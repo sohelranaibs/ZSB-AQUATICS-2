@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import {
   formatCurrency,
@@ -20,18 +20,33 @@ import {
   X,
   RotateCcw,
   Edit2,
+  UploadCloud,
+  Lock,
+  Archive,
+  QrCode,
+  RefreshCw,
+  AlertTriangle,
+  CheckCircle2,
+  Zap,
 } from 'lucide-react';
+import { findShipmentByDeepLink } from '../utils/shipmentQrCode.ts';
+import { ShipmentQrBadge } from './ShipmentQrBadge.tsx';
 import {
   downloadCsvFile,
   generatePurchasesCSV,
   generatePackingsCSV,
   generatePaymentsCSV,
 } from '../utils/csvExporter.ts';
+import { exportDatasetFile } from '../utils/excelDataHandler.ts';
 import {
   isDateInRange,
   getDateRangePreset,
   DatePresetKey,
 } from '../utils/dateFilters.ts';
+import {
+  analyzePurchasePaymentReconciliation,
+  buildSmartSyncReconciliationPlan,
+} from '../utils/smartDataSync.ts';
 
 interface DatabaseViewProps {
   initialType?: 'purchase' | 'packing' | 'payment';
@@ -40,30 +55,106 @@ interface DatabaseViewProps {
 export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purchase' }) => {
   const {
     purchases,
+    addPurchase,
+    updatePurchase,
     deletePurchase,
     packings,
     updatePacking,
     deletePacking,
     payments,
+    addPayment,
+    updatePayment,
     deletePayment,
     companyProfile,
     openPrintModal,
+    openDataCenterModal,
+    openSnapshotModal,
+    snapshots,
     showToast,
     clearAllDatabaseRecords,
     setActiveTab,
     setEditingPackingId,
     setEditingPurchaseId,
+    focusedShipmentInvoice,
+    clearFocusedShipment,
   } = useApp();
 
-  const [activeDbType, setActiveDbType] = useState<'purchase' | 'packing' | 'payment'>(initialType);
+  const [activeDbType, setActiveDbType] = useState<'purchase' | 'packing' | 'payment'>(() =>
+    focusedShipmentInvoice ? 'packing' : initialType
+  );
   const [paymentCategoryFilter, setPaymentCategoryFilter] = useState<'all' | 'supplier' | 'exporter'>('all');
-  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [reconciliationFilter, setReconciliationFilter] = useState<'all' | 'discrepancies' | 'reconciled'>('all');
+  const [lastSyncLog, setLastSyncLog] = useState<string[]>([]);
+  const [searchTerm, setSearchTerm] = useState<string>(() => focusedShipmentInvoice || '');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   // Date-range filter state
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [activePreset, setActivePreset] = useState<DatePresetKey>('all');
+
+  // Smart Data Sync live reconciliation analysis across Purchase DB & Payment DB
+  const smartSyncAnalysis = useMemo(
+    () => analyzePurchasePaymentReconciliation(purchases, payments),
+    [purchases, payments]
+  );
+
+  const handleSmartSyncReconcile = (targetRecordId?: string) => {
+    const plan = buildSmartSyncReconciliationPlan(purchases, payments, targetRecordId);
+    if (
+      plan.paymentsToCreate.length === 0 &&
+      plan.purchasesToCreate.length === 0 &&
+      plan.purchasesToUpdate.length === 0 &&
+      plan.paymentsToUpdate.length === 0
+    ) {
+      showToast('Smart Data Sync: All purchase records and supplier payments are already reconciled.');
+      return;
+    }
+
+    for (const newPayment of plan.paymentsToCreate) {
+      addPayment(newPayment);
+    }
+    for (const newPurchase of plan.purchasesToCreate) {
+      addPurchase(newPurchase);
+    }
+    for (const updPurchase of plan.purchasesToUpdate) {
+      updatePurchase(updPurchase.id, updPurchase.record);
+    }
+    for (const updPayment of plan.paymentsToUpdate) {
+      updatePayment(updPayment.id, updPayment.record);
+    }
+
+    setLastSyncLog(plan.descriptions);
+    if (reconciliationFilter === 'discrepancies' && !targetRecordId) {
+      setReconciliationFilter('all');
+    }
+    showToast(
+      `Smart Data Sync reconciled ${plan.resolvedCount} discrepancy record(s) automatically.`
+    );
+  };
+
+  useEffect(() => {
+    if (focusedShipmentInvoice) {
+      setActiveDbType('packing');
+      setSearchTerm(focusedShipmentInvoice);
+    }
+  }, [focusedShipmentInvoice]);
+
+  const focusedShipmentRecord = useMemo(() => {
+    if (!focusedShipmentInvoice) return null;
+    return findShipmentByDeepLink(packings, {
+      invoiceNumber: focusedShipmentInvoice,
+      shippingMark: focusedShipmentInvoice,
+    });
+  }, [packings, focusedShipmentInvoice]);
+
+  useEffect(() => {
+    const handleCleared = () => {
+      setSelectedIds([]);
+    };
+    window.addEventListener('zsb-records-cleared', handleCleared);
+    return () => window.removeEventListener('zsb-records-cleared', handleCleared);
+  }, []);
 
   const handleSelectAll = (allIds: string[]) => {
     if (selectedIds.length === allIds.length) {
@@ -97,7 +188,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
 
   const handleBatchPrint = () => {
     if (selectedIds.length === 0) {
-      alert('Please select at least one record using the checkboxes to batch print.');
+      showToast('Please select at least one record using the checkboxes to batch print.');
       return;
     }
 
@@ -121,17 +212,25 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     });
   };
 
-  // Filtered lists reactive to both search term and date range
+  // Filtered lists reactive to search term, date range, and reconciliation status filter
   const filteredPurchases = useMemo(() => {
     return purchases.filter((p) => {
+      const rec = smartSyncAnalysis.purchaseReconciliations[p.id];
+      if (reconciliationFilter === 'discrepancies' && !rec?.hasDiscrepancy) {
+        return false;
+      }
+      if (reconciliationFilter === 'reconciled' && rec?.status !== 'RECONCILED') {
+        return false;
+      }
       const matchesSearch =
         !searchTerm.trim() ||
         p.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.description.toLowerCase().includes(searchTerm.toLowerCase());
+        p.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (rec?.label || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesDate = isDateInRange(p.date, startDate, endDate);
       return matchesSearch && matchesDate;
     });
-  }, [purchases, searchTerm, startDate, endDate]);
+  }, [purchases, smartSyncAnalysis, reconciliationFilter, searchTerm, startDate, endDate]);
 
   const filteredPackings = useMemo(() => {
     return packings.filter((pkg) => {
@@ -153,16 +252,24 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
       if (paymentCategoryFilter !== 'all' && cat !== paymentCategoryFilter) {
         return false;
       }
+      const rec = smartSyncAnalysis.paymentReconciliations[pm.id];
+      if (reconciliationFilter === 'discrepancies' && !rec?.hasDiscrepancy) {
+        return false;
+      }
+      if (reconciliationFilter === 'reconciled' && rec?.status !== 'RECONCILED') {
+        return false;
+      }
       const matchesSearch =
         !searchTerm.trim() ||
         pm.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
         pm.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (pm.shippingMark || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        pm.status.toLowerCase().includes(searchTerm.toLowerCase());
+        pm.status.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (rec?.label || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesDate = isDateInRange(pm.date, startDate, endDate);
       return matchesSearch && matchesDate;
     });
-  }, [payments, paymentCategoryFilter, searchTerm, startDate, endDate]);
+  }, [payments, paymentCategoryFilter, smartSyncAnalysis, reconciliationFilter, searchTerm, startDate, endDate]);
 
   // Current active filtered records count and total records
   const currentFilteredCount =
@@ -178,6 +285,53 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
       : activeDbType === 'packing'
       ? packings.length
       : payments.length;
+
+  // Export current database view as Excel (.xlsx) file
+  const handleExportExcel = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const dateRangeTag =
+      startDate || endDate
+        ? `_${startDate || 'start'}_to_${endDate || 'end'}`
+        : `_${today}`;
+
+    if (activeDbType === 'purchase') {
+      if (filteredPurchases.length === 0) {
+        showToast('No purchase records in current filtered view to export.');
+        return;
+      }
+      const filename = exportDatasetFile(
+        'purchase',
+        'xlsx',
+        filteredPurchases,
+        `ZSB_Aquatics_Purchases${dateRangeTag}.xlsx`
+      );
+      showToast(`Exported ${filteredPurchases.length} purchase records to Excel (${filename})`);
+    } else if (activeDbType === 'packing') {
+      if (filteredPackings.length === 0) {
+        showToast('No packing records in current filtered view to export.');
+        return;
+      }
+      const filename = exportDatasetFile(
+        'packing',
+        'xlsx',
+        filteredPackings,
+        `ZSB_Aquatics_Packing_Lists${dateRangeTag}.xlsx`
+      );
+      showToast(`Exported ${filteredPackings.length} packing records to Excel (${filename})`);
+    } else {
+      if (filteredPayments.length === 0) {
+        showToast('No payment records in current filtered view to export.');
+        return;
+      }
+      const filename = exportDatasetFile(
+        'payment',
+        'xlsx',
+        filteredPayments,
+        `ZSB_Aquatics_Payments${dateRangeTag}.xlsx`
+      );
+      showToast(`Exported ${filteredPayments.length} payment records to Excel (${filename})`);
+    }
+  };
 
   // Export current database view as Excel-compatible CSV file
   const handleExportCSV = () => {
@@ -223,19 +377,28 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
       {/* Top Banner */}
       <div className="bg-[#1b2b44] text-white px-5 py-3 rounded-lg shadow-md flex flex-wrap items-center justify-between gap-4 border-b-2 border-amber-500">
-        <div>
-          <div className="flex items-center space-x-3">
-            <span className="text-xl sm:text-2xl font-black tracking-wider text-amber-400 font-serif uppercase">
-              {companyProfile.companyName}
-            </span>
-            <span className="text-lg text-slate-300">|</span>
-            <span className="text-sm sm:text-base font-semibold text-slate-100 uppercase tracking-wide">
-              Master Database Sheets &amp; Batch Print Center
-            </span>
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
+            <img
+              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+              alt={companyProfile.companyName}
+              className="w-full h-full object-contain rounded-full"
+            />
           </div>
-          <p className="text-xs text-slate-300 mt-0.5">
-            Filter by Date Range, Export to Excel CSV, Select records for Batch Print, or audit transactions
-          </p>
+          <div>
+            <div className="flex items-center space-x-3">
+              <span className="zsb-3d-text text-xl sm:text-2xl font-black">
+                {companyProfile.companyName}
+              </span>
+              <span className="text-lg text-slate-300">|</span>
+              <span className="text-sm sm:text-base font-semibold text-slate-100 uppercase tracking-wide">
+                Master Database Sheets &amp; Batch Print Center
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mt-0.5">
+              Filter by Date Range, Import or Export Excel (.xlsx) &amp; CSV (.csv), Select records for Batch Print, or audit transactions
+            </p>
+          </div>
         </div>
 
         {/* Database Switcher Tabs */}
@@ -282,6 +445,313 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
         </div>
       </div>
 
+      {/* Smart Data Sync & Reconciliation Utility Panel */}
+      {(activeDbType === 'purchase' || activeDbType === 'payment') && (
+        <div
+          data-testid="smart-data-sync-panel"
+          className={`rounded-xl p-4 sm:p-5 border-2 shadow-sm transition-all ${
+            smartSyncAnalysis.summary.discrepancyCount > 0
+              ? 'bg-amber-50/90 border-amber-400'
+              : 'bg-emerald-50/80 border-emerald-300'
+          }`}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div
+                className={`p-2.5 rounded-lg border shrink-0 ${
+                  smartSyncAnalysis.summary.discrepancyCount > 0
+                    ? 'bg-amber-500 text-slate-950 border-amber-600'
+                    : 'bg-emerald-600 text-white border-emerald-700'
+                }`}
+              >
+                <RefreshCw className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-black uppercase tracking-wide text-slate-900">
+                    Smart Data Sync — Purchase &amp; Supplier Payment Reconciliation
+                  </h3>
+                  {smartSyncAnalysis.summary.discrepancyCount > 0 ? (
+                    <span
+                      data-testid="smart-sync-status-badge"
+                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded bg-rose-600 text-white text-[11px] font-black uppercase tracking-wider"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      <span>
+                        {smartSyncAnalysis.summary.discrepancyCount} Discrepanc
+                        {smartSyncAnalysis.summary.discrepancyCount === 1 ? 'y' : 'ies'} Detected
+                      </span>
+                    </span>
+                  ) : (
+                    <span
+                      data-testid="smart-sync-status-badge"
+                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded bg-emerald-700 text-white text-[11px] font-black uppercase tracking-wider"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>All Records Reconciled</span>
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-600 mt-1">
+                  Automatically cross-references Purchase Challans against Supplier Payment Vouchers to highlight missing payment vouchers, paid amount mismatches, and balance drift in the{' '}
+                  <strong className="text-slate-900">RECONCILIATION STATUS</strong> column below.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Reconciliation Filter Buttons */}
+              <div className="flex items-center bg-white/90 p-1 rounded-lg border border-slate-300 text-xs">
+                <button
+                  type="button"
+                  data-testid="smart-sync-filter-all"
+                  onClick={() => setReconciliationFilter('all')}
+                  className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
+                    reconciliationFilter === 'all'
+                      ? 'bg-[#1b2b44] text-white'
+                      : 'text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  All ({activeDbType === 'purchase' ? purchases.length : payments.length})
+                </button>
+                <button
+                  type="button"
+                  data-testid="smart-sync-filter-discrepancies"
+                  onClick={() => setReconciliationFilter('discrepancies')}
+                  className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
+                    reconciliationFilter === 'discrepancies'
+                      ? 'bg-rose-600 text-white'
+                      : 'text-rose-700 hover:bg-rose-50'
+                  }`}
+                >
+                  Discrepancies (
+                  {activeDbType === 'purchase'
+                    ? smartSyncAnalysis.summary.purchaseDiscrepancyCount
+                    : smartSyncAnalysis.summary.paymentDiscrepancyCount}
+                  )
+                </button>
+                <button
+                  type="button"
+                  data-testid="smart-sync-filter-reconciled"
+                  onClick={() => setReconciliationFilter('reconciled')}
+                  className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
+                    reconciliationFilter === 'reconciled'
+                      ? 'bg-emerald-700 text-white'
+                      : 'text-emerald-800 hover:bg-emerald-50'
+                  }`}
+                >
+                  Reconciled (
+                  {activeDbType === 'purchase'
+                    ? smartSyncAnalysis.summary.reconciledPurchasesCount
+                    : smartSyncAnalysis.summary.reconciledPaymentsCount}
+                  )
+                </button>
+              </div>
+
+              {/* Primary Auto-Reconcile Button */}
+              <button
+                type="button"
+                data-testid="smart-sync-reconcile-all-btn"
+                disabled={smartSyncAnalysis.summary.discrepancyCount === 0}
+                onClick={() => handleSmartSyncReconcile()}
+                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wide shadow-sm transition ${
+                  smartSyncAnalysis.summary.discrepancyCount > 0
+                    ? 'bg-rose-600 hover:bg-rose-700 text-white cursor-pointer'
+                    : 'bg-emerald-700/20 text-emerald-900 border border-emerald-300 cursor-not-allowed'
+                }`}
+              >
+                <Zap className="w-4 h-4" />
+                <span>
+                  {smartSyncAnalysis.summary.discrepancyCount > 0
+                    ? `Smart Sync & Reconcile (${smartSyncAnalysis.summary.discrepancyCount})`
+                    : '100% Synced'}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Summary KPI Strip */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-3 pt-3 border-t border-slate-200/80 text-xs">
+            <div className="bg-white/90 px-3 py-2 rounded-lg border border-slate-200">
+              <div className="text-[10px] font-bold uppercase text-slate-500">
+                Reconciled Purchase Bills
+              </div>
+              <div
+                data-testid="smart-sync-reconciled-count"
+                className="font-mono font-black text-emerald-700 text-sm mt-0.5"
+              >
+                {smartSyncAnalysis.summary.reconciledPurchasesCount} /{' '}
+                {smartSyncAnalysis.summary.totalPurchasesChecked} Bills
+              </div>
+            </div>
+            <div className="bg-white/90 px-3 py-2 rounded-lg border border-slate-200">
+              <div className="text-[10px] font-bold uppercase text-slate-500">
+                Missing Vouchers / Mismatches
+              </div>
+              <div
+                data-testid="smart-sync-discrepancy-breakdown"
+                className="font-mono font-black text-rose-700 text-sm mt-0.5"
+              >
+                {smartSyncAnalysis.summary.missingVoucherCount} Missing ·{' '}
+                {smartSyncAnalysis.summary.amountMismatchCount +
+                  smartSyncAnalysis.summary.balanceMismatchCount}{' '}
+                Mismatch
+              </div>
+            </div>
+            <div className="bg-white/90 px-3 py-2 rounded-lg border border-slate-200">
+              <div className="text-[10px] font-bold uppercase text-slate-500">
+                Unreconciled Variance Value
+              </div>
+              <div
+                data-testid="smart-sync-discrepancy-amount"
+                className={`font-mono font-black text-sm mt-0.5 ${
+                  smartSyncAnalysis.summary.totalDiscrepancyAmount > 0
+                    ? 'text-rose-700'
+                    : 'text-emerald-700'
+                }`}
+              >
+                {formatCurrency(
+                  smartSyncAnalysis.summary.totalDiscrepancyAmount,
+                  companyProfile.currency
+                )}
+              </div>
+            </div>
+            <div className="bg-white/90 px-3 py-2 rounded-lg border border-slate-200">
+              <div className="text-[10px] font-bold uppercase text-slate-500">
+                Supplier Vouchers Audited
+              </div>
+              <div className="font-mono font-black text-purple-900 text-sm mt-0.5">
+                {smartSyncAnalysis.summary.reconciledPaymentsCount} /{' '}
+                {smartSyncAnalysis.summary.totalSupplierPaymentsChecked} Synced
+              </div>
+            </div>
+          </div>
+
+          {lastSyncLog.length > 0 && (
+            <div
+              data-testid="smart-sync-execution-log"
+              className="mt-3 px-3 py-2 rounded-lg bg-emerald-900 text-emerald-50 text-xs flex flex-wrap items-center justify-between gap-2"
+            >
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-300 shrink-0" />
+                <span>
+                  <strong>Last Smart Data Sync Action:</strong> {lastSyncLog.join(' | ')}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLastSyncLog([])}
+                className="text-emerald-200 hover:text-white text-[11px] font-bold underline cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* QR Linked Shipment Details Banner */}
+      {focusedShipmentInvoice && activeDbType === 'packing' && (
+        <div
+          data-testid="qr-linked-shipment-banner"
+          className="bg-teal-950 text-white rounded-xl p-4 sm:p-5 border-2 border-teal-400 shadow-md space-y-3"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-lg bg-teal-500/20 border border-teal-400/40 text-teal-300">
+                <QrCode className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-black uppercase tracking-wider text-teal-300">
+                    QR Linked Shipment Inspector
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-mono text-xs font-black">
+                    {focusedShipmentRecord?.invoiceNumber || focusedShipmentInvoice}
+                  </span>
+                </div>
+                <p className="text-xs text-teal-100/90 mt-0.5">
+                  Showing specific Export Packing List shipment details linked via QR code
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {focusedShipmentRecord && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    openPrintModal({
+                      type: 'packing',
+                      title: `Export Packing List - ${focusedShipmentRecord.invoiceNumber}`,
+                      data: focusedShipmentRecord,
+                      items: focusedShipmentRecord.items,
+                    })
+                  }
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Print / View QR Manifest</span>
+                </button>
+              )}
+              <button
+                type="button"
+                data-testid="clear-qr-shipment-filter-btn"
+                onClick={() => {
+                  clearFocusedShipment();
+                  setSearchTerm('');
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 text-xs font-bold transition cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Clear QR Filter (Show All)</span>
+              </button>
+            </div>
+          </div>
+
+          {focusedShipmentRecord && (
+            <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5 pt-2 border-t border-teal-800/80 text-xs">
+              <div className="bg-teal-900/60 p-2.5 rounded-lg border border-teal-800">
+                <div className="text-[10px] text-teal-300 uppercase font-bold">Manifest No</div>
+                <div className="font-mono font-black text-white mt-0.5">
+                  {focusedShipmentRecord.invoiceNumber}
+                </div>
+              </div>
+              <div className="bg-teal-900/60 p-2.5 rounded-lg border border-teal-800">
+                <div className="text-[10px] text-teal-300 uppercase font-bold">Shipping Mark</div>
+                <div className="font-black text-amber-300 mt-0.5">
+                  {focusedShipmentRecord.shippingMark}
+                </div>
+              </div>
+              <div className="bg-teal-900/60 p-2.5 rounded-lg border border-teal-800">
+                <div className="text-[10px] text-teal-300 uppercase font-bold">Packing Date</div>
+                <div className="font-mono font-bold text-white mt-0.5">
+                  {formatDate(focusedShipmentRecord.packingDate)}
+                </div>
+              </div>
+              <div className="bg-teal-900/60 p-2.5 rounded-lg border border-teal-800">
+                <div className="text-[10px] text-teal-300 uppercase font-bold">Flight &amp; Dest</div>
+                <div className="font-bold text-white mt-0.5 truncate">
+                  {focusedShipmentRecord.flight} · {focusedShipmentRecord.destination}
+                </div>
+              </div>
+              <div className="bg-teal-900/60 p-2.5 rounded-lg border border-teal-800">
+                <div className="text-[10px] text-teal-300 uppercase font-bold">Total Weight</div>
+                <div className="font-mono font-black text-emerald-300 mt-0.5">
+                  {focusedShipmentRecord.totalWeight} KG ({focusedShipmentRecord.totalBox} Box)
+                </div>
+              </div>
+              <div className="bg-teal-900/60 p-2.5 rounded-lg border border-teal-800">
+                <div className="text-[10px] text-teal-300 uppercase font-bold">Invoice Value</div>
+                <div className="font-mono font-black text-amber-300 mt-0.5">
+                  {formatCurrency(focusedShipmentRecord.totalAmount, 'RMB')}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Date-Range Filter & Preset Controls */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
@@ -312,7 +782,6 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 { key: 'this_year', label: 'This Year' },
               ] as const
             ).map((p) => {
-              const isSelected = activePreset === p.key && (!startDate || p.key !== 'all' || !endDate);
               return (
                 <button
                   key={p.key}
@@ -411,16 +880,41 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
           />
         </div>
 
-        {/* Action Buttons: Export to CSV & Batch Print */}
+        {/* Action Buttons: Import/Export Excel & CSV, Batch Print */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Export to CSV Button */}
+          {/* Import from Excel / CSV Button */}
           <button
             type="button"
-            onClick={handleExportCSV}
+            data-testid="database-import-excel-csv-btn"
+            onClick={() => openDataCenterModal('import', activeDbType)}
+            className="flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-sm transition bg-amber-500 hover:bg-amber-400 text-slate-950 cursor-pointer"
+            title={`Import ${activeDbType} records from Excel (.xlsx) or CSV (.csv)`}
+          >
+            <UploadCloud className="w-4 h-4 stroke-[2.2]" />
+            <span>IMPORT EXCEL / CSV</span>
+          </button>
+
+          {/* Export to Excel (.XLSX) Button */}
+          <button
+            type="button"
+            data-testid="database-export-xlsx-btn"
+            onClick={handleExportExcel}
             className="flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-sm transition bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white cursor-pointer"
-            title={`Export current filtered ${activeDbType} view as Excel-compatible CSV`}
+            title={`Export current filtered ${activeDbType} view as Microsoft Excel (.xlsx)`}
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+            <span>EXPORT EXCEL .XLSX ({currentFilteredCount})</span>
+          </button>
+
+          {/* Export to CSV (.CSV) Button */}
+          <button
+            type="button"
+            data-testid="database-export-csv-btn"
+            onClick={handleExportCSV}
+            className="flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-sm transition bg-teal-700 hover:bg-teal-600 active:bg-teal-800 text-white cursor-pointer"
+            title={`Export current filtered ${activeDbType} view as Excel-compatible CSV`}
+          >
+            <Download className="w-4 h-4 text-teal-200" />
             <span>EXPORT CSV ({currentFilteredCount})</span>
           </button>
 
@@ -439,23 +933,30 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
             <span>BATCH PRINT ({selectedIds.length})</span>
           </button>
 
-          {/* Clear All Database Records Button */}
+          {/* Database Snapshots (JSON Archive & Recovery) Button */}
           <button
             type="button"
+            data-testid="database-snapshots-btn"
+            onClick={openSnapshotModal}
+            className="flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-sm transition bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer"
+            title="Create or Restore Local JSON Database Snapshots"
+          >
+            <Archive className="w-3.5 h-3.5 text-amber-300" />
+            <span>SNAPSHOTS ({snapshots.length})</span>
+          </button>
+
+          {/* Clear All Database Records Button (Protected by Super Admin Password) */}
+          <button
+            type="button"
+            data-testid="database-clear-all-records-btn"
             onClick={() => {
-              if (
-                window.confirm(
-                  'Are you sure you want to clear ALL database records? This will delete all purchases, packings, payments, and expenses permanently.'
-                )
-              ) {
-                clearAllDatabaseRecords();
-                setSelectedIds([]);
-              }
+              clearAllDatabaseRecords('all');
             }}
             className="flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-sm transition bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 cursor-pointer"
-            title="Clear all database records permanently"
+            title="Clear all database records permanently (Requires Super Admin Password)"
           >
-            <Trash2 className="w-4 h-4 text-rose-600" />
+            <Lock className="w-3.5 h-3.5 text-rose-600" />
+            <Trash2 className="w-3.5 h-3.5 text-rose-600" />
             <span>CLEAR ALL RECORDS</span>
           </button>
 
@@ -491,25 +992,34 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   <th className="p-3 text-center">ITEMS</th>
                   <th className="p-3 text-right">TOTAL QTY</th>
                   <th className="p-3 text-right">TOTAL AMOUNT</th>
+                  <th className="p-3 text-right">PAID AMOUNT</th>
                   <th className="p-3 text-right">BALANCE</th>
+                  <th className="p-3">RECONCILIATION STATUS</th>
                   <th className="p-3 text-center">ACTIONS</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 font-medium">
                 {filteredPurchases.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="p-8 text-center text-slate-400">
+                    <td colSpan={12} className="p-8 text-center text-slate-400">
                       No purchase records found.
                     </td>
                   </tr>
                 ) : (
                   filteredPurchases.map((p) => {
                     const isSelected = selectedIds.includes(p.id);
+                    const rec = smartSyncAnalysis.purchaseReconciliations[p.id];
+                    const hasDiscrepancy = Boolean(rec?.hasDiscrepancy);
                     return (
                       <tr
                         key={p.id}
-                        className={`hover:bg-blue-50/40 transition ${
-                          isSelected ? 'bg-blue-50/80' : ''
+                        data-testid={`purchase-row-${p.id}`}
+                        className={`transition ${
+                          hasDiscrepancy
+                            ? 'bg-amber-50/70 hover:bg-amber-100/60'
+                            : isSelected
+                            ? 'bg-blue-50/80'
+                            : 'hover:bg-blue-50/40'
                         }`}
                       >
                         <td className="p-3 text-center">
@@ -542,8 +1052,61 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         <td className="p-3 text-right font-mono font-bold text-slate-900">
                           {formatCurrency(p.totalAmount, companyProfile.currency)}
                         </td>
+                        <td className="p-3 text-right font-mono font-bold text-emerald-800">
+                          {formatCurrency(p.paidAmount, companyProfile.currency)}
+                        </td>
                         <td className="p-3 text-right font-mono font-bold text-rose-700">
                           {formatCurrency(p.balance, companyProfile.currency)}
+                        </td>
+                        <td
+                          className="p-3 min-w-[230px]"
+                          data-testid={`reconciliation-status-cell-${p.id}`}
+                        >
+                          {rec && (
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span
+                                  data-testid={`reconciliation-badge-${p.id}`}
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                                    rec.status === 'RECONCILED'
+                                      ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                      : rec.status === 'UNPAID_PENDING'
+                                      ? 'bg-slate-100 text-slate-700 border border-slate-300'
+                                      : 'bg-rose-600 text-white shadow-xs'
+                                  }`}
+                                >
+                                  {rec.hasDiscrepancy ? (
+                                    <AlertTriangle className="w-3 h-3" />
+                                  ) : (
+                                    <CheckCircle2 className="w-3 h-3" />
+                                  )}
+                                  <span>{rec.label}</span>
+                                </span>
+
+                                {rec.hasDiscrepancy && (
+                                  <span className="font-mono text-[10px] font-black text-rose-800 bg-rose-100 px-1.5 py-0.5 rounded">
+                                    Δ {formatCurrency(rec.discrepancyAmount, companyProfile.currency)}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[11px] text-slate-600 leading-snug">
+                                {rec.summaryText}
+                              </div>
+                              {rec.hasDiscrepancy && (
+                                <div data-export-ignore="true" className="pt-0.5">
+                                  <button
+                                    type="button"
+                                    data-testid={`reconcile-record-btn-${p.id}`}
+                                    onClick={() => handleSmartSyncReconcile(p.id)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#1b2b44] hover:bg-blue-800 text-amber-300 text-[10px] font-black uppercase tracking-wide transition cursor-pointer shadow-xs"
+                                  >
+                                    <RefreshCw className="w-3 h-3" />
+                                    <span>Auto-Sync: {rec.resolutionLabel}</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td className="p-3 text-center">
                           <div className="flex items-center justify-center space-x-1.5">
@@ -574,17 +1137,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                               <span>PDF</span>
                             </button>
                             <button
-                              onClick={() => {
-                                if (
-                                  confirm(
-                                    `Delete purchase invoice ${p.invoiceNumber}?`
-                                  )
-                                ) {
-                                  deletePurchase(p.id);
-                                }
-                              }}
-                              className="p-1 text-slate-400 hover:text-rose-600 rounded transition"
-                              title="Delete"
+                              type="button"
+                              onClick={() => deletePurchase(p.id)}
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
+                              title={`Delete purchase invoice ${p.invoiceNumber}`}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -752,17 +1308,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                               <span>PDF</span>
                             </button>
                             <button
-                              onClick={() => {
-                                if (
-                                  confirm(
-                                    `Delete packing list ${pkg.invoiceNumber}?`
-                                  )
-                                ) {
-                                  deletePacking(pkg.id);
-                                }
-                              }}
-                              className="p-1 text-slate-400 hover:text-rose-600 rounded transition"
-                              title="Delete"
+                              type="button"
+                              onClick={() => deletePacking(pkg.id)}
+                              className="p-1 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
+                              title={`Delete packing list ${pkg.invoiceNumber}`}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -896,13 +1445,14 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                     <th className="p-3 text-right">PAID AMOUNT</th>
                     <th className="p-3 text-right">BALANCE</th>
                     <th className="p-3">EXPORT REF</th>
+                    <th className="p-3">RECONCILIATION STATUS</th>
                     <th className="p-3 text-center">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 font-medium">
                   {filteredPayments.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="p-8 text-center text-slate-400">
+                      <td colSpan={11} className="p-8 text-center text-slate-400">
                         No payment records found.
                       </td>
                     </tr>
@@ -910,11 +1460,18 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                     filteredPayments.map((pm) => {
                       const isSelected = selectedIds.includes(pm.id);
                       const category = classifyPaymentCategory(pm);
+                      const rec = smartSyncAnalysis.paymentReconciliations[pm.id];
+                      const hasDiscrepancy = Boolean(rec?.hasDiscrepancy);
                       return (
                         <tr
                           key={pm.id}
-                          className={`hover:bg-purple-50/40 transition ${
-                            isSelected ? 'bg-purple-50/80' : ''
+                          data-testid={`payment-row-${pm.id}`}
+                          className={`transition ${
+                            hasDiscrepancy
+                              ? 'bg-amber-50/70 hover:bg-amber-100/60'
+                              : isSelected
+                              ? 'bg-purple-50/80'
+                              : 'hover:bg-purple-50/40'
                           }`}
                         >
                           <td className="p-3 text-center">
@@ -966,6 +1523,55 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                           <td className="p-3 font-mono text-slate-600">
                             {pm.exportGoodsRef || '-'}
                           </td>
+                          <td
+                            className="p-3 min-w-[220px]"
+                            data-testid={`reconciliation-status-cell-${pm.id}`}
+                          >
+                            {rec && (
+                              <div className="space-y-1">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span
+                                    data-testid={`reconciliation-badge-${pm.id}`}
+                                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                                      rec.status === 'RECONCILED'
+                                        ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                        : rec.status === 'EXPORTER_LEDGER'
+                                        ? 'bg-teal-100 text-teal-900 border border-teal-300'
+                                        : 'bg-rose-600 text-white shadow-xs'
+                                    }`}
+                                  >
+                                    {rec.hasDiscrepancy ? (
+                                      <AlertTriangle className="w-3 h-3" />
+                                    ) : (
+                                      <CheckCircle2 className="w-3 h-3" />
+                                    )}
+                                    <span>{rec.label}</span>
+                                  </span>
+                                  {rec.hasDiscrepancy && (
+                                    <span className="font-mono text-[10px] font-black text-rose-800 bg-rose-100 px-1.5 py-0.5 rounded">
+                                      Δ {formatCurrency(rec.discrepancyAmount, companyProfile.currency)}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-slate-600 leading-snug">
+                                  {rec.summaryText}
+                                </div>
+                                {rec.hasDiscrepancy && (
+                                  <div data-export-ignore="true" className="pt-0.5">
+                                    <button
+                                      type="button"
+                                      data-testid={`reconcile-record-btn-${pm.id}`}
+                                      onClick={() => handleSmartSyncReconcile(pm.id)}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#1b2b44] hover:bg-purple-800 text-amber-300 text-[10px] font-black uppercase tracking-wide transition cursor-pointer shadow-xs"
+                                    >
+                                      <RefreshCw className="w-3 h-3" />
+                                      <span>Auto-Sync: {rec.resolutionLabel}</span>
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </td>
                           <td className="p-3 text-center">
                             <div className="flex items-center justify-center space-x-1.5">
                               <button
@@ -988,17 +1594,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                                 <span>PDF</span>
                               </button>
                               <button
-                                onClick={() => {
-                                  if (
-                                    confirm(
-                                      `Delete payment voucher ${pm.invoiceNumber}?`
-                                    )
-                                  ) {
-                                    deletePayment(pm.id);
-                                  }
-                                }}
-                                className="p-1 text-slate-400 hover:text-rose-600 rounded transition"
-                                title="Delete"
+                                type="button"
+                                onClick={() => deletePayment(pm.id)}
+                                className="p-1 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
+                                title={`Delete payment voucher ${pm.invoiceNumber}`}
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>

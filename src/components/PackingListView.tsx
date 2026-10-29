@@ -6,11 +6,13 @@ import {
   calculatePackingTotalAmountBDT,
   formatCurrency,
   formatDate,
+  formatPackingExportFilename,
   generateInvoiceNumber,
 } from '../utils/calculations.ts';
 import { PackingItemRow } from '../types/index.ts';
 import { validatePackingForm } from '../utils/validation.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
+import { exportElementToPng } from '../utils/pdfGenerator.ts';
 import {
   Save,
   FileText,
@@ -29,7 +31,10 @@ import {
   Edit2,
   Edit3,
   CheckCircle2,
+  ImageDown,
+  Loader2,
 } from 'lucide-react';
+import { ShipmentQrBadge } from './ShipmentQrBadge.tsx';
 
 export const PackingListView: React.FC = () => {
   const {
@@ -44,6 +49,7 @@ export const PackingListView: React.FC = () => {
     openPrintModal,
     setActiveTab,
     showToast,
+    openShipmentDetails,
   } = useApp();
 
   // Manifest Header Fields (From Date & To Date removed per user request)
@@ -90,6 +96,7 @@ export const PackingListView: React.FC = () => {
   const [addingCategory, setAddingCategory] = useState<string | null>(null);
   const [newOptionValue, setNewOptionValue] = useState<string>('');
   const [validationAttempted, setValidationAttempted] = useState<boolean>(false);
+  const [isExportingPng, setIsExportingPng] = useState<boolean>(false);
 
   const validation = validatePackingForm({
     invoiceNumber,
@@ -344,11 +351,17 @@ export const PackingListView: React.FC = () => {
     );
   };
 
+  const exportableRows = (() => {
+    const validItems = rows.filter(
+      (r) => r.item.trim() !== '' || r.box > 0 || r.weight > 0 || r.rate > 0
+    );
+    return validItems.length > 0 ? validItems : rows.slice(0, 5);
+  })();
+
   const handlePrintSelected = () => {
-    const validItems = rows.filter((r) => r.item.trim() !== '' || r.box > 0);
     openPrintModal({
       type: 'packing',
-      title: `Export Packing List (Selected Preview) - ${invoiceNumber}`,
+      title: `Export Packing List - ${invoiceNumber}`,
       data: {
         invoiceNumber,
         shippingMark,
@@ -358,14 +371,33 @@ export const PackingListView: React.FC = () => {
         packingDate,
         fromDate: packingDate,
         toDate: packingDate,
-        items: validItems.length > 0 ? validItems : rows.slice(0, 5),
+        items: exportableRows,
         totalBox,
         totalWeight,
         totalAmount,
         remarks,
       },
-      items: validItems.length > 0 ? validItems : rows.slice(0, 5),
+      items: exportableRows,
     });
+  };
+
+  const handleDirectSavePng = async () => {
+    setIsExportingPng(true);
+    const filename = formatPackingExportFilename(invoiceNumber, shippingMark, packingDate, 'png');
+    try {
+      const success = await exportElementToPng('packing-manifest-export-canvas', filename, 800);
+      if (success) {
+        showToast(`PNG image downloaded: ${filename}`);
+      } else {
+        showToast('Opening Document Print Preview...');
+        handlePrintSelected();
+      }
+    } catch (err) {
+      console.error('Packing PNG export error:', err);
+      showToast('Error generating PNG image.');
+    } finally {
+      setIsExportingPng(false);
+    }
   };
 
   const handleMonthlyStatement = () => {
@@ -406,9 +438,16 @@ export const PackingListView: React.FC = () => {
       {/* Top Banner with Official ZSB Branding */}
       <div className="bg-[#1e2548] text-white px-5 py-3.5 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-amber-500">
         <div className="flex flex-wrap items-center gap-3">
+          <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
+            <img
+              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+              alt={companyProfile.companyName}
+              className="w-full h-full object-contain rounded-full"
+            />
+          </div>
           <div>
             <div className="flex items-center gap-2.5">
-              <span className="text-xl sm:text-2xl font-black tracking-wider text-amber-400 font-serif uppercase">
+              <span className="zsb-3d-text text-xl sm:text-2xl font-black">
                 {companyProfile.companyName}
               </span>
               <span className="text-slate-400 hidden sm:inline">·</span>
@@ -421,6 +460,10 @@ export const PackingListView: React.FC = () => {
               <span>|</span>
               <span className="font-mono">
                 Mob: {companyProfile.mobiles.join(', ')}
+              </span>
+              <span>|</span>
+              <span className="font-mono">
+                EMAIL: {companyProfile.email || 'www.zsbaquatics.com'}
               </span>
             </div>
           </div>
@@ -451,18 +494,59 @@ export const PackingListView: React.FC = () => {
         <div className="lg:col-span-8 space-y-4">
           <div className="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden">
             {/* Sheet Title Header */}
-            <div className="bg-[#8b3858] text-white py-3 px-5 flex flex-wrap items-center justify-between gap-2 border-b border-pink-950">
-              <div>
-                <div className="text-lg sm:text-xl font-black tracking-widest text-amber-400 font-serif uppercase">
-                  {companyProfile.companyName}
+            <div className="bg-[#8b3858] text-white py-3 px-5 flex flex-wrap items-center justify-between gap-3 border-b border-pink-950">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-amber-300 bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
+                  <img
+                    src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+                    alt={companyProfile.companyName}
+                    className="w-full h-full object-contain rounded-full"
+                  />
                 </div>
-                <div className="text-xs font-semibold tracking-wider uppercase text-pink-100">
-                  PACKING LIST DATA ENTRY FORM (AIR FREIGHT EXPORT MANIFEST)
+                <div>
+                  <div className="zsb-3d-text text-lg sm:text-xl font-black">
+                    {companyProfile.companyName}
+                  </div>
+                  <div className="text-xs font-semibold tracking-wider uppercase text-pink-100">
+                    PACKING LIST DATA ENTRY FORM (AIR FREIGHT EXPORT MANIFEST)
+                  </div>
                 </div>
               </div>
-              <div className="text-right font-mono text-xs text-pink-100 tabular-nums">
-                <div className="text-[11px] text-pink-200 uppercase">Manifest Ref</div>
-                <div className="font-bold text-amber-300 text-sm">{invoiceNumber}</div>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handlePrintSelected}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-xs transition cursor-pointer whitespace-nowrap"
+                    title="Open Document Print Preview (Save as PDF & Save as .PNG)"
+                  >
+                    <Printer className="w-3.5 h-3.5 shrink-0" />
+                    <span>PRINT / SAVE PDF</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDirectSavePng}
+                    disabled={isExportingPng}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black shadow-xs transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                    title="Download Export Packing List Manifest as .PNG image"
+                  >
+                    {isExportingPng ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                        <span>SAVING .PNG...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ImageDown className="w-3.5 h-3.5 shrink-0" />
+                        <span>SAVE .PNG</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <div className="text-right font-mono text-xs text-pink-100 tabular-nums pl-2 border-l border-pink-900/80">
+                  <div className="text-[11px] text-pink-200 uppercase">Manifest Ref</div>
+                  <div className="font-bold text-amber-300 text-sm">{invoiceNumber}</div>
+                </div>
               </div>
             </div>
 
@@ -1196,6 +1280,24 @@ export const PackingListView: React.FC = () => {
                   className="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
                 />
               </div>
+
+              {/* Live Shipment QR Code Preview & Direct System Link */}
+              <ShipmentQrBadge
+                shipment={{
+                  id: editingPackingId || undefined,
+                  invoiceNumber,
+                  shippingMark,
+                  packingDate,
+                  flight,
+                  destination,
+                  totalBox,
+                  totalWeight,
+                  totalAmount,
+                }}
+                showInteractiveControls={true}
+                onOpenInSystem={openShipmentDetails}
+                testIdPrefix="packing-form-shipment-qr"
+              />
             </div>
           </div>
         </div>
@@ -1208,69 +1310,71 @@ export const PackingListView: React.FC = () => {
               ACTION BUTTONS
             </div>
 
-            {/* SAVE (PDF) / UPDATE MANIFEST Button */}
-            <button
-              type="button"
-              onClick={handleSavePDF}
-              className={`w-full text-white py-2.5 px-4 rounded-lg font-bold text-sm shadow-xs flex items-center justify-center space-x-2 transition transform active:scale-95 cursor-pointer ${
-                editingPackingId
-                  ? 'bg-amber-600 hover:bg-amber-700'
-                  : 'bg-[#129c54] hover:bg-[#0e8346]'
-              }`}
-            >
-              {editingPackingId ? (
-                <>
-                  <Edit3 className="w-5 h-5 text-amber-200" />
+            {/* SAVE (PDF / .PNG) / UPDATE MANIFEST Button */}
+            {editingPackingId ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleSavePDF}
+                  className="w-full bg-[#d97706] hover:bg-[#b45309] text-white py-2.5 px-4 rounded-lg font-bold text-sm shadow-xs flex items-center justify-center space-x-2 transition transform active:scale-95 cursor-pointer whitespace-nowrap"
+                >
+                  <Edit3 className="w-4 h-4 text-amber-200 shrink-0" />
                   <span>UPDATE MANIFEST (SAVE)</span>
-                </>
-              ) : (
-                <>
-                  <Save className="w-5 h-5" />
-                  <span>SAVE (PDF)</span>
-                </>
-              )}
-            </button>
+                </button>
 
-            {editingPackingId && (
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="w-full bg-slate-700 hover:bg-slate-800 text-white py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer whitespace-nowrap"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                  <span>CANCEL EDIT (NEW MANIFEST)</span>
+                </button>
+              </>
+            ) : (
               <button
                 type="button"
-                onClick={handleCancelEdit}
-                className="w-full bg-slate-700 hover:bg-slate-800 text-white py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer"
+                onClick={handleSavePDF}
+                className="w-full text-white py-2.5 px-4 rounded-lg font-bold text-sm shadow-xs flex items-center justify-center space-x-2 transition transform active:scale-95 cursor-pointer bg-[#129c54] hover:bg-[#0e8346] whitespace-nowrap"
+                title="Save Manifest and open Document Print Preview (PDF / .PNG)"
               >
-                <RotateCcw className="w-3.5 h-3.5 text-slate-300" />
-                <span>CANCEL EDIT (NEW MANIFEST)</span>
+                <Save className="w-5 h-5 shrink-0" />
+                <span>SAVE (PDF / .PNG)</span>
               </button>
             )}
 
-            {/* OPEN EXPORTER PAYMENT SLIP (付款单) Button */}
-            <button
-              type="button"
-              onClick={() => setActiveTab('exporter_payment_slip')}
-              className="w-full bg-[#1e2548] hover:bg-[#2a3362] text-amber-300 py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition border border-amber-400/40 cursor-pointer"
-            >
-              <FileCheck2 className="w-4 h-4 text-amber-400" />
-              <span>EXPORTER PAYMENT SLIP (付款单)</span>
-            </button>
+            {/* Direct Save .PNG & Document Print Preview Buttons */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleDirectSavePng}
+                disabled={isExportingPng}
+                className="w-full bg-amber-600 hover:bg-amber-700 text-white py-2.5 px-3 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-1.5 transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                title="Download Export Packing List Manifest directly as a .PNG image"
+              >
+                {isExportingPng ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                    <span>PNG...</span>
+                  </>
+                ) : (
+                  <>
+                    <ImageDown className="w-3.5 h-3.5 shrink-0" />
+                    <span>SAVE .PNG</span>
+                  </>
+                )}
+              </button>
 
-            {/* MONTHLY STATEMENT (PDF) Button - Violet/Purple */}
-            <button
-              type="button"
-              onClick={handleMonthlyStatement}
-              className="w-full bg-[#6d28d9] hover:bg-[#5b21b6] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
-            >
-              <FileText className="w-4 h-4" />
-              <span>MONTHLY STATEMENT (PDF)</span>
-            </button>
-
-            {/* PRINT (Selected Cells) Button - Cyan */}
-            <button
-              type="button"
-              onClick={handlePrintSelected}
-              className="w-full bg-[#0891b2] hover:bg-[#0e7490] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
-            >
-              <Printer className="w-4 h-4" />
-              <span>PRINT (Selected Cells)</span>
-            </button>
+              <button
+                type="button"
+                onClick={handlePrintSelected}
+                className="w-full bg-[#0891b2] hover:bg-[#0e7490] text-white py-2.5 px-3 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-1.5 transition cursor-pointer whitespace-nowrap"
+                title="Open Document Print Preview"
+              >
+                <Printer className="w-3.5 h-3.5 shrink-0" />
+                <span>PRINT / PDF</span>
+              </button>
+            </div>
 
             {/* SEARCH Button - Royal Blue */}
             <button
@@ -1464,6 +1568,462 @@ export const PackingListView: React.FC = () => {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Offscreen Printable / Exportable Packing Manifest Canvas for Direct .PNG and PDF Export */}
+      <div className="fixed -left-[9999px] top-0 pointer-events-none" aria-hidden="true">
+        <div
+          id="packing-manifest-export-canvas"
+          style={{
+            width: '800px',
+            backgroundColor: '#ffffff',
+            color: '#000000',
+            padding: '32px',
+            fontFamily: 'sans-serif',
+          }}
+        >
+          {/* Official Document Header */}
+          <div
+            style={{ borderBottom: '2px solid #0f172a', paddingBottom: '16px', textAlign: 'center' }}
+          >
+            {/* Official Company Logo Emblem */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
+              <div
+                style={{
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '50%',
+                  border: '2px solid #d4af37',
+                  backgroundColor: '#ffffff',
+                  padding: '2px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                }}
+              >
+                <img
+                  src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+                  alt={companyProfile.companyName}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '50%' }}
+                />
+              </div>
+            </div>
+
+            <div
+              className="zsb-3d-text-print"
+              style={{
+                color: '#f59e0b',
+                fontFamily: "'Cinzel', Georgia, Cambria, 'Times New Roman', Times, serif",
+                fontSize: '32px',
+                fontWeight: 900,
+                letterSpacing: '0.09em',
+                textTransform: 'uppercase',
+                textShadow:
+                  '1px 1px 0px #b45309, 2px 2px 0px #92400e, 3px 3px 0px #78350f, 4px 4px 0px #451a03, 5px 5px 7px rgba(15, 23, 42, 0.35)',
+              }}
+            >
+              {companyProfile.companyName}
+            </div>
+            <div
+              style={{
+                color: '#000000',
+                fontSize: '13px',
+                fontWeight: 700,
+                marginTop: '4px',
+              }}
+            >
+              Address: {companyProfile.address}
+            </div>
+            <div
+              style={{
+                color: '#000000',
+                fontSize: '13px',
+                fontWeight: 700,
+                fontFamily: 'monospace',
+                marginTop: '2px',
+              }}
+            >
+              Mobile: {companyProfile.mobiles.join(' , ')} | EMAIL: {companyProfile.email || 'www.zsbaquatics.com'}
+            </div>
+            <div
+              style={{
+                backgroundColor: '#0f172a',
+                color: '#ffffff',
+                display: 'inline-block',
+                marginTop: '10px',
+                padding: '5px 18px 9px 18px',
+                borderRadius: '4px',
+                fontSize: '11px',
+                fontWeight: 800,
+                lineHeight: '1.2',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+              }}
+            >
+              EXPORT AIR PACKING LIST MANIFEST
+            </div>
+          </div>
+
+          {/* Manifest Metadata Grid */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '10px',
+              backgroundColor: '#f8fafc',
+              border: '1px solid #cbd5e1',
+              borderRadius: '6px',
+              padding: '12px',
+              marginTop: '16px',
+              fontSize: '12px',
+            }}
+          >
+            <div>
+              <div style={{ color: '#64748b', fontSize: '10px', fontWeight: 700 }}>PACKING NO:</div>
+              <div style={{ color: '#0f172a', fontWeight: 900, fontFamily: 'monospace', fontSize: '14px' }}>
+                {invoiceNumber || '-'}
+              </div>
+            </div>
+            <div>
+              <div style={{ color: '#64748b', fontSize: '10px', fontWeight: 700 }}>SHIPPING MARK:</div>
+              <div style={{ color: '#1e3a8a', fontWeight: 900, fontSize: '14px' }}>
+                {shippingMark || '-'}
+              </div>
+            </div>
+            <div>
+              <div style={{ color: '#64748b', fontSize: '10px', fontWeight: 700 }}>PACKING DATE:</div>
+              <div style={{ color: '#0f172a', fontWeight: 700, fontFamily: 'monospace' }}>
+                {formatDate(packingDate)}
+              </div>
+            </div>
+            <div>
+              <div style={{ color: '#64748b', fontSize: '10px', fontWeight: 700 }}>FLIGHT:</div>
+              <div style={{ color: '#0f172a', fontWeight: 700 }}>{flight || '-'}</div>
+            </div>
+            <div>
+              <div style={{ color: '#64748b', fontSize: '10px', fontWeight: 700 }}>DESTINATION:</div>
+              <div style={{ color: '#0f172a', fontWeight: 700 }}>{destination || '-'}</div>
+            </div>
+            <div>
+              <div style={{ color: '#64748b', fontSize: '10px', fontWeight: 700 }}>SHIPPER:</div>
+              <div style={{ color: '#0f172a', fontWeight: 700 }}>{shipper || '-'}</div>
+            </div>
+          </div>
+
+          {/* Manifest Line Items Table */}
+          <table
+            style={{
+              width: '100%',
+              borderCollapse: 'collapse',
+              marginTop: '16px',
+              fontSize: '12px',
+              border: '1px solid #cbd5e1',
+            }}
+          >
+            <thead>
+              <tr
+                style={{
+                  backgroundColor: '#f1f5f9',
+                  color: '#1e293b',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                }}
+              >
+                <th style={{ padding: '8px', border: '1px solid #cbd5e1', textAlign: 'center', width: '40px' }}>
+                  SL
+                </th>
+                <th style={{ padding: '8px', border: '1px solid #cbd5e1', textAlign: 'left' }}>
+                  ITEM / SIZE
+                </th>
+                <th style={{ padding: '8px', border: '1px solid #cbd5e1', textAlign: 'center', width: '70px' }}>
+                  BOX
+                </th>
+                <th style={{ padding: '8px', border: '1px solid #cbd5e1', textAlign: 'center', width: '70px' }}>
+                  WEIGHT (KG)
+                </th>
+                <th style={{ padding: '8px', border: '1px solid #cbd5e1', textAlign: 'right', width: '100px' }}>
+                  TOTAL WEIGHT
+                </th>
+                <th style={{ padding: '8px', border: '1px solid #cbd5e1', textAlign: 'center', width: '60px' }}>
+                  UNIT
+                </th>
+                <th style={{ padding: '8px', border: '1px solid #cbd5e1', textAlign: 'right', width: '90px' }}>
+                  RATE (RMB)
+                </th>
+                <th style={{ padding: '8px', border: '1px solid #cbd5e1', textAlign: 'right', width: '110px' }}>
+                  AMOUNT (RMB)
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {exportableRows.map((row, idx) => (
+                <tr key={row.id || idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                  <td
+                    style={{
+                      padding: '8px',
+                      border: '1px solid #cbd5e1',
+                      textAlign: 'center',
+                      fontFamily: 'monospace',
+                    }}
+                  >
+                    {idx + 1}
+                  </td>
+                  <td
+                    style={{
+                      padding: '8px',
+                      border: '1px solid #cbd5e1',
+                      fontWeight: 700,
+                      color: '#0f172a',
+                    }}
+                  >
+                    {row.item || '-'}
+                  </td>
+                  <td
+                    style={{
+                      padding: '8px',
+                      border: '1px solid #cbd5e1',
+                      textAlign: 'center',
+                      fontFamily: 'monospace',
+                    }}
+                  >
+                    {row.box || 0}
+                  </td>
+                  <td
+                    style={{
+                      padding: '8px',
+                      border: '1px solid #cbd5e1',
+                      textAlign: 'center',
+                      fontFamily: 'monospace',
+                    }}
+                  >
+                    {row.weight || 0}
+                  </td>
+                  <td
+                    style={{
+                      padding: '8px',
+                      border: '1px solid #cbd5e1',
+                      textAlign: 'right',
+                      fontFamily: 'monospace',
+                      fontWeight: 700,
+                      color: '#115e59',
+                    }}
+                  >
+                    {(row.totalWeight || 0).toFixed(2)} KG
+                  </td>
+                  <td
+                    style={{
+                      padding: '8px',
+                      border: '1px solid #cbd5e1',
+                      textAlign: 'center',
+                      fontSize: '10px',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {row.unit || 'KG'}
+                  </td>
+                  <td
+                    style={{
+                      padding: '8px',
+                      border: '1px solid #cbd5e1',
+                      textAlign: 'right',
+                      fontFamily: 'monospace',
+                    }}
+                  >
+                    {formatCurrency(row.rate || 0, '')}
+                  </td>
+                  <td
+                    style={{
+                      padding: '8px',
+                      border: '1px solid #cbd5e1',
+                      textAlign: 'right',
+                      fontFamily: 'monospace',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {formatCurrency(row.amount || 0, '')}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr style={{ backgroundColor: '#f1f5f9', fontWeight: 700, borderTop: '2px solid #64748b' }}>
+                <td colSpan={2} style={{ padding: '8px', border: '1px solid #cbd5e1', textAlign: 'right' }}>
+                  TOTALS:
+                </td>
+                <td
+                  style={{
+                    padding: '8px',
+                    border: '1px solid #cbd5e1',
+                    textAlign: 'center',
+                    fontFamily: 'monospace',
+                    color: '#0f172a',
+                  }}
+                >
+                  {totalBox} Boxes
+                </td>
+                <td style={{ padding: '8px', border: '1px solid #cbd5e1' }}></td>
+                <td
+                  style={{
+                    padding: '8px',
+                    border: '1px solid #cbd5e1',
+                    textAlign: 'right',
+                    fontFamily: 'monospace',
+                    fontWeight: 900,
+                    color: '#115e59',
+                  }}
+                >
+                  {totalWeight.toFixed(2)} KG
+                </td>
+                <td colSpan={2} style={{ padding: '8px', border: '1px solid #cbd5e1', textAlign: 'right' }}>
+                  TOTAL INVOICE VALUE:
+                </td>
+                <td
+                  style={{
+                    padding: '8px',
+                    border: '1px solid #cbd5e1',
+                    textAlign: 'right',
+                    fontFamily: 'monospace',
+                    fontWeight: 900,
+                    color: '#0f172a',
+                  }}
+                >
+                  {formatCurrency(totalAmount, 'RMB')}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+
+          {remarks && (
+            <div
+              style={{
+                marginTop: '14px',
+                padding: '10px 12px',
+                backgroundColor: '#f8fafc',
+                border: '1px solid #cbd5e1',
+                borderRadius: '6px',
+                fontSize: '12px',
+              }}
+            >
+              <strong style={{ color: '#334155' }}>Flight &amp; Handling Remarks:</strong> {remarks}
+            </div>
+          )}
+
+          {/* Shipment QR Code for Direct System Lookup on PNG Export Canvas */}
+          <ShipmentQrBadge
+            shipment={{
+              id: editingPackingId || undefined,
+              invoiceNumber,
+              shippingMark,
+              packingDate,
+              flight,
+              destination,
+              totalBox,
+              totalWeight,
+              totalAmount,
+            }}
+            inlineStylesOnly={true}
+            testIdPrefix="packing-canvas-shipment-qr"
+          />
+
+          {/* Dual Official Signatures */}
+          <div
+            style={{
+              paddingTop: '48px',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, 1fr)',
+              gap: '32px',
+              textAlign: 'center',
+              fontSize: '12px',
+            }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div
+                style={{
+                  borderBottom: '2px solid #0f172a',
+                  width: '210px',
+                  paddingBottom: '6px',
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: 'Georgia, serif',
+                    fontStyle: 'italic',
+                    color: '#0f172a',
+                    fontSize: '16px',
+                    fontWeight: 700,
+                  }}
+                >
+                  {companyProfile.managingPartner}
+                </div>
+              </div>
+              <div
+                style={{
+                  color: '#0f172a',
+                  marginTop: '6px',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                Managing Partner
+              </div>
+              <div style={{ color: '#64748b', fontSize: '10px', fontWeight: 600, textTransform: 'uppercase' }}>
+                {companyProfile.companyName}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div
+                style={{
+                  borderBottom: '2px solid #0f172a',
+                  width: '210px',
+                  paddingBottom: '6px',
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: 'Georgia, serif',
+                    fontStyle: 'italic',
+                    color: '#0f172a',
+                    fontSize: '16px',
+                    fontWeight: 700,
+                  }}
+                >
+                  {companyProfile.partner}
+                </div>
+              </div>
+              <div
+                style={{
+                  color: '#0f172a',
+                  marginTop: '6px',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                Partner
+              </div>
+              <div style={{ color: '#64748b', fontSize: '10px', fontWeight: 600, textTransform: 'uppercase' }}>
+                {companyProfile.companyName}
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              borderTop: '1px solid #e2e8f0',
+              color: '#94a3b8',
+              textAlign: 'center',
+              fontSize: '10px',
+              paddingTop: '14px',
+              marginTop: '24px',
+            }}
+          >
+            This is an official computer-generated document from {companyProfile.companyName} System • Validated and archived.
           </div>
         </div>
       </div>

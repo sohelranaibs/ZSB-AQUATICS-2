@@ -104,7 +104,7 @@ async function renderElementToHighResCanvas(
         clonedTarget.style.boxSizing = 'border-box';
         clonedTarget.style.backgroundColor = '#ffffff';
         clonedTarget.style.color = '#000000';
-        if (elementId === 'printable-document') {
+        if (elementId === 'printable-document' || elementId === 'global-printable-document') {
           clonedTarget.style.padding = '32px';
         }
         clonedTarget.style.margin = '0 auto';
@@ -277,6 +277,13 @@ export async function exportElementToPdf(
 
     const baseName = filename.replace(/\.(pdf|png)$/i, '');
     const cleanFilename = `${baseName}.pdf`;
+    if (typeof window !== 'undefined') {
+      (window as unknown as Record<string, unknown>).__LAST_EXPORTED_PDF__ = {
+        filename: cleanFilename,
+        elementId,
+        timestamp: new Date().toISOString(),
+      };
+    }
     pdf.save(cleanFilename);
     return true;
   } catch (error) {
@@ -376,7 +383,7 @@ export function openPrintableDocumentWindow(
 <body>
   <div class="print-bar">
     <div>
-      <span style="color:#d4af37;font-weight:900;font-size:16px;letter-spacing:1px;font-family:serif;">ZSB AQUATICS</span>
+      <span style="color:#ffe066;font-weight:900;font-size:18px;letter-spacing:0.08em;font-family:'Cinzel',Georgia,serif;text-shadow:0px 1px 0px #d97706,1px 2px 0px #b45309,2px 3px 0px #92400e,3px 4px 0px #78350f,4px 5px 6px rgba(0,0,0,0.7);">ZSB AQUATICS</span>
       <span style="color:#94a3b8;margin:0 8px;">|</span>
       <span style="font-weight:600;font-size:13px;color:#f8fafc;">Official Print Ready Document</span>
     </div>

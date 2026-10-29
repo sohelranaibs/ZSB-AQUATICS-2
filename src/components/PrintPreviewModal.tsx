@@ -6,6 +6,7 @@ import {
   formatRMB,
   formatExporterSlipExportFilename,
   formatPurchaseExportFilename,
+  formatPackingExportFilename,
 } from '../utils/calculations.ts';
 import {
   exportElementToPdf,
@@ -23,13 +24,33 @@ import {
   FileDown,
   ImageDown,
 } from 'lucide-react';
+import { ShipmentQrBadge } from './ShipmentQrBadge.tsx';
+import {
+  GlobalViewTablePrintBody,
+  GlobalOffscreenPrintHost,
+} from './GlobalViewTablePrintBody.tsx';
+import { formatMortalityReportFilename } from '../utils/mortalityReport.ts';
 
 export const PrintPreviewModal: React.FC = () => {
-  const { printModalData, closePrintModal, companyProfile, showToast } = useApp();
+  const {
+    printModalData,
+    closePrintModal,
+    companyProfile,
+    showToast,
+    openShipmentDetails,
+    globalViewReport,
+  } = useApp();
   const [isSavingPdf, setIsSavingPdf] = useState(false);
   const [isSavingPng, setIsSavingPng] = useState(false);
 
-  if (!printModalData.isOpen) return null;
+  if (!printModalData.isOpen) {
+    return (
+      <GlobalOffscreenPrintHost
+        report={globalViewReport}
+        companyProfile={companyProfile}
+      />
+    );
+  }
 
   const { type, title, data, items, selectedIds } = printModalData;
 
@@ -48,6 +69,21 @@ export const PrintPreviewModal: React.FC = () => {
         data?.date || '',
         ext
       );
+    }
+    if (type === 'packing') {
+      return formatPackingExportFilename(
+        data?.invoiceNumber || 'PKG',
+        data?.shippingMark || '',
+        data?.packingDate || '',
+        ext
+      );
+    }
+    if (type === 'global_view_table' && data?.filename) {
+      const base = String(data.filename).replace(/\.(pdf|png)$/i, '');
+      return `${base}.${ext}`;
+    }
+    if (type === 'mortality_report') {
+      return formatMortalityReportFilename(data?.targetMonth || '', ext);
     }
     const docNo = data?.invoiceNumber || (data?.records?.[0]?.invoiceNumber) || type;
     const cleanDoc = String(docNo).replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -108,7 +144,7 @@ export const PrintPreviewModal: React.FC = () => {
   return (
     <div
       id="printable-modal-backdrop"
-      className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 print:p-0 print:bg-white print:static print:overflow-visible"
+      className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 flex items-center justify-center p-2 sm:p-4 print:p-0 print:bg-white print:static print:overflow-visible"
     >
       <div
         id="printable-modal-card"
@@ -197,14 +233,28 @@ export const PrintPreviewModal: React.FC = () => {
                 style={{ borderBottom: '2px solid #0f172a' }}
                 className="pb-4 text-center space-y-1.5"
               >
-                {/* Golden Company Name (Requirement: Should be GOLDEN COLOR in every place) */}
+                {/* Official Company Logo Emblem */}
+                <div className="flex justify-center mb-1">
+                  <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shadow-xs">
+                    <img
+                      src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+                      alt={companyProfile.companyName}
+                      className="w-full h-full object-contain rounded-full"
+                    />
+                  </div>
+                </div>
+
+                {/* Golden 3D Company Name */}
                 <div
+                  className="zsb-3d-text-print text-3xl sm:text-4xl font-black tracking-widest uppercase"
                   style={{
-                    color: '#d4af37',
-                    fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif',
-                    textShadow: '0 1px 2px rgba(212,175,55,0.25)',
+                    color: '#f59e0b',
+                    fontFamily: "'Cinzel', Georgia, Cambria, 'Times New Roman', Times, serif",
+                    fontWeight: 900,
+                    letterSpacing: '0.09em',
+                    textShadow:
+                      '1px 1px 0px #b45309, 2px 2px 0px #92400e, 3px 3px 0px #78350f, 4px 4px 0px #451a03, 5px 5px 7px rgba(15, 23, 42, 0.35)',
                   }}
-                  className="text-3xl sm:text-4xl font-black tracking-widest uppercase"
                 >
                   {companyProfile.companyName}
                 </div>
@@ -222,7 +272,7 @@ export const PrintPreviewModal: React.FC = () => {
                   style={{ color: '#000000' }}
                   className="text-xs sm:text-sm font-bold font-mono"
                 >
-                  Mobile: {companyProfile.mobiles.join(' , ')}
+                  Mobile: {companyProfile.mobiles.join(' , ')} | EMAIL: {companyProfile.email || 'www.zsbaquatics.com'}
                 </div>
 
                 <div
@@ -243,6 +293,10 @@ export const PrintPreviewModal: React.FC = () => {
                     ? 'MONTHLY STATEMENT REPORT'
                     : type === 'profit_loss'
                     ? 'LOSS & PROFIT STATEMENT'
+                    : type === 'mortality_report'
+                    ? `MONTHLY INVENTORY MORTALITY & STOCK LOSS REPORT (${data?.monthLabel || 'CURRENT MONTH'})`
+                    : type === 'global_view_table'
+                    ? data?.documentBadge || 'OFFICIAL VIEW TABLE REPORT'
                     : 'CONSOLIDATED BATCH REPORT'}
                 </div>
               </div>
@@ -430,6 +484,24 @@ export const PrintPreviewModal: React.FC = () => {
                   <strong className="text-slate-700">Flight &amp; Handling Remarks:</strong> {data.remarks}
                 </div>
               )}
+
+              {/* Shipment QR Code for Direct System Lookup */}
+              <ShipmentQrBadge
+                shipment={{
+                  id: data.id,
+                  invoiceNumber: data.invoiceNumber || 'PKG',
+                  shippingMark: data.shippingMark || '',
+                  packingDate: data.packingDate || '',
+                  flight: data.flight,
+                  destination: data.destination,
+                  totalBox: data.totalBox,
+                  totalWeight: data.totalWeight,
+                  totalAmount: data.totalAmount,
+                }}
+                showInteractiveControls={true}
+                onOpenInSystem={openShipmentDetails}
+                testIdPrefix="print-modal-shipment-qr"
+              />
             </div>
           )}
 
@@ -468,15 +540,22 @@ export const PrintPreviewModal: React.FC = () => {
                   <tr className="bg-slate-100 text-slate-800 uppercase font-bold text-[11px] border-b border-slate-300">
                     <th className="p-2 border-r border-slate-300 text-center w-12">SL</th>
                     <th className="p-2 border-r border-slate-300 text-left">PARTICULARS</th>
-                    <th className="p-2 border-r border-slate-300 text-right w-32">
+                    <th className="p-2 border-r border-slate-300 text-right w-28">
                       DEBIT ({data.paymentCategory === 'exporter' ? 'RMB' : companyProfile.currency})
                     </th>
-                    <th className="p-2 border-r border-slate-300 text-right w-32">
+                    <th className="p-2 border-r border-slate-300 text-right w-28">
                       CREDIT ({data.paymentCategory === 'exporter' ? 'RMB' : companyProfile.currency})
                     </th>
-                    <th className="p-2 text-right w-32">
+                    <th
+                      className={`p-2 text-right w-28 ${
+                        data.paymentCategory === 'exporter' ? 'border-r border-slate-300' : ''
+                      }`}
+                    >
                       BALANCE ({data.paymentCategory === 'exporter' ? 'RMB' : companyProfile.currency})
                     </th>
+                    {data.paymentCategory === 'exporter' && (
+                      <th className="p-2 text-center w-28">STATUS</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -491,9 +570,18 @@ export const PrintPreviewModal: React.FC = () => {
                         <td className="p-2 border-r border-slate-200 text-right font-mono">
                           {formatCurrency(row.creditAmount, '')}
                         </td>
-                        <td className="p-2 text-right font-mono font-bold">
+                        <td
+                          className={`p-2 text-right font-mono font-bold ${
+                            data.paymentCategory === 'exporter' ? 'border-r border-slate-200' : ''
+                          }`}
+                        >
                           {formatCurrency(row.balance, '')}
                         </td>
+                        {data.paymentCategory === 'exporter' && (
+                          <td className="p-2 text-center font-bold uppercase text-[10px]">
+                            {row.status || data.status || 'REPORT'}
+                          </td>
+                        )}
                       </tr>
                     ))
                   ) : null}
@@ -507,13 +595,25 @@ export const PrintPreviewModal: React.FC = () => {
                         data.paymentCategory === 'exporter' ? 'RMB' : companyProfile.currency
                       )}
                     </td>
-                    <td></td>
+                    <td className="p-2 text-right font-mono font-bold">
+                      {data.paidAmount !== undefined
+                        ? formatCurrency(
+                            data.paidAmount,
+                            data.paymentCategory === 'exporter' ? 'RMB' : companyProfile.currency
+                          )
+                        : ''}
+                    </td>
                     <td className="p-2 text-right font-mono text-purple-900 font-black">
                       {formatCurrency(
                         data.balance,
                         data.paymentCategory === 'exporter' ? 'RMB' : companyProfile.currency
                       )}
                     </td>
+                    {data.paymentCategory === 'exporter' && (
+                      <td className="p-2 text-center font-bold uppercase text-[10px]">
+                        {data.status || 'REPORT'}
+                      </td>
+                    )}
                   </tr>
                 </tfoot>
               </table>
@@ -601,6 +701,220 @@ export const PrintPreviewModal: React.FC = () => {
             </div>
           )}
 
+          {/* Type 5B: Global View Table Report */}
+          {type === 'global_view_table' && data && (
+            <GlobalViewTablePrintBody report={data} />
+          )}
+
+          {/* Type 5C: Monthly Inventory Mortality Report */}
+          {type === 'mortality_report' && data && (
+            <div data-testid="printable-mortality-report" className="space-y-4 text-xs">
+              {/* Report Sub-Header */}
+              <div
+                style={{ backgroundColor: '#faf5ff', borderColor: '#d8b4fe' }}
+                className="p-3.5 rounded-lg border flex flex-wrap items-center justify-between gap-3"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-purple-900 bg-purple-200/80 px-2 py-0.5 rounded">
+                      Report Period:
+                    </span>
+                    <span className="text-sm font-black text-purple-950 font-mono">
+                      {data.monthLabel || 'Current Month'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-purple-800 mt-1">
+                    Monthly ledger audit of live seafood mortality losses, cause analysis, and inventory stock adjustments.
+                  </p>
+                </div>
+
+                <div className="text-right text-[11px] text-purple-900 font-mono">
+                  <div>Audit Month: <strong>{data.targetMonth}</strong></div>
+                  <div>Generated: <strong>{formatDate(data.generatedAt || new Date().toISOString())}</strong></div>
+                </div>
+              </div>
+
+              {/* KPI Summary Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div style={{ backgroundColor: '#fff1f2', borderColor: '#fecdd3' }} className="p-3 rounded-lg border">
+                  <div className="text-[10px] font-bold uppercase text-rose-800">Total Mortality Loss</div>
+                  <div className="text-lg font-black font-mono text-rose-700 mt-0.5">
+                    {data.totalLossKg} KG
+                  </div>
+                  <div className="text-[10px] text-rose-600 font-mono mt-0.5">
+                    Deducted from Stock
+                  </div>
+                </div>
+
+                <div style={{ backgroundColor: '#f5f3ff', borderColor: '#ddd6fe' }} className="p-3 rounded-lg border">
+                  <div className="text-[10px] font-bold uppercase text-purple-800">Mortality Incidents</div>
+                  <div className="text-lg font-black font-mono text-purple-900 mt-0.5">
+                    {data.totalIncidents} Recorded
+                  </div>
+                  <div className="text-[10px] text-purple-700 font-mono mt-0.5">
+                    Avg: {data.averageLossPerIncidentKg} KG/Incident
+                  </div>
+                </div>
+
+                <div style={{ backgroundColor: '#fefce8', borderColor: '#fef08a' }} className="p-3 rounded-lg border">
+                  <div className="text-[10px] font-bold uppercase text-amber-800">Primary Impact Species</div>
+                  <div className="text-base font-black font-mono text-amber-900 mt-0.5 truncate">
+                    {data.primarySpecies}
+                  </div>
+                  <div className="text-[10px] text-amber-700 font-mono mt-0.5 truncate">
+                    Cause: {data.primaryCause}
+                  </div>
+                </div>
+
+                <div style={{ backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }} className="p-3 rounded-lg border">
+                  <div className="text-[10px] font-bold uppercase text-emerald-800">Est. Financial Loss</div>
+                  <div className="text-lg font-black font-mono text-emerald-900 mt-0.5">
+                    {formatCurrency(data.estimatedTotalLossBDT, companyProfile.currency)}
+                  </div>
+                  <div className="text-[10px] text-emerald-700 font-mono mt-0.5">
+                    At Average Procurement Rate
+                  </div>
+                </div>
+              </div>
+
+              {/* Table 1: Species & Grade Loss Distribution Breakdown */}
+              <div className="space-y-1.5 pt-1">
+                <div className="font-bold text-xs uppercase tracking-wide text-slate-800 flex items-center justify-between">
+                  <span>Species &amp; Grade Loss Distribution</span>
+                  <span className="text-[11px] font-mono text-slate-500 font-semibold">
+                    {data.speciesBreakdown?.length || 0} Species Impacted
+                  </span>
+                </div>
+                <table style={{ border: '1px solid #cbd5e1' }} className="w-full text-left text-xs border-collapse">
+                  <thead style={{ backgroundColor: '#581c87', color: '#ffffff' }} className="font-bold text-[10px] uppercase">
+                    <tr>
+                      <th className="p-2 w-10 text-center">SL</th>
+                      <th className="p-2">SPECIES / GRADE</th>
+                      <th className="p-2 text-right">LOSS QTY (KG)</th>
+                      <th className="p-2 text-right">% OF MONTH LOSS</th>
+                      <th className="p-2 text-center">INCIDENTS</th>
+                      <th className="p-2 text-right">EST. PROCUREMENT RATE</th>
+                      <th className="p-2 text-right">EST. LOSS AMOUNT (TK)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {!data.speciesBreakdown || data.speciesBreakdown.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-4 text-center text-slate-400">
+                          No mortality recorded for this month.
+                        </td>
+                      </tr>
+                    ) : (
+                      data.speciesBreakdown.map((row: any, idx: number) => (
+                        <tr key={row.species} className="hover:bg-slate-50">
+                          <td className="p-2 text-center font-mono text-slate-500">{idx + 1}</td>
+                          <td className="p-2 font-mono font-bold text-purple-950">{row.species}</td>
+                          <td className="p-2 text-right font-mono font-black text-rose-700">
+                            {row.totalLossKg} KG
+                          </td>
+                          <td className="p-2 text-right font-mono text-slate-700">
+                            {row.percentageOfTotal}%
+                          </td>
+                          <td className="p-2 text-center font-mono text-slate-700">{row.incidentCount}</td>
+                          <td className="p-2 text-right font-mono text-slate-700">
+                            {formatCurrency(row.estimatedRatePerKg, companyProfile.currency)}
+                          </td>
+                          <td className="p-2 text-right font-mono font-bold text-slate-900">
+                            {formatCurrency(row.estimatedLossBDT, companyProfile.currency)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                  {data.speciesBreakdown && data.speciesBreakdown.length > 0 && (
+                    <tfoot style={{ backgroundColor: '#faf5ff', borderTop: '2px solid #a855f7' }}>
+                      <tr className="font-black text-purple-950 text-xs">
+                        <td colSpan={2} className="p-2 text-right uppercase">TOTAL MONTH LOSS:</td>
+                        <td className="p-2 text-right font-mono text-rose-700">{data.totalLossKg} KG</td>
+                        <td className="p-2 text-right font-mono">100%</td>
+                        <td className="p-2 text-center font-mono">{data.totalIncidents}</td>
+                        <td className="p-2"></td>
+                        <td className="p-2 text-right font-mono text-slate-950">
+                          {formatCurrency(data.estimatedTotalLossBDT, companyProfile.currency)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+
+              {/* Table 2: Chronological Mortality Incident Ledger */}
+              <div className="space-y-1.5 pt-2">
+                <div className="font-bold text-xs uppercase tracking-wide text-slate-800 flex items-center justify-between">
+                  <span>Detailed Mortality Event Log ({data.monthLabel})</span>
+                  <span className="text-[11px] font-mono text-slate-500 font-semibold">
+                    {data.records?.length || 0} Incident Records
+                  </span>
+                </div>
+                <table style={{ border: '1px solid #cbd5e1' }} className="w-full text-left text-xs border-collapse">
+                  <thead style={{ backgroundColor: '#1e1b4b', color: '#ffffff' }} className="font-bold text-[10px] uppercase">
+                    <tr>
+                      <th className="p-2 w-10 text-center">SL</th>
+                      <th className="p-2">DATE</th>
+                      <th className="p-2">SPECIES / GRADE</th>
+                      <th className="p-2 text-right">MORTALITY LOSS</th>
+                      <th className="p-2">CAUSE / REASON</th>
+                      <th className="p-2">NOTES / LOCATION</th>
+                      <th className="p-2">STOCK ADJUSTMENT IMPACT</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {!data.records || data.records.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-4 text-center text-slate-400">
+                          No mortality events recorded in this month.
+                        </td>
+                      </tr>
+                    ) : (
+                      data.records.map((rec: any, idx: number) => (
+                        <tr key={rec.id} className="hover:bg-slate-50">
+                          <td className="p-2 text-center font-mono text-slate-500">{idx + 1}</td>
+                          <td className="p-2 font-mono text-slate-700">{formatDate(rec.date)}</td>
+                          <td className="p-2 font-mono font-bold text-purple-950">{rec.species}</td>
+                          <td className="p-2 text-right font-mono font-black text-rose-700">
+                            -{rec.quantityKg} KG
+                          </td>
+                          <td className="p-2 text-slate-800 font-medium">{rec.cause || '-'}</td>
+                          <td className="p-2 text-slate-600">{rec.notes || '-'}</td>
+                          <td className="p-2 font-mono text-[10px] text-amber-800 font-bold">
+                            Deducted {rec.quantityKg} KG from {rec.species} stock
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Signatures & Verification Seal */}
+              <div className="pt-6 mt-4 border-t border-slate-300 grid grid-cols-3 gap-6 text-center text-xs">
+                <div>
+                  <div className="border-b border-slate-400 pb-8 font-bold text-slate-800">
+                    Inventory &amp; Depot Supervisor
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-1 uppercase font-semibold">Physical Count Verified</div>
+                </div>
+                <div>
+                  <div className="border-b border-slate-400 pb-8 font-bold text-slate-800">
+                    {companyProfile.partner || 'Md. Sohel Rana'}
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-1 uppercase font-semibold">Partner • ZSB AQUATICS</div>
+                </div>
+                <div>
+                  <div className="border-b border-slate-400 pb-8 font-bold text-slate-800">
+                    {companyProfile.managingPartner || 'Md. Mizanur Rahman'}
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-1 uppercase font-semibold">Managing Partner • ZSB AQUATICS</div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Type 6: Exporter Payment Slip (PAYMENT SLIP 付款单) */}
           {type === 'exporter_payment_slip' && data && (
             <div
@@ -609,9 +923,26 @@ export const PrintPreviewModal: React.FC = () => {
             >
               <div
                 style={{ backgroundColor: '#98486f', color: '#ffffff' }}
-                className="py-3 px-4 text-center border-b-2 border-black"
+                className="py-3 px-4 flex items-center justify-center gap-3 border-b-2 border-black"
               >
-                <div className="text-3xl font-black tracking-wider uppercase font-sans">
+                <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-300 bg-white p-0.5 shrink-0 shadow-xs">
+                  <img
+                    src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+                    alt={companyProfile.companyName}
+                    className="w-full h-full object-contain rounded-full"
+                  />
+                </div>
+                <div
+                  className="zsb-3d-text-lg text-3xl font-black tracking-wider uppercase"
+                  style={{
+                    color: '#ffe57f',
+                    fontFamily: "'Cinzel', Georgia, Cambria, 'Times New Roman', Times, serif",
+                    fontWeight: 900,
+                    letterSpacing: '0.09em',
+                    textShadow:
+                      '0px 1px 0px #f59e0b, 1px 2px 0px #d97706, 2px 3px 0px #b45309, 3px 4px 0px #92400e, 4px 5px 0px #78350f, 5px 6px 0px #451a03, 6px 8px 10px rgba(0, 0, 0, 0.75)',
+                  }}
+                >
                   {companyProfile.companyName}
                 </div>
               </div>
@@ -623,12 +954,13 @@ export const PrintPreviewModal: React.FC = () => {
                   29/B, NISHATNAGAR, TARARTEK, TURAG, DHAKA-1230
                 </div>
                 <div className="py-1 px-3 text-xs sm:text-sm font-bold uppercase">
-                  CONTACT NUMBER - +880 18411-65902, +880 1711 331545
+                  CONTACT NUMBER - +880 18411-65902, +880 1711 331545 | EMAIL:{' '}
+                  <span className="normal-case">{companyProfile.email || 'www.zsbaquatics.com'}</span>
                 </div>
               </div>
               <div
                 style={{ backgroundColor: '#faefd0', color: '#000000' }}
-                className="py-2 px-3 text-center border-b-2 border-black font-black text-lg sm:text-xl uppercase"
+                className="py-2 px-3 text-center border-b-2 border-black font-black text-lg sm:text-xl"
               >
                 PAYMENT SLIP 付款单
               </div>
@@ -804,6 +1136,10 @@ export const PrintPreviewModal: React.FC = () => {
         </div>
       </div>
     </div>
+    <GlobalOffscreenPrintHost
+      report={globalViewReport}
+      companyProfile={companyProfile}
+    />
   </div>
 );
 };

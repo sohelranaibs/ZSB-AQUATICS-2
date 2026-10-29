@@ -13,8 +13,15 @@ import {
   generateInvoiceNumber,
   formatDate,
   formatRMB,
+  calculatePaymentRow,
 } from '../utils/calculations.ts';
-import { ExporterPaymentSlipRow } from '../types/index.ts';
+import {
+  EXPORTER_STATUS_OPTIONS,
+  ExporterRecordHistoryRow,
+  buildExporterRecordHistory,
+  calculateExporterHistoryTotals,
+} from '../utils/exporterHistory.ts';
+import { ExporterPaymentSlipRow, ExporterStatus } from '../types/index.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
 import { exportElementToPng } from '../utils/pdfGenerator.ts';
 import {
@@ -35,7 +42,7 @@ import {
   Loader2,
 } from 'lucide-react';
 
-const CUSTOM_SLIP_ROWS_STORAGE_KEY = 'zsb_exporter_slip_custom_rows_v2';
+const CUSTOM_SLIP_ROWS_STORAGE_KEY = 'zsb_exporter_slip_custom_rows_v3';
 
 export const ExporterPaymentSlipView: React.FC = () => {
   const {
@@ -43,6 +50,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
     payments,
     addPacking,
     updatePacking,
+    updatePayment,
     dropdownOptions,
     companyProfile,
     openPrintModal,
@@ -62,20 +70,6 @@ export const ExporterPaymentSlipView: React.FC = () => {
     try {
       const saved = localStorage.getItem(CUSTOM_SLIP_ROWS_STORAGE_KEY);
       if (!saved) {
-        const legacySaved = localStorage.getItem('zsb_exporter_slip_custom_rows_v1');
-        if (legacySaved) {
-          const parsedLegacy = JSON.parse(legacySaved);
-          if (Array.isArray(parsedLegacy)) {
-            const populatedLegacy = parsedLegacy.filter((r) => isExporterSlipRowPopulated(r));
-            if (populatedLegacy.length > 0) {
-              const initial = createInitialExporterSlipRows(DEFAULT_EXPORTER_SLIP_ROWS);
-              return [
-                ...populatedLegacy,
-                ...initial.slice(0, Math.max(0, DEFAULT_EXPORTER_SLIP_ROWS - populatedLegacy.length)),
-              ];
-            }
-          }
-        }
         return createInitialExporterSlipRows(DEFAULT_EXPORTER_SLIP_ROWS);
       }
       const parsed = JSON.parse(saved);
@@ -95,6 +89,18 @@ export const ExporterPaymentSlipView: React.FC = () => {
       console.error(e);
     }
   }, [customRows]);
+
+  useEffect(() => {
+    const handleClearAll = () => {
+      setCustomRows(createInitialExporterSlipRows(DEFAULT_EXPORTER_SLIP_ROWS));
+      setSelectedMark('ALL');
+      setSelectedDate('ALL');
+      setSelectedFlight('ALL');
+      setSelectedStatus('ALL');
+    };
+    window.addEventListener('zsb-clear-all-db', handleClearAll);
+    return () => window.removeEventListener('zsb-clear-all-db', handleClearAll);
+  }, []);
 
   // Unique Shipping Marks present in Exporter DB (packings) + dropdownOptions
   const availableMarks = useMemo(() => {
@@ -246,6 +252,90 @@ export const ExporterPaymentSlipView: React.FC = () => {
   );
 
   const totals = useMemo(() => calculateExporterSlipTotals(slipRows), [slipRows]);
+
+  // Build All Exporter Record History (Debit, Credit, Balance & Status: Report, No Report, Paid)
+  const historyRows = useMemo(
+    () =>
+      buildExporterRecordHistory(packings, payments, {
+        shippingMark: selectedMark,
+        packingDate: selectedDate,
+        flight: selectedFlight,
+        status: selectedStatus,
+        rmbExchangeRate: companyProfile.rmbExchangeRate,
+      }),
+    [
+      packings,
+      payments,
+      selectedMark,
+      selectedDate,
+      selectedFlight,
+      selectedStatus,
+      companyProfile.rmbExchangeRate,
+    ]
+  );
+
+  const historyTotals = useMemo(
+    () => calculateExporterHistoryTotals(historyRows),
+    [historyRows]
+  );
+
+  const statusOptions = useMemo(() => {
+    const merged = Array.from(
+      new Set([...EXPORTER_STATUS_OPTIONS, ...dropdownOptions.paymentStatuses])
+    );
+    return merged;
+  }, [dropdownOptions.paymentStatuses]);
+
+  const handleUpdateHistoryRow = (
+    row: ExporterRecordHistoryRow,
+    field: 'debitAmount' | 'creditAmount' | 'status',
+    value: number | string
+  ) => {
+    if (row.packingId) {
+      if (field === 'debitAmount') {
+        const nextDebit = Math.max(0, Number(value) || 0);
+        const nextBalance = calculatePaymentRow(nextDebit, row.creditAmount);
+        updatePacking(row.packingId, {
+          debitAmount: nextDebit,
+          settledAmount: nextDebit,
+          balanceAmount: nextBalance,
+        });
+      } else if (field === 'creditAmount') {
+        const nextCredit = Math.max(0, Number(value) || 0);
+        const nextBalance = calculatePaymentRow(row.debitAmount, nextCredit);
+        updatePacking(row.packingId, {
+          creditAmount: nextCredit,
+          balanceAmount: nextBalance,
+        });
+      } else if (field === 'status') {
+        const nextStatus = String(value) as ExporterStatus;
+        updatePacking(row.packingId, {
+          exporterStatus: nextStatus,
+          paymentStatus: nextStatus,
+        });
+      }
+    } else if (row.paymentId) {
+      if (field === 'debitAmount') {
+        const nextDebit = Math.max(0, Number(value) || 0);
+        const nextBalance = calculatePaymentRow(nextDebit, row.creditAmount);
+        updatePayment(row.paymentId, {
+          totalAmount: nextDebit,
+          balance: nextBalance,
+        });
+      } else if (field === 'creditAmount') {
+        const nextCredit = Math.max(0, Number(value) || 0);
+        const nextBalance = calculatePaymentRow(row.debitAmount, nextCredit);
+        updatePayment(row.paymentId, {
+          paidAmount: nextCredit,
+          balance: nextBalance,
+        });
+      } else if (field === 'status') {
+        updatePayment(row.paymentId, {
+          status: String(value) as ExporterStatus,
+        });
+      }
+    }
+  };
 
   // Add a new row to the Payment Slip form
   const handleAddRow = () => {
@@ -469,12 +559,16 @@ export const ExporterPaymentSlipView: React.FC = () => {
       {/* Top Action & Filter Bar */}
       <div className="bg-slate-900 text-white px-5 py-3.5 rounded-xl shadow-md border-b-2 border-amber-500 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-lg bg-[#98486f]/30 border border-[#98486f] flex items-center justify-center">
-            <FileSpreadsheet className="w-5 h-5 text-amber-400" />
+          <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
+            <img
+              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+              alt={companyProfile.companyName}
+              className="w-full h-full object-contain rounded-full"
+            />
           </div>
           <div>
             <div className="flex items-center space-x-2.5">
-              <span className="text-lg sm:text-xl font-black tracking-wider text-amber-400 font-serif uppercase">
+              <span className="zsb-3d-text text-lg sm:text-xl font-black">
                 {companyProfile.companyName}
               </span>
               <span className="text-slate-500">·</span>
@@ -483,7 +577,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
               </h1>
             </div>
             <p className="text-xs text-slate-300 mt-0.5">
-              Automatically receives shipment &amp; settlement data from Exporter Database (Select Shipping Mark &amp; Packing Date)
+              Automatically receives shipment &amp; record history from Exporter Database (Select Shipping Mark &amp; Packing Date)
             </p>
           </div>
         </div>
@@ -570,7 +664,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
           </div>
           <div className="flex items-center space-x-3">
             <span className="text-xs font-mono text-slate-600 bg-slate-100 px-2.5 py-1 rounded border border-slate-200">
-              Active Slip Rows: <strong className="text-slate-900">{populatedSlipRows.length}</strong> ({dbSlipRows.length} DB · {populatedCustomRows.length} Custom)
+              Record History: <strong className="text-slate-900">{historyRows.length}</strong> · Active Slip Rows: <strong className="text-slate-900">{populatedSlipRows.length}</strong>
             </span>
             <button
               type="button"
@@ -728,7 +822,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
               className="flex items-center space-x-1 text-[11px] font-black uppercase text-slate-700 mb-1.5"
             >
               <CheckCircle2 className="w-3.5 h-3.5 text-slate-600" />
-              <span>Status (STATUS 地位)</span>
+              <span>Status (Report, No Report &amp; Paid)</span>
             </label>
             <select
               id="exporter-slip-status-select"
@@ -737,8 +831,8 @@ export const ExporterPaymentSlipView: React.FC = () => {
               onChange={(e) => setSelectedStatus(e.target.value)}
               className="w-full px-3 py-2 text-xs sm:text-sm font-semibold border border-slate-300 rounded-lg bg-slate-50 text-slate-800 focus:bg-white focus:border-[#98486f] focus:outline-none transition"
             >
-              <option value="ALL">-- All Statuses --</option>
-              {dropdownOptions.paymentStatuses.map((st) => (
+              <option value="ALL">-- All Statuses (Report, No Report, Paid) --</option>
+              {statusOptions.map((st) => (
                 <option key={st} value={st}>
                   {st}
                 </option>
@@ -747,46 +841,202 @@ export const ExporterPaymentSlipView: React.FC = () => {
           </div>
         </div>
 
-        {/* Quick Shipment Pill Bar for 1-Click Selection */}
-        <div className="pt-1 flex flex-wrap items-center gap-1.5">
-          <span className="text-[11px] font-bold text-slate-500 uppercase mr-1">
-            Quick Select Shipment:
-          </span>
-          <button
-            type="button"
-            onClick={handleResetFilters}
-            className={`px-2.5 py-1 rounded text-xs font-bold border transition cursor-pointer ${
-              selectedMark === 'ALL' && selectedDate === 'ALL'
-                ? 'bg-[#98486f] text-white border-[#98486f] shadow-xs'
-                : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
-            }`}
-          >
-            All Shipments ({packings.length})
-          </button>
-          {packings.map((pkg) => {
-            const isSelected =
-              selectedMark === pkg.shippingMark && selectedDate === pkg.packingDate;
-            return (
-              <button
-                key={pkg.id}
-                type="button"
-                onClick={() => {
-                  setSelectedMark(pkg.shippingMark);
-                  setSelectedDate(pkg.packingDate);
-                }}
-                className={`px-2.5 py-1 rounded border transition cursor-pointer inline-flex items-center gap-1.5 ${
-                  isSelected
-                    ? 'bg-[#98486f] text-white border-[#98486f] shadow-xs'
-                    : 'bg-[#faefd0]/60 text-slate-800 border-[#98486f]/30 hover:bg-[#faefd0]'
-                }`}
-              >
-                <span className="text-2xl sm:text-[28px] leading-none font-black tracking-wider uppercase">
-                  {pkg.shippingMark}
-                </span>
-                <span className="text-xs font-bold opacity-80">· {formatDate(pkg.packingDate)}</span>
-              </button>
-            );
-          })}
+        {/* All Exporter Record History Table (Debit, Credit, Balance & Status: Report, No Report, Paid) */}
+        <div
+          data-testid="exporter-lookup-record-history-section"
+          className="pt-2 border-t border-slate-200 space-y-2.5"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <FileSpreadsheet className="w-4 h-4 text-[#98486f]" />
+              <span className="text-xs font-black uppercase tracking-wider text-slate-800">
+                All Exporter Record History (Debit, Credit, Balance &amp; Status)
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono">
+              <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-bold border border-slate-200">
+                Records: {historyTotals.recordCount}
+              </span>
+              <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 font-bold border border-emerald-200">
+                PAID: {historyTotals.paidCount}
+              </span>
+              <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-800 font-bold border border-blue-200">
+                REPORT: {historyTotals.reportCount}
+              </span>
+              <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-800 font-bold border border-rose-200">
+                NO REPORT: {historyTotals.noReportCount}
+              </span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-lg border border-slate-300">
+            <table
+              data-testid="exporter-lookup-record-history-table"
+              className="w-full border-collapse text-xs"
+            >
+              <thead>
+                <tr className="bg-[#0f3d4c] text-white uppercase text-[11px] font-bold tracking-wider border-b border-slate-800">
+                  <th className="py-2 px-2.5 border-r border-slate-700 text-center w-10">SL</th>
+                  <th className="py-2 px-2.5 border-r border-slate-700 text-left w-28">
+                    PACKING DATE
+                  </th>
+                  <th className="py-2 px-2.5 border-r border-slate-700 text-left w-28">
+                    SHIPPING MARK
+                  </th>
+                  <th className="py-2 px-3 border-r border-slate-700 text-left">
+                    RECORD HISTORY / SHIPMENT PARTICULARS
+                  </th>
+                  <th className="py-2 px-2.5 border-r border-slate-700 text-right w-32">
+                    DEBIT (RMB)
+                  </th>
+                  <th className="py-2 px-2.5 border-r border-slate-700 text-right w-32">
+                    CREDIT (RMB)
+                  </th>
+                  <th className="py-2 px-2.5 border-r border-slate-700 text-right w-32">
+                    BALANCE (RMB)
+                  </th>
+                  <th className="py-2 px-2.5 text-center w-44">
+                    STATUS (REPORT / NO REPORT / PAID)
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 bg-white">
+                {historyRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-5 text-center text-slate-400 italic">
+                      No exporter records match the selected Shipping Mark &amp; Packing Date filter.
+                    </td>
+                  </tr>
+                ) : (
+                  historyRows.map((row, idx) => (
+                    <tr
+                      key={row.id}
+                      data-testid={`exporter-history-row-${idx + 1}`}
+                      className={
+                        idx % 2 === 0
+                          ? 'bg-white hover:bg-amber-50/40'
+                          : 'bg-slate-50/70 hover:bg-amber-50/40'
+                      }
+                    >
+                      <td className="py-1.5 px-2 border-r border-slate-200 text-center font-mono font-bold text-slate-500">
+                        {idx + 1}
+                      </td>
+                      <td className="py-1.5 px-2.5 border-r border-slate-200 font-mono font-semibold text-slate-700">
+                        {formatDate(row.date)}
+                      </td>
+                      <td className="py-1.5 px-2.5 border-r border-slate-200 font-black text-sm text-[#98486f] uppercase">
+                        {row.shippingMark}
+                      </td>
+                      <td className="py-1.5 px-3 border-r border-slate-200 font-medium text-slate-800">
+                        <span className="font-mono font-bold text-teal-900">
+                          {row.invoiceNumber}
+                        </span>
+                        {row.flight ? ` · Flight ${row.flight}` : ''}
+                        {row.box > 0 || row.weightKg > 0
+                          ? ` (${row.box} Box / ${row.weightKg} KG)`
+                          : ''}
+                      </td>
+                      <td className="py-1 px-2 border-r border-slate-200 text-right">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          aria-label={`History Row ${idx + 1} Debit`}
+                          value={row.debitAmount || ''}
+                          onChange={(e) =>
+                            handleUpdateHistoryRow(
+                              row,
+                              'debitAmount',
+                              parseFloat(e.target.value) || 0
+                            )
+                          }
+                          placeholder="0.00"
+                          className="w-full px-2 py-1 text-right font-mono font-bold text-slate-900 bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-[#98486f]"
+                        />
+                      </td>
+                      <td className="py-1 px-2 border-r border-slate-200 text-right">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          aria-label={`History Row ${idx + 1} Credit`}
+                          value={row.creditAmount || ''}
+                          onChange={(e) =>
+                            handleUpdateHistoryRow(
+                              row,
+                              'creditAmount',
+                              parseFloat(e.target.value) || 0
+                            )
+                          }
+                          placeholder="0.00"
+                          className="w-full px-2 py-1 text-right font-mono font-bold text-emerald-800 bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-[#98486f]"
+                        />
+                      </td>
+                      <td
+                        data-testid={`exporter-history-balance-${idx + 1}`}
+                        className={`py-1.5 px-2.5 border-r border-slate-200 text-right font-mono font-black ${
+                          row.balance > 0 ? 'text-rose-700' : 'text-emerald-800'
+                        }`}
+                      >
+                        {formatRMB(row.balance)}
+                      </td>
+                      <td className="py-1 px-2 text-center">
+                        <select
+                          aria-label={`History Row ${idx + 1} Status`}
+                          value={row.status}
+                          onChange={(e) =>
+                            handleUpdateHistoryRow(row, 'status', e.target.value)
+                          }
+                          className={`w-full text-center text-xs font-black uppercase rounded px-2 py-1 border cursor-pointer focus:outline-none ${
+                            row.status === 'PAID'
+                              ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                              : row.status === 'REPORT'
+                              ? 'bg-blue-100 text-blue-900 border-blue-300'
+                              : 'bg-rose-100 text-rose-900 border-rose-300'
+                          }`}
+                        >
+                          {statusOptions.map((st) => (
+                            <option key={st} value={st} className="bg-white text-slate-900">
+                              {st}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              <tfoot>
+                <tr className="bg-slate-900 text-white font-black text-xs border-t-2 border-slate-800">
+                  <td colSpan={4} className="py-2 px-3 text-right uppercase tracking-wider">
+                    TOTAL EXPORTER RECORD HISTORY:
+                  </td>
+                  <td
+                    data-testid="exporter-history-total-debit"
+                    className="py-2 px-2.5 text-right font-mono text-amber-300 border-l border-slate-700"
+                  >
+                    {formatRMB(historyTotals.totalDebit)}
+                  </td>
+                  <td
+                    data-testid="exporter-history-total-credit"
+                    className="py-2 px-2.5 text-right font-mono text-emerald-300 border-l border-slate-700"
+                  >
+                    {formatRMB(historyTotals.totalCredit)}
+                  </td>
+                  <td
+                    data-testid="exporter-history-total-balance"
+                    className="py-2 px-2.5 text-right font-mono text-rose-300 border-l border-slate-700"
+                  >
+                    {formatRMB(historyTotals.totalBalance)}
+                  </td>
+                  <td className="py-2 px-2.5 text-center font-mono text-[11px] text-slate-200 border-l border-slate-700">
+                    {historyTotals.paidCount} PAID · {historyTotals.reportCount} REPORT ·{' '}
+                    {historyTotals.noReportCount} NO REPORT
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -795,8 +1045,25 @@ export const ExporterPaymentSlipView: React.FC = () => {
         <div className="overflow-x-auto">
           <div id="exporter-payment-slip-canvas" className="min-w-[900px] font-sans bg-white">
             {/* 1. Top Plum Title Header: ZSB AQUATICS */}
-            <div className="bg-[#98486f] text-white py-3.5 px-6 text-center border-b-2 border-black">
-              <div className="text-3xl sm:text-4xl font-black tracking-wider uppercase font-sans">
+            <div className="bg-[#98486f] text-white py-3 px-6 flex items-center justify-center gap-3.5 border-b-2 border-black">
+              <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-300 bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
+                <img
+                  src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+                  alt={companyProfile.companyName}
+                  className="w-full h-full object-contain rounded-full"
+                />
+              </div>
+              <div
+                className="zsb-3d-text-lg text-3xl sm:text-4xl font-black tracking-wider uppercase"
+                style={{
+                  color: '#ffe57f',
+                  fontFamily: "'Cinzel', Georgia, Cambria, 'Times New Roman', Times, serif",
+                  fontWeight: 900,
+                  letterSpacing: '0.09em',
+                  textShadow:
+                    '0px 1px 0px #f59e0b, 1px 2px 0px #d97706, 2px 3px 0px #b45309, 3px 4px 0px #92400e, 4px 5px 0px #78350f, 5px 6px 0px #451a03, 6px 8px 10px rgba(0, 0, 0, 0.75)',
+                }}
+              >
                 {companyProfile.companyName}
               </div>
             </div>
@@ -807,13 +1074,14 @@ export const ExporterPaymentSlipView: React.FC = () => {
                 29/B, NISHATNAGAR, TARARTEK, TURAG, DHAKA-1230
               </div>
               <div className="py-1.5 px-4 text-sm sm:text-base font-bold tracking-wide uppercase">
-                CONTACT NUMBER - +880 18411-65902, +880 1711 331545
+                CONTACT NUMBER - +880 18411-65902, +880 1711 331545 | EMAIL:{' '}
+                <span className="normal-case">{companyProfile.email || 'www.zsbaquatics.com'}</span>
               </div>
             </div>
 
             {/* 3. PAYMENT SLIP 付款单 Banner */}
             <div className="bg-[#faefd0] text-black py-2.5 px-4 text-center border-b-2 border-black">
-              <div className="text-xl sm:text-2xl font-black tracking-wide uppercase">
+              <div className="text-xl sm:text-2xl font-black tracking-wide">
                 PAYMENT SLIP 付款单
               </div>
             </div>

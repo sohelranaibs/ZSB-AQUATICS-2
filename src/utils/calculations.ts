@@ -1450,6 +1450,35 @@ export function formatPurchaseExportFilename(
   return `${parts.join('_')}.${cleanExt}`;
 }
 
+/**
+ * Formats a clean export filename for Export Packing List Manifest (.pdf or .png)
+ */
+export function formatPackingExportFilename(
+  invoiceNumber: string,
+  shippingMark: string = '',
+  date: string = '',
+  extension: 'pdf' | 'png' = 'pdf'
+): string {
+  const sanitize = (str: string) =>
+    (str || '')
+      .trim()
+      .replace(/[^a-zA-Z0-9_-]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+
+  const cleanInv = sanitize(invoiceNumber) || 'PKG';
+  const cleanMark = sanitize(shippingMark);
+  const cleanDate = sanitize(date) || new Date().toISOString().slice(0, 10);
+  const cleanExt = extension.toLowerCase() === 'png' ? 'png' : 'pdf';
+
+  const parts = ['ZSB_AQUATICS_Export_Packing_List', cleanInv];
+  if (cleanMark) {
+    parts.push(cleanMark);
+  }
+  parts.push(cleanDate);
+
+  return `${parts.join('_')}.${cleanExt}`;
+}
+
 export interface PackingConsignmentSummary {
   totalConsignments: number;
   totalCumulativeWeightKg: number;
@@ -1545,5 +1574,169 @@ export function calculatePackingConsignmentSummary(
   };
 }
 
+export interface MonthlyExportsPurchasesReportItem {
+  yearMonth: string;
+  monthLabel: string;
+  shortMonthLabel: string;
+  year: string;
+  purchaseVolume: number;
+  purchaseValue: number;
+  purchaseCount: number;
+  exportWeight: number;
+  exportBoxes: number;
+  exportValueRMB: number;
+  exportValueBDT: number;
+  exportCount: number;
+  otherCosts: number;
+  netProfit: number;
+  marginPercent: number;
+}
 
+export interface MonthlyReportsSummaryTotals {
+  totalPurchaseVolume: number;
+  totalPurchaseValue: number;
+  totalPurchaseCount: number;
+  totalExportWeight: number;
+  totalExportBoxes: number;
+  totalExportValueRMB: number;
+  totalExportValueBDT: number;
+  totalExportCount: number;
+  totalOtherCosts: number;
+  totalNetProfit: number;
+  overallMarginPercent: number;
+}
 
+/**
+ * Computes consolidated monthly summary reports of all exports and purchases.
+ * Groups by YYYY-MM and calculates volume (KG), monetary amounts (BDT & RMB),
+ * consignment counts, purchase counts, other costing, and net profit.
+ */
+export function calculateAllMonthlyReports(
+  purchases: PurchaseRecord[],
+  packings: PackingRecord[],
+  otherCosts: OtherCostRecord[] = [],
+  rmbExchangeRate: number = 16.5
+): {
+  items: MonthlyExportsPurchasesReportItem[];
+  totals: MonthlyReportsSummaryTotals;
+  availableYears: string[];
+} {
+  const monthSet = new Set<string>();
+
+  const extractMonth = (dateStr?: string) => {
+    if (dateStr && /^\d{4}-\d{2}/.test(dateStr.trim())) {
+      monthSet.add(dateStr.trim().slice(0, 7));
+    }
+  };
+
+  purchases.forEach((p) => extractMonth(p.date));
+  packings.forEach((pk) => extractMonth(pk.packingDate));
+  otherCosts.forEach((c) => extractMonth(c.date));
+
+  // If no records exist, ensure current month is represented
+  if (monthSet.size === 0) {
+    monthSet.add(getCurrentYearMonth());
+  }
+
+  // Sort months descending (latest first)
+  const sortedMonths = Array.from(monthSet).sort((a, b) => b.localeCompare(a));
+  const yearSet = new Set<string>();
+
+  const items: MonthlyExportsPurchasesReportItem[] = sortedMonths.map((ym) => {
+    const year = ym.slice(0, 4);
+    yearSet.add(year);
+
+    const mPurchases = purchases.filter((p) => (p.date || '').slice(0, 7) === ym);
+    const mPackings = packings.filter((pk) => (pk.packingDate || '').slice(0, 7) === ym);
+    const mOtherCosts = otherCosts.filter((c) => (c.date || '').slice(0, 7) === ym);
+
+    const purchaseVolume = Math.round(
+      mPurchases.reduce((acc, p) => acc + (Number(p.totalQty) || 0), 0) * 100
+    ) / 100;
+    const purchaseValue = Math.round(
+      mPurchases.reduce((acc, p) => acc + (Number(p.totalAmount) || 0), 0) * 100
+    ) / 100;
+    const purchaseCount = mPurchases.length;
+
+    const exportWeight = Math.round(
+      mPackings.reduce((acc, pk) => acc + (Number(pk.totalWeight) || 0), 0) * 100
+    ) / 100;
+    const exportBoxes = mPackings.reduce((acc, pk) => acc + (Number(pk.totalBox) || 0), 0);
+    const exportValueRMB = Math.round(
+      mPackings.reduce((acc, pk) => acc + (Number(pk.totalAmount) || 0), 0) * 100
+    ) / 100;
+
+    const exportValueBDT = Math.round(
+      mPackings.reduce((acc, pk) => {
+        const val = Number(pk.totalAmount) || 0;
+        const rate = Number(pk.rmbRate) > 0 ? Number(pk.rmbRate) : rmbExchangeRate;
+        return acc + calculatePackingTotalAmountBDT(val, rate);
+      }, 0) * 100
+    ) / 100;
+    const exportCount = mPackings.length;
+
+    const otherCostVal = Math.round(
+      mOtherCosts.reduce((acc, c) => acc + (Number(c.amount) || 0), 0) * 100
+    ) / 100;
+
+    const netProfit = Math.round((exportValueBDT - purchaseValue - otherCostVal) * 100) / 100;
+    const marginPercent =
+      exportValueBDT > 0 ? Math.round((netProfit / exportValueBDT) * 1000) / 10 : 0;
+
+    return {
+      yearMonth: ym,
+      monthLabel: formatYearMonthLabel(ym),
+      shortMonthLabel: formatShortYearMonthLabel(ym),
+      year,
+      purchaseVolume,
+      purchaseValue,
+      purchaseCount,
+      exportWeight,
+      exportBoxes,
+      exportValueRMB,
+      exportValueBDT,
+      exportCount,
+      otherCosts: otherCostVal,
+      netProfit,
+      marginPercent,
+    };
+  });
+
+  const totals: MonthlyReportsSummaryTotals = items.reduce(
+    (acc, it) => ({
+      totalPurchaseVolume: Math.round((acc.totalPurchaseVolume + it.purchaseVolume) * 100) / 100,
+      totalPurchaseValue: Math.round((acc.totalPurchaseValue + it.purchaseValue) * 100) / 100,
+      totalPurchaseCount: acc.totalPurchaseCount + it.purchaseCount,
+      totalExportWeight: Math.round((acc.totalExportWeight + it.exportWeight) * 100) / 100,
+      totalExportBoxes: acc.totalExportBoxes + it.exportBoxes,
+      totalExportValueRMB: Math.round((acc.totalExportValueRMB + it.exportValueRMB) * 100) / 100,
+      totalExportValueBDT: Math.round((acc.totalExportValueBDT + it.exportValueBDT) * 100) / 100,
+      totalExportCount: acc.totalExportCount + it.exportCount,
+      totalOtherCosts: Math.round((acc.totalOtherCosts + it.otherCosts) * 100) / 100,
+      totalNetProfit: Math.round((acc.totalNetProfit + it.netProfit) * 100) / 100,
+      overallMarginPercent: 0,
+    }),
+    {
+      totalPurchaseVolume: 0,
+      totalPurchaseValue: 0,
+      totalPurchaseCount: 0,
+      totalExportWeight: 0,
+      totalExportBoxes: 0,
+      totalExportValueRMB: 0,
+      totalExportValueBDT: 0,
+      totalExportCount: 0,
+      totalOtherCosts: 0,
+      totalNetProfit: 0,
+      overallMarginPercent: 0,
+    }
+  );
+
+  totals.overallMarginPercent =
+    totals.totalExportValueBDT > 0
+      ? Math.round((totals.totalNetProfit / totals.totalExportValueBDT) * 1000) / 10
+      : 0;
+
+  const availableYears = Array.from(yearSet).sort((a, b) => b.localeCompare(a));
+
+  return { items, totals, availableYears };
+}

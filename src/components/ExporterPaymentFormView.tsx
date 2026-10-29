@@ -10,6 +10,12 @@ import {
   getExporterManifestStats,
   classifyPaymentCategory,
 } from '../utils/calculations.ts';
+import {
+  EXPORTER_STATUS_OPTIONS,
+  ExporterRecordHistoryRow,
+  buildExporterRecordHistory,
+  calculateExporterHistoryTotals,
+} from '../utils/exporterHistory.ts';
 import { PaymentItemRow, ExporterStatus } from '../types/index.ts';
 import { validateExporterPaymentForm } from '../utils/validation.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
@@ -20,7 +26,6 @@ import {
   Trash2,
   Printer,
   Plus,
-  Layers,
   Database,
   Coins,
   CheckCircle,
@@ -30,6 +35,9 @@ import {
   Receipt,
   AlertCircle,
   X,
+  Filter,
+  Tag,
+  Calendar,
 } from 'lucide-react';
 
 export const ExporterPaymentFormView: React.FC = () => {
@@ -39,7 +47,8 @@ export const ExporterPaymentFormView: React.FC = () => {
     addDropdownItem,
     packings,
     payments,
-     updatePacking,
+    updatePacking,
+    updatePayment,
     addPayment,
     openPrintModal,
     setActiveTab,
@@ -54,35 +63,29 @@ export const ExporterPaymentFormView: React.FC = () => {
   const nextVoucherNo = generateInvoiceNumber('EXP-PAY', exporterPayments.length);
   const [invoiceNumber, setInvoiceNumber] = useState<string>(nextVoucherNo);
   const [date, setDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
-  const [shippingMark, setShippingMark] = useState<string>('');
+  const [shippingMark, setShippingMark] = useState<string>('ALL');
+  const [selectedPackingDate, setSelectedPackingDate] = useState<string>('ALL');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
   const [contactNumber, setContactNumber] = useState<string>('');
 
-  // Exporter Specific Fields (empty / fresh by default)
-  const [exporterStatus, setExporterStatus] = useState<ExporterStatus>('NO REPORT');
+  // Exporter Specific Fields
+  const [exporterStatus, setExporterStatus] = useState<ExporterStatus>('REPORT');
   const [returnRMB, setReturnRMB] = useState<number>(0);
   const [exportGoodsRef, setExportGoodsRef] = useState<string>('');
   const [remarks, setRemarks] = useState<string>('');
 
-  const createEmptyRow = (id: string): PaymentItemRow => ({
+  const createEmptyRow = (id: string, defaultMark = ''): PaymentItemRow => ({
     id,
+    shippingMark: defaultMark,
     description: '',
     debitAmount: 0,
     creditAmount: 0,
     balance: 0,
+    status: 'REPORT',
   });
 
-  const [rows, setRows] = useState<PaymentItemRow[]>([
-    createEmptyRow('1'),
-    createEmptyRow('2'),
-    createEmptyRow('3'),
-    createEmptyRow('4'),
-    createEmptyRow('5'),
-    createEmptyRow('6'),
-    createEmptyRow('7'),
-    createEmptyRow('8'),
-    createEmptyRow('9'),
-    createEmptyRow('10'),
-  ]);
+  // Optional custom rows added on top of automatic Exporter DB record history
+  const [customRows, setCustomRows] = useState<PaymentItemRow[]>([]);
 
   const [overallPreviousAmount, setOverallPreviousAmount] = useState<number>(0);
   const [overallPaidAmount, setOverallPaidAmount] = useState<number>(0);
@@ -92,10 +95,76 @@ export const ExporterPaymentFormView: React.FC = () => {
   const [newMarkValue, setNewMarkValue] = useState<string>('');
   const [validationAttempted, setValidationAttempted] = useState<boolean>(false);
 
+  const statusOptions = useMemo(() => {
+    return Array.from(
+      new Set([...EXPORTER_STATUS_OPTIONS, ...dropdownOptions.paymentStatuses])
+    );
+  }, [dropdownOptions.paymentStatuses]);
+
+  // Available Shipping Marks & Packing Dates for Automatic Exporter Database Lookup
+  const availableMarks = useMemo(() => {
+    const dbMarks = Array.from(
+      new Set(packings.map((p) => p.shippingMark).filter(Boolean))
+    );
+    const otherMarks = dropdownOptions.shippingMarks.filter(
+      (m) => !dbMarks.includes(m)
+    );
+    return { dbMarks, otherMarks };
+  }, [packings, dropdownOptions.shippingMarks]);
+
+  const availablePackingDates = useMemo(() => {
+    const matching =
+      shippingMark === 'ALL' || !shippingMark
+        ? packings
+        : packings.filter(
+            (p) =>
+              p.shippingMark.trim().toLowerCase() ===
+              shippingMark.trim().toLowerCase()
+          );
+    return Array.from(
+      new Set(matching.map((p) => p.packingDate).filter(Boolean))
+    ).sort((a, b) => b.localeCompare(a));
+  }, [packings, shippingMark]);
+
+  // Automatic Exporter Record History (Debit, Credit, Balance & Status: Report, No Report, Paid)
+  const dbHistoryRows = useMemo(
+    () =>
+      buildExporterRecordHistory(packings, payments, {
+        shippingMark: shippingMark || 'ALL',
+        packingDate: selectedPackingDate || 'ALL',
+        status: selectedStatusFilter || 'ALL',
+        rmbExchangeRate: companyProfile.rmbExchangeRate,
+      }),
+    [
+      packings,
+      payments,
+      shippingMark,
+      selectedPackingDate,
+      selectedStatusFilter,
+      companyProfile.rmbExchangeRate,
+    ]
+  );
+
+  // Combined rows: all Exporter Database record history + any custom added rows
+  const rows: PaymentItemRow[] = useMemo(
+    () => [...dbHistoryRows, ...customRows],
+    [dbHistoryRows, customRows]
+  );
+
+  const historyTotals = useMemo(
+    () => calculateExporterHistoryTotals(rows),
+    [rows]
+  );
+
+  const effectiveShippingMarkForSave =
+    shippingMark && shippingMark !== 'ALL'
+      ? shippingMark
+      : rows[0]?.shippingMark || 'ALL MARKS';
+
   const validation = validateExporterPaymentForm({
     invoiceNumber,
     date,
-    shippingMark,
+    shippingMark: effectiveShippingMarkForSave,
     exporterStatus,
     returnRMB,
     overallPreviousAmount,
@@ -109,37 +178,52 @@ export const ExporterPaymentFormView: React.FC = () => {
       getExporterManifestStats(
         packings,
         payments,
-        shippingMark,
+        shippingMark === 'ALL' ? '' : shippingMark,
         companyProfile.rmbExchangeRate
       ),
     [packings, payments, shippingMark, companyProfile.rmbExchangeRate]
   );
 
-  // Manifests belonging to selected shippingMark (or all manifests)
-  const markManifests = useMemo(() => {
-    const filtered = packings.filter(
-      (pk) => pk.shippingMark.trim().toLowerCase() === shippingMark.trim().toLowerCase()
-    );
-    return filtered.length > 0 ? filtered : packings;
-  }, [packings, shippingMark]);
-
   const handleSelectShippingMark = (mark: string) => {
-    setShippingMark(mark);
-    const matchingPkg = packings.find(
-      (pk) => pk.shippingMark.trim().toLowerCase() === mark.trim().toLowerCase()
-    );
-    if (matchingPkg) {
-      setExportGoodsRef(matchingPkg.invoiceNumber);
-      const estRmb =
-        matchingPkg.rmbAmount && matchingPkg.rmbAmount > 0
-          ? matchingPkg.rmbAmount
-          : Math.round(
-              (matchingPkg.totalAmount / (companyProfile.rmbExchangeRate || 16.5)) * 100
-            ) / 100;
-      setReturnRMB(estRmb);
-      if (matchingPkg.exporterStatus) {
-        setExporterStatus(matchingPkg.exporterStatus);
+    const normalized = mark || 'ALL';
+    setShippingMark(normalized);
+    if (normalized !== 'ALL') {
+      const matchingPkg = packings.find(
+        (pk) => pk.shippingMark.trim().toLowerCase() === normalized.trim().toLowerCase()
+      );
+      if (matchingPkg) {
+        setExportGoodsRef(matchingPkg.invoiceNumber);
+        const estRmb =
+          matchingPkg.rmbAmount && matchingPkg.rmbAmount > 0
+            ? matchingPkg.rmbAmount
+            : Math.round(
+                (matchingPkg.totalAmount / (companyProfile.rmbExchangeRate || 16.5)) * 100
+              ) / 100;
+        setReturnRMB(estRmb);
+        if (matchingPkg.exporterStatus || matchingPkg.paymentStatus) {
+          setExporterStatus(
+            (matchingPkg.exporterStatus || matchingPkg.paymentStatus) as ExporterStatus
+          );
+        }
       }
+      if (selectedPackingDate !== 'ALL') {
+        const hasOnDate = packings.some(
+          (p) =>
+            p.shippingMark.trim().toLowerCase() === normalized.trim().toLowerCase() &&
+            p.packingDate === selectedPackingDate
+        );
+        if (!hasOnDate) {
+          setSelectedPackingDate('ALL');
+        }
+      }
+    }
+  };
+
+  const handleSelectPackingDate = (newDate: string) => {
+    const normalized = newDate || 'ALL';
+    setSelectedPackingDate(normalized);
+    if (normalized !== 'ALL') {
+      setDate(normalized);
     }
   };
 
@@ -148,6 +232,7 @@ export const ExporterPaymentFormView: React.FC = () => {
     const foundPkg = packings.find((pk) => pk.invoiceNumber === manifestInvoiceNo);
     if (foundPkg) {
       setShippingMark(foundPkg.shippingMark);
+      setSelectedPackingDate(foundPkg.packingDate || 'ALL');
       const estRmb =
         foundPkg.rmbAmount && foundPkg.rmbAmount > 0
           ? foundPkg.rmbAmount
@@ -157,19 +242,6 @@ export const ExporterPaymentFormView: React.FC = () => {
       setReturnRMB(estRmb);
       setOverallPreviousAmount(foundPkg.totalAmount);
       setOverallPaidAmount(foundPkg.totalAmount);
-      setRows((prev) =>
-        prev.map((r, idx) =>
-          idx === 0
-            ? {
-                ...r,
-                description: `${foundPkg.shippingMark} - Export shipment ${foundPkg.invoiceNumber} (${foundPkg.totalBox} Boxes, ${foundPkg.totalWeight} KG to ${foundPkg.destination})`,
-                debitAmount: foundPkg.totalAmount,
-                creditAmount: 0,
-                balance: foundPkg.totalAmount,
-              }
-            : r
-        )
-      );
       showToast(
         `Synced manifest ${foundPkg.invoiceNumber} (${foundPkg.shippingMark} · ${foundPkg.totalWeight} KG · ${formatRMB(estRmb)})`
       );
@@ -177,41 +249,100 @@ export const ExporterPaymentFormView: React.FC = () => {
   };
 
   const handleRowChange = (
-    id: string,
-    field: keyof PaymentItemRow,
+    row: PaymentItemRow,
+    field: 'description' | 'debitAmount' | 'creditAmount' | 'status',
     value: string | number
   ) => {
-    setRows((prev) =>
-      prev.map((row) => {
-        if (row.id !== id) return row;
-        const updated = { ...row, [field]: value };
+    if (row.packingId) {
+      if (field === 'debitAmount') {
+        const nextDebit = Math.max(0, Number(value) || 0);
+        const nextBalance = calculatePaymentRow(nextDebit, row.creditAmount);
+        updatePacking(row.packingId, {
+          debitAmount: nextDebit,
+          settledAmount: nextDebit,
+          balanceAmount: nextBalance,
+        });
+      } else if (field === 'creditAmount') {
+        const nextCredit = Math.max(0, Number(value) || 0);
+        const nextBalance = calculatePaymentRow(row.debitAmount, nextCredit);
+        updatePacking(row.packingId, {
+          creditAmount: nextCredit,
+          balanceAmount: nextBalance,
+        });
+      } else if (field === 'status') {
+        const nextStatus = String(value) as ExporterStatus;
+        updatePacking(row.packingId, {
+          exporterStatus: nextStatus,
+          paymentStatus: nextStatus,
+        });
+      }
+      return;
+    }
 
-        const d = field === 'debitAmount' ? Number(value) : row.debitAmount;
-        const c = field === 'creditAmount' ? Number(value) : row.creditAmount;
+    if (row.paymentId) {
+      if (field === 'debitAmount') {
+        const nextDebit = Math.max(0, Number(value) || 0);
+        const nextBalance = calculatePaymentRow(nextDebit, row.creditAmount);
+        updatePayment(row.paymentId, {
+          totalAmount: nextDebit,
+          balance: nextBalance,
+        });
+      } else if (field === 'creditAmount') {
+        const nextCredit = Math.max(0, Number(value) || 0);
+        const nextBalance = calculatePaymentRow(row.debitAmount, nextCredit);
+        updatePayment(row.paymentId, {
+          paidAmount: nextCredit,
+          balance: nextBalance,
+        });
+      } else if (field === 'status') {
+        updatePayment(row.paymentId, {
+          status: String(value) as ExporterStatus,
+        });
+      }
+      return;
+    }
+
+    setCustomRows((prev) =>
+      prev.map((r) => {
+        if (r.id !== row.id) return r;
+        const updated = { ...r, [field]: value };
+        const d = field === 'debitAmount' ? Number(value) : r.debitAmount;
+        const c = field === 'creditAmount' ? Number(value) : r.creditAmount;
         updated.balance = calculatePaymentRow(d, c);
-
         return updated;
       })
     );
   };
 
-  const handleClearRow = (id: string) => {
-    setRows((prev) =>
-      prev.map((row) => (row.id === id ? createEmptyRow(id) : row))
-    );
+  const handleClearRow = (row: PaymentItemRow) => {
+    if (row.packingId) {
+      updatePacking(row.packingId, {
+        debitAmount: undefined,
+        creditAmount: undefined,
+        balanceAmount: undefined,
+      });
+      showToast(`Reset ${row.invoiceNumber || row.shippingMark} to default manifest amounts.`);
+      return;
+    }
+    setCustomRows((prev) => prev.filter((r) => r.id !== row.id));
   };
 
   const handleAddRow = () => {
-    setRows((prev) => [
+    setCustomRows((prev) => [
       ...prev,
-      createEmptyRow(generateRecordId('exprow')),
+      createEmptyRow(
+        generateRecordId('exprow'),
+        shippingMark !== 'ALL' ? shippingMark : ''
+      ),
     ]);
   };
 
   const resetFormFields = () => {
-    setShippingMark('');
+    setShippingMark('ALL');
+    setSelectedPackingDate('ALL');
+    setSelectedStatusFilter('ALL');
     setContactNumber('');
-    setExporterStatus('NO REPORT');
+    setExporterStatus('REPORT');
     setReturnRMB(0);
     setExportGoodsRef('');
     setRemarks('');
@@ -219,30 +350,19 @@ export const ExporterPaymentFormView: React.FC = () => {
     setOverallPreviousAmount(0);
     setOverallPaidAmount(0);
     setDate(new Date().toISOString().slice(0, 10));
-    setRows([
-      createEmptyRow('1'),
-      createEmptyRow('2'),
-      createEmptyRow('3'),
-      createEmptyRow('4'),
-      createEmptyRow('5'),
-      createEmptyRow('6'),
-      createEmptyRow('7'),
-      createEmptyRow('8'),
-      createEmptyRow('9'),
-      createEmptyRow('10'),
-    ]);
+    setCustomRows([]);
     setValidationAttempted(false);
   };
 
   const handleClear = () => {
     resetFormFields();
-    showToast('Exporter payment form cleared and all cells reset.');
+    showToast('Reset lookup filters and showing all Exporter record history.');
   };
 
   const { totalDebit, totalCredit, balance } = calculatePaymentTotals(
     rows,
-    overallPreviousAmount,
-    overallPaidAmount
+    overallPreviousAmount || historyTotals.totalDebit,
+    overallPaidAmount || historyTotals.totalCredit
   );
 
   const returnRMBInBDT =
@@ -256,7 +376,7 @@ export const ExporterPaymentFormView: React.FC = () => {
     const check = validateExporterPaymentForm({
       invoiceNumber,
       date,
-      shippingMark,
+      shippingMark: effectiveShippingMarkForSave,
       exporterStatus,
       returnRMB,
       overallPreviousAmount,
@@ -277,19 +397,22 @@ export const ExporterPaymentFormView: React.FC = () => {
 
     const newRecord = {
       invoiceNumber: invoiceNumber.trim(),
-      date,
-      description: `${shippingMark}${
+      date:
+        selectedPackingDate !== 'ALL'
+          ? selectedPackingDate
+          : date || new Date().toISOString().slice(0, 10),
+      description: `${effectiveShippingMarkForSave}${
         exporterStats.latestDestination ? ` (${exporterStats.latestDestination})` : ''
       }`,
-      shippingMark,
+      shippingMark: effectiveShippingMarkForSave,
       contactNumber,
       items: validItems,
       totalAmount: totalDebit,
-      previousAmount: overallPreviousAmount,
-      paidAmount: overallPaidAmount,
-      balance,
+      previousAmount: overallPreviousAmount || totalDebit,
+      paidAmount: overallPaidAmount || totalCredit,
+      balance: totalDebit - totalCredit,
       status: exporterStatus,
-      returnRMB,
+      returnRMB: returnRMB || totalCredit,
       returnRMBInBDT,
       exportGoodsRef,
       paymentCategory: 'exporter' as const,
@@ -298,7 +421,6 @@ export const ExporterPaymentFormView: React.FC = () => {
 
     addPayment(newRecord);
 
-    // Also update linked packing record's exporterStatus & rmbAmount if exportGoodsRef matches
     if (exportGoodsRef.trim()) {
       const matchedPkg = packings.find(
         (pk) => pk.invoiceNumber.toLowerCase() === exportGoodsRef.trim().toLowerCase()
@@ -306,6 +428,7 @@ export const ExporterPaymentFormView: React.FC = () => {
       if (matchedPkg) {
         updatePacking(matchedPkg.id, {
           exporterStatus,
+          paymentStatus: exporterStatus,
           rmbAmount: returnRMB > 0 ? returnRMB : matchedPkg.rmbAmount,
           settledAmount: returnRMB > 0 ? returnRMB : matchedPkg.settledAmount,
         });
@@ -322,7 +445,7 @@ export const ExporterPaymentFormView: React.FC = () => {
     setInvoiceNumber(generateInvoiceNumber('EXP-PAY', exporterPayments.length + 1));
     resetFormFields();
     showToast(
-      `Exporter payment voucher ${newRecord.invoiceNumber} saved successfully. All fields cleared and ready for next entry.`
+      `Exporter payment voucher ${newRecord.invoiceNumber} saved successfully.`
     );
   };
 
@@ -335,17 +458,20 @@ export const ExporterPaymentFormView: React.FC = () => {
       title: `Exporter Payment Voucher (Preview) - ${invoiceNumber}`,
       data: {
         invoiceNumber,
-        date,
-        description: shippingMark,
-        shippingMark,
+        date:
+          selectedPackingDate !== 'ALL'
+            ? selectedPackingDate
+            : date || new Date().toISOString().slice(0, 10),
+        description: effectiveShippingMarkForSave,
+        shippingMark: effectiveShippingMarkForSave,
         contactNumber,
         items: validItems.length > 0 ? validItems : rows.slice(0, 5),
         totalAmount: totalDebit,
-        previousAmount: overallPreviousAmount,
-        paidAmount: overallPaidAmount,
-        balance,
+        previousAmount: overallPreviousAmount || totalDebit,
+        paidAmount: overallPaidAmount || totalCredit,
+        balance: totalDebit - totalCredit,
         status: exporterStatus,
-        returnRMB,
+        returnRMB: returnRMB || totalCredit,
         returnRMBInBDT,
         exportGoodsRef,
         paymentCategory: 'exporter',
@@ -356,16 +482,19 @@ export const ExporterPaymentFormView: React.FC = () => {
   };
 
   const handleMonthlyStatement = () => {
-    const matched = exporterPayments.filter(
-      (p) =>
-        (p.shippingMark || '').toLowerCase() === shippingMark.toLowerCase() ||
-        p.description.toLowerCase().includes(shippingMark.toLowerCase())
-    );
+    const targetMark = shippingMark === 'ALL' ? '' : shippingMark.toLowerCase();
+    const matched = targetMark
+      ? exporterPayments.filter(
+          (p) =>
+            (p.shippingMark || '').toLowerCase() === targetMark ||
+            p.description.toLowerCase().includes(targetMark)
+        )
+      : exporterPayments;
     openPrintModal({
       type: 'monthly_statement',
-      title: `Exporter Monthly Statement - Mark ${shippingMark}`,
+      title: `Exporter Monthly Statement - ${effectiveShippingMarkForSave}`,
       data: {
-        party: `Exporter Mark: ${shippingMark}`,
+        party: `Exporter Mark: ${effectiveShippingMarkForSave}`,
         date,
         records: matched,
         totalRecords: matched.length,
@@ -374,7 +503,8 @@ export const ExporterPaymentFormView: React.FC = () => {
   };
 
   const matchingExporterVouchers = useMemo(() => {
-    const query = (searchQuery || shippingMark || '').trim().toLowerCase();
+    const rawMark = shippingMark === 'ALL' ? '' : shippingMark;
+    const query = (searchQuery || rawMark || '').trim().toLowerCase();
     if (!query) return exporterPayments.slice(0, 4);
     return exporterPayments
       .filter(
@@ -391,14 +521,23 @@ export const ExporterPaymentFormView: React.FC = () => {
     <div className="p-3 sm:p-5 max-w-7xl mx-auto space-y-5">
       {/* Top Banner (Sheet #5 - Dedicated Exporter Payment) */}
       <div className="bg-[#0f3d4c] text-white px-5 py-3 rounded-lg shadow-md flex flex-wrap items-center justify-between gap-3 border-b-2 border-amber-500">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <span className="text-xl sm:text-2xl font-black tracking-wider text-amber-400 font-serif uppercase">
-            {companyProfile.companyName}
-          </span>
-          <span className="text-lg text-slate-300 hidden sm:inline">|</span>
-          <span className="text-sm sm:text-base font-semibold text-slate-100 uppercase tracking-wide">
-            Exporter Payment Data Entry Form – Foreign Buyers &amp; RMB Settlement
-          </span>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
+            <img
+              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+              alt={companyProfile.companyName}
+              className="w-full h-full object-contain rounded-full"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <span className="zsb-3d-text text-xl sm:text-2xl font-black">
+              {companyProfile.companyName}
+            </span>
+            <span className="text-lg text-slate-300 hidden sm:inline">|</span>
+            <span className="text-sm sm:text-base font-semibold text-slate-100 uppercase tracking-wide">
+              Exporter Payment Data Entry Form – All Record History (Debit, Credit, Balance &amp; Status)
+            </span>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -422,6 +561,127 @@ export const ExporterPaymentFormView: React.FC = () => {
         </div>
       </div>
 
+      {/* Automatic Exporter Database Lookup (Select Shipping Mark & Packing Date) */}
+      <div
+        data-testid="exporter-form-auto-lookup-card"
+        className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-[#126b62]" />
+            <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-800">
+              Automatic Exporter Database Lookup (Select Shipping Mark &amp; Packing Date)
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-mono bg-teal-50 text-teal-900 border border-teal-200 px-2.5 py-0.5 rounded font-bold">
+              Showing {rows.length} Record{rows.length === 1 ? '' : 's'} ({historyTotals.paidCount} PAID · {historyTotals.reportCount} REPORT · {historyTotals.noReportCount} NO REPORT)
+            </span>
+            <button
+              type="button"
+              onClick={handleClear}
+              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold cursor-pointer"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Show All History ({packings.length})</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+          {/* 1. Select Shipping Mark */}
+          <div>
+            <label
+              htmlFor="exporter-lookup-mark-select"
+              className="flex items-center justify-between font-black uppercase text-slate-700 mb-1"
+            >
+              <span className="flex items-center gap-1">
+                <Tag className="w-3.5 h-3.5 text-[#126b62]" />
+                <span>Select Shipping Mark</span>
+              </span>
+              <span className="text-[10px] text-emerald-700 font-bold">Auto-Lookup</span>
+            </label>
+            <select
+              id="exporter-lookup-mark-select"
+              value={shippingMark}
+              onChange={(e) => handleSelectShippingMark(e.target.value)}
+              className="w-full bg-teal-50/50 border-2 border-teal-600/40 rounded-lg px-2.5 py-1.5 font-black text-sm text-slate-950 focus:bg-white focus:border-teal-700 focus:outline-none"
+            >
+              <option value="ALL">ALL SHIPPING MARKS ({packings.length})</option>
+              <optgroup label="Marks with Saved Exporter Records">
+                {availableMarks.dbMarks.map((mk) => (
+                  <option key={mk} value={mk}>
+                    {mk}
+                  </option>
+                ))}
+              </optgroup>
+              {availableMarks.otherMarks.length > 0 && (
+                <optgroup label="Other Registered Shipping Marks">
+                  {availableMarks.otherMarks.map((mk) => (
+                    <option key={mk} value={mk}>
+                      {mk}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+          </div>
+
+          {/* 2. Select Packing Date */}
+          <div>
+            <label
+              htmlFor="exporter-lookup-date-select"
+              className="flex items-center justify-between font-black uppercase text-slate-700 mb-1"
+            >
+              <span className="flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-[#126b62]" />
+                <span>Select Packing Date</span>
+              </span>
+              <span className="text-[10px] text-emerald-700 font-bold">Auto-Lookup</span>
+            </label>
+            <select
+              id="exporter-lookup-date-select"
+              value={selectedPackingDate}
+              onChange={(e) => handleSelectPackingDate(e.target.value)}
+              className="w-full bg-teal-50/50 border-2 border-teal-600/40 rounded-lg px-2.5 py-1.5 font-mono font-bold text-slate-900 focus:bg-white focus:border-teal-700 focus:outline-none"
+            >
+              <option value="ALL">-- ALL PACKING DATES --</option>
+              {availablePackingDates.map((d) => (
+                <option key={d} value={d}>
+                  {formatDate(d)} ({d})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 3. Filter by Status (Report, No Report, Paid) */}
+          <div>
+            <label
+              htmlFor="exporter-lookup-status-filter"
+              className="flex items-center justify-between font-black uppercase text-slate-700 mb-1"
+            >
+              <span className="flex items-center gap-1">
+                <CheckCircle className="w-3.5 h-3.5 text-[#126b62]" />
+                <span>Status Filter (Report / No Report / Paid)</span>
+              </span>
+            </label>
+            <select
+              id="exporter-lookup-status-filter"
+              value={selectedStatusFilter}
+              onChange={(e) => setSelectedStatusFilter(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-900 focus:bg-white focus:border-teal-700 focus:outline-none"
+            >
+              <option value="ALL">-- All Statuses (Report, No Report, Paid) --</option>
+              {statusOptions.map((st) => (
+                <option key={st} value={st}>
+                  {st}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
       {/* Main Grid: Form Left (8 Cols), Action Buttons & Exporter Search Right (4 Cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Left: The Dedicated Exporter Payment Excel Sheet (8 Cols) */}
@@ -429,11 +689,20 @@ export const ExporterPaymentFormView: React.FC = () => {
           <div className="bg-white rounded-xl shadow-md border-2 border-slate-300 overflow-hidden">
             {/* Teal / Navy Sheet Header Box */}
             <div className="bg-[#126b62] text-white py-3 px-4 text-center border-b border-teal-950 shadow-inner space-y-1.5">
-              <div className="text-xl sm:text-2xl font-black tracking-widest text-amber-400 font-serif uppercase">
-                {companyProfile.companyName}
+              <div className="flex items-center justify-center gap-2.5">
+                <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-amber-300 bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
+                  <img
+                    src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+                    alt={companyProfile.companyName}
+                    className="w-full h-full object-contain rounded-full"
+                  />
+                </div>
+                <div className="zsb-3d-text-lg text-xl sm:text-2xl font-black">
+                  {companyProfile.companyName}
+                </div>
               </div>
               <div className="text-xs sm:text-sm font-bold tracking-wider uppercase text-teal-100">
-                EXPORTER PAYMENT DATA ENTRY FORM (RMB &amp; EXPORT GOODS SETTLEMENT)
+                EXPORTER PAYMENT DATA ENTRY &amp; RECORD HISTORY (DEBIT, CREDIT, BALANCE &amp; STATUS)
               </div>
               <div className="flex flex-wrap items-center justify-center gap-2 pt-0.5">
                 <span className="bg-white/95 text-black px-2.5 py-0.5 rounded text-[11px] font-bold shadow-xs">
@@ -441,6 +710,9 @@ export const ExporterPaymentFormView: React.FC = () => {
                 </span>
                 <span className="bg-white/95 text-black px-2.5 py-0.5 rounded text-[11px] font-bold font-mono shadow-xs">
                   Mobile: {companyProfile.mobiles.join(', ')}
+                </span>
+                <span className="bg-white/95 text-black px-2.5 py-0.5 rounded text-[11px] font-bold font-mono shadow-xs">
+                  EMAIL: {companyProfile.email || 'www.zsbaquatics.com'}
                 </span>
               </div>
             </div>
@@ -477,8 +749,8 @@ export const ExporterPaymentFormView: React.FC = () => {
               </div>
             )}
 
-            {/* Row 1: Voucher Number, Date, Shipping Mark / Exporter, Buyer Contact */}
-            <div className="p-3.5 bg-teal-50/50 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+            {/* Row 1: Voucher Number, Shipping Mark, Buyer Contact ("Settlement date" Deleted) */}
+            <div className="p-3.5 bg-teal-50/50 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
               <div>
                 <label
                   htmlFor="exporter-payment-voucher"
@@ -496,29 +768,6 @@ export const ExporterPaymentFormView: React.FC = () => {
                   onChange={(e) => setInvoiceNumber(e.target.value)}
                   className={`w-full bg-white border rounded-lg px-2.5 py-1.5 font-mono font-bold text-teal-950 focus:outline-none focus:ring-2 ${
                     validationAttempted && validation.fieldErrors.invoiceNumber
-                      ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
-                      : 'border-slate-300 focus:ring-teal-600'
-                  }`}
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="exporter-payment-date"
-                  className="font-bold text-slate-800 uppercase block mb-1"
-                >
-                  SETTLEMENT DATE: <span className="text-rose-600">*</span>
-                </label>
-                <input
-                  id="exporter-payment-date"
-                  type="date"
-                  aria-invalid={
-                    validationAttempted && Boolean(validation.fieldErrors.date)
-                  }
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className={`w-full bg-white border rounded-lg px-2.5 py-1.5 text-slate-800 font-medium focus:outline-none focus:ring-2 ${
-                    validationAttempted && validation.fieldErrors.date
                       ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
                       : 'border-slate-300 focus:ring-teal-600'
                   }`}
@@ -554,7 +803,7 @@ export const ExporterPaymentFormView: React.FC = () => {
                       : 'border-slate-300 focus:ring-teal-600'
                   }`}
                 >
-                  <option value="">-- Select Shipping Mark --</option>
+                  <option value="ALL">ALL MARKS ({packings.length})</option>
                   {dropdownOptions.shippingMarks.map((mk) => (
                     <option key={mk} value={mk}>
                       {mk}
@@ -616,30 +865,8 @@ export const ExporterPaymentFormView: React.FC = () => {
               </div>
             )}
 
-            {/* Row 2: Dedicated Exporter Status & Export Goods Doc Ref Bar */}
-            <div className="p-3.5 bg-amber-50/80 border-b border-amber-200 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div>
-                <label
-                  htmlFor="exporter-status-select"
-                  className="font-bold text-slate-800 uppercase block mb-1 flex items-center space-x-1"
-                >
-                  <CheckCircle className="w-3.5 h-3.5 text-teal-700" />
-                  <span>EXPORTER STATUS (DROPDOWN)</span>
-                </label>
-                <select
-                  id="exporter-status-select"
-                  value={exporterStatus}
-                  onChange={(e) => setExporterStatus(e.target.value as ExporterStatus)}
-                  className="w-full bg-white border border-amber-400 rounded-lg px-2.5 py-1.5 font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600"
-                >
-                  {dropdownOptions.paymentStatuses.map((st) => (
-                    <option key={st} value={st}>
-                      {st}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
+            {/* Row 2: Export Goods Doc Ref Bar ("EXPORTER STATUS (REPORT, NO REPORT, PAID)" Deleted) */}
+            <div className="p-3.5 bg-amber-50/80 border-b border-amber-200 grid grid-cols-1 gap-3 text-xs">
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label
@@ -679,44 +906,10 @@ export const ExporterPaymentFormView: React.FC = () => {
                 <div className="text-[10px] text-slate-600 mt-1 truncate">
                   Active Ref:{' '}
                   <strong className="font-mono text-slate-900">
-                    {exportGoodsRef || 'None selected'}
+                    {exportGoodsRef || 'All Exporter History Loaded'}
                   </strong>
                 </div>
               </div>
-            </div>
-
-            {/* Live Exporter Shipment & RMB Ledger Strip */}
-            <div className="px-3.5 py-2.5 bg-teal-50/90 border-b border-teal-200 flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-700">
-                <span className="inline-flex items-center space-x-1 font-black text-teal-950">
-                  <Plane className="w-3.5 h-3.5 text-teal-700" />
-                  <span>Mark {shippingMark}:</span>
-                </span>
-                <span className="font-mono">
-                  Shipments: <strong>{exporterStats.manifestCount}</strong> (
-                  {exporterStats.totalBoxes} Boxes / {exporterStats.totalWeightKg} KG)
-                </span>
-                <span>·</span>
-                <span className="font-mono">
-                  Export Value:{' '}
-                  <strong className="text-teal-900">
-                    {formatCurrency(
-                      exporterStats.totalExportValueBDT,
-                      'RMB'
-                    )}
-                  </strong>
-                </span>
-              </div>
-
-              {exporterStats.latestManifestRef && (
-                <button
-                  type="button"
-                  onClick={() => handleSelectManifestRef(exporterStats.latestManifestRef)}
-                  className="px-2.5 py-1 bg-teal-700 hover:bg-teal-800 text-white rounded font-bold text-[11px] shadow-2xs transition cursor-pointer"
-                >
-                  Sync Latest ({exporterStats.latestManifestRef})
-                </button>
-              )}
             </div>
 
             {/* Table Action Bar */}
@@ -724,7 +917,7 @@ export const ExporterPaymentFormView: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <Coins className="w-3.5 h-3.5 text-[#126b62]" />
                 <span className="font-bold text-slate-700 uppercase">
-                  Exporter Settlement Rows ({activeRowCount} Active / {rows.length} Rows)
+                  All Exporter Record History — Debit, Credit, Balance &amp; Status ({activeRowCount} Active / {rows.length} Rows)
                 </span>
               </div>
               <button
@@ -737,25 +930,31 @@ export const ExporterPaymentFormView: React.FC = () => {
               </button>
             </div>
 
-            {/* Data Entry Table Grid */}
+            {/* Data Entry & Record History Table Grid (with Debit, Credit, Balance & Status Column) */}
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-xs">
+              <table
+                data-testid="exporter-payment-history-table"
+                className="w-full border-collapse text-xs"
+              >
                 <thead>
                   <tr className="bg-[#126b62] text-white uppercase text-[11px] font-bold tracking-wider text-center border-b border-teal-950">
                     <th className="px-2 py-2.5 border-r border-teal-800/60 w-10">SL</th>
                     <th className="px-3 py-2.5 border-r border-teal-800/60 text-left">
-                      EXPORTER SETTLEMENT PARTICULARS / SHIPMENT DESCRIPTION
+                      RECORD HISTORY / SHIPMENT PARTICULARS (MARK &amp; DATE)
                     </th>
-                    <th className="px-3 py-2.5 border-r border-teal-800/60 w-32">
-                      DEBIT (EXPORT RMB)
+                    <th className="px-2.5 py-2.5 border-r border-teal-800/60 w-28">
+                      DEBIT (RMB)
                     </th>
-                    <th className="px-3 py-2.5 border-r border-teal-800/60 w-32">
-                      CREDIT (CLAIM RMB)
+                    <th className="px-2.5 py-2.5 border-r border-teal-800/60 w-28">
+                      CREDIT (RMB)
                     </th>
-                    <th className="px-3 py-2.5 border-r border-teal-800/60 w-32">
-                      ROW BALANCE
+                    <th className="px-2.5 py-2.5 border-r border-teal-800/60 w-28">
+                      BALANCE (RMB)
                     </th>
-                    <th className="px-2 py-2.5 w-12">CLR</th>
+                    <th className="px-2.5 py-2.5 border-r border-teal-800/60 w-36">
+                      STATUS (REPORT / NO REPORT / PAID)
+                    </th>
+                    <th className="px-2 py-2.5 w-10">CLR</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -767,6 +966,7 @@ export const ExporterPaymentFormView: React.FC = () => {
                       validationAttempted &&
                       Boolean(validation.fieldErrors.rows) &&
                       idx === 0;
+                    const rowStatus = row.status || exporterStatus || 'REPORT';
                     return (
                       <tr
                         key={row.id}
@@ -784,23 +984,34 @@ export const ExporterPaymentFormView: React.FC = () => {
 
                         {/* Description Input */}
                         <td className="p-1 border-r border-slate-200">
-                          <input
-                            type="text"
-                            aria-label={`Exporter payment row ${idx + 1} particulars`}
-                            aria-invalid={Boolean(
-                              rowErr?.description || highlightFirstEmptyRow
+                          <div className="flex flex-col gap-0.5">
+                            {row.date && (
+                              <div className="flex items-center gap-1.5 px-1 text-[10px] font-mono text-slate-500">
+                                <span className="font-bold text-teal-900">
+                                  {row.shippingMark}
+                                </span>
+                                <span>·</span>
+                                <span>Packing Date: {formatDate(row.date)}</span>
+                              </div>
                             )}
-                            value={row.description}
-                            onChange={(e) =>
-                              handleRowChange(row.id, 'description', e.target.value)
-                            }
-                            placeholder={`e.g. ${shippingMark} - RMB settlement for export shipment...`}
-                            className={`w-full border rounded px-2.5 py-1.5 text-slate-800 font-medium focus:bg-white focus:outline-none focus:ring-1 ${
-                              rowErr?.description || highlightFirstEmptyRow
-                                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
-                                : 'bg-slate-50 border-slate-200 focus:ring-teal-600'
-                            }`}
-                          />
+                            <input
+                              type="text"
+                              aria-label={`Exporter payment row ${idx + 1} particulars`}
+                              aria-invalid={Boolean(
+                                rowErr?.description || highlightFirstEmptyRow
+                              )}
+                              value={row.description}
+                              onChange={(e) =>
+                                handleRowChange(row, 'description', e.target.value)
+                              }
+                              placeholder="e.g. AAD - Export shipment settlement..."
+                              className={`w-full border rounded px-2 py-1 text-slate-800 font-medium focus:bg-white focus:outline-none focus:ring-1 ${
+                                rowErr?.description || highlightFirstEmptyRow
+                                  ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
+                                  : 'bg-slate-50 border-slate-200 focus:ring-teal-600'
+                              }`}
+                            />
+                          </div>
                         </td>
 
                         {/* Debit Amount */}
@@ -816,7 +1027,7 @@ export const ExporterPaymentFormView: React.FC = () => {
                             value={row.debitAmount || ''}
                             onChange={(e) =>
                               handleRowChange(
-                                row.id,
+                                row,
                                 'debitAmount',
                                 parseFloat(e.target.value) || 0
                               )
@@ -843,12 +1054,12 @@ export const ExporterPaymentFormView: React.FC = () => {
                             value={row.creditAmount || ''}
                             onChange={(e) =>
                               handleRowChange(
-                                row.id,
+                                row,
                                 'creditAmount',
                                 parseFloat(e.target.value) || 0
                               )
                             }
-                            className={`w-full bg-white border rounded px-2 py-1.5 text-right font-mono text-slate-800 focus:outline-none focus:ring-1 ${
+                            className={`w-full bg-white border rounded px-2 py-1.5 text-right font-mono text-emerald-800 font-semibold focus:outline-none focus:ring-1 ${
                               rowErr?.creditAmount || highlightFirstEmptyRow
                                 ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
                                 : 'border-slate-200 focus:ring-teal-600'
@@ -858,16 +1069,40 @@ export const ExporterPaymentFormView: React.FC = () => {
                         </td>
 
                         {/* Row Balance */}
-                        <td className="p-1 border-r border-slate-200 text-right font-mono font-bold text-slate-900 pr-3 bg-slate-50">
+                        <td className="p-1 border-r border-slate-200 text-right font-mono font-bold text-slate-900 pr-2.5 bg-slate-50">
                           {row.balance.toFixed(2)}
                         </td>
 
-                        {/* Clear Single Row */}
+                        {/* Status Column (Report, No Report, Paid) */}
+                        <td className="p-1 border-r border-slate-200 text-center">
+                          <select
+                            aria-label={`Exporter payment row ${idx + 1} status`}
+                            value={rowStatus}
+                            onChange={(e) =>
+                              handleRowChange(row, 'status', e.target.value)
+                            }
+                            className={`w-full text-center text-[11px] font-black uppercase rounded px-1.5 py-1.5 border cursor-pointer focus:outline-none ${
+                              rowStatus === 'PAID'
+                                ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                : rowStatus === 'REPORT'
+                                ? 'bg-blue-100 text-blue-900 border-blue-300'
+                                : 'bg-rose-100 text-rose-900 border-rose-300'
+                            }`}
+                          >
+                            {statusOptions.map((st) => (
+                              <option key={st} value={st} className="bg-white text-slate-900">
+                                {st}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+
+                        {/* Clear / Reset Single Row */}
                         <td className="p-1 text-center">
                           <button
                             type="button"
-                            onClick={() => handleClearRow(row.id)}
-                            title={`Clear row ${idx + 1}`}
+                            onClick={() => handleClearRow(row)}
+                            title={`Reset row ${idx + 1}`}
                             aria-label={`Clear exporter payment row ${idx + 1}`}
                             className="p-1 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
                           >
@@ -886,19 +1121,23 @@ export const ExporterPaymentFormView: React.FC = () => {
                       colSpan={2}
                       className="px-3 py-2 text-right uppercase tracking-wider text-[11px]"
                     >
-                      TOTAL EXPORTER VOUCHER (RMB):
+                      TOTAL EXPORTER RECORD HISTORY (RMB):
                     </td>
-                    <td className="px-3 py-2 text-right font-mono text-amber-300 font-black text-sm">
+                    <td className="px-2.5 py-2 text-right font-mono text-amber-300 font-black text-sm">
                       {totalDebit.toFixed(2)}
                     </td>
-                    <td className="px-3 py-2 text-right font-mono text-amber-200 font-bold text-xs">
+                    <td className="px-2.5 py-2 text-right font-mono text-amber-200 font-bold text-xs">
                       {totalCredit.toFixed(2)}
+                    </td>
+                    <td className="px-2.5 py-2 text-right font-mono text-amber-300 font-black text-sm">
+                      {(totalDebit - totalCredit).toFixed(2)}
                     </td>
                     <td
                       colSpan={2}
-                      className="px-3 py-2 text-right font-mono text-amber-300 font-black text-sm pr-3"
+                      className="px-2 py-2 text-center font-mono text-[10px] text-teal-100"
                     >
-                      {(totalDebit - totalCredit).toFixed(2)}
+                      {historyTotals.paidCount} PAID · {historyTotals.reportCount} REPORT ·{' '}
+                      {historyTotals.noReportCount} NO REPORT
                     </td>
                   </tr>
 
@@ -909,35 +1148,26 @@ export const ExporterPaymentFormView: React.FC = () => {
                       rowSpan={3}
                       className="px-3 py-2 text-center uppercase font-black tracking-widest text-[#126b62] border-r border-amber-300"
                     >
-                      EXPORTER SETTLEMENT REVIEW
+                      EXPORTER BALANCE REVIEW
                     </td>
                     <td
                       colSpan={2}
                       className="px-2 py-1.5 text-right font-bold text-slate-700"
                     >
-                      PREVIOUS / INVOICED AMOUNT (RMB):
+                      TOTAL DEBIT / INVOICED (RMB):
                     </td>
-                    <td colSpan={2} className="px-2 py-1.5">
+                    <td colSpan={3} className="px-2 py-1.5">
                       <input
                         type="number"
                         min="0"
                         step="0.01"
                         aria-label="Exporter Previous Amount"
-                        aria-invalid={
-                          validationAttempted &&
-                          Boolean(validation.fieldErrors.overallPreviousAmount)
-                        }
-                        value={overallPreviousAmount || ''}
+                        value={overallPreviousAmount || totalDebit || ''}
                         onChange={(e) =>
                           setOverallPreviousAmount(parseFloat(e.target.value) || 0)
                         }
                         placeholder="0.00"
-                        className={`w-full bg-white border rounded px-2 py-1 text-right font-mono font-bold text-slate-800 ${
-                          validationAttempted &&
-                          validation.fieldErrors.overallPreviousAmount
-                            ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40'
-                            : 'border-amber-400'
-                        }`}
+                        className="w-full bg-white border border-amber-400 rounded px-2 py-1 text-right font-mono font-bold text-slate-800"
                       />
                     </td>
                   </tr>
@@ -946,29 +1176,20 @@ export const ExporterPaymentFormView: React.FC = () => {
                       colSpan={2}
                       className="px-2 py-1.5 text-right font-bold text-slate-700"
                     >
-                      RECEIVED / SETTLED AMOUNT (RMB):
+                      TOTAL CREDIT / PAID (RMB):
                     </td>
-                    <td colSpan={2} className="px-2 py-1.5">
+                    <td colSpan={3} className="px-2 py-1.5">
                       <input
                         type="number"
                         min="0"
                         step="0.01"
                         aria-label="Exporter Paid Amount"
-                        aria-invalid={
-                          validationAttempted &&
-                          Boolean(validation.fieldErrors.overallPaidAmount)
-                        }
-                        value={overallPaidAmount || ''}
+                        value={overallPaidAmount || totalCredit || ''}
                         onChange={(e) =>
                           setOverallPaidAmount(parseFloat(e.target.value) || 0)
                         }
                         placeholder="0.00"
-                        className={`w-full bg-white border rounded px-2 py-1 text-right font-mono font-bold text-emerald-800 ${
-                          validationAttempted &&
-                          validation.fieldErrors.overallPaidAmount
-                            ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40'
-                            : 'border-amber-400'
-                        }`}
+                        className="w-full bg-white border border-amber-400 rounded px-2 py-1 text-right font-mono font-bold text-emerald-800"
                       />
                     </td>
                   </tr>
@@ -980,7 +1201,7 @@ export const ExporterPaymentFormView: React.FC = () => {
                       OUTSTANDING EXPORTER BALANCE (RMB):
                     </td>
                     <td
-                      colSpan={2}
+                      colSpan={3}
                       className="px-2 py-1.5 text-right font-mono text-base text-rose-800 pr-3"
                     >
                       {balance.toFixed(2)}
@@ -1090,7 +1311,7 @@ export const ExporterPaymentFormView: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setActiveTab('payment_db');
-                  showToast(`Opening Payment DB for Mark: "${searchQuery || shippingMark}"`);
+                  showToast(`Opening Payment DB for Mark: "${searchQuery || effectiveShippingMarkForSave}"`);
                 }}
                 className="bg-[#126b62] hover:bg-[#0e524b] text-white px-3 py-1.5 rounded font-bold text-xs uppercase shadow flex items-center space-x-1 transition cursor-pointer"
               >
@@ -1150,7 +1371,7 @@ export const ExporterPaymentFormView: React.FC = () => {
           {/* System Flow Diagram */}
           <div className="bg-white rounded-xl shadow-md border border-slate-200 p-4 space-y-3">
             <div className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-              EXPORTER SETTLEMENT FLOW
+              EXPORTER RECORD FLOW
             </div>
 
             <div className="space-y-2 text-xs">
@@ -1159,9 +1380,9 @@ export const ExporterPaymentFormView: React.FC = () => {
                   <Plane className="w-4 h-4" />
                 </div>
                 <div>
-                  <div className="font-bold text-teal-950">1. Link Export Packing Manifest</div>
+                  <div className="font-bold text-teal-950">1. Automatic Database Lookup</div>
                   <div className="text-[11px] text-slate-500">
-                    Select Mark &amp; PKG ref to load weight &amp; value
+                    Select Shipping Mark &amp; Packing Date to filter history
                   </div>
                 </div>
               </div>
@@ -1171,9 +1392,9 @@ export const ExporterPaymentFormView: React.FC = () => {
                   <Coins className="w-4 h-4" />
                 </div>
                 <div>
-                  <div className="font-bold text-amber-950">2. Return RMB &amp; Status</div>
+                  <div className="font-bold text-amber-950">2. Debit, Credit, Balance &amp; Status</div>
                   <div className="text-[11px] text-slate-500">
-                    Settle in RMB &amp; set PAID/REPORT
+                    Track RMB Debit/Credit/Balance &amp; Status (Report, No Report, Paid)
                   </div>
                 </div>
               </div>

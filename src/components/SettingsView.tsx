@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import { DropdownOptions } from '../types/index.ts';
+import { DEFAULT_SUPER_ADMIN_PASSWORD } from '../utils/superAdminAuth.ts';
 import {
   Settings,
   Plus,
@@ -14,6 +15,12 @@ import {
   MapPin,
   PenTool,
   Save,
+  ShieldCheck,
+  Lock,
+  KeyRound,
+  Mail,
+  Archive,
+  Download,
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
@@ -25,12 +32,21 @@ export const SettingsView: React.FC = () => {
     editDropdownItem,
     deleteDropdownItem,
     resetDropdowns,
+    clearAllDatabaseRecords,
+    superAdminPassword,
+    updateSuperAdminPassword,
+    snapshots,
+    openSnapshotModal,
+    createSnapshot,
+    restoreSnapshot,
+    downloadSnapshotJSON,
   } = useApp();
 
   // Company profile form state
   const [address, setAddress] = useState(companyProfile.address);
   const [mobile1, setMobile1] = useState(companyProfile.mobiles[0] || '+8801671036114');
   const [mobile2, setMobile2] = useState(companyProfile.mobiles[1] || '+8801841165902');
+  const [email, setEmail] = useState(companyProfile.email || 'www.zsbaquatics.com');
   const [managingPartner, setManagingPartner] = useState(companyProfile.managingPartner);
   const [partner, setPartner] = useState(companyProfile.partner);
 
@@ -38,6 +54,33 @@ export const SettingsView: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState<keyof DropdownOptions>('shippingMarks');
   const [newItemText, setNewItemText] = useState('');
   const [editingItem, setEditingItem] = useState<{ original: string; text: string } | null>(null);
+
+  // Super Admin password change state
+  const [currentPwd, setCurrentPwd] = useState('');
+  const [newPwd, setNewPwd] = useState('');
+  const [confirmPwd, setConfirmPwd] = useState('');
+  const [pwdStatus, setPwdStatus] = useState<{ type: 'error' | 'success'; message: string } | null>(
+    null
+  );
+
+  const handleUpdatePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = updateSuperAdminPassword(currentPwd, newPwd, confirmPwd);
+    if (!res.valid) {
+      setPwdStatus({
+        type: 'error',
+        message: res.error || 'Failed to update Super Admin password.',
+      });
+      return;
+    }
+    setCurrentPwd('');
+    setNewPwd('');
+    setConfirmPwd('');
+    setPwdStatus({
+      type: 'success',
+      message: 'Super Admin password updated! Use your new password when clearing records.',
+    });
+  };
 
   const categoryTitles: Record<keyof DropdownOptions, string> = {
     shippingMarks: 'Shipping Marks (32+ Presets)',
@@ -60,6 +103,7 @@ export const SettingsView: React.FC = () => {
     updateCompanyProfile({
       address,
       mobiles: [mobile1, mobile2].filter(Boolean),
+      email: email.trim() || 'www.zsbaquatics.com',
       managingPartner,
       partner,
     });
@@ -83,7 +127,14 @@ export const SettingsView: React.FC = () => {
       {/* Top Banner */}
       <div className="bg-[#1b2b44] text-white px-5 py-3 rounded-lg shadow-md flex items-center justify-between border-b-2 border-amber-500">
         <div className="flex items-center space-x-3">
-          <span className="text-xl sm:text-2xl font-black tracking-wider text-amber-400 font-serif uppercase">
+          <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
+            <img
+              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+              alt={companyProfile.companyName}
+              className="w-full h-full object-contain rounded-full"
+            />
+          </div>
+          <span className="zsb-3d-text text-xl sm:text-2xl font-black">
             {companyProfile.companyName}
           </span>
           <span className="text-lg text-slate-300">|</span>
@@ -91,17 +142,35 @@ export const SettingsView: React.FC = () => {
             Master Settings &amp; Dropdown Configuration
           </span>
         </div>
-        <button
-          onClick={() => {
-            if (confirm('Reset all dropdown lists to initial defaults?')) {
-              resetDropdowns();
-            }
-          }}
-          className="flex items-center space-x-1 px-3 py-1.5 text-xs font-bold bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-400/40 rounded transition"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          <span>Reset Dropdowns</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            data-testid="settings-open-snapshots-btn"
+            onClick={openSnapshotModal}
+            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold bg-indigo-500/20 text-indigo-200 hover:bg-indigo-500/30 border border-indigo-400/40 rounded transition cursor-pointer"
+          >
+            <Archive className="w-3.5 h-3.5 text-amber-300" />
+            <span>Database Snapshots ({snapshots.length})</span>
+          </button>
+          <button
+            type="button"
+            data-testid="settings-delete-all-records-btn"
+            onClick={() => clearAllDatabaseRecords('all')}
+            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold bg-rose-500/20 text-rose-200 hover:bg-rose-500/30 border border-rose-400/40 rounded transition cursor-pointer"
+          >
+            <Lock className="w-3.5 h-3.5" />
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Delete All Database Records</span>
+          </button>
+          <button
+            type="button"
+            onClick={resetDropdowns}
+            className="flex items-center space-x-1 px-3 py-1.5 text-xs font-bold bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-400/40 rounded transition cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Reset Dropdowns</span>
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -119,15 +188,24 @@ export const SettingsView: React.FC = () => {
             </div>
 
             <form onSubmit={handleSaveProfile} className="p-4 space-y-3.5 text-xs">
-              {/* Golden Company Name (Fixed / Branded) */}
+              {/* Golden Company Name & Official Logo (Fixed / Branded) */}
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Company Name</label>
-                <div className="p-2.5 bg-slate-900 rounded-lg border border-slate-700">
-                  <div className="text-xl font-black tracking-widest text-amber-400 font-serif uppercase drop-shadow">
-                    {companyProfile.companyName}
+                <label className="font-bold text-slate-700 block mb-1">Company Brand &amp; Logo</label>
+                <div className="p-3 bg-slate-900 rounded-lg border border-slate-700 flex items-center gap-3.5">
+                  <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-md flex items-center justify-center">
+                    <img
+                      src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+                      alt={companyProfile.companyName}
+                      className="w-full h-full object-contain rounded-full"
+                    />
                   </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">
-                    (Branded Golden color in every voucher, header, and PDF print)
+                  <div>
+                    <div className="zsb-3d-text text-xl font-black">
+                      {companyProfile.companyName}
+                    </div>
+                    <div className="text-[10px] text-slate-300 mt-0.5">
+                      Official Company Gold Seal Logo • Integrated across all vouchers, headers &amp; PDF / PNG prints
+                    </div>
                   </div>
                 </div>
               </div>
@@ -174,6 +252,21 @@ export const SettingsView: React.FC = () => {
                 </div>
               </div>
 
+              {/* Email / Official Website */}
+              <div>
+                <label className="font-bold text-slate-700 block mb-1 flex items-center space-x-1">
+                  <Mail className="w-3.5 h-3.5 text-slate-600" />
+                  <span>EMAIL (Black Font in Prints)</span>
+                </label>
+                <input
+                  type="text"
+                  aria-label="EMAIL"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono font-bold text-black"
+                />
+              </div>
+
               {/* Signatures: Managing Partner & Partner */}
               <div className="p-3 bg-amber-50/60 rounded-lg border border-amber-200 space-y-2">
                 <div className="font-bold text-amber-950 uppercase flex items-center space-x-1">
@@ -206,12 +299,205 @@ export const SettingsView: React.FC = () => {
 
               <button
                 type="submit"
-                className="w-full bg-[#1b73b4] hover:bg-[#165f95] text-white py-2 rounded font-bold text-xs uppercase shadow transition flex items-center justify-center space-x-1.5"
+                className="w-full bg-[#1b73b4] hover:bg-[#165f95] text-white py-2 rounded font-bold text-xs uppercase shadow transition flex items-center justify-center space-x-1.5 cursor-pointer"
               >
                 <Save className="w-4 h-4" />
                 <span>Save Company Configuration</span>
               </button>
             </form>
+          </div>
+
+          {/* Super Admin Security & Password Configuration Card */}
+          <div className="bg-white rounded-xl shadow border border-slate-200 overflow-hidden">
+            <div className="bg-rose-900 text-white px-4 py-3 font-bold text-xs uppercase flex items-center justify-between">
+              <span className="flex items-center space-x-2">
+                <ShieldCheck className="w-4 h-4 text-amber-300" />
+                <span>SUPER ADMIN SECURITY &amp; PASSWORD</span>
+              </span>
+              <span className="text-[10px] px-2 py-0.5 rounded bg-rose-800 text-amber-300 font-bold uppercase">
+                Protected Clear
+              </span>
+            </div>
+
+            <form onSubmit={handleUpdatePassword} className="p-4 space-y-3 text-xs">
+              <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-950 flex items-center justify-between">
+                <span className="flex items-center space-x-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                  <span>
+                    {superAdminPassword === DEFAULT_SUPER_ADMIN_PASSWORD ? (
+                      <>
+                        Default Password Active:{' '}
+                        <code className="px-1.5 py-0.5 rounded bg-amber-200/70 font-mono font-black">
+                          {DEFAULT_SUPER_ADMIN_PASSWORD}
+                        </code>
+                      </>
+                    ) : (
+                      <strong>Custom Super Admin Password Active</strong>
+                    )}
+                  </span>
+                </span>
+                <span className="text-[10px] font-bold text-rose-700 uppercase">
+                  Required for Clear All
+                </span>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="settings-current-super-pwd"
+                  className="font-bold text-slate-700 block mb-1"
+                >
+                  Current Super Admin Password
+                </label>
+                <input
+                  id="settings-current-super-pwd"
+                  data-testid="settings-current-super-pwd"
+                  type="password"
+                  value={currentPwd}
+                  onChange={(e) => {
+                    setCurrentPwd(e.target.value);
+                    setPwdStatus(null);
+                  }}
+                  placeholder="Enter current password..."
+                  className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono font-bold text-slate-900"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label
+                    htmlFor="settings-new-super-pwd"
+                    className="font-bold text-slate-700 block mb-1"
+                  >
+                    New Password
+                  </label>
+                  <input
+                    id="settings-new-super-pwd"
+                    data-testid="settings-new-super-pwd"
+                    type="password"
+                    value={newPwd}
+                    onChange={(e) => {
+                      setNewPwd(e.target.value);
+                      setPwdStatus(null);
+                    }}
+                    placeholder="Min 4 chars"
+                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono font-bold text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="settings-confirm-super-pwd"
+                    className="font-bold text-slate-700 block mb-1"
+                  >
+                    Confirm New Password
+                  </label>
+                  <input
+                    id="settings-confirm-super-pwd"
+                    data-testid="settings-confirm-super-pwd"
+                    type="password"
+                    value={confirmPwd}
+                    onChange={(e) => {
+                      setConfirmPwd(e.target.value);
+                      setPwdStatus(null);
+                    }}
+                    placeholder="Repeat password"
+                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono font-bold text-slate-900"
+                  />
+                </div>
+              </div>
+
+              {pwdStatus && (
+                <div
+                  role="alert"
+                  className={`p-2 rounded border text-[11px] font-bold ${
+                    pwdStatus.type === 'error'
+                      ? 'bg-rose-50 border-rose-300 text-rose-800'
+                      : 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                  }`}
+                >
+                  {pwdStatus.message}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                data-testid="settings-save-super-pwd-btn"
+                className="w-full bg-rose-700 hover:bg-rose-800 text-white py-2 rounded font-bold text-xs uppercase shadow transition flex items-center justify-center space-x-1.5 cursor-pointer"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Update Super Admin Password</span>
+              </button>
+            </form>
+          </div>
+
+          {/* Database Snapshot & Local JSON Recovery Card */}
+          <div className="bg-white rounded-xl shadow border border-slate-200 overflow-hidden">
+            <div className="bg-indigo-950 text-white px-4 py-3 font-bold text-xs uppercase flex items-center justify-between">
+              <span className="flex items-center space-x-2">
+                <Archive className="w-4 h-4 text-amber-300" />
+                <span>DATABASE SNAPSHOT &amp; JSON RECOVERY</span>
+              </span>
+              <span className="text-[10px] font-mono text-amber-300 font-bold">
+                {snapshots.length} Saved
+              </span>
+            </div>
+
+            <div className="p-4 space-y-3 text-xs">
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                Create local JSON archives of your current records or restore state in one click if data is accidentally cleared or corrupted.
+              </p>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  data-testid="settings-quick-snapshot-btn"
+                  onClick={() => createSnapshot(undefined, 'Created from Settings panel', 'manual')}
+                  className="flex items-center justify-center space-x-1.5 px-3 py-2 rounded bg-[#1b73b4] hover:bg-[#155d93] text-white font-bold text-xs transition cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Create Snapshot</span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="settings-download-snapshot-btn"
+                  onClick={() => downloadSnapshotJSON()}
+                  className="flex items-center justify-center space-x-1.5 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs transition cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download .JSON</span>
+                </button>
+              </div>
+
+              {snapshots.length > 0 && (
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between gap-2">
+                  <div className="truncate">
+                    <div className="font-bold text-slate-900 truncate">
+                      Latest: {snapshots[0].label}
+                    </div>
+                    <div className="text-[10px] font-mono text-slate-500">
+                      {snapshots[0].recordCounts.totalRecords} records · {snapshots[0].checksum}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="settings-restore-latest-btn"
+                    onClick={() => restoreSnapshot(snapshots[0].id)}
+                    className="px-2.5 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shrink-0 transition cursor-pointer"
+                  >
+                    Restore Latest
+                  </button>
+                </div>
+              )}
+
+              <button
+                type="button"
+                data-testid="settings-manage-snapshots-btn"
+                onClick={openSnapshotModal}
+                className="w-full py-2 rounded border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 font-bold text-xs uppercase transition flex items-center justify-center space-x-1.5 cursor-pointer"
+              >
+                <Archive className="w-3.5 h-3.5 text-indigo-700" />
+                <span>Open Snapshot &amp; Recovery Manager ({snapshots.length})</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -326,12 +612,10 @@ export const SettingsView: React.FC = () => {
                         </button>
                         <button
                           onClick={() => {
-                            if (confirm(`Delete "${item}" from ${categoryTitles[activeCategory]}?`)) {
-                              deleteDropdownItem(activeCategory, item);
-                            }
+                            deleteDropdownItem(activeCategory, item);
                           }}
-                          className="p-1 text-slate-400 hover:text-rose-600 rounded transition"
-                          title="Delete"
+                          className="p-1 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
+                          title={`Delete ${item}`}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>

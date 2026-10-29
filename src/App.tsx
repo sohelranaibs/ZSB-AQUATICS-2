@@ -17,6 +17,9 @@ import { DatabaseView } from './components/DatabaseView.tsx';
 import { SearchReportsView } from './components/SearchReportsView.tsx';
 import { SettingsView } from './components/SettingsView.tsx';
 import { PrintPreviewModal } from './components/PrintPreviewModal.tsx';
+import { QuickEntryModal } from './components/QuickEntryModal.tsx';
+import { SuperAdminClearModal } from './components/SuperAdminClearModal.tsx';
+import { DatabaseSnapshotModal } from './components/DatabaseSnapshotModal.tsx';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 
 const MainContent: React.FC = () => {
@@ -29,7 +32,7 @@ const MainContent: React.FC = () => {
 
       {/* Toast Notification Banner */}
       {toastMessage && (
-        <div className="fixed bottom-4 right-4 z-50 bg-slate-900 text-white px-4 py-2.5 rounded-xl shadow-2xl border border-amber-500/50 flex items-center space-x-2 text-xs font-semibold animate-bounce print:hidden">
+        <div className="fixed bottom-4 right-4 z-50 bg-slate-900 text-white px-4 py-2.5 rounded-xl shadow-2xl border border-amber-500/50 flex items-center space-x-2 text-xs font-semibold transition-opacity duration-150 print:hidden">
           <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
           <span>{toastMessage}</span>
         </div>
@@ -53,6 +56,15 @@ const MainContent: React.FC = () => {
 
       {/* Printable Modal (Voucher / Statement / PDF) */}
       <PrintPreviewModal />
+
+      {/* Global Excel (.XLSX) & CSV Import / Export Center Modal */}
+      <QuickEntryModal />
+
+      {/* Super Admin Password Verification Modal for Clear All Records */}
+      <SuperAdminClearModal />
+
+      {/* Local JSON Database Snapshot & State Recovery Modal */}
+      <DatabaseSnapshotModal />
     </div>
   );
 };

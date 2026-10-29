@@ -399,8 +399,8 @@ export function validateExporterPaymentForm(
     errors.push(msg);
   }
 
-  if (!isValidDateString(input.date || '')) {
-    const msg = 'A valid Settlement Date is required.';
+  if (input.date && input.date.trim() !== '' && !isValidDateString(input.date)) {
+    const msg = 'A valid date is required.';
     fieldErrors.date = msg;
     errors.push(msg);
   }

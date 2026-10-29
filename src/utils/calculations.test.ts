@@ -25,6 +25,7 @@ import {
   DEFAULT_EXPORTER_SLIP_ROWS,
   formatExporterSlipExportFilename,
   formatPurchaseExportFilename,
+  formatPackingExportFilename,
   createEmptyExporterSlipRow,
   createInitialExporterSlipRows,
   isExporterSlipRowPopulated,
@@ -38,7 +39,12 @@ import {
   getExporterManifestStats,
   getTopSuppliersByVolume,
   calculatePackingConsignmentSummary,
+  calculateAllMonthlyReports,
 } from './calculations.ts';
+import {
+  generateMonthlyExportsAndPurchasesSummaryCSV,
+  generateDetailedMonthlyExportsPurchasesCSV,
+} from './csvExporter.ts';
 
 test('calculatePurchaseRowTotal should multiply quantity and rate correctly', () => {
   assert.equal(calculatePurchaseRowTotal(10, 150), 1500);
@@ -936,4 +942,126 @@ test('calculatePackingConsignmentSummary calculates cumulative export weight and
   assert.equal(summary.pendingConsignmentsCount, 1);
   assert.equal(summary.latestConsignmentDate, '2026-10-23');
   assert.equal(summary.latestInvoiceNumber, 'PKG-2026-0003');
+});
+
+test('formatPackingExportFilename generates clean filename with invoice, shipping mark and date', () => {
+  assert.equal(
+    formatPackingExportFilename('PKG-2026-0001', 'AAD', '2026-10-23', 'pdf'),
+    'ZSB_AQUATICS_Export_Packing_List_PKG-2026-0001_AAD_2026-10-23.pdf'
+  );
+  assert.equal(
+    formatPackingExportFilename('PKG-2026-0002', 'CHJ-22', '2026-10-23', 'png'),
+    'ZSB_AQUATICS_Export_Packing_List_PKG-2026-0002_CHJ-22_2026-10-23.png'
+  );
+  assert.equal(
+    formatPackingExportFilename('', '', '2026-10-23', 'png'),
+    'ZSB_AQUATICS_Export_Packing_List_PKG_2026-10-23.png'
+  );
+});
+
+test('calculateAllMonthlyReports aggregates exports and purchases by month and produces accurate totals', () => {
+  const purchases: any[] = [
+    { id: '1', date: '2026-10-05', totalQty: 100, totalAmount: 50000 },
+    { id: '2', date: '2026-10-18', totalQty: 150, totalAmount: 75000 },
+    { id: '3', date: '2026-09-12', totalQty: 200, totalAmount: 90000 },
+  ];
+  const packings: any[] = [
+    { id: 'p1', packingDate: '2026-10-08', totalBox: 10, totalWeight: 160, totalAmount: 4000, rmbRate: 16.5 }, // 4000 * 16.5 = 66,000 BDT
+    { id: 'p2', packingDate: '2026-10-22', totalBox: 15, totalWeight: 240, totalAmount: 6000, rmbRate: 16.5 }, // 6000 * 16.5 = 99,000 BDT
+    { id: 'p3', packingDate: '2026-09-15', totalBox: 20, totalWeight: 320, totalAmount: 8000, rmbRate: 16.5 }, // 8000 * 16.5 = 132,000 BDT
+  ];
+  const otherCosts: any[] = [
+    { id: 'c1', date: '2026-10-10', amount: 5000 },
+    { id: 'c2', date: '2026-09-20', amount: 4000 },
+  ];
+
+  const report = calculateAllMonthlyReports(purchases, packings, otherCosts, 16.5);
+  assert.equal(report.items.length, 2); // 2026-10 and 2026-09
+  assert.equal(report.items[0].yearMonth, '2026-10');
+  assert.equal(report.items[0].purchaseVolume, 250); // 100 + 150
+  assert.equal(report.items[0].purchaseValue, 125000); // 50000 + 75000
+  assert.equal(report.items[0].purchaseCount, 2);
+  assert.equal(report.items[0].exportWeight, 400); // 160 + 240
+  assert.equal(report.items[0].exportBoxes, 25); // 10 + 15
+  assert.equal(report.items[0].exportValueRMB, 10000); // 4000 + 6000
+  assert.equal(report.items[0].exportValueBDT, 165000); // 66000 + 99000
+  assert.equal(report.items[0].exportCount, 2);
+  assert.equal(report.items[0].otherCosts, 5000);
+  assert.equal(report.items[0].netProfit, 35000); // 165000 - 125000 - 5000
+
+  // Check cumulative totals
+  assert.equal(report.totals.totalPurchaseVolume, 450); // 250 + 200
+  assert.equal(report.totals.totalPurchaseValue, 215000); // 125000 + 90000
+  assert.equal(report.totals.totalPurchaseCount, 3);
+  assert.equal(report.totals.totalExportWeight, 720); // 400 + 320
+  assert.equal(report.totals.totalExportBoxes, 45); // 25 + 20
+  assert.equal(report.totals.totalExportValueRMB, 18000);
+  assert.equal(report.totals.totalExportValueBDT, 297000);
+  assert.equal(report.totals.totalExportCount, 3);
+  assert.equal(report.totals.totalNetProfit, 73000); // 35000 + (132000 - 90000 - 4000)
+  assert.deepEqual(report.availableYears, ['2026']);
+});
+
+test('generateMonthlyExportsAndPurchasesSummaryCSV produces valid RFC4180 CSV with UTF8 BOM and summary totals', () => {
+  const items: any[] = [
+    {
+      yearMonth: '2026-10',
+      monthLabel: 'October 2026',
+      purchaseVolume: 250,
+      purchaseValue: 125000,
+      purchaseCount: 2,
+      exportWeight: 400,
+      exportBoxes: 25,
+      exportValueRMB: 10000,
+      exportValueBDT: 165000,
+      exportCount: 2,
+      otherCosts: 5000,
+      netProfit: 35000,
+      marginPercent: 21.2,
+    },
+  ];
+  const totals: any = {
+    totalPurchaseVolume: 250,
+    totalPurchaseValue: 125000,
+    totalPurchaseCount: 2,
+    totalExportWeight: 400,
+    totalExportBoxes: 25,
+    totalExportValueRMB: 10000,
+    totalExportValueBDT: 165000,
+    totalExportCount: 2,
+    totalOtherCosts: 5000,
+    totalNetProfit: 35000,
+    overallMarginPercent: 21.2,
+  };
+
+  const csv = generateMonthlyExportsAndPurchasesSummaryCSV(items, totals, 'ZSB AQUATICS');
+  assert.ok(csv.startsWith('\uFEFF'), 'Must start with UTF-8 BOM');
+  assert.ok(csv.includes('ZSB AQUATICS — MONTHLY SUMMARY REPORT (ALL EXPORTS & PURCHASES)'));
+  assert.ok(csv.includes('Purchase Volume (KG)'));
+  assert.ok(csv.includes('Export Weight (KG)'));
+  assert.ok(csv.includes('2026-10,October 2026,250,125000,2,400,25,10000,165000,2,5000,35000,21.2%,PROFIT'));
+  assert.ok(csv.includes('TOTAL / CUMULATIVE'));
+});
+
+test('generateDetailedMonthlyExportsPurchasesCSV filters by month and formats both purchases and exports', () => {
+  const purchases: any[] = [
+    { invoiceNumber: 'PUR-001', date: '2026-10-05', description: 'RAKIB VAI', totalQty: 100, totalAmount: 50000, balance: 0, items: [] },
+    { invoiceNumber: 'PUR-002', date: '2026-09-10', description: 'ABDULLAH VAI', totalQty: 50, totalAmount: 25000, balance: 5000, items: [] },
+  ];
+  const packings: any[] = [
+    { invoiceNumber: 'PKG-001', packingDate: '2026-10-08', shippingMark: 'AAD', destination: 'GUANGZHOU', flight: 'CZ', shipper: 'ZSB', totalBox: 10, totalWeight: 160, totalAmount: 4000, rmbRate: 16.5, paymentStatus: 'PAID', items: [] },
+    { invoiceNumber: 'PKG-002', packingDate: '2026-09-12', shippingMark: 'CHJ-22', destination: 'SHANGHAI', flight: 'MU', shipper: 'ZSB', totalBox: 8, totalWeight: 120, totalAmount: 3000, rmbRate: 16.5, paymentStatus: 'NO REPORT', items: [] },
+  ];
+
+  const csvOct = generateDetailedMonthlyExportsPurchasesCSV({ targetMonth: '2026-10', purchases, packings, rmbExchangeRate: 16.5 });
+  assert.ok(csvOct.includes('PUR-001'));
+  assert.ok(csvOct.includes('PKG-001'));
+  assert.ok(!csvOct.includes('PUR-002'), 'Should not include September purchase');
+  assert.ok(!csvOct.includes('PKG-002'), 'Should not include September packing');
+
+  const csvAll = generateDetailedMonthlyExportsPurchasesCSV({ targetMonth: 'ALL', purchases, packings, rmbExchangeRate: 16.5 });
+  assert.ok(csvAll.includes('PUR-001'));
+  assert.ok(csvAll.includes('PUR-002'));
+  assert.ok(csvAll.includes('PKG-001'));
+  assert.ok(csvAll.includes('PKG-002'));
 });

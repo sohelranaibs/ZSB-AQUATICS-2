@@ -2,10 +2,14 @@ export interface CompanyProfile {
   companyName: string;
   address: string;
   mobiles: string[];
+  email?: string;
   managingPartner: string;
   partner: string;
   currency: string;
   rmbExchangeRate: number;
+  logoUrl?: string;
+  minInventoryThresholdKg?: number;
+  approachingThresholdPercent?: number;
 }
 
 export interface DropdownOptions {
@@ -80,6 +84,9 @@ export interface PackingRecord {
   totalAmountBDT?: number;
   rmbAmount?: number;
   settledAmount?: number;
+  debitAmount?: number;
+  creditAmount?: number;
+  balanceAmount?: number;
   exporterStatus?: ExporterStatus;
   paymentStatus?: ExporterStatus;
   paymentDate?: string;
@@ -112,6 +119,9 @@ export interface ExporterPaymentSlipRow {
   weightKg: number;
   rmb: number;
   amount: number;
+  debitAmount?: number;
+  creditAmount?: number;
+  balance?: number;
   status: ExporterStatus;
   destination?: string;
   shipper?: string;
@@ -121,18 +131,32 @@ export interface ExporterPaymentSlipRow {
 
 export interface PaymentItemRow {
   id: string;
+  packingId?: string;
+  paymentId?: string;
+  invoiceNumber?: string;
+  date?: string;
+  shippingMark?: string;
+  flight?: string;
+  box?: number;
+  weightKg?: number;
   description: string;
   debitAmount: number;
   creditAmount: number;
   balance: number; // debit - credit
+  status?: ExporterStatus;
 }
 
 export type ExporterStatus = 'NO REPORT' | 'REPORT' | 'PAID' | string;
+
+export type RecurrenceFrequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly';
 
 export interface PaymentRecord {
   id: string;
   invoiceNumber: string;
   date: string;
+  dueDate?: string;
+  isRecurring?: boolean;
+  recurrenceFrequency?: RecurrenceFrequency;
   description: string;
   contactNumber: string;
   items: PaymentItemRow[];
@@ -160,6 +184,53 @@ export interface OtherCostRecord {
   createdAt: string;
 }
 
+export type SupplierCreditReason =
+  | 'Weight Shortage / Shrinkage'
+  | 'Mortality / DOA Claim'
+  | 'Grade / Quality Discount'
+  | 'Overcharge Adjustment'
+  | 'Volume Rebate / Loyalty Credit'
+  | 'Returned Consignment'
+  | 'Other Credit Note'
+  | string;
+
+export type SupplierCreditStatus = 'AVAILABLE' | 'PARTIAL' | 'APPLIED';
+
+export interface SupplierCreditApplication {
+  id: string;
+  date: string;
+  amount: number;
+  targetPaymentInvoice?: string;
+  targetPurchaseInvoice?: string;
+  notes?: string;
+}
+
+export interface SupplierCreditRecord {
+  id: string;
+  creditNoteNumber: string;
+  date: string;
+  supplierName: string;
+  refPurchaseInvoice?: string;
+  reason: SupplierCreditReason;
+  amount: number;
+  appliedAmount: number;
+  remainingAmount: number;
+  status: SupplierCreditStatus;
+  applications: SupplierCreditApplication[];
+  remarks?: string;
+  createdAt: string;
+}
+
+export interface MortalityRecord {
+  id: string;
+  species: string; // Species or grade code (e.g. F1, FF1, KS/3, Eel Fish)
+  quantityKg: number;
+  date: string; // YYYY-MM-DD
+  cause?: string; // e.g. 'Transit Stress', 'Tank Acclimation', 'DOA Claim', 'Water Quality'
+  notes?: string;
+  createdAt: string;
+}
+
 export type ActiveTab =
   | 'dashboard'
   | 'purchase_form'
@@ -173,3 +244,5 @@ export type ActiveTab =
   | 'payment_db'
   | 'search_reports'
   | 'settings';
+
+

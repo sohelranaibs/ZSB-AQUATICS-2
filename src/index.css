@@ -6,6 +6,57 @@
   }
 }
 
+/* 3D Sculpted Gold Font for "ZSB AQUATICS" across all sheets & headers */
+.zsb-3d-text {
+  font-family: 'Cinzel', Georgia, Cambria, "Times New Roman", Times, serif;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #ffe066;
+  text-shadow:
+    0px 1px 0px #d97706,
+    1px 2px 0px #b45309,
+    2px 3px 0px #92400e,
+    3px 4px 0px #78350f,
+    4px 5px 0px #451a03,
+    5px 6px 8px rgba(0, 0, 0, 0.72),
+    0px 0px 14px rgba(251, 191, 36, 0.25);
+  display: inline-block;
+}
+
+.zsb-3d-text-lg {
+  font-family: 'Cinzel', Georgia, Cambria, "Times New Roman", Times, serif;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: #ffe57f;
+  text-shadow:
+    0px 1px 0px #f59e0b,
+    1px 2px 0px #d97706,
+    2px 3px 0px #b45309,
+    3px 4px 0px #92400e,
+    4px 5px 0px #78350f,
+    5px 6px 0px #451a03,
+    6px 8px 10px rgba(0, 0, 0, 0.75),
+    0px 0px 18px rgba(251, 191, 36, 0.3);
+  display: inline-block;
+}
+
+.zsb-3d-text-print {
+  font-family: 'Cinzel', Georgia, Cambria, "Times New Roman", Times, serif;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: #f59e0b;
+  text-shadow:
+    1px 1px 0px #b45309,
+    2px 2px 0px #92400e,
+    3px 3px 0px #78350f,
+    4px 4px 0px #451a03,
+    5px 5px 7px rgba(15, 23, 42, 0.35);
+  display: inline-block;
+}
+
 @media print {
   @page {
     size: A4 portrait;

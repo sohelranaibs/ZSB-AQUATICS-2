@@ -1,13 +1,19 @@
-import { CompanyProfile, DropdownOptions, PurchaseRecord, PackingRecord, PaymentRecord, OtherCostRecord } from '../types/index.ts';
+import { CompanyProfile, DropdownOptions, PurchaseRecord, PackingRecord, PaymentRecord, OtherCostRecord, SupplierCreditRecord, MortalityRecord } from '../types/index.ts';
+
+export const COMPANY_LOGO_URL = '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg';
 
 export const initialCompanyProfile: CompanyProfile = {
   companyName: 'ZSB AQUATICS',
   address: '29/B, Tarartek, Nolvog, Turag, Dhaka – 1230',
   mobiles: ['+8801671036114', '+8801841165902'],
+  email: 'www.zsbaquatics.com',
   managingPartner: 'Md. Mizanur Rahman',
   partner: 'Md. Sohel Rana',
   currency: 'TK',
   rmbExchangeRate: 16.5,
+  logoUrl: COMPANY_LOGO_URL,
+  minInventoryThresholdKg: 100,
+  approachingThresholdPercent: 25,
 };
 
 export const initialDropdownOptions: DropdownOptions = {
@@ -75,8 +81,410 @@ export const initialDropdownOptions: DropdownOptions = {
   ],
 };
 
-// All database records initialized as clean empty arrays
-export const initialPurchases: PurchaseRecord[] = [];
-export const initialPackings: PackingRecord[] = [];
-export const initialPayments: PaymentRecord[] = [];
-export const initialOtherCosts: OtherCostRecord[] = [];
+// Seed trade records across various dates for immediate reporting & date filtering analysis
+export const initialPurchases: PurchaseRecord[] = [
+  {
+    id: 'pur-seed-001',
+    invoiceNumber: 'INV-2026-1001',
+    date: '2026-10-05',
+    description: 'ABDULLAH VAI',
+    contactNumber: '+8801711223344',
+    items: [
+      { id: '1', item: 'FF1', quantity: 80, rate: 850, totalAmount: 68000, previousAmount: 0, paidAmount: 68000, balance: 0 },
+      { id: '2', item: 'F1', quantity: 70, rate: 814.2857, totalAmount: 57000, previousAmount: 0, paidAmount: 32000, balance: 25000 },
+    ],
+    totalQty: 150,
+    totalAmount: 125000,
+    previousAmount: 0,
+    paidAmount: 100000,
+    balance: 25000,
+    remarks: 'Grade A Live Eel batch from Turag River',
+    createdAt: '2026-10-05T08:30:00.000Z',
+  },
+  {
+    id: 'pur-seed-002',
+    invoiceNumber: 'INV-2026-1012',
+    date: '2026-10-12',
+    description: 'UZZAL VAI',
+    contactNumber: '+8801822334455',
+    items: [
+      { id: '1', item: 'F2', quantity: 110, rate: 859.09, totalAmount: 94500, previousAmount: 0, paidAmount: 94500, balance: 0 },
+    ],
+    totalQty: 110,
+    totalAmount: 94500,
+    previousAmount: 0,
+    paidAmount: 94500,
+    balance: 0,
+    remarks: 'Full settlement paid on receipt',
+    createdAt: '2026-10-12T09:15:00.000Z',
+  },
+  {
+    id: 'pur-seed-003',
+    invoiceNumber: 'INV-2026-0918',
+    date: '2026-09-18',
+    description: 'FAISAL VAI',
+    contactNumber: '+8801933445566',
+    items: [
+      { id: '1', item: 'KS/3', quantity: 200, rate: 800, totalAmount: 160000, previousAmount: 0, paidAmount: 120000, balance: 40000 },
+    ],
+    totalQty: 200,
+    totalAmount: 160000,
+    previousAmount: 0,
+    paidAmount: 120000,
+    balance: 40000,
+    remarks: 'September shipment procurement',
+    createdAt: '2026-09-18T10:00:00.000Z',
+  },
+  {
+    id: 'pur-seed-004',
+    invoiceNumber: 'INV-2026-0825',
+    date: '2026-08-25',
+    description: 'RAKIB VAI',
+    contactNumber: '+8801644556677',
+    items: [
+      { id: '1', item: 'XXL', quantity: 125, rate: 880, totalAmount: 110000, previousAmount: 0, paidAmount: 110000, balance: 0 },
+    ],
+    totalQty: 125,
+    totalAmount: 110000,
+    previousAmount: 0,
+    paidAmount: 110000,
+    balance: 0,
+    remarks: 'August consignment settled',
+    createdAt: '2026-08-25T11:20:00.000Z',
+  },
+  {
+    id: 'pur-seed-005',
+    invoiceNumber: 'INV-2026-0719',
+    date: '2026-07-19',
+    description: 'KABIR VAI',
+    contactNumber: '+8801555667788',
+    items: [
+      { id: '1', item: 'KS/3', quantity: 95, rate: 800, totalAmount: 76000, previousAmount: 0, paidAmount: 60000, balance: 16000 },
+    ],
+    totalQty: 95,
+    totalAmount: 76000,
+    previousAmount: 0,
+    paidAmount: 60000,
+    balance: 16000,
+    remarks: 'July live fish supply batch from Kabir Vai',
+    createdAt: '2026-07-19T10:15:00.000Z',
+  },
+];
+
+export const initialPackings: PackingRecord[] = [
+  {
+    id: 'pkg-seed-001',
+    invoiceNumber: 'PKG-2026-1001',
+    shippingMark: 'AAD',
+    flight: 'CZ392',
+    destination: 'GUANGZHOU',
+    shipper: 'ZSB AQUATICS',
+    packingDate: '2026-10-08',
+    fromDate: '2026-10-01',
+    toDate: '2026-10-08',
+    items: [
+      { id: '1', item: '2F', box: 15, weight: 16, totalWeight: 240, unit: 'KG', rate: 38, amount: 9120 },
+      { id: '2', item: '3F', box: 10, weight: 16, totalWeight: 160, unit: 'KG', rate: 36.75, amount: 5880 },
+    ],
+    totalBox: 25,
+    totalWeight: 400,
+    totalAmount: 15000, // RMB
+    rmbRate: 16.5,
+    totalAmountBDT: 247500,
+    paymentStatus: 'PAID',
+    remarks: 'Guangzhou direct export flight CZ392',
+    createdAt: '2026-10-08T14:00:00.000Z',
+  },
+  {
+    id: 'pkg-seed-002',
+    invoiceNumber: 'PKG-2026-1015',
+    shippingMark: 'CHJ-22',
+    flight: 'MU KMG',
+    destination: 'SHANGHAI',
+    shipper: 'SHISHIR MAMA',
+    packingDate: '2026-10-15',
+    fromDate: '2026-10-09',
+    toDate: '2026-10-15',
+    items: [
+      { id: '1', item: '4F', box: 18, weight: 16, totalWeight: 288, unit: 'KG', rate: 38.888, amount: 11200 },
+    ],
+    totalBox: 18,
+    totalWeight: 288,
+    totalAmount: 11200, // RMB
+    rmbRate: 16.5,
+    totalAmountBDT: 184800,
+    paymentStatus: 'REPORT',
+    remarks: 'Shanghai buyer report received',
+    createdAt: '2026-10-15T15:30:00.000Z',
+  },
+  {
+    id: 'pkg-seed-003',
+    invoiceNumber: 'PKG-2026-0922',
+    shippingMark: 'LXB-52',
+    flight: 'CAN',
+    destination: 'CAN',
+    shipper: 'ZSB AQUATICS',
+    packingDate: '2026-09-22',
+    fromDate: '2026-09-15',
+    toDate: '2026-09-22',
+    items: [
+      { id: '1', item: '5F', box: 30, weight: 16, totalWeight: 480, unit: 'KG', rate: 38.5416, amount: 18500 },
+    ],
+    totalBox: 30,
+    totalWeight: 480,
+    totalAmount: 18500, // RMB
+    rmbRate: 16.5,
+    totalAmountBDT: 305250,
+    paymentStatus: 'PAID',
+    remarks: 'September big export manifest',
+    createdAt: '2026-09-22T13:45:00.000Z',
+  },
+  {
+    id: 'pkg-seed-004',
+    invoiceNumber: 'PKG-2026-0828',
+    shippingMark: 'ROE',
+    flight: 'JD KMG',
+    destination: 'KUNMING',
+    shipper: 'SAJID INT.',
+    packingDate: '2026-08-28',
+    fromDate: '2026-08-20',
+    toDate: '2026-08-28',
+    items: [
+      { id: '1', item: '6F', box: 20, weight: 16, totalWeight: 320, unit: 'KG', rate: 37.5, amount: 12000 },
+    ],
+    totalBox: 20,
+    totalWeight: 320,
+    totalAmount: 12000, // RMB
+    rmbRate: 16.5,
+    totalAmountBDT: 198000,
+    paymentStatus: 'PAID',
+    remarks: 'Kunming flight transit',
+    createdAt: '2026-08-28T12:10:00.000Z',
+  },
+];
+
+const buildFutureISODate = (daysAhead: number): string => {
+  const d = new Date();
+  d.setDate(d.getDate() + daysAhead);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+export const initialPayments: PaymentRecord[] = [
+  {
+    id: 'pay-seed-001',
+    invoiceNumber: 'PAY-2026-1001',
+    date: '2026-10-06',
+    dueDate: buildFutureISODate(2),
+    isRecurring: true,
+    recurrenceFrequency: 'weekly',
+    description: 'ABDULLAH VAI',
+    contactNumber: '+8801711223344',
+    items: [
+      { id: '1', description: 'Weekly Live Eel procurement advance', debitAmount: 100000, creditAmount: 100000, balance: 0 },
+    ],
+    totalAmount: 100000,
+    previousAmount: 0,
+    paidAmount: 100000,
+    balance: 25000,
+    status: 'PAID',
+    returnRMB: 0,
+    paymentCategory: 'supplier',
+    remarks: 'Weekly recurring live eel supply installment via Bank Transfer',
+    createdAt: '2026-10-06T11:00:00.000Z',
+  },
+  {
+    id: 'pay-seed-002',
+    invoiceNumber: 'PAY-2026-1013',
+    date: '2026-10-13',
+    dueDate: buildFutureISODate(6),
+    isRecurring: true,
+    recurrenceFrequency: 'biweekly',
+    description: 'UZZAL VAI',
+    contactNumber: '+8801822334455',
+    items: [
+      { id: '1', description: 'Bi-weekly fish supply settlement', debitAmount: 94500, creditAmount: 94500, balance: 0 },
+    ],
+    totalAmount: 94500,
+    previousAmount: 0,
+    paidAmount: 94500,
+    balance: 0,
+    status: 'PAID',
+    returnRMB: 0,
+    paymentCategory: 'supplier',
+    remarks: 'Bi-weekly recurring settlement at Turag packing site',
+    createdAt: '2026-10-13T16:00:00.000Z',
+  },
+  {
+    id: 'pay-seed-003',
+    invoiceNumber: 'PAY-2026-0919',
+    date: '2026-09-19',
+    dueDate: buildFutureISODate(14),
+    isRecurring: true,
+    recurrenceFrequency: 'monthly',
+    description: 'FAISAL VAI',
+    contactNumber: '+8801933445566',
+    items: [
+      { id: '1', description: 'Monthly contract fish bill installment', debitAmount: 160000, creditAmount: 120000, balance: 40000 },
+    ],
+    totalAmount: 160000,
+    previousAmount: 0,
+    paidAmount: 120000,
+    balance: 40000,
+    status: 'PAID',
+    returnRMB: 0,
+    paymentCategory: 'supplier',
+    remarks: 'Monthly recurring balance installment of TK 40,000',
+    createdAt: '2026-09-19T10:30:00.000Z',
+  },
+  {
+    id: 'pay-seed-004',
+    invoiceNumber: 'PAY-2026-0826',
+    date: '2026-08-26',
+    description: 'RAKIB VAI',
+    contactNumber: '+8801644556677',
+    items: [
+      { id: '1', description: 'Full clearance of XXL consignment', debitAmount: 110000, creditAmount: 110000, balance: 0 },
+    ],
+    totalAmount: 110000,
+    previousAmount: 0,
+    paidAmount: 110000,
+    balance: 0,
+    status: 'PAID',
+    returnRMB: 0,
+    paymentCategory: 'supplier',
+    remarks: 'Online RTGS transfer',
+    createdAt: '2026-08-26T14:15:00.000Z',
+  },
+];
+
+export const initialOtherCosts: OtherCostRecord[] = [
+  {
+    id: 'cost-seed-001',
+    date: '2026-10-07',
+    category: 'Air Freight & Cargo',
+    amount: 35000,
+    description: 'Air freight cargo booking for PKG-2026-1001 Guangzhou',
+    refInvoice: 'PKG-2026-1001',
+    createdAt: '2026-10-07T09:00:00.000Z',
+  },
+  {
+    id: 'cost-seed-002',
+    date: '2026-10-14',
+    category: 'Boxes & Packing Materials',
+    amount: 12500,
+    description: 'Export foam boxes, polyethylene bags, and gel ice packs',
+    refInvoice: 'PKG-2026-1015',
+    createdAt: '2026-10-14T11:30:00.000Z',
+  },
+  {
+    id: 'cost-seed-003',
+    date: '2026-09-21',
+    category: 'Airport Handling & Customs',
+    amount: 18000,
+    description: 'Customs export duty, quarantine certificate, and terminal fee',
+    refInvoice: 'PKG-2026-0922',
+    createdAt: '2026-09-21T15:00:00.000Z',
+  },
+  {
+    id: 'cost-seed-004',
+    date: '2026-08-27',
+    category: 'Labor & Handling',
+    amount: 8500,
+    description: 'Night shift fish grading, packing, and airport delivery crew',
+    refInvoice: 'PKG-2026-0828',
+    createdAt: '2026-08-27T18:00:00.000Z',
+  },
+];
+
+export const initialSupplierCredits: SupplierCreditRecord[] = [
+  {
+    id: 'cn-seed-001',
+    creditNoteNumber: 'CN-2026-0001',
+    date: '2026-10-12',
+    supplierName: 'ABDULLAH VAI',
+    refPurchaseInvoice: 'PUR-2026-1001',
+    reason: 'Weight Shortage / Shrinkage',
+    amount: 12000,
+    appliedAmount: 0,
+    remainingAmount: 12000,
+    status: 'AVAILABLE',
+    applications: [],
+    remarks: '24 KG live eel transit shrinkage credit note approved by Abdullah Vai',
+    createdAt: '2026-10-12T10:30:00.000Z',
+  },
+  {
+    id: 'cn-seed-002',
+    creditNoteNumber: 'CN-2026-0002',
+    date: '2026-09-24',
+    supplierName: 'FAISAL VAI',
+    refPurchaseInvoice: 'PUR-2026-0920',
+    reason: 'Grade / Quality Discount',
+    amount: 18000,
+    appliedAmount: 8000,
+    remainingAmount: 10000,
+    status: 'PARTIAL',
+    applications: [
+      {
+        id: 'cnapp-seed-001',
+        date: '2026-09-29',
+        amount: 8000,
+        targetPaymentInvoice: 'PAY-2026-0929',
+        targetPurchaseInvoice: 'PUR-2026-0920',
+        notes: 'Partial rebate applied against September settlement',
+      },
+    ],
+    remarks: 'Size grading adjustment on live mud crab consignment',
+    createdAt: '2026-09-24T14:15:00.000Z',
+  },
+  {
+    id: 'cn-seed-003',
+    creditNoteNumber: 'CN-2026-0003',
+    date: '2026-08-29',
+    supplierName: 'RAKIB VAI',
+    refPurchaseInvoice: 'PUR-2026-0825',
+    reason: 'Mortality / DOA Claim',
+    amount: 6500,
+    appliedAmount: 6500,
+    remainingAmount: 0,
+    status: 'APPLIED',
+    applications: [
+      {
+        id: 'cnapp-seed-002',
+        date: '2026-09-02',
+        amount: 6500,
+        targetPaymentInvoice: 'PAY-2026-0826',
+        targetPurchaseInvoice: 'PUR-2026-0825',
+        notes: 'Full DOA credit deducted on supplier payment voucher',
+      },
+    ],
+    remarks: 'Depot holding tank mortality allowance',
+    createdAt: '2026-08-29T16:00:00.000Z',
+  },
+];
+
+export const initialMortalities: MortalityRecord[] = [
+  {
+    id: 'mort-seed-001',
+    species: 'F1',
+    quantityKg: 5,
+    date: '2026-10-14',
+    cause: 'Tank Acclimation Stress',
+    notes: 'Holding tank acclimation mortality during saline conditioning',
+    createdAt: '2026-10-14T09:30:00.000Z',
+  },
+  {
+    id: 'mort-seed-002',
+    species: 'KS/3',
+    quantityKg: 8,
+    date: '2026-09-20',
+    cause: 'Transit Damage & DOA',
+    notes: 'Depot arrival inspection dead on arrival loss',
+    createdAt: '2026-09-20T11:15:00.000Z',
+  },
+];
+
+
+

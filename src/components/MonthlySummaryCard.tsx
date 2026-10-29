@@ -13,9 +13,16 @@ import {
   TrendingDown,
   ArrowUpRight,
   RotateCcw,
+  Download,
 } from 'lucide-react';
 
-export const MonthlySummaryCard: React.FC = () => {
+interface MonthlySummaryCardProps {
+  onOpenMonthlyReports?: () => void;
+}
+
+export const MonthlySummaryCard: React.FC<MonthlySummaryCardProps> = ({
+  onOpenMonthlyReports,
+}) => {
   const {
     purchases,
     packings,
@@ -108,6 +115,19 @@ export const MonthlySummaryCard: React.FC = () => {
             >
               <RotateCcw className="w-3 h-3 text-amber-400" />
               <span>Current Month</span>
+            </button>
+          )}
+
+          {onOpenMonthlyReports && (
+            <button
+              type="button"
+              data-testid="monthly-summary-export-csv-btn"
+              onClick={onOpenMonthlyReports}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0 shadow-xs"
+              title="Open Monthly Summary Reports and CSV Export View"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export Monthly CSV</span>
             </button>
           )}
 

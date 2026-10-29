@@ -12,9 +12,8 @@ import {
 import { PurchaseItemRow } from '../types/index.ts';
 import { validatePurchaseForm } from '../utils/validation.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
-import { exportElementToPdf, exportElementToPng } from '../utils/pdfGenerator.ts';
+import { exportElementToPng } from '../utils/pdfGenerator.ts';
 import {
-  Save,
   FileText,
   Search,
   Trash2,
@@ -28,7 +27,6 @@ import {
   AlertCircle,
   X,
   Edit2,
-  FileDown,
   ImageDown,
   Loader2,
 } from 'lucide-react';
@@ -89,7 +87,6 @@ export const PurchaseFormView: React.FC = () => {
   const [isAddingNewSupplier, setIsAddingNewSupplier] = useState<boolean>(false);
   const [newSupplierValue, setNewSupplierValue] = useState<string>('');
   const [validationAttempted, setValidationAttempted] = useState<boolean>(false);
-  const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
   const [isExportingPng, setIsExportingPng] = useState<boolean>(false);
 
   const validation = validatePurchaseForm({
@@ -341,22 +338,11 @@ export const PurchaseFormView: React.FC = () => {
     });
   };
 
-  const handleDirectSavePdf = async () => {
-    setIsExportingPdf(true);
-    const filename = formatPurchaseExportFilename(invoiceNumber, description, date, 'pdf');
-    try {
-      const success = await exportElementToPdf('purchase-voucher-export-canvas', filename);
-      if (success) {
-        showToast(`PDF downloaded: ${filename}`);
-      } else {
-        showToast('Opening Print / Save PDF preview...');
-        handlePrintSelected();
-      }
-    } catch (err) {
-      console.error('Purchase PDF export error:', err);
-      showToast('Error generating PDF file.');
-    } finally {
-      setIsExportingPdf(false);
+  const handlePrintOrSaveAction = () => {
+    if (validation.isValid || populatedRowCount > 0 || description.trim() !== '') {
+      handleSavePDF();
+    } else {
+      handlePrintSelected();
     }
   };
 
@@ -410,14 +396,36 @@ export const PurchaseFormView: React.FC = () => {
     <div className="p-3 sm:p-5 max-w-7xl mx-auto space-y-5">
       {/* Top Banner */}
       <div className="bg-[#1e2548] text-white px-5 py-3.5 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-amber-500">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <span className="text-xl sm:text-2xl font-black tracking-wider text-amber-400 font-serif uppercase">
-            {companyProfile.companyName}
-          </span>
-          <span className="text-slate-400 hidden sm:inline">·</span>
-          <span className="text-sm sm:text-base font-semibold text-slate-100 tracking-wide">
-            Purchase Challan / Bill — Data Entry Voucher
-          </span>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
+            <img
+              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+              alt={companyProfile.companyName}
+              className="w-full h-full object-contain rounded-full"
+            />
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="zsb-3d-text text-xl sm:text-2xl font-black">
+                {companyProfile.companyName}
+              </span>
+              <span className="text-slate-400 hidden sm:inline">·</span>
+              <span className="text-sm sm:text-base font-semibold text-slate-100 tracking-wide">
+                Purchase Challan / Bill — Data Entry Voucher
+              </span>
+            </div>
+            <div className="mt-1 inline-flex flex-wrap items-center gap-2 bg-amber-50/95 px-2.5 py-0.5 rounded text-[11px] font-semibold text-black">
+              <span>{companyProfile.address}</span>
+              <span>|</span>
+              <span className="font-mono">
+                Mob: {companyProfile.mobiles.join(', ')}
+              </span>
+              <span>|</span>
+              <span className="font-mono">
+                EMAIL: {companyProfile.email || 'www.zsbaquatics.com'}
+              </span>
+            </div>
+          </div>
         </div>
         <div className="flex items-center gap-4 text-xs text-slate-300 font-mono tabular-nums">
           <span>Active Rows: {populatedRowCount}/{rows.length}</span>
@@ -437,12 +445,21 @@ export const PurchaseFormView: React.FC = () => {
           <div className="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden">
             {/* Sheet Title Header */}
             <div className="bg-[#7c2d4d] text-white py-3 px-5 flex flex-wrap items-center justify-between gap-3 border-b border-pink-950">
-              <div>
-                <div className="text-lg sm:text-xl font-black tracking-widest text-amber-400 font-serif uppercase">
-                  {companyProfile.companyName}
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-amber-300 bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
+                  <img
+                    src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+                    alt={companyProfile.companyName}
+                    className="w-full h-full object-contain rounded-full"
+                  />
                 </div>
-                <div className="text-xs font-semibold tracking-wider uppercase text-pink-100">
-                  PURCHASE DATA ENTRY FORM (LIVE CRABS, EEL FISH &amp; CHILLED FISH GRADES)
+                <div>
+                  <div className="zsb-3d-text text-lg sm:text-xl font-black">
+                    {companyProfile.companyName}
+                  </div>
+                  <div className="text-xs font-semibold tracking-wider uppercase text-pink-100">
+                    PURCHASE DATA ENTRY FORM (LIVE CRABS, EEL FISH &amp; CHILLED FISH GRADES)
+                  </div>
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2.5">
@@ -459,7 +476,7 @@ export const PurchaseFormView: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleDirectSavePng}
-                    disabled={isExportingPng || isExportingPdf}
+                    disabled={isExportingPng}
                     className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black shadow-xs transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
                     title="Download Purchase Challan / Data Entry Form as .PNG image"
                   >
@@ -1178,8 +1195,8 @@ export const PurchaseFormView: React.FC = () => {
               ACTION BUTTONS
             </div>
 
-            {/* Primary Action Button: Update or Save */}
-            {editingPurchaseId ? (
+            {/* Primary Action Button when Editing */}
+            {editingPurchaseId && (
               <>
                 <button
                   type="button"
@@ -1199,64 +1216,12 @@ export const PurchaseFormView: React.FC = () => {
                   <span>CANCEL EDIT (NEW BILL)</span>
                 </button>
               </>
-            ) : (
-              <button
-                type="button"
-                onClick={handleSavePDF}
-                className="w-full bg-[#129c54] hover:bg-[#0e8346] text-white py-2.5 px-4 rounded-lg font-bold text-sm shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer active:scale-95 whitespace-nowrap"
-              >
-                <Save className="w-4 h-4 shrink-0" />
-                <span>SAVE (PDF / .PNG)</span>
-              </button>
             )}
 
-            {/* Direct Download PDF (.pdf) & Save as PNG (.png) Buttons */}
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={handleDirectSavePdf}
-                disabled={isExportingPdf || isExportingPng}
-                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white py-2.5 px-3 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-1.5 transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
-                title="Download Purchase Challan directly as a .PDF file"
-              >
-                {isExportingPdf ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-                    <span>PDF...</span>
-                  </>
-                ) : (
-                  <>
-                    <FileDown className="w-3.5 h-3.5 shrink-0" />
-                    <span>SAVE PDF (.pdf)</span>
-                  </>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={handleDirectSavePng}
-                disabled={isExportingPng || isExportingPdf}
-                className="w-full bg-amber-600 hover:bg-amber-700 text-white py-2.5 px-3 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-1.5 transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
-                title="Download Purchase Challan directly as a .PNG image"
-              >
-                {isExportingPng ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-                    <span>PNG...</span>
-                  </>
-                ) : (
-                  <>
-                    <ImageDown className="w-3.5 h-3.5 shrink-0" />
-                    <span>SAVE .PNG (.png)</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* PRINT / SAVE PDF with .PNG (Preview) Button */}
+            {/* PRINT / SAVE PDF with .PNG Button */}
             <button
               type="button"
-              onClick={handlePrintSelected}
+              onClick={handlePrintOrSaveAction}
               className="w-full bg-[#0891b2] hover:bg-[#0e7490] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer whitespace-nowrap"
             >
               <Printer className="w-4 h-4 shrink-0" />
@@ -1518,7 +1483,7 @@ export const PurchaseFormView: React.FC = () => {
             <li>Select Supplier &amp; verify Bill Date</li>
             <li>Enter Item Grade, Quantity &amp; Rate rows</li>
             <li>Enter Previous Amount &amp; Paid Amount in Review</li>
-            <li>Click Save (PDF / .PNG) or Save .PNG to export Challan</li>
+            <li>Click Print / Save PDF &amp; .PNG to export Challan</li>
           </ol>
         </div>
       </div>
@@ -1539,14 +1504,41 @@ export const PurchaseFormView: React.FC = () => {
           <div
             style={{ borderBottom: '2px solid #0f172a', paddingBottom: '16px', textAlign: 'center' }}
           >
+            {/* Official Company Logo Emblem */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
+              <div
+                style={{
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '50%',
+                  border: '2px solid #d4af37',
+                  backgroundColor: '#ffffff',
+                  padding: '2px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                }}
+              >
+                <img
+                  src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+                  alt={companyProfile.companyName}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '50%' }}
+                />
+              </div>
+            </div>
+
             <div
+              className="zsb-3d-text-print"
               style={{
-                color: '#d4af37',
-                fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif',
+                color: '#f59e0b',
+                fontFamily: "'Cinzel', Georgia, Cambria, 'Times New Roman', Times, serif",
                 fontSize: '32px',
                 fontWeight: 900,
-                letterSpacing: '0.08em',
+                letterSpacing: '0.09em',
                 textTransform: 'uppercase',
+                textShadow:
+                  '1px 1px 0px #b45309, 2px 2px 0px #92400e, 3px 3px 0px #78350f, 4px 4px 0px #451a03, 5px 5px 7px rgba(15, 23, 42, 0.35)',
               }}
             >
               {companyProfile.companyName}
@@ -1570,7 +1562,7 @@ export const PurchaseFormView: React.FC = () => {
                 marginTop: '2px',
               }}
             >
-              Mobile: {companyProfile.mobiles.join(' , ')}
+              Mobile: {companyProfile.mobiles.join(' , ')} | EMAIL: {companyProfile.email || 'www.zsbaquatics.com'}
             </div>
             <div
               style={{

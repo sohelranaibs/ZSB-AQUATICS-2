@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   CompanyProfile,
   DropdownOptions,
@@ -8,6 +8,8 @@ import {
   PackingItemRow,
   PaymentRecord,
   OtherCostRecord,
+  SupplierCreditRecord,
+  MortalityRecord,
   ActiveTab,
 } from '../types/index.ts';
 import {
@@ -17,9 +19,43 @@ import {
   initialPackings,
   initialPayments,
   initialOtherCosts,
+  initialSupplierCredits,
+  initialMortalities,
+  COMPANY_LOGO_URL,
 } from './initialData.ts';
 import { generateRecordId, deduplicateRecords } from '../utils/idGenerator.ts';
 import { generateInvoiceNumber } from '../utils/calculations.ts';
+import {
+  createSupplierCreditRecord,
+  applySupplierCreditNote,
+  applyCreditAmountAcrossSupplierNotes,
+} from '../utils/supplierCredits.ts';
+import {
+  DEFAULT_SUPER_ADMIN_PASSWORD,
+  ClearRecordsScope,
+  verifySuperAdminPassword,
+  validateSuperAdminPasswordChange,
+} from '../utils/superAdminAuth.ts';
+import {
+  DatabaseSnapshot,
+  SnapshotTrigger,
+  SnapshotValidationResult,
+  createDatabaseSnapshot,
+  serializeSnapshotToJSON,
+  validateAndParseSnapshotJSON,
+  appendSnapshotWithRetention,
+} from '../utils/snapshotManager.ts';
+import { SyncStatusState } from '../utils/syncStatus.ts';
+import {
+  parseShipmentDeepLink,
+  buildShipmentDetailUrl,
+} from '../utils/shipmentQrCode.ts';
+import {
+  GlobalViewTableReport,
+  buildGlobalViewTableReport,
+  extractLiveDomTablesFromContainer,
+} from '../utils/globalViewPdfExport.ts';
+import { exportElementToPdf } from '../utils/pdfGenerator.ts';
 
 const createEmptyPackingDraftRows = (): PackingItemRow[] =>
   ['1', '2', '3', '4', '5'].map((id) => ({
@@ -55,11 +91,24 @@ export interface PrintModalData {
     | 'exporter_payment_slip'
     | 'monthly_statement'
     | 'batch_print'
-    | 'profit_loss';
+    | 'profit_loss'
+    | 'global_view_table'
+    | 'mortality_report';
   title: string;
   data: any;
   items?: any[];
   selectedIds?: string[];
+}
+
+export interface DataCenterModalConfig {
+  isOpen: boolean;
+  initialTab: 'import' | 'export';
+  initialDataset: 'purchase' | 'packing' | 'payment' | 'other_cost' | 'all';
+}
+
+export interface SuperAdminClearModalConfig {
+  isOpen: boolean;
+  initialScope: ClearRecordsScope;
 }
 
 interface AppContextType {
@@ -77,6 +126,10 @@ interface AppContextType {
   addPurchase: (record: Omit<PurchaseRecord, 'id' | 'createdAt'>) => string;
   updatePurchase: (id: string, record: Partial<PurchaseRecord>) => void;
   deletePurchase: (id: string) => void;
+  bulkImportPurchases: (
+    records: Omit<PurchaseRecord, 'id' | 'createdAt'>[],
+    mode?: 'append' | 'replace'
+  ) => number;
   editingPurchaseId: string | null;
   setEditingPurchaseId: (id: string | null) => void;
 
@@ -84,6 +137,10 @@ interface AppContextType {
   addPacking: (record: Omit<PackingRecord, 'id' | 'createdAt'>) => string;
   updatePacking: (id: string, record: Partial<PackingRecord>, silent?: boolean) => void;
   deletePacking: (id: string) => void;
+  bulkImportPackings: (
+    records: Omit<PackingRecord, 'id' | 'createdAt'>[],
+    mode?: 'append' | 'replace'
+  ) => number;
   editingPackingId: string | null;
   setEditingPackingId: (id: string | null) => void;
   packingDraft: PackingFormDraft;
@@ -94,25 +151,129 @@ interface AppContextType {
   addPayment: (record: Omit<PaymentRecord, 'id' | 'createdAt'>) => string;
   updatePayment: (id: string, record: Partial<PaymentRecord>) => void;
   deletePayment: (id: string) => void;
+  bulkImportPayments: (
+    records: Omit<PaymentRecord, 'id' | 'createdAt'>[],
+    mode?: 'append' | 'replace'
+  ) => number;
 
   otherCosts: OtherCostRecord[];
   addOtherCost: (record: Omit<OtherCostRecord, 'id' | 'createdAt'>) => string;
   deleteOtherCost: (id: string) => void;
+  bulkImportOtherCosts: (
+    records: Omit<OtherCostRecord, 'id' | 'createdAt'>[],
+    mode?: 'append' | 'replace'
+  ) => number;
 
-  // Print & PDF modal state
+  supplierCredits: SupplierCreditRecord[];
+  addSupplierCredit: (input: {
+    creditNoteNumber?: string;
+    date: string;
+    supplierName: string;
+    refPurchaseInvoice?: string;
+    reason?: string;
+    amount: number;
+    remarks?: string;
+  }) => SupplierCreditRecord;
+  applySupplierCredit: (
+    creditId: string,
+    application: {
+      amount: number;
+      date?: string;
+      targetPaymentInvoice?: string;
+      targetPurchaseInvoice?: string;
+      notes?: string;
+    }
+  ) => number;
+  applySupplierCreditsForPayment: (
+    supplierName: string,
+    amountToApply: number,
+    meta?: {
+      date?: string;
+      targetPaymentInvoice?: string;
+      targetPurchaseInvoice?: string;
+      notes?: string;
+      specificCreditId?: string;
+    }
+  ) => { totalApplied: number; affectedCreditNotes: string[] };
+  deleteSupplierCredit: (id: string) => void;
+
+  mortalities: MortalityRecord[];
+  addMortality: (record: Omit<MortalityRecord, 'id' | 'createdAt'>) => string;
+  updateMortality: (id: string, record: Partial<MortalityRecord>) => void;
+  deleteMortality: (id: string) => void;
+
+  // Print & PDF modal state + Global View PDF Export
   printModalData: PrintModalData;
   openPrintModal: (modal: Omit<PrintModalData, 'isOpen'>) => void;
   closePrintModal: () => void;
+  globalViewReport: GlobalViewTableReport;
+  isExportingGlobalPdf: boolean;
+  lastExportedPdfFilename: string | null;
+  exportCurrentViewToPdf: (options?: { openPreviewOnly?: boolean }) => Promise<boolean>;
 
-  // Database management
-  clearAllDatabaseRecords: () => void;
+  // Excel & CSV Import/Export Data Center modal state
+  dataCenterModal: DataCenterModalConfig;
+  openDataCenterModal: (
+    initialTab?: 'import' | 'export',
+    initialDataset?: 'purchase' | 'packing' | 'payment' | 'other_cost' | 'all'
+  ) => void;
+  closeDataCenterModal: () => void;
+
+  // Super Admin Password & Clear Modal
+  superAdminPassword: string;
+  updateSuperAdminPassword: (
+    currentPasswordInput: string,
+    newPassword: string,
+    confirmPassword: string
+  ) => { valid: boolean; error?: string };
+  superAdminClearModal: SuperAdminClearModalConfig;
+  openSuperAdminClearModal: (scope?: ClearRecordsScope) => void;
+  closeSuperAdminClearModal: () => void;
+  clearRecordsWithSuperAdmin: (
+    passwordInput: string,
+    scope?: ClearRecordsScope
+  ) => { valid: boolean; error?: string };
+
+  // Database management & Snapshots
+  clearAllDatabaseRecords: (scope?: ClearRecordsScope) => void;
   resetAllData: () => void;
   exportDatabaseJSON: () => void;
   importDatabaseJSON: (jsonStr: string) => boolean;
 
+  snapshots: DatabaseSnapshot[];
+  snapshotModalOpen: boolean;
+  openSnapshotModal: () => void;
+  closeSnapshotModal: () => void;
+  createSnapshot: (
+    label?: string,
+    notes?: string,
+    trigger?: SnapshotTrigger
+  ) => DatabaseSnapshot;
+  restoreSnapshot: (
+    snapshotId: string,
+    options?: { includeSettings?: boolean; createPreRestoreBackup?: boolean }
+  ) => boolean;
+  deleteSnapshot: (snapshotId: string) => void;
+  downloadSnapshotJSON: (snapshotId?: string) => void;
+  importSnapshotFromJSON: (
+    jsonStr: string,
+    autoRestore?: boolean
+  ) => SnapshotValidationResult;
+
+  // Local Database Persistence Sync Status
+  syncStatus: SyncStatusState;
+  lastSyncedAt: string;
+  lastSyncedEntity: string;
+  triggerManualSync: (entityLabel?: string) => void;
+
   // Notification toast
   toastMessage: string | null;
   showToast: (msg: string) => void;
+
+  // Shipment QR Code Deep-Link Focus
+  focusedShipmentInvoice: string | null;
+  openShipmentDetails: (invoiceNumber: string, shippingMark?: string) => void;
+  clearFocusedShipment: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -120,15 +281,30 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const STORAGE_KEYS = {
   PROFILE: 'zsb_company_profile_v1',
   DROPDOWNS: 'zsb_dropdown_options_v1',
-  PURCHASES: 'zsb_purchases_v2',
-  PACKINGS: 'zsb_packings_v2',
-  PACKING_DRAFT: 'zsb_packing_draft_v1',
-  PAYMENTS: 'zsb_payments_v2',
-  OTHER_COSTS: 'zsb_other_costs_v2',
+  PURCHASES: 'zsb_purchases_v3',
+  PACKINGS: 'zsb_packings_v3',
+  PACKING_DRAFT: 'zsb_packing_draft_v3',
+  PAYMENTS: 'zsb_payments_v3',
+  OTHER_COSTS: 'zsb_other_costs_v3',
+  SUPPLIER_CREDITS: 'zsb_supplier_credits_v1',
+  MORTALITIES: 'zsb_mortalities_v1',
+  SUPER_ADMIN_PASSWORD: 'zsb_super_admin_password_v1',
+  SNAPSHOTS: 'zsb_database_snapshots_v1',
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+  const initialDeepLink =
+    typeof window !== 'undefined' ? parseShipmentDeepLink(window.location.search) : null;
+
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() =>
+    initialDeepLink?.isShipmentLink ? 'packing_db' : 'dashboard'
+  );
+  const [focusedShipmentInvoice, setFocusedShipmentInvoice] = useState<string | null>(() => {
+    if (initialDeepLink?.isShipmentLink) {
+      return initialDeepLink.invoiceNumber || initialDeepLink.shippingMark || null;
+    }
+    return null;
+  });
   const [editingPackingId, setEditingPackingId] = useState<string | null>(null);
   const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
 
@@ -137,14 +313,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem(STORAGE_KEYS.PROFILE);
       if (!saved) return initialCompanyProfile;
       const parsed = JSON.parse(saved);
+      const merged: CompanyProfile = {
+        ...initialCompanyProfile,
+        ...parsed,
+        email: parsed.email || initialCompanyProfile.email,
+        logoUrl: parsed.logoUrl || COMPANY_LOGO_URL,
+        minInventoryThresholdKg:
+          parsed.minInventoryThresholdKg !== undefined
+            ? Number(parsed.minInventoryThresholdKg)
+            : initialCompanyProfile.minInventoryThresholdKg,
+        approachingThresholdPercent:
+          parsed.approachingThresholdPercent !== undefined
+            ? Number(parsed.approachingThresholdPercent)
+            : initialCompanyProfile.approachingThresholdPercent,
+      };
       if (parsed.partner === 'Md. Faisal Ahmed' || parsed.managingPartner === 'Md. Sohel Rana') {
-        return {
-          ...parsed,
-          managingPartner: 'Md. Mizanur Rahman',
-          partner: 'Md. Sohel Rana',
-        };
+        merged.managingPartner = 'Md. Mizanur Rahman';
+        merged.partner = 'Md. Sohel Rana';
       }
-      return parsed;
+      return merged;
     } catch {
       return initialCompanyProfile;
     }
@@ -173,7 +360,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem(STORAGE_KEYS.PURCHASES);
       if (!saved) return initialPurchases;
       const parsed: PurchaseRecord[] = JSON.parse(saved);
-      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'pur') : initialPurchases;
+      if (!Array.isArray(parsed) || parsed.length === 0) return initialPurchases;
+      const existingIds = new Set(parsed.map((p) => p.id));
+      const missingSeeds = initialPurchases.filter((s) => !existingIds.has(s.id));
+      const merged =
+        missingSeeds.length > 0 && parsed.some((p) => p.id.startsWith('pur-seed-'))
+          ? [...parsed, ...missingSeeds]
+          : parsed;
+      return deduplicateRecords(merged, 'pur');
     } catch {
       return initialPurchases;
     }
@@ -184,7 +378,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem(STORAGE_KEYS.PACKINGS);
       if (!saved) return initialPackings;
       const parsed: PackingRecord[] = JSON.parse(saved);
-      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'pkg') : initialPackings;
+      return Array.isArray(parsed) && parsed.length > 0 ? deduplicateRecords(parsed, 'pkg') : initialPackings;
     } catch {
       return initialPackings;
     }
@@ -217,7 +411,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem(STORAGE_KEYS.PAYMENTS);
       if (!saved) return initialPayments;
       const parsed: PaymentRecord[] = JSON.parse(saved);
-      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'pay') : initialPayments;
+      if (!Array.isArray(parsed) || parsed.length === 0) return initialPayments;
+      const seedById = new Map(initialPayments.map((s) => [s.id, s]));
+      const enriched = parsed.map((pm) => {
+        const seed = seedById.get(pm.id);
+        if (seed && !pm.dueDate && seed.dueDate) {
+          return {
+            ...pm,
+            dueDate: seed.dueDate,
+            isRecurring: seed.isRecurring,
+            recurrenceFrequency: seed.recurrenceFrequency,
+            balance: pm.balance || seed.balance,
+          };
+        }
+        return pm;
+      });
+      return deduplicateRecords(enriched, 'pay');
     } catch {
       return initialPayments;
     }
@@ -228,9 +437,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem(STORAGE_KEYS.OTHER_COSTS);
       if (!saved) return initialOtherCosts;
       const parsed: OtherCostRecord[] = JSON.parse(saved);
-      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'cost') : initialOtherCosts;
+      return Array.isArray(parsed) && parsed.length > 0 ? deduplicateRecords(parsed, 'cost') : initialOtherCosts;
     } catch {
       return initialOtherCosts;
+    }
+  });
+
+  const [supplierCredits, setSupplierCredits] = useState<SupplierCreditRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.SUPPLIER_CREDITS);
+      if (!saved) return initialSupplierCredits;
+      const parsed: SupplierCreditRecord[] = JSON.parse(saved);
+      return Array.isArray(parsed) && parsed.length > 0
+        ? deduplicateRecords(parsed, 'cn')
+        : initialSupplierCredits;
+    } catch {
+      return initialSupplierCredits;
+    }
+  });
+
+  const [mortalities, setMortalities] = useState<MortalityRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.MORTALITIES);
+      if (!saved) return initialMortalities;
+      const parsed: MortalityRecord[] = JSON.parse(saved);
+      return Array.isArray(parsed) && parsed.length > 0
+        ? deduplicateRecords(parsed, 'mort')
+        : initialMortalities;
+    } catch {
+      return initialMortalities;
     }
   });
 
@@ -243,70 +478,232 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     data: null,
   });
 
-  // Sync to localStorage
-  useEffect(() => {
+  const [dataCenterModal, setDataCenterModal] = useState<DataCenterModalConfig>({
+    isOpen: false,
+    initialTab: 'import',
+    initialDataset: 'purchase',
+  });
+
+  const [superAdminPassword, setSuperAdminPassword] = useState<string>(() => {
     try {
-      localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(companyProfile));
+      const saved = localStorage.getItem(STORAGE_KEYS.SUPER_ADMIN_PASSWORD);
+      if (saved && saved.trim().length > 0) {
+        return saved.trim();
+      }
+      return DEFAULT_SUPER_ADMIN_PASSWORD;
+    } catch {
+      return DEFAULT_SUPER_ADMIN_PASSWORD;
+    }
+  });
+
+  const [superAdminClearModal, setSuperAdminClearModal] = useState<SuperAdminClearModalConfig>({
+    isOpen: false,
+    initialScope: 'all',
+  });
+
+  const openSuperAdminClearModal = (scope: ClearRecordsScope = 'all') => {
+    setSuperAdminClearModal({
+      isOpen: true,
+      initialScope: scope,
+    });
+  };
+
+  const closeSuperAdminClearModal = () => {
+    setSuperAdminClearModal((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  const openDataCenterModal = (
+    initialTab: 'import' | 'export' = 'import',
+    initialDataset: 'purchase' | 'packing' | 'payment' | 'other_cost' | 'all' = 'purchase'
+  ) => {
+    setDataCenterModal({
+      isOpen: true,
+      initialTab,
+      initialDataset,
+    });
+  };
+
+  const closeDataCenterModal = () => {
+    setDataCenterModal((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  const [snapshotModalOpen, setSnapshotModalOpen] = useState<boolean>(false);
+
+  const openSnapshotModal = () => {
+    setSnapshotModalOpen(true);
+  };
+
+  const closeSnapshotModal = () => {
+    setSnapshotModalOpen(false);
+  };
+
+  const [snapshots, setSnapshots] = useState<DatabaseSnapshot[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.SNAPSHOTS);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Local Database Persistence Sync Status state
+  const [syncStatus, setSyncStatus] = useState<SyncStatusState>('synced');
+  const [lastSyncedAt, setLastSyncedAt] = useState<string>(() => new Date().toISOString());
+  const [lastSyncedEntity, setLastSyncedEntity] = useState<string>('All Ledgers');
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isInitialMountRef = useRef<boolean>(true);
+
+  const persistWithSyncIndicator = (entityLabel: string, writeFn: () => void) => {
+    try {
+      writeFn();
+      if (!isInitialMountRef.current) {
+        setSyncStatus('saving');
+        setLastSyncedEntity(entityLabel);
+        if (syncTimerRef.current) {
+          clearTimeout(syncTimerRef.current);
+        }
+        syncTimerRef.current = setTimeout(() => {
+          setSyncStatus('synced');
+          setLastSyncedAt(new Date().toISOString());
+        }, 550);
+      }
     } catch (e) {
       console.error(e);
+      setSyncStatus('error');
     }
+  };
+
+  const triggerManualSync = (entityLabel: string = 'All Ledgers') => {
+    try {
+      setSyncStatus('saving');
+      setLastSyncedEntity(entityLabel);
+      localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(companyProfile));
+      localStorage.setItem(STORAGE_KEYS.DROPDOWNS, JSON.stringify(dropdownOptions));
+      localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify(purchases));
+      localStorage.setItem(STORAGE_KEYS.PACKINGS, JSON.stringify(packings));
+      localStorage.setItem(STORAGE_KEYS.PACKING_DRAFT, JSON.stringify(packingDraft));
+      localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
+      localStorage.setItem(STORAGE_KEYS.OTHER_COSTS, JSON.stringify(otherCosts));
+      localStorage.setItem(STORAGE_KEYS.SUPPLIER_CREDITS, JSON.stringify(supplierCredits));
+      localStorage.setItem(STORAGE_KEYS.MORTALITIES, JSON.stringify(mortalities));
+      localStorage.setItem(STORAGE_KEYS.SNAPSHOTS, JSON.stringify(snapshots));
+      if (syncTimerRef.current) {
+        clearTimeout(syncTimerRef.current);
+      }
+      syncTimerRef.current = setTimeout(() => {
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date().toISOString());
+      }, 550);
+    } catch (e) {
+      console.error(e);
+      setSyncStatus('error');
+    }
+  };
+
+  // Sync to localStorage
+  useEffect(() => {
+    persistWithSyncIndicator('Company Profile', () => {
+      localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(companyProfile));
+    });
   }, [companyProfile]);
 
   useEffect(() => {
-    try {
+    persistWithSyncIndicator('Master Lists', () => {
       localStorage.setItem(STORAGE_KEYS.DROPDOWNS, JSON.stringify(dropdownOptions));
-    } catch (e) {
-      console.error(e);
-    }
+    });
   }, [dropdownOptions]);
 
   useEffect(() => {
-    try {
+    persistWithSyncIndicator('Purchase DB', () => {
       localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify(purchases));
-    } catch (e) {
-      console.error(e);
-    }
+    });
   }, [purchases]);
 
   useEffect(() => {
-    try {
+    persistWithSyncIndicator('Packing DB', () => {
       localStorage.setItem(STORAGE_KEYS.PACKINGS, JSON.stringify(packings));
-    } catch (e) {
-      console.error(e);
-    }
+    });
   }, [packings]);
 
   useEffect(() => {
-    try {
+    persistWithSyncIndicator('Packing Draft', () => {
       localStorage.setItem(STORAGE_KEYS.PACKING_DRAFT, JSON.stringify(packingDraft));
-    } catch (e) {
-      console.error(e);
-    }
+    });
   }, [packingDraft]);
 
   useEffect(() => {
-    try {
+    persistWithSyncIndicator('Payment DB', () => {
       localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
-    } catch (e) {
-      console.error(e);
-    }
+    });
   }, [payments]);
 
   useEffect(() => {
-    try {
+    persistWithSyncIndicator('Costing DB', () => {
       localStorage.setItem(STORAGE_KEYS.OTHER_COSTS, JSON.stringify(otherCosts));
-    } catch (e) {
-      console.error(e);
-    }
+    });
   }, [otherCosts]);
+
+  useEffect(() => {
+    persistWithSyncIndicator('Supplier Credits', () => {
+      localStorage.setItem(
+        STORAGE_KEYS.SUPPLIER_CREDITS,
+        JSON.stringify(supplierCredits)
+      );
+    });
+  }, [supplierCredits]);
+
+  useEffect(() => {
+    persistWithSyncIndicator('Mortality Log', () => {
+      localStorage.setItem(STORAGE_KEYS.MORTALITIES, JSON.stringify(mortalities));
+    });
+  }, [mortalities]);
+
+  useEffect(() => {
+    persistWithSyncIndicator('Security Config', () => {
+      localStorage.setItem(STORAGE_KEYS.SUPER_ADMIN_PASSWORD, superAdminPassword);
+    });
+  }, [superAdminPassword]);
+
+  useEffect(() => {
+    persistWithSyncIndicator('Snapshot Archive', () => {
+      localStorage.setItem(STORAGE_KEYS.SNAPSHOTS, JSON.stringify(snapshots));
+    });
+  }, [snapshots]);
+
+  useEffect(() => {
+    isInitialMountRef.current = false;
+    return () => {
+      if (syncTimerRef.current) {
+        clearTimeout(syncTimerRef.current);
+      }
+    };
+  }, []);
 
   // One-time cleanup of obsolete storage versions on startup
   useEffect(() => {
     try {
-      localStorage.removeItem('zsb_purchases_v1');
-      localStorage.removeItem('zsb_packings_v1');
-      localStorage.removeItem('zsb_payments_v1');
-      localStorage.removeItem('zsb_other_costs_v1');
+      const legacyKeys = [
+        'zsb_purchases_v1',
+        'zsb_purchases_v2',
+        'zsb_packings_v1',
+        'zsb_packings_v2',
+        'zsb_packings_v5',
+        'zsb_packing_draft_v1',
+        'zsb_packing_draft_v2',
+        'zsb_payments_v1',
+        'zsb_payments_v2',
+        'zsb_other_costs_v1',
+        'zsb_other_costs_v2',
+        'zsb_exporter_slip_custom_rows_v1',
+        'zsb_exporter_slip_custom_rows_v2',
+      ];
+      legacyKeys.forEach((k) => localStorage.removeItem(k));
     } catch {
       // ignore
     }
@@ -383,6 +780,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast(`Purchase record deleted from database.`);
   };
 
+  const bulkImportPurchases = (
+    records: Omit<PurchaseRecord, 'id' | 'createdAt'>[],
+    mode: 'append' | 'replace' = 'append'
+  ): number => {
+    if (!records || records.length === 0) return 0;
+    const now = new Date().toISOString();
+    const hydrated: PurchaseRecord[] = records.map((rec) => ({
+      ...rec,
+      id: generateRecordId('pur'),
+      createdAt: now,
+    }));
+    setPurchases((prev) => (mode === 'replace' ? hydrated : [...hydrated, ...prev]));
+    return hydrated.length;
+  };
+
   // Packings CRUD
   const addPacking = (record: Omit<PackingRecord, 'id' | 'createdAt'>) => {
     const id = generateRecordId('pkg');
@@ -408,6 +820,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast(`Packing record deleted from database.`);
   };
 
+  const bulkImportPackings = (
+    records: Omit<PackingRecord, 'id' | 'createdAt'>[],
+    mode: 'append' | 'replace' = 'append'
+  ): number => {
+    if (!records || records.length === 0) return 0;
+    const now = new Date().toISOString();
+    const hydrated: PackingRecord[] = records.map((rec) => ({
+      ...rec,
+      id: generateRecordId('pkg'),
+      createdAt: now,
+    }));
+    setPackings((prev) => (mode === 'replace' ? hydrated : [...hydrated, ...prev]));
+    return hydrated.length;
+  };
+
   // Payments CRUD
   const addPayment = (record: Omit<PaymentRecord, 'id' | 'createdAt'>) => {
     const id = generateRecordId('pay');
@@ -431,6 +858,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast(`Payment record deleted from database.`);
   };
 
+  const bulkImportPayments = (
+    records: Omit<PaymentRecord, 'id' | 'createdAt'>[],
+    mode: 'append' | 'replace' = 'append'
+  ): number => {
+    if (!records || records.length === 0) return 0;
+    const now = new Date().toISOString();
+    const hydrated: PaymentRecord[] = records.map((rec) => ({
+      ...rec,
+      id: generateRecordId('pay'),
+      createdAt: now,
+    }));
+    setPayments((prev) => (mode === 'replace' ? hydrated : [...hydrated, ...prev]));
+    return hydrated.length;
+  };
+
   // Other Costs CRUD
   const addOtherCost = (record: Omit<OtherCostRecord, 'id' | 'createdAt'>) => {
     const id = generateRecordId('cost');
@@ -449,7 +891,171 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast(`Expense deleted.`);
   };
 
-  // Print modal
+  const bulkImportOtherCosts = (
+    records: Omit<OtherCostRecord, 'id' | 'createdAt'>[],
+    mode: 'append' | 'replace' = 'append'
+  ): number => {
+    if (!records || records.length === 0) return 0;
+    const now = new Date().toISOString();
+    const hydrated: OtherCostRecord[] = records.map((rec) => ({
+      ...rec,
+      id: generateRecordId('cost'),
+      createdAt: now,
+    }));
+    setOtherCosts((prev) => (mode === 'replace' ? hydrated : [...hydrated, ...prev]));
+    return hydrated.length;
+  };
+
+  // Supplier Credits CRUD & Application
+  const addSupplierCredit = (input: {
+    creditNoteNumber?: string;
+    date: string;
+    supplierName: string;
+    refPurchaseInvoice?: string;
+    reason?: string;
+    amount: number;
+    remarks?: string;
+  }): SupplierCreditRecord => {
+    const newCredit = createSupplierCreditRecord(input, supplierCredits.length);
+    setSupplierCredits((prev) => [newCredit, ...prev]);
+    showToast(
+      `Supplier Credit Note ${newCredit.creditNoteNumber} (${newCredit.supplierName}) recorded.`
+    );
+    return newCredit;
+  };
+
+  const applySupplierCredit = (
+    creditId: string,
+    application: {
+      amount: number;
+      date?: string;
+      targetPaymentInvoice?: string;
+      targetPurchaseInvoice?: string;
+      notes?: string;
+    }
+  ): number => {
+    let appliedDeltaResult = 0;
+    let targetNoteNo = '';
+    setSupplierCredits((prev) =>
+      prev.map((cn) => {
+        if (cn.id !== creditId) return cn;
+        const { updatedCredit, appliedDelta } = applySupplierCreditNote(
+          cn,
+          application
+        );
+        appliedDeltaResult = appliedDelta;
+        targetNoteNo = updatedCredit.creditNoteNumber;
+        return updatedCredit;
+      })
+    );
+    if (appliedDeltaResult > 0) {
+      showToast(
+        `Applied ${companyProfile.currency} ${appliedDeltaResult.toLocaleString()} from credit note ${targetNoteNo}.`
+      );
+    }
+    return appliedDeltaResult;
+  };
+
+  const applySupplierCreditsForPayment = (
+    supplierName: string,
+    amountToApply: number,
+    meta: {
+      date?: string;
+      targetPaymentInvoice?: string;
+      targetPurchaseInvoice?: string;
+      notes?: string;
+      specificCreditId?: string;
+    } = {}
+  ): { totalApplied: number; affectedCreditNotes: string[] } => {
+    const res = applyCreditAmountAcrossSupplierNotes(
+      supplierCredits,
+      supplierName,
+      amountToApply,
+      meta
+    );
+    if (res.totalApplied > 0) {
+      setSupplierCredits(res.updatedCredits);
+      showToast(
+        `Applied ${companyProfile.currency} ${res.totalApplied.toLocaleString()} credit (${res.affectedCreditNotes.join(', ')}) to payment.`
+      );
+    }
+    return {
+      totalApplied: res.totalApplied,
+      affectedCreditNotes: res.affectedCreditNotes,
+    };
+  };
+
+  const deleteSupplierCredit = (id: string) => {
+    setSupplierCredits((prev) => prev.filter((cn) => cn.id !== id));
+    showToast('Supplier credit note deleted.');
+  };
+
+  const addMortality = (record: Omit<MortalityRecord, 'id' | 'createdAt'>): string => {
+    const newId = generateRecordId('mort');
+    const newRecord: MortalityRecord = {
+      ...record,
+      id: newId,
+      createdAt: new Date().toISOString(),
+    };
+    setMortalities((prev) => [newRecord, ...prev]);
+    showToast(
+      `Recorded mortality of ${newRecord.quantityKg} KG for ${newRecord.species}. Stock adjustment applied.`
+    );
+    return newId;
+  };
+
+  const updateMortality = (id: string, record: Partial<MortalityRecord>) => {
+    setMortalities((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, ...record } : m))
+    );
+    showToast('Updated mortality record and recalculated inventory stock.');
+  };
+
+  const deleteMortality = (id: string) => {
+    setMortalities((prev) => prev.filter((m) => m.id !== id));
+    showToast('Deleted mortality record. Stock adjustment restored.');
+  };
+
+  // Print modal & Global View Table PDF Export
+  const [isExportingGlobalPdf, setIsExportingGlobalPdf] = useState<boolean>(false);
+  const [lastExportedPdfFilename, setLastExportedPdfFilename] = useState<string | null>(null);
+  const [liveDomTablesSnapshot, setLiveDomTablesSnapshot] = useState<
+    ReturnType<typeof extractLiveDomTablesFromContainer>
+  >([]);
+
+  const globalViewReport = React.useMemo(
+    () =>
+      buildGlobalViewTableReport({
+        activeTab,
+        companyProfile,
+        purchases,
+        packings,
+        payments,
+        otherCosts,
+        supplierCredits,
+        packingDraft,
+        dropdownOptions,
+        domTables: liveDomTablesSnapshot,
+      }),
+    [
+      activeTab,
+      companyProfile,
+      purchases,
+      packings,
+      payments,
+      otherCosts,
+      supplierCredits,
+      packingDraft,
+      dropdownOptions,
+      liveDomTablesSnapshot,
+    ]
+  );
+
+  // Clear stale DOM table snapshot whenever the user switches activeTab
+  useEffect(() => {
+    setLiveDomTablesSnapshot([]);
+  }, [activeTab]);
+
   const openPrintModal = (modal: Omit<PrintModalData, 'isOpen'>) => {
     setPrintModalData({
       ...modal,
@@ -461,79 +1067,434 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setPrintModalData((prev) => ({ ...prev, isOpen: false }));
   };
 
-  // Backup & Reset
-  const clearAllDatabaseRecords = () => {
-    setPurchases([]);
-    setPackings([]);
-    setPayments([]);
-    setOtherCosts([]);
-    try {
-      localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify([]));
-      localStorage.setItem(STORAGE_KEYS.PACKINGS, JSON.stringify([]));
-      localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify([]));
-      localStorage.setItem(STORAGE_KEYS.OTHER_COSTS, JSON.stringify([]));
-      localStorage.removeItem('zsb_purchases_v1');
-      localStorage.removeItem('zsb_packings_v1');
-      localStorage.removeItem('zsb_payments_v1');
-      localStorage.removeItem('zsb_other_costs_v1');
-    } catch (e) {
-      console.error(e);
-    }
-    showToast('All database records cleared. All databases are now clean and empty.');
-  };
+  const exportCurrentViewToPdf = async (options?: {
+    openPreviewOnly?: boolean;
+  }): Promise<boolean> => {
+    const mainEl =
+      typeof document !== 'undefined'
+        ? (document.querySelector('main') as HTMLElement | null)
+        : null;
+    const extractedDomTables = extractLiveDomTablesFromContainer(mainEl);
+    setLiveDomTablesSnapshot(extractedDomTables);
 
-  const resetAllData = () => {
-    setCompanyProfile(initialCompanyProfile);
-    setDropdownOptions(initialDropdownOptions);
-    setPurchases([]);
-    setPackings([]);
-    setPayments([]);
-    setOtherCosts([]);
-    try {
-      localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify([]));
-      localStorage.setItem(STORAGE_KEYS.PACKINGS, JSON.stringify([]));
-      localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify([]));
-      localStorage.setItem(STORAGE_KEYS.OTHER_COSTS, JSON.stringify([]));
-    } catch (e) {
-      console.error(e);
-    }
-    showToast('Database records cleared and settings reset to system defaults.');
-  };
-
-  const exportDatabaseJSON = () => {
-    const backup = {
+    const freshReport = buildGlobalViewTableReport({
+      activeTab,
       companyProfile,
-      dropdownOptions,
       purchases,
       packings,
       payments,
       otherCosts,
-      exportedAt: new Date().toISOString(),
-    };
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      supplierCredits,
+      packingDraft,
+      dropdownOptions,
+      domTables: extractedDomTables,
+    });
+
+    if (options?.openPreviewOnly) {
+      if (activeTab === 'exporter_payment_slip' && freshReport.exporterSlipPayload) {
+        openPrintModal({
+          type: 'exporter_payment_slip',
+          title: freshReport.documentTitle,
+          data: freshReport.exporterSlipPayload,
+          items: freshReport.exporterSlipPayload.rows,
+        });
+      } else {
+        openPrintModal({
+          type: 'global_view_table',
+          title: freshReport.documentTitle,
+          data: freshReport,
+        });
+      }
+      return true;
+    }
+
+    setIsExportingGlobalPdf(true);
+    try {
+      // Wait briefly so the offscreen #global-printable-document updates with freshReport
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      const targetElementId = printModalData.isOpen
+        ? 'printable-document'
+        : 'global-printable-document';
+      const success = await exportElementToPdf(targetElementId, freshReport.filename);
+      if (success) {
+        setLastExportedPdfFilename(freshReport.filename);
+        showToast(`PDF downloaded: ${freshReport.filename}`);
+        return true;
+      } else {
+        showToast('Error generating PDF for current view.');
+        return false;
+      }
+    } catch (err) {
+      console.error('Global PDF export failed:', err);
+      showToast('Error generating PDF for current view.');
+      return false;
+    } finally {
+      setIsExportingGlobalPdf(false);
+    }
+  };
+
+  // Super Admin Password & Protected Clear Operations
+  const updateSuperAdminPassword = (
+    currentPasswordInput: string,
+    newPassword: string,
+    confirmPassword: string
+  ): { valid: boolean; error?: string } => {
+    const check = validateSuperAdminPasswordChange(
+      currentPasswordInput,
+      newPassword,
+      confirmPassword,
+      superAdminPassword
+    );
+    if (!check.valid || !check.normalizedNewPassword) {
+      return { valid: false, error: check.error };
+    }
+    setSuperAdminPassword(check.normalizedNewPassword);
+    showToast('Super Admin password updated successfully.');
+    return { valid: true };
+  };
+
+  const executeUnconditionalClearAll = () => {
+    setPurchases([]);
+    setPackings([]);
+    setPayments([]);
+    setOtherCosts([]);
+    setSupplierCredits([]);
+    setEditingPackingId(null);
+    setEditingPurchaseId(null);
+    const freshDraft = createInitialPackingDraft(0);
+    setPackingDraft(freshDraft);
+    try {
+      localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.PACKINGS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.OTHER_COSTS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.SUPPLIER_CREDITS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.PACKING_DRAFT, JSON.stringify(freshDraft));
+      const keysToClear = [
+        'zsb_purchases_v1',
+        'zsb_purchases_v2',
+        'zsb_packings_v1',
+        'zsb_packings_v2',
+        'zsb_packings_v5',
+        'zsb_packing_draft_v1',
+        'zsb_packing_draft_v2',
+        'zsb_payments_v1',
+        'zsb_payments_v2',
+        'zsb_other_costs_v1',
+        'zsb_other_costs_v2',
+        'zsb_exporter_slip_custom_rows_v1',
+        'zsb_exporter_slip_custom_rows_v2',
+        'zsb_exporter_slip_custom_rows_v3',
+      ];
+      keysToClear.forEach((k) => localStorage.removeItem(k));
+      window.dispatchEvent(new CustomEvent('zsb-clear-all-db'));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const createSnapshot = (
+    label?: string,
+    notes?: string,
+    trigger: SnapshotTrigger = 'manual'
+  ): DatabaseSnapshot => {
+    const newSnap = createDatabaseSnapshot(
+      {
+        purchases,
+        packings,
+        payments,
+        otherCosts,
+        companyProfile,
+        dropdownOptions,
+        packingDraft,
+      },
+      {
+        label,
+        notes,
+        trigger,
+      }
+    );
+    setSnapshots((prev) => {
+      const updated = appendSnapshotWithRetention(prev, newSnap);
+      try {
+        localStorage.setItem(STORAGE_KEYS.SNAPSHOTS, JSON.stringify(updated));
+      } catch (e) {
+        console.error(e);
+      }
+      return updated;
+    });
+    if (trigger === 'manual') {
+      showToast(
+        `Database Snapshot "${newSnap.label}" saved (${newSnap.recordCounts.totalRecords} records).`
+      );
+    }
+    return newSnap;
+  };
+
+  const applySnapshotPayloadToState = (
+    snap: DatabaseSnapshot,
+    includeSettings: boolean = true
+  ) => {
+    const p = snap.payload;
+    const nextPurchases = deduplicateRecords(p.purchases || [], 'pur');
+    const nextPackings = deduplicateRecords(p.packings || [], 'pkg');
+    const nextPayments = deduplicateRecords(p.payments || [], 'pay');
+    const nextOtherCosts = deduplicateRecords(p.otherCosts || [], 'cost');
+    const nextDraft = p.packingDraft || createInitialPackingDraft(nextPackings.length);
+
+    setPurchases(nextPurchases);
+    setPackings(nextPackings);
+    setPayments(nextPayments);
+    setOtherCosts(nextOtherCosts);
+    setPackingDraft(nextDraft);
+    setEditingPurchaseId(null);
+    setEditingPackingId(null);
+
+    try {
+      localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify(nextPurchases));
+      localStorage.setItem(STORAGE_KEYS.PACKINGS, JSON.stringify(nextPackings));
+      localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(nextPayments));
+      localStorage.setItem(STORAGE_KEYS.OTHER_COSTS, JSON.stringify(nextOtherCosts));
+      localStorage.setItem(STORAGE_KEYS.PACKING_DRAFT, JSON.stringify(nextDraft));
+    } catch (e) {
+      console.error(e);
+    }
+
+    if (includeSettings) {
+      if (p.companyProfile) {
+        setCompanyProfile(p.companyProfile);
+        try {
+          localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(p.companyProfile));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      if (p.dropdownOptions) {
+        setDropdownOptions(p.dropdownOptions);
+        try {
+          localStorage.setItem(STORAGE_KEYS.DROPDOWNS, JSON.stringify(p.dropdownOptions));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+  };
+
+  const restoreSnapshot = (
+    snapshotId: string,
+    options?: { includeSettings?: boolean; createPreRestoreBackup?: boolean }
+  ): boolean => {
+    const target = snapshots.find((s) => s.id === snapshotId);
+    if (!target) {
+      showToast('Snapshot not found in local archive.');
+      return false;
+    }
+
+    const currentTotal =
+      purchases.length + packings.length + payments.length + otherCosts.length;
+    if (options?.createPreRestoreBackup && currentTotal > 0) {
+      createSnapshot(
+        `Auto Backup Before Restoring "${target.label}"`,
+        `Automatically captured ${currentTotal} records before restoring snapshot ${target.id}.`,
+        'auto_pre_restore'
+      );
+    }
+
+    applySnapshotPayloadToState(target, options?.includeSettings ?? true);
+    showToast(
+      `Restored "${target.label}" (${target.recordCounts.totalRecords} records recovered).`
+    );
+    return true;
+  };
+
+  const deleteSnapshot = (snapshotId: string) => {
+    setSnapshots((prev) => {
+      const updated = prev.filter((s) => s.id !== snapshotId);
+      try {
+        localStorage.setItem(STORAGE_KEYS.SNAPSHOTS, JSON.stringify(updated));
+      } catch (e) {
+        console.error(e);
+      }
+      return updated;
+    });
+    showToast('Snapshot removed from local archive.');
+  };
+
+  const downloadSnapshotJSON = (snapshotId?: string) => {
+    let target = snapshotId ? snapshots.find((s) => s.id === snapshotId) : undefined;
+    if (!target) {
+      target = createSnapshot(
+        `Exported JSON Snapshot (${new Date().toISOString().slice(0, 10)})`,
+        'Created via JSON Archive Download',
+        'manual'
+      );
+    }
+    const jsonString = serializeSnapshotToJSON(target);
+    const blob = new Blob([jsonString], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ZSB_AQUATICS_BACKUP_${new Date().toISOString().slice(0, 10)}.json`;
+    const safeDate = target.createdAt.slice(0, 10);
+    a.download = `ZSB_AQUATICS_SNAPSHOT_${safeDate}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast('Database exported successfully as JSON file.');
+    showToast(`Snapshot JSON archive downloaded (${target.recordCounts.totalRecords} records).`);
+  };
+
+  const importSnapshotFromJSON = (
+    jsonStr: string,
+    autoRestore: boolean = true
+  ): SnapshotValidationResult => {
+    const validation = validateAndParseSnapshotJSON(jsonStr);
+    if (!validation.valid || !validation.snapshot) {
+      showToast(validation.error || 'Invalid or corrupted JSON archive.');
+      return validation;
+    }
+
+    const importedSnap = validation.snapshot;
+    setSnapshots((prev) => {
+      const updated = appendSnapshotWithRetention(prev, importedSnap);
+      try {
+        localStorage.setItem(STORAGE_KEYS.SNAPSHOTS, JSON.stringify(updated));
+      } catch (e) {
+        console.error(e);
+      }
+      return updated;
+    });
+
+    if (autoRestore) {
+      applySnapshotPayloadToState(importedSnap, true);
+      showToast(
+        `Restored ${importedSnap.recordCounts.totalRecords} records from JSON archive & saved snapshot!`
+      );
+    } else {
+      showToast(
+        `Imported snapshot "${importedSnap.label}" (${importedSnap.recordCounts.totalRecords} records) to local archive.`
+      );
+    }
+
+    return validation;
+  };
+
+  const clearRecordsWithSuperAdmin = (
+    passwordInput: string,
+    scope: ClearRecordsScope = 'all'
+  ): { valid: boolean; error?: string } => {
+    const verification = verifySuperAdminPassword(passwordInput, superAdminPassword);
+    if (!verification.valid) {
+      return { valid: false, error: verification.error };
+    }
+
+    // Automatically create a safety snapshot before clearing any non-empty records
+    const currentTotal =
+      purchases.length + packings.length + payments.length + otherCosts.length;
+    if (currentTotal > 0) {
+      createSnapshot(
+        `Auto Safety Snapshot (Before Clear ${scope.toUpperCase()})`,
+        `Automatic pre-clear backup of ${currentTotal} records before Super Admin clear (${scope}).`,
+        'auto_pre_clear'
+      );
+    }
+
+    if (scope === 'purchase') {
+      setPurchases([]);
+      setEditingPurchaseId(null);
+      try {
+        localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify([]));
+      } catch (e) {
+        console.error(e);
+      }
+      showToast('Super Admin verified: Purchase DB cleared (Safety Snapshot saved).');
+    } else if (scope === 'packing') {
+      setPackings([]);
+      setEditingPackingId(null);
+      const freshDraft = createInitialPackingDraft(0);
+      setPackingDraft(freshDraft);
+      try {
+        localStorage.setItem(STORAGE_KEYS.PACKINGS, JSON.stringify([]));
+        localStorage.setItem(STORAGE_KEYS.PACKING_DRAFT, JSON.stringify(freshDraft));
+      } catch (e) {
+        console.error(e);
+      }
+      showToast('Super Admin verified: Packing DB cleared (Safety Snapshot saved).');
+    } else if (scope === 'payment') {
+      setPayments([]);
+      try {
+        localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify([]));
+      } catch (e) {
+        console.error(e);
+      }
+      showToast('Super Admin verified: Payment DB cleared (Safety Snapshot saved).');
+    } else {
+      executeUnconditionalClearAll();
+      showToast(
+        'Super Admin verified: All database records cleared. A local Safety Snapshot was saved for recovery.'
+      );
+    }
+
+    window.dispatchEvent(new CustomEvent('zsb-records-cleared', { detail: { scope } }));
+    return { valid: true };
+  };
+
+  // Opens Super Admin password confirmation modal before clearing records
+  const clearAllDatabaseRecords = (scope: ClearRecordsScope = 'all') => {
+    openSuperAdminClearModal(scope);
+  };
+
+  const resetAllData = () => {
+    openSuperAdminClearModal('all');
+  };
+
+  const exportDatabaseJSON = () => {
+    downloadSnapshotJSON();
   };
 
   const importDatabaseJSON = (jsonStr: string): boolean => {
+    const res = importSnapshotFromJSON(jsonStr, true);
+    return res.valid;
+  };
+
+  const openShipmentDetails = (invoiceNumber: string, shippingMark?: string) => {
+    const cleanInv = (invoiceNumber || '').trim();
+    const cleanMark = (shippingMark || '').trim();
+    const targetRef = cleanInv || cleanMark;
+    if (!targetRef) return;
+
+    setFocusedShipmentInvoice(targetRef);
+    setPrintModalData((prev) => ({ ...prev, isOpen: false }));
+    setActiveTab('packing_db');
+
     try {
-      const data = JSON.parse(jsonStr);
-      if (data.purchases && Array.isArray(data.purchases)) setPurchases(deduplicateRecords(data.purchases, 'pur'));
-      if (data.packings && Array.isArray(data.packings)) setPackings(deduplicateRecords(data.packings, 'pkg'));
-      if (data.payments && Array.isArray(data.payments)) setPayments(deduplicateRecords(data.payments, 'pay'));
-      if (data.otherCosts && Array.isArray(data.otherCosts)) setOtherCosts(deduplicateRecords(data.otherCosts, 'cost'));
-      if (data.dropdownOptions) setDropdownOptions(data.dropdownOptions);
-      if (data.companyProfile) setCompanyProfile(data.companyProfile);
-      showToast('Database successfully imported from JSON file!');
-      return true;
-    } catch (e) {
-      showToast('Invalid backup file format.');
-      return false;
+      if (typeof window !== 'undefined' && window.history?.replaceState) {
+        const matched = packings.find(
+          (p) =>
+            p.invoiceNumber.toLowerCase() === cleanInv.toLowerCase() ||
+            (cleanMark && p.shippingMark.toLowerCase() === cleanMark.toLowerCase())
+        );
+        const url = buildShipmentDetailUrl(window.location.origin, {
+          id: matched?.id,
+          invoiceNumber: cleanInv || matched?.invoiceNumber || '',
+          shippingMark: cleanMark || matched?.shippingMark || '',
+          packingDate: matched?.packingDate || '',
+        });
+        const parsedUrl = new URL(url);
+        window.history.replaceState({}, '', `${parsedUrl.pathname}${parsedUrl.search}`);
+      }
+    } catch {
+      // ignore URL state update errors
+    }
+
+    showToast(`Opened shipment details for ${targetRef} in Packing DB.`);
+  };
+
+  const clearFocusedShipment = () => {
+    setFocusedShipmentInvoice(null);
+    try {
+      if (typeof window !== 'undefined' && window.history?.replaceState) {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    } catch {
+      // ignore
     }
   };
 
@@ -553,12 +1514,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addPurchase,
         updatePurchase,
         deletePurchase,
+        bulkImportPurchases,
         editingPurchaseId,
         setEditingPurchaseId,
         packings,
         addPacking,
         updatePacking,
         deletePacking,
+        bulkImportPackings,
         editingPackingId,
         setEditingPackingId,
         packingDraft,
@@ -568,18 +1531,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addPayment,
         updatePayment,
         deletePayment,
+        bulkImportPayments,
         otherCosts,
         addOtherCost,
         deleteOtherCost,
+        bulkImportOtherCosts,
+        supplierCredits,
+        addSupplierCredit,
+        applySupplierCredit,
+        applySupplierCreditsForPayment,
+        deleteSupplierCredit,
+        mortalities,
+        addMortality,
+        updateMortality,
+        deleteMortality,
         printModalData,
         openPrintModal,
         closePrintModal,
+        globalViewReport,
+        isExportingGlobalPdf,
+        lastExportedPdfFilename,
+        exportCurrentViewToPdf,
+        dataCenterModal,
+        openDataCenterModal,
+        closeDataCenterModal,
+        superAdminPassword,
+        updateSuperAdminPassword,
+        superAdminClearModal,
+        openSuperAdminClearModal,
+        closeSuperAdminClearModal,
+        clearRecordsWithSuperAdmin,
         clearAllDatabaseRecords,
         resetAllData,
         exportDatabaseJSON,
         importDatabaseJSON,
+        snapshots,
+        snapshotModalOpen,
+        openSnapshotModal,
+        closeSnapshotModal,
+        createSnapshot,
+        restoreSnapshot,
+        deleteSnapshot,
+        downloadSnapshotJSON,
+        importSnapshotFromJSON,
+        syncStatus,
+        lastSyncedAt,
+        lastSyncedEntity,
+        triggerManualSync,
         toastMessage,
         showToast,
+        focusedShipmentInvoice,
+        openShipmentDetails,
+        clearFocusedShipment,
       }}
     >
       {children}

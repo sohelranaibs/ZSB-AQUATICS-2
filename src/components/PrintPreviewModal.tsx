@@ -722,35 +722,136 @@ export const PrintPreviewModal: React.FC = () => {
             </div>
           )}
 
-          {/* Type 5: Profit & Loss Statement */}
+          {/* Type 5: Profit & Loss Statement & Daily Report Details */}
           {type === 'profit_loss' && data && (
-            <div className="space-y-4">
-              <div className="p-4 bg-slate-50 rounded border border-slate-200 text-xs space-y-2">
+            <div className="space-y-4 text-xs" data-testid="printable-profit-loss-report">
+              {data.periodLabel && (
+                <div className="flex items-center justify-between bg-slate-100 px-3 py-2 rounded border border-slate-300 font-mono text-[11px]">
+                  <span>
+                    <strong>REPORT SCOPE:</strong> {data.periodLabel}
+                  </span>
+                  <span>
+                    <strong>GENERATED:</strong> {formatDate(new Date().toISOString())}
+                  </span>
+                </div>
+              )}
+
+              {/* Executive Summary Block */}
+              <div className="p-4 bg-slate-50 rounded border border-slate-300 text-xs space-y-2">
+                <div className="font-black text-slate-900 uppercase tracking-wider border-b border-slate-300 pb-1.5">
+                  Executive Profit &amp; Loss Summary
+                </div>
                 <div className="flex justify-between border-b pb-1.5 font-bold">
-                  <span>Gross Export Sales / Invoiced Value</span>
+                  <span>Gross Export Sales / Invoiced Value (A)</span>
                   <span className="font-mono text-teal-800">
                     {formatCurrency(data.summary.totalExportValue, companyProfile.currency)}
                   </span>
                 </div>
                 <div className="flex justify-between border-b pb-1.5 font-bold">
-                  <span>Less: Total Purchase Cost (Live Fish)</span>
+                  <span>Less: Total Purchase Cost — Live Fish (B)</span>
                   <span className="font-mono text-rose-700">
                     - {formatCurrency(data.summary.totalPurchasing, companyProfile.currency)}
                   </span>
                 </div>
+                <div className="flex justify-between border-b pb-1.5 font-bold bg-amber-50/70 px-2 py-1 rounded">
+                  <span>Gross Profit / Margin (A - B)</span>
+                  <span className="font-mono text-slate-900">
+                    {formatCurrency(data.summary.grossProfit, companyProfile.currency)}
+                  </span>
+                </div>
                 <div className="flex justify-between border-b pb-1.5 font-bold">
-                  <span>Less: Total Other Operating Costs (Freight/Cargo/Customs)</span>
+                  <span>Less: Total Other Operating Costs — Freight / Cargo / Customs (C)</span>
                   <span className="font-mono text-rose-700">
                     - {formatCurrency(data.summary.totalOtherCosting, companyProfile.currency)}
                   </span>
                 </div>
                 <div className="flex justify-between pt-1 font-black text-sm">
-                  <span>NET BUSINESS PROFIT / (LOSS)</span>
-                  <span className="font-mono text-emerald-800">
-                    {formatCurrency(data.summary.netProfit, companyProfile.currency)}
+                  <span>NET BUSINESS PROFIT / (LOSS) (A - B - C)</span>
+                  <span
+                    className={`font-mono ${
+                      data.summary.netProfit >= 0 ? 'text-emerald-800' : 'text-rose-700'
+                    }`}
+                  >
+                    {data.summary.netProfit >= 0 ? '+' : ''}
+                    {formatCurrency(data.summary.netProfit, companyProfile.currency)} (
+                    {data.summary.marginPercent}%)
                   </span>
                 </div>
               </div>
+
+              {/* Daily Report Details of Profit & Loss Table */}
+              {Array.isArray(data.dailyEntries) && data.dailyEntries.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="font-black text-xs uppercase tracking-wider text-slate-900 flex items-center justify-between">
+                    <span>Daily Report Details of Profit &amp; Loss</span>
+                    <span className="font-mono text-[11px] text-slate-600">
+                      {data.dailyEntries.length} Trading{' '}
+                      {data.dailyEntries.length === 1 ? 'Day' : 'Days'}
+                    </span>
+                  </div>
+                  <table className="w-full text-[11px] border border-slate-300 border-collapse font-mono">
+                    <thead>
+                      <tr className="bg-slate-800 text-white uppercase font-bold text-[10px]">
+                        <th className="p-2 border-r border-slate-600 text-left font-sans">
+                          Date &amp; Day
+                        </th>
+                        <th className="p-2 border-r border-slate-600 text-right">
+                          Export Rev (A)
+                        </th>
+                        <th className="p-2 border-r border-slate-600 text-right">
+                          Purchase Cost (B)
+                        </th>
+                        <th className="p-2 border-r border-slate-600 text-right">
+                          Gross Profit
+                        </th>
+                        <th className="p-2 border-r border-slate-600 text-right">
+                          Other Cost (C)
+                        </th>
+                        <th className="p-2 border-r border-slate-600 text-right">
+                          Net Profit / Loss
+                        </th>
+                        <th className="p-2 text-center font-sans">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {data.dailyEntries.map((d: any) => (
+                        <tr key={d.date} className="hover:bg-slate-50">
+                          <td className="p-2 border-r border-slate-200 font-sans">
+                            <div className="font-mono font-bold text-slate-900">
+                              {d.formattedDate} ({d.weekdayLabel})
+                            </div>
+                            <div className="text-[10px] text-slate-500">{d.topSummaryText}</div>
+                          </td>
+                          <td className="p-2 border-r border-slate-200 text-right font-bold text-teal-800">
+                            {formatCurrency(d.exportAmountBDT, companyProfile.currency)}
+                          </td>
+                          <td className="p-2 border-r border-slate-200 text-right font-bold text-blue-800">
+                            {formatCurrency(d.purchaseAmount, companyProfile.currency)}
+                          </td>
+                          <td className="p-2 border-r border-slate-200 text-right font-bold text-slate-800">
+                            {d.grossProfit >= 0 ? '+' : ''}
+                            {formatCurrency(d.grossProfit, companyProfile.currency)}
+                          </td>
+                          <td className="p-2 border-r border-slate-200 text-right font-bold text-amber-800">
+                            {formatCurrency(d.otherCostAmount, companyProfile.currency)}
+                          </td>
+                          <td
+                            className={`p-2 border-r border-slate-200 text-right font-black ${
+                              d.netProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                            }`}
+                          >
+                            {d.netProfit >= 0 ? '+' : ''}
+                            {formatCurrency(d.netProfit, companyProfile.currency)}
+                          </td>
+                          <td className="p-2 text-center font-sans font-bold text-[10px]">
+                            {d.status} ({d.marginPercent}%)
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 

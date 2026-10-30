@@ -15,6 +15,8 @@ import {
   SUPPLIER_CREDIT_REASONS,
   calculateSupplierCreditSummary,
 } from '../utils/supplierCredits.ts';
+import { calculateDailyProfitLossReport } from '../utils/dailyProfitLoss.ts';
+import { DailyProfitLossSection } from './DailyProfitLossSection.tsx';
 import { SupplierCreditRecord } from '../types/index.ts';
 import {
   ComposedChart,
@@ -67,6 +69,9 @@ export const ProfitLossView: React.FC = () => {
   } = useApp();
 
   const [newCategory, setNewCategory] = useState<string>(dropdownOptions.costingCategories[0] || 'Air Freight & Cargo');
+  const [newCostDate, setNewCostDate] = useState<string>(() =>
+    new Date().toISOString().slice(0, 10)
+  );
   const [newAmount, setNewAmount] = useState<string>('');
   const [newDesc, setNewDesc] = useState<string>('');
   const [newRef, setNewRef] = useState<string>('');
@@ -177,7 +182,7 @@ export const ProfitLossView: React.FC = () => {
     if (!amt || amt <= 0) return;
 
     addOtherCost({
-      date: new Date().toISOString().slice(0, 10),
+      date: newCostDate || new Date().toISOString().slice(0, 10),
       category: newCategory,
       amount: amt,
       description: newDesc.trim() || newCategory,
@@ -190,11 +195,20 @@ export const ProfitLossView: React.FC = () => {
   };
 
   const handlePrintProfitLoss = () => {
+    const fullDailyReport = calculateDailyProfitLossReport(
+      purchases,
+      packings,
+      payments,
+      otherCosts,
+      { rmbExchangeRate: companyProfile.rmbExchangeRate }
+    );
     openPrintModal({
       type: 'profit_loss',
-      title: 'Loss & Profit Financial Statement',
+      title: 'Loss & Profit Financial Statement & Daily Report',
       data: {
         summary,
+        dailyEntries: fullDailyReport.entries,
+        periodLabel: 'All Active Trading Days',
         purchases,
         packings,
         payments,
@@ -326,6 +340,17 @@ export const ProfitLossView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Daily Report Details of Profit & Loss */}
+      <DailyProfitLossSection
+        purchases={purchases}
+        packings={packings}
+        payments={payments}
+        otherCosts={otherCosts}
+        companyProfile={companyProfile}
+        openPrintModal={openPrintModal}
+        setActiveTab={setActiveTab}
+      />
 
       {/* Month-over-Month Visual Trends Chart: Export Revenue vs. Supplier Payment Outflows */}
       <section
@@ -1854,19 +1879,33 @@ export const ProfitLossView: React.FC = () => {
             </div>
 
             <form onSubmit={handleAddCost} className="space-y-2.5 text-xs">
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">Expense Category</label>
-                <select
-                  value={newCategory}
-                  onChange={(e) => setNewCategory(e.target.value)}
-                  className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-medium text-slate-800"
-                >
-                  {dropdownOptions.costingCategories.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Expense Category</label>
+                  <select
+                    aria-label="Other Costing Category"
+                    value={newCategory}
+                    onChange={(e) => setNewCategory(e.target.value)}
+                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-medium text-slate-800"
+                  >
+                    {dropdownOptions.costingCategories.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Expense Date</label>
+                  <input
+                    type="date"
+                    aria-label="Other Costing Date"
+                    data-testid="pl-other-cost-date-input"
+                    value={newCostDate}
+                    onChange={(e) => setNewCostDate(e.target.value)}
+                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono text-slate-800"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">

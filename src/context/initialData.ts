@@ -1,6 +1,6 @@
 import { CompanyProfile, DropdownOptions, PurchaseRecord, PackingRecord, PaymentRecord, OtherCostRecord, SupplierCreditRecord, MortalityRecord } from '../types/index.ts';
 
-export const COMPANY_LOGO_URL = '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg';
+export const COMPANY_LOGO_URL = '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg';
 
 export const initialCompanyProfile: CompanyProfile = {
   companyName: 'ZSB AQUATICS',

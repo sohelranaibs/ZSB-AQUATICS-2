@@ -74,7 +74,7 @@ export const LandingLoginView: React.FC = () => {
             className="flex items-center gap-2.5 text-lg sm:text-xl font-black tracking-tight text-amber-400 whitespace-nowrap shrink-0"
           >
             <img
-              src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
+              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
               alt="ZSB AQUATICS Logo"
               referrerPolicy="no-referrer"
               data-testid="landing-header-logo"
@@ -156,7 +156,7 @@ export const LandingLoginView: React.FC = () => {
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <img
-                  src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
+                  src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
                   alt="ZSB AQUATICS Official Emblem"
                   referrerPolicy="no-referrer"
                   className="w-12 h-12 rounded-full object-contain bg-white p-0.5 border-2 border-amber-400 shadow-md shrink-0"
@@ -267,7 +267,7 @@ export const LandingLoginView: React.FC = () => {
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-full bg-white p-0.5 border-2 border-amber-400 flex items-center justify-center overflow-hidden shrink-0">
                       <img
-                        src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
+                        src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
                         alt="ZSB AQUATICS"
                         referrerPolicy="no-referrer"
                         data-testid="login-card-logo"
@@ -439,7 +439,7 @@ export const LandingLoginView: React.FC = () => {
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <img
-              src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
+              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
               alt="ZSB AQUATICS"
               referrerPolicy="no-referrer"
               className="w-6 h-6 rounded-full object-contain bg-white p-0.5 border border-amber-400 shrink-0"

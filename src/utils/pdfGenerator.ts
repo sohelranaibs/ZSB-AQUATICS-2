@@ -43,11 +43,20 @@ if (typeof window !== 'undefined') {
  * so it works reliably in Print Preview modals, blob: print windows, and PDF/PNG exports.
  */
 export function resolveCompanyLogoSrc(logoUrl?: string): string {
-  if (cachedCompanyLogoDataUrl && (!logoUrl || logoUrl === COMPANY_LOGO_URL || logoUrl.includes('Gemini_Generated_Image_x7u4nx'))) {
+  if (
+    cachedCompanyLogoDataUrl &&
+    (!logoUrl ||
+      logoUrl === COMPANY_LOGO_URL ||
+      logoUrl.includes('Gemini_Generated_Image_x7u4nx') ||
+      logoUrl.includes('Image_20260915140835'))
+  ) {
     return cachedCompanyLogoDataUrl;
   }
   const raw =
-    logoUrl && (logoUrl.startsWith('data:image/') || logoUrl.includes('Gemini_Generated_Image_x7u4nx'))
+    logoUrl &&
+    (logoUrl.startsWith('data:image/') ||
+      logoUrl.includes('Gemini_Generated_Image_x7u4nx') ||
+      logoUrl.includes('Image_20260915140835'))
       ? logoUrl
       : COMPANY_LOGO_URL;
   if (raw.startsWith('data:image/') || raw.startsWith('http://') || raw.startsWith('https://')) {
@@ -72,7 +81,12 @@ function imageElementToDataUrlOrAbsolute(img: HTMLImageElement): string {
   if (rawSrc.startsWith('data:image/')) {
     return rawSrc;
   }
-  if (cachedCompanyLogoDataUrl && (rawSrc.includes('Gemini_Generated_Image_x7u4nx') || rawSrc === COMPANY_LOGO_URL)) {
+  if (
+    cachedCompanyLogoDataUrl &&
+    (rawSrc.includes('Gemini_Generated_Image_x7u4nx') ||
+      rawSrc.includes('Image_20260915140835') ||
+      rawSrc === COMPANY_LOGO_URL)
+  ) {
     return cachedCompanyLogoDataUrl;
   }
   if (cachedSignatureDataUrl && rawSrc.includes('Md._Sohel_Rana')) {

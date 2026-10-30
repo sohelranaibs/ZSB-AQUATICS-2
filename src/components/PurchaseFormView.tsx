@@ -438,7 +438,7 @@ export const PurchaseFormView: React.FC = () => {
         <div className="flex flex-wrap items-center gap-3">
           <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
-              src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
+              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
               alt={companyProfile.companyName}
               className="w-full h-full object-contain rounded-full"
             />
@@ -483,7 +483,7 @@ export const PurchaseFormView: React.FC = () => {
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-amber-300 bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
                   <img
-                    src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
+                    src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
                     alt={companyProfile.companyName}
                     className="w-full h-full object-contain rounded-full"
                   />
@@ -1608,7 +1608,7 @@ export const PurchaseFormView: React.FC = () => {
                 }}
               >
                 <img
-                  src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
+                  src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
                   alt={companyProfile.companyName}
                   style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '50%' }}
                 />

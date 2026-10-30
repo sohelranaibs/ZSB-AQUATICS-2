@@ -164,7 +164,7 @@ export const AuditLogsView: React.FC = () => {
         <div className="flex items-start sm:items-center gap-3.5">
           <div className="w-12 h-12 rounded-full bg-white p-0.5 border-2 border-amber-400 shadow-md flex items-center justify-center overflow-hidden shrink-0">
             <img
-              src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
+              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
               alt={companyProfile.companyName}
               referrerPolicy="no-referrer"
               className="w-full h-full object-contain rounded-full"

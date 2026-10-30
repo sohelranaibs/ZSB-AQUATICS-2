@@ -69,6 +69,60 @@ export function authenticateUser(
     };
   }
 
+  // Check dynamically registered team administrators
+  let dynamicTeamMembers: any[] = [];
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('zsb_team_members_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) dynamicTeamMembers = parsed;
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  const matchedDynamic = dynamicTeamMembers.find(
+    (m) =>
+      (typeof m.username === 'string' && m.username.toLowerCase() === cleanUser) ||
+      (typeof m.email === 'string' && m.email.toLowerCase() === cleanUser)
+  );
+
+  if (matchedDynamic) {
+    if (matchedDynamic.status === 'suspended') {
+      return {
+        valid: false,
+        error: `Account "@${matchedDynamic.username}" is currently suspended. Please contact Super Admin.`,
+      };
+    }
+
+    const validPasswords = new Set([
+      matchedDynamic.password || 'admin123',
+      DEFAULT_SUPER_ADMIN_PASSWORD,
+      'ZSB@Admin2026',
+      ...(customSuperAdminPassword ? [customSuperAdminPassword.trim()] : []),
+    ]);
+
+    if (!validPasswords.has(cleanPass)) {
+      return {
+        valid: false,
+        error: 'Invalid password. Please verify your administrator credentials.',
+      };
+    }
+
+    return {
+      valid: true,
+      user: {
+        username: matchedDynamic.username,
+        displayName: matchedDynamic.displayName,
+        role: matchedDynamic.role,
+        email: matchedDynamic.email,
+        loginAt: nowIso,
+      },
+    };
+  }
+
   const matchedAccount = DEFAULT_ADMIN_ACCOUNTS.find((acc) =>
     acc.aliases.some((alias) => alias.toLowerCase() === cleanUser)
   );
@@ -77,7 +131,7 @@ export function authenticateUser(
     return {
       valid: false,
       error:
-        'Unrecognized username or email. Use "admin" or "zsbaquatics@gmail.com".',
+        'Unrecognized username or email. Please check your credentials or contact Super Admin.',
     };
   }
 

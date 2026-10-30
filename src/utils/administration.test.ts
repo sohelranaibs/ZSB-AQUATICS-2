@@ -9,6 +9,8 @@ import {
   deleteTeamMember,
   toggleTeamMemberStatus,
   formatTeamMembersCSV,
+  validateNewAdminRegistration,
+  registerNewAdmin,
 } from './administration.ts';
 
 test('DEFAULT_TEAM_MEMBERS has core partners Md. Sohel Rana and Md. Mizanur Rahman as root accounts', () => {
@@ -95,3 +97,46 @@ test('formatTeamMembersCSV outputs CSV with correct headers and rows', () => {
   assert.ok(csv.includes('Md. Sohel Rana'));
   assert.ok(csv.includes('Md. Mizanur Rahman'));
 });
+
+test('validateNewAdminRegistration rejects if caller is not super admin', () => {
+  const res = validateNewAdminRegistration(
+    {
+      displayName: 'Kazi Nazrul',
+      username: 'kazi.admin',
+      email: 'kazi@zsbaquatics.com',
+      password: 'secretPassword',
+      role: 'Super Admin',
+      permissions: ['perm_purchase_entry'],
+    },
+    DEFAULT_TEAM_MEMBERS,
+    false // callerIsSuperAdmin = false
+  );
+
+  assert.equal(res.valid, false);
+  assert.match(res.error || '', /Only verified Super Admins can register new administrator accounts/);
+});
+
+test('validateNewAdminRegistration and registerNewAdmin succeed when triggered by super admin', () => {
+  const input = {
+    displayName: 'Kazi Nazrul',
+    username: 'kazi.admin',
+    email: 'kazi@zsbaquatics.com',
+    password: 'secretPassword',
+    confirmPassword: 'secretPassword',
+    role: 'Logistics Manager' as const,
+    permissions: ['perm_packing_manifest', 'perm_flight_return_bill', 'perm_exporter_slips'],
+  };
+
+  const validation = validateNewAdminRegistration(input, DEFAULT_TEAM_MEMBERS, true);
+  assert.equal(validation.valid, true);
+
+  const { updatedList, createdAdmin } = registerNewAdmin(DEFAULT_TEAM_MEMBERS, input);
+  assert.equal(updatedList.length, DEFAULT_TEAM_MEMBERS.length + 1);
+  assert.equal(createdAdmin.displayName, 'Kazi Nazrul');
+  assert.equal(createdAdmin.username, 'kazi.admin');
+  assert.equal(createdAdmin.email, 'kazi@zsbaquatics.com');
+  assert.equal(createdAdmin.role, 'Logistics Manager');
+  assert.deepEqual(createdAdmin.permissions, ['perm_packing_manifest', 'perm_flight_return_bill', 'perm_exporter_slips']);
+  assert.equal(createdAdmin.password, 'secretPassword');
+});
+

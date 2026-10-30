@@ -13,6 +13,11 @@ import {
   toggleTeamMemberStatus,
   formatTeamMembersCSV,
   ROLE_PERMISSIONS,
+  SYSTEM_PERMISSIONS,
+  ROLE_DEFAULT_PERMISSION_IDS,
+  RegisterAdminInput,
+  validateNewAdminRegistration,
+  registerNewAdmin,
 } from '../utils/administration.ts';
 import {
   verifySuperAdminPassword,
@@ -58,6 +63,10 @@ import {
   Layers,
   X,
   Plus,
+  Check,
+  CheckSquare,
+  Square,
+  Key,
 } from 'lucide-react';
 
 type AdminTab = 'account' | 'team' | 'audit' | 'backups';
@@ -81,6 +90,7 @@ export const AdministrationView: React.FC = () => {
     payments,
     otherCosts,
     showToast,
+    addAuditLog,
   } = useApp();
 
   // Super Admin session gate state
@@ -121,6 +131,21 @@ export const AdministrationView: React.FC = () => {
   const [teamFormEmail, setTeamFormEmail] = useState<string>('');
   const [teamFormRole, setTeamFormRole] = useState<TeamRole>('Senior Accountant');
   const [teamFormError, setTeamFormError] = useState<string | null>(null);
+
+  // Add New Admin Modal & Role-Based Permissions state (Super Admin exclusive)
+  const [isAddAdminModalOpen, setIsAddAdminModalOpen] = useState<boolean>(false);
+  const [adminFormName, setAdminFormName] = useState<string>('');
+  const [adminFormUsername, setAdminFormUsername] = useState<string>('');
+  const [adminFormEmail, setAdminFormEmail] = useState<string>('');
+  const [adminFormPassword, setAdminFormPassword] = useState<string>('');
+  const [adminFormConfirmPassword, setAdminFormConfirmPassword] = useState<string>('');
+  const [adminFormRole, setAdminFormRole] = useState<TeamRole>('Senior Accountant');
+  const [adminFormStatus, setAdminFormStatus] = useState<'active' | 'suspended'>('active');
+  const [selectedPermissionIds, setSelectedPermissionIds] = useState<string[]>(() =>
+    ROLE_DEFAULT_PERMISSION_IDS['Senior Accountant'] || []
+  );
+  const [showAdminPassword, setShowAdminPassword] = useState<boolean>(false);
+  const [adminFormError, setAdminFormError] = useState<string | null>(null);
 
   // Company Profile form state
   const [profileAddress, setProfileAddress] = useState(companyProfile.address);
@@ -325,6 +350,98 @@ export const AdministrationView: React.FC = () => {
     a.click();
     URL.revokeObjectURL(url);
     showToast('Team roster exported as CSV.');
+  };
+
+  // --------------------------------------------------------------------------
+  // ADD NEW ADMIN: Super Admin Clearance & Role-Based Permissions
+  // --------------------------------------------------------------------------
+  const handleOpenAddNewAdmin = () => {
+    if (!isSuperAdminVerified) {
+      showToast('Security Clearance Denied: Only verified Super Admins can register new administrator accounts.');
+      return;
+    }
+    setAdminFormName('');
+    setAdminFormUsername('');
+    setAdminFormEmail('');
+    setAdminFormPassword('');
+    setAdminFormConfirmPassword('');
+    const defaultRole: TeamRole = 'Senior Accountant';
+    setAdminFormRole(defaultRole);
+    setSelectedPermissionIds(ROLE_DEFAULT_PERMISSION_IDS[defaultRole] || []);
+    setAdminFormStatus('active');
+    setShowAdminPassword(false);
+    setAdminFormError(null);
+    setIsAddAdminModalOpen(true);
+  };
+
+  const handleAdminRoleChange = (newRole: TeamRole) => {
+    setAdminFormRole(newRole);
+    // Prefill with role recommended permission defaults
+    setSelectedPermissionIds(ROLE_DEFAULT_PERMISSION_IDS[newRole] || []);
+  };
+
+  const handleTogglePermission = (permId: string) => {
+    setSelectedPermissionIds((prev) =>
+      prev.includes(permId) ? prev.filter((id) => id !== permId) : [...prev, permId]
+    );
+  };
+
+  const handleSelectAllPermissions = () => {
+    setSelectedPermissionIds(SYSTEM_PERMISSIONS.map((p) => p.id));
+  };
+
+  const handleResetRoleDefaultPermissions = () => {
+    setSelectedPermissionIds(ROLE_DEFAULT_PERMISSION_IDS[adminFormRole] || []);
+  };
+
+  const handleDeselectAllPermissions = () => {
+    setSelectedPermissionIds([]);
+  };
+
+  const handleSaveNewAdmin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isSuperAdminVerified) {
+      setAdminFormError('Security Clearance Denied: Only verified Super Admins can register new administrator accounts.');
+      return;
+    }
+
+    // Resolve human-readable permission labels for storage
+    const permissionLabels = selectedPermissionIds
+      .map((id) => SYSTEM_PERMISSIONS.find((p) => p.id === id)?.label)
+      .filter((l): l is string => Boolean(l));
+
+    const input: RegisterAdminInput = {
+      displayName: adminFormName.trim(),
+      username: adminFormUsername.trim(),
+      email: adminFormEmail.trim(),
+      password: adminFormPassword.trim(),
+      confirmPassword: adminFormConfirmPassword.trim(),
+      role: adminFormRole,
+      status: adminFormStatus,
+      permissions: permissionLabels,
+    };
+
+    const validation = validateNewAdminRegistration(input, teamMembers, isSuperAdminVerified);
+    if (!validation.valid) {
+      setAdminFormError(validation.error || 'Failed to register administrator.');
+      return;
+    }
+
+    const { updatedList, createdAdmin } = registerNewAdmin(teamMembers, input);
+    setTeamMembers(updatedList);
+    setIsAddAdminModalOpen(false);
+
+    // Tamper-evident audit log
+    addAuditLog({
+      action: 'AUTH',
+      module: 'Administration',
+      entityId: `USR-${createdAdmin.username.toUpperCase()}`,
+      summary: `Super Admin registered new administrator "${createdAdmin.displayName}" (${createdAdmin.role})`,
+      details: `Role: ${createdAdmin.role} · Email: ${createdAdmin.email} · Permissions: ${createdAdmin.permissions.length} granted · Status: ${createdAdmin.status}`,
+      actor: `${currentUser?.displayName || 'Md. Sohel Rana'} (Super Admin)`,
+    });
+
+    showToast(`Administrator account "${createdAdmin.displayName}" (${createdAdmin.role}) registered successfully!`);
   };
 
   // Create Snapshot
@@ -575,6 +692,17 @@ export const AdministrationView: React.FC = () => {
                 Partner &amp; Super Admin
               </div>
             </div>
+
+            <button
+              type="button"
+              data-testid="admin-add-new-admin-btn"
+              onClick={handleOpenAddNewAdmin}
+              className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl shadow-md transition cursor-pointer"
+              title="Register a new administrator with role-based access permissions"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>+ Add New Admin</span>
+            </button>
 
             <button
               type="button"
@@ -986,9 +1114,20 @@ export const AdministrationView: React.FC = () => {
 
                 <button
                   type="button"
+                  data-testid="team-add-admin-btn"
+                  onClick={handleOpenAddNewAdmin}
+                  className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg shadow transition cursor-pointer"
+                  title="Register a new administrator with role-based access permissions"
+                >
+                  <ShieldCheck className="w-4 h-4 text-slate-950" />
+                  <span>+ Add New Admin</span>
+                </button>
+
+                <button
+                  type="button"
                   data-testid="admin-add-team-btn"
                   onClick={handleOpenAddTeamMember}
-                  className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg shadow transition cursor-pointer"
+                  className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-white rounded-lg shadow transition cursor-pointer"
                 >
                   <UserPlus className="w-4 h-4" />
                   <span>Add Team Member</span>
@@ -1619,6 +1758,370 @@ export const AdministrationView: React.FC = () => {
                 >
                   {editingMemberId ? 'Save Changes' : 'Create Account'}
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* -------------------------------------------------------------------- */}
+      {/* MODAL: Register New Administrator (Role-Based Permissions)           */}
+      {/* -------------------------------------------------------------------- */}
+      {isAddAdminModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-3 sm:p-4 overflow-y-auto"
+          role="dialog"
+          aria-modal="true"
+          data-testid="add-new-admin-modal"
+        >
+          <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-300 overflow-hidden my-auto max-h-[92vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="bg-[#1b2b44] text-white px-5 py-4 flex items-center justify-between border-b border-amber-500/40 shrink-0">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-300">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-amber-300 flex items-center space-x-2">
+                    <span>Register New Administrator</span>
+                    <span className="text-[10px] bg-amber-500/20 text-amber-200 border border-amber-400/30 px-2 py-0.5 rounded-full uppercase tracking-wider font-mono">
+                      Super Admin Only
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    Assign credentials, administrative clearance, and custom granular module permissions
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddAdminModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+                title="Close modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Form Content */}
+            <form onSubmit={handleSaveNewAdmin} className="flex flex-col overflow-hidden text-xs">
+              <div className="p-5 sm:p-6 space-y-5 overflow-y-auto max-h-[calc(92vh-130px)]">
+                {/* Super Admin Authorization Clearance Banner */}
+                <div className="bg-amber-50 border border-amber-300/80 rounded-xl p-3 flex items-start space-x-2.5">
+                  <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                  <div className="text-[11px] text-amber-900 leading-relaxed">
+                    <strong className="font-bold text-amber-950">Super Admin Clearance Active:</strong> You are authorizing a new administrative user with direct access to ZSB Aquatics trade and financial records.
+                  </div>
+                </div>
+
+                {adminFormError && (
+                  <div
+                    role="alert"
+                    className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-rose-800 font-semibold flex items-center space-x-2"
+                  >
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>{adminFormError}</span>
+                  </div>
+                )}
+
+                {/* Section 1: User Identity & Role */}
+                <div className="space-y-3">
+                  <h4 className="font-bold text-slate-900 uppercase tracking-wider text-[11px] flex items-center space-x-1.5 pb-1 border-b border-slate-200">
+                    <UserPlus className="w-3.5 h-3.5 text-amber-600" />
+                    <span>1. Identity &amp; System Role</span>
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">
+                        Full Name / Display Name <span className="text-rose-600">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        data-testid="new-admin-name-input"
+                        value={adminFormName}
+                        onChange={(e) => setAdminFormName(e.target.value)}
+                        placeholder="e.g. Tariqul Islam"
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-semibold focus:border-amber-500 focus:bg-white outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">
+                        Username <span className="text-rose-600">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        data-testid="new-admin-username-input"
+                        value={adminFormUsername}
+                        onChange={(e) => setAdminFormUsername(e.target.value)}
+                        placeholder="e.g. tariqul"
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-mono focus:border-amber-500 focus:bg-white outline-hidden"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">
+                        Official Email Address <span className="text-rose-600">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        data-testid="new-admin-email-input"
+                        value={adminFormEmail}
+                        onChange={(e) => setAdminFormEmail(e.target.value)}
+                        placeholder="e.g. tariqul@zsbaquatics.com"
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-mono focus:border-amber-500 focus:bg-white outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">
+                        Administrative Role <span className="text-rose-600">*</span>
+                      </label>
+                      <select
+                        data-testid="new-admin-role-select"
+                        value={adminFormRole}
+                        onChange={(e) => handleAdminRoleChange(e.target.value as TeamRole)}
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-bold text-slate-900 focus:border-amber-500 focus:bg-white outline-hidden"
+                      >
+                        <option value="Senior Accountant">Senior Accountant</option>
+                        <option value="Logistics Manager">Logistics Manager</option>
+                        <option value="Depot Dispatcher">Depot Dispatcher</option>
+                        <option value="Managing Partner">Managing Partner</option>
+                        <option value="Super Admin">Super Admin</option>
+                        <option value="Read Only">Read Only</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 2: Credentials & Access Status */}
+                <div className="space-y-3">
+                  <h4 className="font-bold text-slate-900 uppercase tracking-wider text-[11px] flex items-center space-x-1.5 pb-1 border-b border-slate-200">
+                    <Key className="w-3.5 h-3.5 text-purple-600" />
+                    <span>2. Authentication &amp; Initial Status</span>
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="font-bold text-slate-700">
+                          Password <span className="text-rose-600">*</span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setShowAdminPassword(!showAdminPassword)}
+                          className="text-[10px] text-slate-500 hover:text-slate-800 font-medium"
+                        >
+                          {showAdminPassword ? 'Hide' : 'Show'}
+                        </button>
+                      </div>
+                      <input
+                        type={showAdminPassword ? 'text' : 'password'}
+                        required
+                        data-testid="new-admin-password-input"
+                        value={adminFormPassword}
+                        onChange={(e) => setAdminFormPassword(e.target.value)}
+                        placeholder="Min. 4 characters"
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono text-slate-900 focus:border-amber-500 focus:bg-white outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-slate-700 block mb-1">
+                        Confirm Password <span className="text-rose-600">*</span>
+                      </label>
+                      <input
+                        type={showAdminPassword ? 'text' : 'password'}
+                        required
+                        data-testid="new-admin-confirm-password-input"
+                        value={adminFormConfirmPassword}
+                        onChange={(e) => setAdminFormConfirmPassword(e.target.value)}
+                        placeholder="Repeat password"
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-mono text-slate-900 focus:border-amber-500 focus:bg-white outline-hidden"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">
+                      Account Initial Status
+                    </label>
+                    <div className="flex items-center space-x-4">
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="adminStatus"
+                          value="active"
+                          checked={adminFormStatus === 'active'}
+                          onChange={() => setAdminFormStatus('active')}
+                          className="text-amber-500 focus:ring-amber-400"
+                        />
+                        <span className="font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded text-[11px] border border-emerald-200">
+                          Active (Immediate Login)
+                        </span>
+                      </label>
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="adminStatus"
+                          value="suspended"
+                          checked={adminFormStatus === 'suspended'}
+                          onChange={() => setAdminFormStatus('suspended')}
+                          className="text-amber-500 focus:ring-amber-400"
+                        />
+                        <span className="font-semibold text-rose-800 bg-rose-50 px-2 py-0.5 rounded text-[11px] border border-rose-200">
+                          Suspended (Login Blocked)
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 3: Granular Role-Based Permissions Checklist */}
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-1 border-b border-slate-200">
+                    <div className="flex items-center space-x-2">
+                      <h4 className="font-bold text-slate-900 uppercase tracking-wider text-[11px] flex items-center space-x-1.5">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>3. Role-Based Access Permissions</span>
+                      </h4>
+                      <span className="bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-full text-[10px]">
+                        {selectedPermissionIds.length} of {SYSTEM_PERMISSIONS.length} Granted
+                      </span>
+                    </div>
+
+                    <div className="flex items-center space-x-1.5">
+                      <button
+                        type="button"
+                        data-testid="perm-select-all-btn"
+                        onClick={handleSelectAllPermissions}
+                        className="px-2 py-1 text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded border border-slate-300 cursor-pointer transition"
+                      >
+                        Select All
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="perm-reset-defaults-btn"
+                        onClick={handleResetRoleDefaultPermissions}
+                        className="px-2 py-1 text-[10px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 rounded border border-amber-300 cursor-pointer transition"
+                        title="Reset to recommended defaults for the selected role"
+                      >
+                        Role Defaults
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="perm-clear-all-btn"
+                        onClick={handleDeselectAllPermissions}
+                        className="px-2 py-1 text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded border border-slate-300 cursor-pointer transition"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500">
+                    Permissions are prefilled based on the <strong>{adminFormRole}</strong> template. Check or uncheck individual privileges to customize access for this administrator.
+                  </p>
+
+                  {/* Grouped Category Cards */}
+                  <div className="space-y-3">
+                    {(
+                      [
+                        'Procurement & Stock',
+                        'Logistics & Manifests',
+                        'Settlement & Vouchers',
+                        'Financial & Analytics',
+                        'System & Security',
+                      ] as const
+                    ).map((category) => {
+                      const permsInCategory = SYSTEM_PERMISSIONS.filter(
+                        (p) => p.category === category
+                      );
+                      const grantedInCategory = permsInCategory.filter((p) =>
+                        selectedPermissionIds.includes(p.id)
+                      ).length;
+
+                      return (
+                        <div
+                          key={category}
+                          className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-slate-800 text-[11px] uppercase tracking-wide flex items-center space-x-1.5">
+                              <span className="w-2 h-2 rounded-full bg-amber-500" />
+                              <span>{category}</span>
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              {grantedInCategory} / {permsInCategory.length} active
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {permsInCategory.map((perm) => {
+                              const isChecked = selectedPermissionIds.includes(perm.id);
+                              return (
+                                <label
+                                  key={perm.id}
+                                  className={`flex items-start space-x-2.5 p-2 rounded-lg border transition cursor-pointer ${
+                                    isChecked
+                                      ? 'bg-amber-50/60 border-amber-300 text-slate-900 shadow-xs'
+                                      : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    data-testid={`perm-checkbox-${perm.id}`}
+                                    checked={isChecked}
+                                    onChange={() => handleTogglePermission(perm.id)}
+                                    className="mt-0.5 rounded text-amber-600 focus:ring-amber-400 cursor-pointer"
+                                  />
+                                  <div className="space-y-0.5 leading-snug">
+                                    <div className={`font-bold text-[11px] ${isChecked ? 'text-slate-900' : 'text-slate-700'}`}>
+                                      {perm.label}
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 line-clamp-2">
+                                      {perm.description}
+                                    </div>
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                <div className="text-[11px] text-slate-500">
+                  <span className="font-semibold text-slate-700">Audit Notice:</span> Creation event will be permanently recorded in the system audit trail.
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddAdminModalOpen(false)}
+                    className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg font-bold transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    data-testid="submit-new-admin-btn"
+                    className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg shadow-md transition cursor-pointer flex items-center space-x-1.5"
+                  >
+                    <ShieldCheck className="w-4 h-4 text-slate-950" />
+                    <span>Register Administrator</span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>

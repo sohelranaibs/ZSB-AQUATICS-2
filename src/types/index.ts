@@ -33,9 +33,6 @@ export interface PurchaseItemRow {
   item: string;
   quantity: number;
   rate: number;
-  subtotal?: number;
-  gstRate?: number;
-  gstAmount?: number;
   totalAmount: number;
   previousAmount: number;
   paidAmount: number;
@@ -50,9 +47,6 @@ export interface PurchaseRecord {
   contactNumber: string;
   items: PurchaseItemRow[];
   totalQty: number;
-  subtotalAmount?: number;
-  gstRate?: number;
-  totalGstAmount?: number;
   totalAmount: number;
   previousAmount: number;
   paidAmount: number;
@@ -69,10 +63,7 @@ export interface PackingItemRow {
   totalWeight: number; // box * weight
   unit: string;
   rate: number;
-  subtotal?: number; // totalWeight * rate
-  gstRate?: number;
-  gstAmount?: number;
-  amount: number; // subtotal + gstAmount (or totalWeight * rate when gstRate = 0)
+  amount: number; // totalWeight * rate
 }
 
 export interface PackingRecord {
@@ -88,9 +79,6 @@ export interface PackingRecord {
   items: PackingItemRow[];
   totalBox: number;
   totalWeight: number;
-  subtotalAmount?: number;
-  gstRate?: number;
-  totalGstAmount?: number;
   totalAmount: number;
   rmbRate?: number;
   totalAmountBDT?: number;
@@ -116,7 +104,6 @@ export interface PackingFormDraft {
   shipper: string;
   paymentStatus: ExporterStatus;
   customRmbAmount: string;
-  gstRate?: number;
   remarks: string;
   rows: PackingItemRow[];
 }

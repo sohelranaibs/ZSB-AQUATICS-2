@@ -377,36 +377,10 @@ export const PrintPreviewModal: React.FC = () => {
                   )}
                 </tbody>
                 <tfoot>
-                  {data.subtotalAmount !== undefined && (
-                    <tr className="bg-slate-50 font-semibold text-[11px] border-t-2 border-slate-400">
-                      <td colSpan={2} className="p-2 text-right uppercase">TOTAL QUANTITY:</td>
-                      <td className="p-2 text-right font-mono tabular-nums text-blue-900 border-r border-slate-300">{data.totalQty}</td>
-                      <td className="p-2 text-right uppercase border-r border-slate-300">TAXABLE SUBTOTAL:</td>
-                      <td className="p-2 text-right font-mono tabular-nums font-bold text-slate-800">
-                        {formatCurrency(data.subtotalAmount, companyProfile.currency)}
-                      </td>
-                    </tr>
-                  )}
-                  {(data.totalGstAmount ?? 0) > 0 && (
-                    <tr className="bg-slate-50 font-semibold text-[11px]">
-                      <td colSpan={4} className="p-2 text-right uppercase text-teal-800 border-r border-slate-200">
-                        ADD: TOTAL GST ({data.gstRate ?? 0}%):
-                      </td>
-                      <td className="p-2 text-right font-mono tabular-nums font-bold text-teal-800">
-                        + {formatCurrency(data.totalGstAmount, companyProfile.currency)}
-                      </td>
-                    </tr>
-                  )}
-                  <tr className="bg-slate-100 font-bold border-t border-slate-300">
-                    {data.subtotalAmount === undefined ? (
-                      <>
-                        <td colSpan={2} className="p-2 text-right uppercase">TOTAL QUANTITY:</td>
-                        <td className="p-2 text-right font-mono tabular-nums text-blue-900 border-r border-slate-300">{data.totalQty}</td>
-                        <td className="p-2 text-right uppercase border-r border-slate-300">CURRENT BILL TOTAL:</td>
-                      </>
-                    ) : (
-                      <td colSpan={4} className="p-2 text-right uppercase border-r border-slate-300">CURRENT BILL TOTAL:</td>
-                    )}
+                  <tr className="bg-slate-100 font-bold border-t-2 border-slate-400">
+                    <td colSpan={2} className="p-2 text-right uppercase">TOTAL QUANTITY:</td>
+                    <td className="p-2 text-right font-mono tabular-nums text-blue-900 border-r border-slate-300">{data.totalQty}</td>
+                    <td className="p-2 text-right uppercase border-r border-slate-300">CURRENT BILL TOTAL:</td>
                     <td className="p-2 text-right font-mono tabular-nums font-black text-slate-900">
                       {formatCurrency(data.totalAmount, companyProfile.currency)}
                     </td>
@@ -508,26 +482,6 @@ export const PrintPreviewModal: React.FC = () => {
                   ) : null}
                 </tbody>
                 <tfoot>
-                  {data.subtotalAmount !== undefined && (data.totalGstAmount ?? 0) > 0 && (
-                    <>
-                      <tr className="bg-slate-50 font-semibold text-[11px] border-t-2 border-slate-400">
-                        <td colSpan={7} className="p-2 text-right uppercase text-slate-600 border-r border-slate-200">
-                          TAXABLE SUBTOTAL:
-                        </td>
-                        <td className="p-2 text-right font-mono tabular-nums font-bold text-slate-800">
-                          {formatCurrency(data.subtotalAmount, 'RMB')}
-                        </td>
-                      </tr>
-                      <tr className="bg-slate-50 font-semibold text-[11px]">
-                        <td colSpan={7} className="p-2 text-right uppercase text-teal-800 border-r border-slate-200">
-                          ADD: TOTAL GST ({data.gstRate ?? 0}%):
-                        </td>
-                        <td className="p-2 text-right font-mono tabular-nums font-bold text-teal-800">
-                          + {formatCurrency(data.totalGstAmount, 'RMB')}
-                        </td>
-                      </tr>
-                    </>
-                  )}
                   <tr className="bg-slate-100 font-bold border-t-2 border-slate-400">
                     <td colSpan={2} className="p-2 text-right uppercase">TOTALS:</td>
                     <td className="p-2 text-center font-mono text-slate-900">{data.totalBox} Boxes</td>

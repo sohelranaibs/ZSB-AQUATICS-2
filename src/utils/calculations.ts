@@ -14,23 +14,16 @@ import {
 } from '../types/index.ts';
 
 /**
- * Calculates Purchase Row Total = Quantity * Rate (+ optional GST)
+ * Calculates Purchase Row Total = Quantity * Rate
  */
-export function calculatePurchaseRowTotal(
-  quantity: number,
-  rate: number,
-  gstRate: number = 0
-): number {
+export function calculatePurchaseRowTotal(quantity: number, rate: number): number {
   const qty = Number(quantity) || 0;
   const rt = Number(rate) || 0;
-  const gst = Math.max(0, Number(gstRate) || 0);
-  const subtotal = Math.round(qty * rt * 100) / 100;
-  const gstAmount = Math.round(subtotal * (gst / 100) * 100) / 100;
-  return Math.round((subtotal + gstAmount) * 100) / 100;
+  return Math.round(qty * rt * 100) / 100;
 }
 
 /**
- * Calculates Purchase Form Totals (including Subtotal, GST, Grand Total, and Balance)
+ * Calculates Purchase Form Totals
  */
 export function calculatePurchaseTotals(
   rows: PurchaseItemRow[],
@@ -38,14 +31,6 @@ export function calculatePurchaseTotals(
   paidAmount: number
 ) {
   const totalQty = rows.reduce((acc, r) => acc + (Number(r.quantity) || 0), 0);
-  const subtotalAmount = rows.reduce((acc, r) => {
-    const rowSub =
-      r.subtotal !== undefined
-        ? Number(r.subtotal) || 0
-        : Math.round((Number(r.quantity) || 0) * (Number(r.rate) || 0) * 100) / 100;
-    return acc + rowSub;
-  }, 0);
-  const totalGstAmount = rows.reduce((acc, r) => acc + (Number(r.gstAmount) || 0), 0);
   const totalAmount = rows.reduce((acc, r) => acc + (Number(r.totalAmount) || 0), 0);
   const prev = Number(previousAmount) || 0;
   const paid = Number(paidAmount) || 0;
@@ -53,8 +38,6 @@ export function calculatePurchaseTotals(
 
   return {
     totalQty: Math.round(totalQty * 100) / 100,
-    subtotalAmount: Math.round(subtotalAmount * 100) / 100,
-    totalGstAmount: Math.round(totalGstAmount * 100) / 100,
     totalAmount: Math.round(totalAmount * 100) / 100,
     previousAmount: prev,
     paidAmount: paid,
@@ -65,56 +48,33 @@ export function calculatePurchaseTotals(
 /**
  * Calculates Packing List Row:
  * Total Weight = Box * Weight
- * Subtotal = Total Weight * Rate
- * GST Amount = Subtotal * (gstRate / 100)
- * Amount = Subtotal + GST Amount
+ * Amount = Total Weight * Rate
  */
-export function calculatePackingRow(
-  box: number,
-  weight: number,
-  rate: number,
-  gstRate: number = 0
-) {
+export function calculatePackingRow(box: number, weight: number, rate: number) {
   const b = Number(box) || 0;
   const w = Number(weight) || 0;
   const r = Number(rate) || 0;
-  const gst = Math.max(0, Number(gstRate) || 0);
 
   const totalWeight = Math.round(b * w * 100) / 100;
-  const subtotal = Math.round(totalWeight * r * 100) / 100;
-  const gstAmount = Math.round(subtotal * (gst / 100) * 100) / 100;
-  const amount = Math.round((subtotal + gstAmount) * 100) / 100;
+  const amount = Math.round(totalWeight * r * 100) / 100;
 
   return {
     totalWeight,
-    subtotal,
-    gstRate: gst,
-    gstAmount,
     amount,
   };
 }
 
 /**
- * Calculates Packing List Totals (Boxes, Net Weight, Subtotal, GST, and Total Amount)
+ * Calculates Packing List Totals
  */
 export function calculatePackingTotals(rows: PackingItemRow[]) {
   const totalBox = rows.reduce((acc, r) => acc + (Number(r.box) || 0), 0);
   const totalWeight = rows.reduce((acc, r) => acc + (Number(r.totalWeight) || 0), 0);
-  const subtotalAmount = rows.reduce((acc, r) => {
-    const rowSub =
-      r.subtotal !== undefined
-        ? Number(r.subtotal) || 0
-        : Math.round((Number(r.totalWeight) || 0) * (Number(r.rate) || 0) * 100) / 100;
-    return acc + rowSub;
-  }, 0);
-  const totalGstAmount = rows.reduce((acc, r) => acc + (Number(r.gstAmount) || 0), 0);
   const totalAmount = rows.reduce((acc, r) => acc + (Number(r.amount) || 0), 0);
 
   return {
     totalBox,
     totalWeight: Math.round(totalWeight * 100) / 100,
-    subtotalAmount: Math.round(subtotalAmount * 100) / 100,
-    totalGstAmount: Math.round(totalGstAmount * 100) / 100,
     totalAmount: Math.round(totalAmount * 100) / 100,
   };
 }

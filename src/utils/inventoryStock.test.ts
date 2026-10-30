@@ -4,7 +4,7 @@ import {
   calculateInventoryStockItems,
   calculateLowStockSummary,
 } from './inventoryStock.ts';
-import { initialPurchases } from '../context/initialData.ts';
+import { samplePurchases as initialPurchases } from '../context/initialData.ts';
 import { MortalityRecord } from '../types/index.ts';
 
 describe('inventoryStock utility with Mortality Stock Adjustments', () => {

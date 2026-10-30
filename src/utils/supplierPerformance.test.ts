@@ -4,7 +4,7 @@ import {
   buildRollingMonthWindow,
   calculateSupplierPerformance,
 } from './supplierPerformance.ts';
-import { initialPurchases } from '../context/initialData.ts';
+import { samplePurchases as initialPurchases } from '../context/initialData.ts';
 import { PurchaseRecord } from '../types/index.ts';
 
 test('buildRollingMonthWindow returns 6 chronological YYYY-MM months including year rollover', () => {

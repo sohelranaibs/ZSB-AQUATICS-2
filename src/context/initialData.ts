@@ -81,8 +81,8 @@ export const initialDropdownOptions: DropdownOptions = {
   ],
 };
 
-// Seed trade records across various dates for immediate reporting & date filtering analysis
-export const initialPurchases: PurchaseRecord[] = [
+// Sample trade records for tests and fixture analysis
+export const samplePurchases: PurchaseRecord[] = [
   {
     id: 'pur-seed-001',
     invoiceNumber: 'INV-2026-1001',
@@ -171,7 +171,7 @@ export const initialPurchases: PurchaseRecord[] = [
   },
 ];
 
-export const initialPackings: PackingRecord[] = [
+export const samplePackings: PackingRecord[] = [
   {
     id: 'pkg-seed-001',
     invoiceNumber: 'PKG-2026-1001',
@@ -272,7 +272,7 @@ const buildFutureISODate = (daysAhead: number): string => {
   return `${year}-${month}-${day}`;
 };
 
-export const initialPayments: PaymentRecord[] = [
+export const samplePayments: PaymentRecord[] = [
   {
     id: 'pay-seed-001',
     invoiceNumber: 'PAY-2026-1001',
@@ -360,7 +360,7 @@ export const initialPayments: PaymentRecord[] = [
   },
 ];
 
-export const initialOtherCosts: OtherCostRecord[] = [
+export const sampleOtherCosts: OtherCostRecord[] = [
   {
     id: 'cost-seed-001',
     date: '2026-10-07',
@@ -399,7 +399,7 @@ export const initialOtherCosts: OtherCostRecord[] = [
   },
 ];
 
-export const initialSupplierCredits: SupplierCreditRecord[] = [
+export const sampleSupplierCredits: SupplierCreditRecord[] = [
   {
     id: 'cn-seed-001',
     creditNoteNumber: 'CN-2026-0001',
@@ -465,7 +465,7 @@ export const initialSupplierCredits: SupplierCreditRecord[] = [
   },
 ];
 
-export const initialMortalities: MortalityRecord[] = [
+export const sampleMortalities: MortalityRecord[] = [
   {
     id: 'mort-seed-001',
     species: 'F1',
@@ -486,5 +486,10 @@ export const initialMortalities: MortalityRecord[] = [
   },
 ];
 
-
-
+// Active database records: initialized completely empty (0 records)
+export const initialPurchases: PurchaseRecord[] = [];
+export const initialPackings: PackingRecord[] = [];
+export const initialPayments: PaymentRecord[] = [];
+export const initialOtherCosts: OtherCostRecord[] = [];
+export const initialSupplierCredits: SupplierCreditRecord[] = [];
+export const initialMortalities: MortalityRecord[] = [];

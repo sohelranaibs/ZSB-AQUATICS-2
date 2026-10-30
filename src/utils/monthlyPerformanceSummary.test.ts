@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { calculateMonthlyPerformanceSummary } from './monthlyPerformanceSummary.ts';
-import { initialPurchases, initialPayments } from '../context/initialData.ts';
+import {
+  samplePurchases as initialPurchases,
+  samplePayments as initialPayments,
+} from '../context/initialData.ts';
 
 test('calculateMonthlyPerformanceSummary computes accurate monthly purchases vs payments for seed records', () => {
   const result = calculateMonthlyPerformanceSummary(

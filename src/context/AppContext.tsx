@@ -282,13 +282,13 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const STORAGE_KEYS = {
   PROFILE: 'zsb_company_profile_v1',
   DROPDOWNS: 'zsb_dropdown_options_v1',
-  PURCHASES: 'zsb_purchases_v3',
-  PACKINGS: 'zsb_packings_v3',
-  PACKING_DRAFT: 'zsb_packing_draft_v3',
-  PAYMENTS: 'zsb_payments_v3',
-  OTHER_COSTS: 'zsb_other_costs_v3',
-  SUPPLIER_CREDITS: 'zsb_supplier_credits_v1',
-  MORTALITIES: 'zsb_mortalities_v1',
+  PURCHASES: 'zsb_purchases_v4',
+  PACKINGS: 'zsb_packings_v4',
+  PACKING_DRAFT: 'zsb_packing_draft_v4',
+  PAYMENTS: 'zsb_payments_v4',
+  OTHER_COSTS: 'zsb_other_costs_v4',
+  SUPPLIER_CREDITS: 'zsb_supplier_credits_v2',
+  MORTALITIES: 'zsb_mortalities_v2',
   SUPER_ADMIN_PASSWORD: 'zsb_super_admin_password_v1',
   SNAPSHOTS: 'zsb_database_snapshots_v1',
 };
@@ -358,35 +358,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [purchases, setPurchases] = useState<PurchaseRecord[]>(() => {
     try {
+      localStorage.removeItem('zsb_purchases_v1');
+      localStorage.removeItem('zsb_purchases_v2');
+      localStorage.removeItem('zsb_purchases_v3');
       const saved = localStorage.getItem(STORAGE_KEYS.PURCHASES);
-      if (!saved) return initialPurchases;
-      const parsed: PurchaseRecord[] = JSON.parse(saved);
-      if (!Array.isArray(parsed) || parsed.length === 0) return initialPurchases;
-      const existingIds = new Set(parsed.map((p) => p.id));
-      const missingSeeds = initialPurchases.filter((s) => !existingIds.has(s.id));
-      const merged =
-        missingSeeds.length > 0 && parsed.some((p) => p.id.startsWith('pur-seed-'))
-          ? [...parsed, ...missingSeeds]
-          : parsed;
-      return deduplicateRecords(merged, 'pur');
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'pur') : [];
     } catch {
-      return initialPurchases;
+      return [];
     }
   });
 
   const [packings, setPackings] = useState<PackingRecord[]>(() => {
     try {
+      localStorage.removeItem('zsb_packings_v1');
+      localStorage.removeItem('zsb_packings_v2');
+      localStorage.removeItem('zsb_packings_v3');
+      localStorage.removeItem('zsb_packings_v5');
       const saved = localStorage.getItem(STORAGE_KEYS.PACKINGS);
-      if (!saved) return initialPackings;
-      const parsed: PackingRecord[] = JSON.parse(saved);
-      return Array.isArray(parsed) && parsed.length > 0 ? deduplicateRecords(parsed, 'pkg') : initialPackings;
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'pkg') : [];
     } catch {
-      return initialPackings;
+      return [];
     }
   });
 
   const [packingDraft, setPackingDraft] = useState<PackingFormDraft>(() => {
     try {
+      localStorage.removeItem('zsb_packing_draft_v1');
+      localStorage.removeItem('zsb_packing_draft_v2');
+      localStorage.removeItem('zsb_packing_draft_v3');
       const saved = localStorage.getItem(STORAGE_KEYS.PACKING_DRAFT);
       if (!saved) return createInitialPackingDraft(0);
       const parsed = JSON.parse(saved);
@@ -409,64 +412,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [payments, setPayments] = useState<PaymentRecord[]>(() => {
     try {
+      localStorage.removeItem('zsb_payments_v1');
+      localStorage.removeItem('zsb_payments_v2');
+      localStorage.removeItem('zsb_payments_v3');
       const saved = localStorage.getItem(STORAGE_KEYS.PAYMENTS);
-      if (!saved) return initialPayments;
-      const parsed: PaymentRecord[] = JSON.parse(saved);
-      if (!Array.isArray(parsed) || parsed.length === 0) return initialPayments;
-      const seedById = new Map(initialPayments.map((s) => [s.id, s]));
-      const enriched = parsed.map((pm) => {
-        const seed = seedById.get(pm.id);
-        if (seed && !pm.dueDate && seed.dueDate) {
-          return {
-            ...pm,
-            dueDate: seed.dueDate,
-            isRecurring: seed.isRecurring,
-            recurrenceFrequency: seed.recurrenceFrequency,
-            balance: pm.balance || seed.balance,
-          };
-        }
-        return pm;
-      });
-      return deduplicateRecords(enriched, 'pay');
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'pay') : [];
     } catch {
-      return initialPayments;
+      return [];
     }
   });
 
   const [otherCosts, setOtherCosts] = useState<OtherCostRecord[]>(() => {
     try {
+      localStorage.removeItem('zsb_other_costs_v1');
+      localStorage.removeItem('zsb_other_costs_v2');
+      localStorage.removeItem('zsb_other_costs_v3');
       const saved = localStorage.getItem(STORAGE_KEYS.OTHER_COSTS);
-      if (!saved) return initialOtherCosts;
-      const parsed: OtherCostRecord[] = JSON.parse(saved);
-      return Array.isArray(parsed) && parsed.length > 0 ? deduplicateRecords(parsed, 'cost') : initialOtherCosts;
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'cost') : [];
     } catch {
-      return initialOtherCosts;
+      return [];
     }
   });
 
   const [supplierCredits, setSupplierCredits] = useState<SupplierCreditRecord[]>(() => {
     try {
+      localStorage.removeItem('zsb_supplier_credits_v1');
       const saved = localStorage.getItem(STORAGE_KEYS.SUPPLIER_CREDITS);
-      if (!saved) return initialSupplierCredits;
-      const parsed: SupplierCreditRecord[] = JSON.parse(saved);
-      return Array.isArray(parsed) && parsed.length > 0
-        ? deduplicateRecords(parsed, 'cn')
-        : initialSupplierCredits;
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'cn') : [];
     } catch {
-      return initialSupplierCredits;
+      return [];
     }
   });
 
   const [mortalities, setMortalities] = useState<MortalityRecord[]>(() => {
     try {
+      localStorage.removeItem('zsb_mortalities_v1');
       const saved = localStorage.getItem(STORAGE_KEYS.MORTALITIES);
-      if (!saved) return initialMortalities;
-      const parsed: MortalityRecord[] = JSON.parse(saved);
-      return Array.isArray(parsed) && parsed.length > 0
-        ? deduplicateRecords(parsed, 'mort')
-        : initialMortalities;
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'mort') : [];
     } catch {
-      return initialMortalities;
+      return [];
     }
   });
 
@@ -1160,6 +1152,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setPayments([]);
     setOtherCosts([]);
     setSupplierCredits([]);
+    setMortalities([]);
     setEditingPackingId(null);
     setEditingPurchaseId(null);
     const freshDraft = createInitialPackingDraft(0);
@@ -1170,19 +1163,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify([]));
       localStorage.setItem(STORAGE_KEYS.OTHER_COSTS, JSON.stringify([]));
       localStorage.setItem(STORAGE_KEYS.SUPPLIER_CREDITS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.MORTALITIES, JSON.stringify([]));
       localStorage.setItem(STORAGE_KEYS.PACKING_DRAFT, JSON.stringify(freshDraft));
       const keysToClear = [
         'zsb_purchases_v1',
         'zsb_purchases_v2',
+        'zsb_purchases_v3',
         'zsb_packings_v1',
         'zsb_packings_v2',
+        'zsb_packings_v3',
         'zsb_packings_v5',
         'zsb_packing_draft_v1',
         'zsb_packing_draft_v2',
+        'zsb_packing_draft_v3',
         'zsb_payments_v1',
         'zsb_payments_v2',
+        'zsb_payments_v3',
         'zsb_other_costs_v1',
         'zsb_other_costs_v2',
+        'zsb_other_costs_v3',
+        'zsb_supplier_credits_v1',
+        'zsb_mortalities_v1',
         'zsb_exporter_slip_custom_rows_v1',
         'zsb_exporter_slip_custom_rows_v2',
         'zsb_exporter_slip_custom_rows_v3',

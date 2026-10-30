@@ -4,7 +4,10 @@ import {
   analyzePurchasePaymentReconciliation,
   buildSmartSyncReconciliationPlan,
 } from './smartDataSync.ts';
-import { initialPurchases, initialPayments } from '../context/initialData.ts';
+import {
+  samplePurchases as initialPurchases,
+  samplePayments as initialPayments,
+} from '../context/initialData.ts';
 import { PurchaseRecord, PaymentRecord } from '../types/index.ts';
 
 describe('smartDataSync utility', () => {

@@ -91,6 +91,7 @@ export interface PrintModalData {
     | 'exporter_payment_slip'
     | 'monthly_statement'
     | 'batch_print'
+    | 'batch_payment_slips'
     | 'profit_loss'
     | 'global_view_table'
     | 'mortality_report';

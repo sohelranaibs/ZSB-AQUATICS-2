@@ -6,16 +6,6 @@ import {
   MonthlyPerformancePaymentMode,
 } from '../utils/monthlyPerformanceSummary.ts';
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts';
-import {
   BarChart3,
   ShoppingCart,
   CreditCard,
@@ -292,125 +282,9 @@ export const MonthlyPerformanceSummaryWidget: React.FC = () => {
         </div>
       </div>
 
-      {/* Side-by-Side Comparison Recharts BarChart */}
-      <div className="p-5 sm:p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
-          <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Side-by-Side Monthly Purchases vs. Payments Bar Chart ({currency})
-            </h3>
-            <p className="text-xs text-slate-500">
-              Grouped bars comparing monthly procurement obligation (Sky Blue) against monthly payments disbursed (Emerald Green)
-            </p>
-          </div>
-          <div className="flex items-center gap-4 text-xs font-semibold">
-            <span className="inline-flex items-center gap-1.5 text-slate-700">
-              <span className="w-3 h-3 rounded-xs bg-sky-600 inline-block" />
-              <span>Total Monthly Purchases</span>
-            </span>
-            <span className="inline-flex items-center gap-1.5 text-slate-700">
-              <span className="w-3 h-3 rounded-xs bg-emerald-600 inline-block" />
-              <span>Total Monthly Payments</span>
-            </span>
-          </div>
-        </div>
-
-        <div
-          data-testid="monthly-performance-barchart-container"
-          className="h-72 sm:h-80 w-full"
-        >
-          <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-            <BarChart
-              data={points}
-              margin={{ top: 10, right: 20, left: 10, bottom: 5 }}
-              barGap={8}
-              barCategoryGap="24%"
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-              <XAxis
-                dataKey="shortMonthLabel"
-                tick={{ fill: '#334155', fontSize: 12, fontWeight: 600 }}
-                axisLine={{ stroke: '#cbd5e1' }}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fill: '#475569', fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={(val: number) =>
-                  val >= 1000 ? `${(val / 1000).toFixed(0)}k` : String(val)
-                }
-              />
-              <Tooltip
-                cursor={{ fill: '#f1f5f9' }}
-                content={({ active, payload }) => {
-                  if (!active || !payload || payload.length === 0) return null;
-                  const pt = payload[0]?.payload;
-                  if (!pt) return null;
-                  return (
-                    <div className="bg-slate-900 text-white p-3.5 rounded-xl shadow-xl border border-slate-700 text-xs space-y-2 min-w-[240px]">
-                      <div className="flex items-center justify-between border-b border-slate-700 pb-1.5">
-                        <span className="font-bold text-amber-300">{pt.monthLabel}</span>
-                        <span className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-200">
-                          {pt.paymentRatioPercent}% Settled
-                        </span>
-                      </div>
-                      <div className="space-y-1 font-mono tabular-nums">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sky-300 font-sans">Total Purchases:</span>
-                          <span className="font-bold text-white">
-                            {formatCurrency(pt.totalPurchases, currency)}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-emerald-300 font-sans">Total Payments:</span>
-                          <span className="font-bold text-emerald-300">
-                            {formatCurrency(pt.totalPayments, currency)}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between pt-1 border-t border-slate-800">
-                          <span className="text-slate-400 font-sans">Net Variance:</span>
-                          <span
-                            className={`font-bold ${
-                              pt.netPayableVariance > 0 ? 'text-rose-400' : 'text-teal-300'
-                            }`}
-                          >
-                            {formatCurrency(pt.netPayableVariance, currency)}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="text-[10px] text-slate-400 font-mono pt-0.5">
-                        {pt.purchaseCount} Challan(s) ({pt.purchaseVolumeKg} KG) · {pt.paymentCount} Payment(s)
-                      </div>
-                    </div>
-                  );
-                }}
-              />
-              <Legend
-                wrapperStyle={{ fontSize: '12px', fontWeight: 600, paddingTop: '8px' }}
-              />
-              <Bar
-                dataKey="totalPurchases"
-                name={`Total Monthly Purchases (${currency})`}
-                fill="#0284c7"
-                radius={[6, 6, 0, 0]}
-                maxBarSize={48}
-              />
-              <Bar
-                dataKey="totalPayments"
-                name={`Total Monthly Payments (${currency})`}
-                fill="#059669"
-                radius={[6, 6, 0, 0]}
-                maxBarSize={48}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
       {/* Collapsible Side-by-Side Monthly Comparison Ledger Table */}
       {showComparisonTable && (
-        <div className="border-t border-slate-200 overflow-x-auto">
+        <div className="overflow-x-auto">
           <table
             data-testid="monthly-performance-comparison-table"
             className="w-full text-xs border-collapse"

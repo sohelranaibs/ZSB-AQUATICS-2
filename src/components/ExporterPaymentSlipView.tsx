@@ -1355,12 +1355,16 @@ export const ExporterPaymentSlipView: React.FC = () => {
 
             {/* 6. Bottom Right Signature Block: YOURS FAITHFULLY - 此致 / MD. SOHEL RANA / PARTNER */}
             <div className="bg-white px-8 py-7 flex justify-end items-end">
-              <div className="text-right space-y-1">
+              <div className="text-right space-y-1 flex flex-col items-end">
                 <div className="text-sm sm:text-base font-bold text-black tracking-wide uppercase">
                   YOURS FAITHFULLY - 此致
                 </div>
-                <div className="text-3xl sm:text-4xl font-bold font-serif italic text-slate-900 py-0.5 pr-1 select-none">
-                  Md. Sohel Rana
+                <div className="py-1 flex justify-end">
+                  <img
+                    src="/assets/aistudio/Md._Sohel_Rana_38797da9.jpg"
+                    alt="Md. Sohel Rana Signature"
+                    className="h-14 sm:h-16 w-auto object-contain select-none"
+                  />
                 </div>
                 <div className="text-sm sm:text-base font-black text-black tracking-wider uppercase">
                   {companyProfile.partner || 'MD. SOHEL RANA'}

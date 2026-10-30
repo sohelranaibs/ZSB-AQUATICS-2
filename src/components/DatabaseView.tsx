@@ -28,6 +28,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   Zap,
+  FileDown,
+  Loader2,
 } from 'lucide-react';
 import { findShipmentByDeepLink } from '../utils/shipmentQrCode.ts';
 import { ShipmentQrBadge } from './ShipmentQrBadge.tsx';
@@ -47,6 +49,12 @@ import {
   analyzePurchasePaymentReconciliation,
   buildSmartSyncReconciliationPlan,
 } from '../utils/smartDataSync.ts';
+import { exportElementsToCombinedPdf } from '../utils/pdfGenerator.ts';
+import {
+  formatBatchPaymentSlipsPdfFilename,
+  preparePaymentRecordsForBatchExport,
+} from '../utils/batchPaymentSlipPdf.ts';
+import { PaymentSlipPrintCard } from './PaymentSlipPrintCard.tsx';
 
 interface DatabaseViewProps {
   initialType?: 'purchase' | 'packing' | 'payment';
@@ -87,6 +95,13 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   const [lastSyncLog, setLastSyncLog] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>(() => focusedShipmentInvoice || '');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isExportingBatchSlips, setIsExportingBatchSlips] = useState<boolean>(false);
+
+  // Selected payment records for batch export
+  const selectedPaymentsForBatch = useMemo(
+    () => preparePaymentRecordsForBatchExport(payments, selectedIds),
+    [payments, selectedIds]
+  );
 
   // Date-range filter state
   const [startDate, setStartDate] = useState<string>('');
@@ -195,21 +210,95 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     let records: any[] = [];
     if (activeDbType === 'purchase') {
       records = purchases.filter((p) => selectedIds.includes(p.id));
+      openPrintModal({
+        type: 'batch_print',
+        title: `Batch Print (${records.length} Documents) - PURCHASE DB`,
+        data: {
+          dbType: 'purchase',
+          records,
+        },
+        selectedIds,
+      });
     } else if (activeDbType === 'packing') {
       records = packings.filter((p) => selectedIds.includes(p.id));
+      openPrintModal({
+        type: 'batch_print',
+        title: `Batch Print (${records.length} Documents) - PACKING DB`,
+        data: {
+          dbType: 'packing',
+          records,
+        },
+        selectedIds,
+      });
     } else {
       records = payments.filter((p) => selectedIds.includes(p.id));
+      openPrintModal({
+        type: 'batch_payment_slips',
+        title: `Batch Payment Slips (${records.length} Documents) - Combined PDF`,
+        data: {
+          dbType: 'payment',
+          records,
+          categoryFilter: paymentCategoryFilter,
+        },
+        selectedIds,
+      });
+    }
+  };
+
+  /**
+   * Batch exports multiple selected payment slips as a single combined PDF document.
+   */
+  const handleBatchExportPaymentSlipsPdf = async () => {
+    if (selectedIds.length === 0) {
+      showToast('Please select at least one payment record using the checkboxes to batch export payment slips.');
+      return;
     }
 
-    openPrintModal({
-      type: 'batch_print',
-      title: `Batch Print (${records.length} Documents) - ${activeDbType.toUpperCase()} DB`,
-      data: {
-        dbType: activeDbType,
-        records,
-      },
-      selectedIds,
-    });
+    const targetPayments = preparePaymentRecordsForBatchExport(payments, selectedIds);
+    if (targetPayments.length === 0) {
+      showToast('No matching payment records found for the selected IDs.');
+      return;
+    }
+
+    setIsExportingBatchSlips(true);
+    const filename = formatBatchPaymentSlipsPdfFilename(
+      targetPayments.length,
+      paymentCategoryFilter,
+      startDate || endDate || undefined
+    );
+
+    showToast(`Generating combined PDF for ${targetPayments.length} payment slips...`);
+
+    try {
+      // Allow React DOM to mount and flush the offscreen elements
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      const elementIds = targetPayments.map((_, idx) => `batch-db-slip-${idx}`);
+      const success = await exportElementsToCombinedPdf(elementIds, filename, 800);
+
+      if (success) {
+        showToast(
+          `Batch exported ${targetPayments.length} payment slips as single combined PDF (${filename})`
+        );
+      } else {
+        showToast('Direct batch PDF export encountered an issue. Opening preview modal...');
+        openPrintModal({
+          type: 'batch_payment_slips',
+          title: `Batch Payment Slips (${targetPayments.length} Documents) - Combined PDF`,
+          data: {
+            dbType: 'payment',
+            records: targetPayments,
+            categoryFilter: paymentCategoryFilter,
+          },
+          selectedIds,
+        });
+      }
+    } catch (err) {
+      console.error('Batch payment slips PDF export error:', err);
+      showToast('Error exporting batch payment slips combined PDF.');
+    } finally {
+      setIsExportingBatchSlips(false);
+    }
   };
 
   // Filtered lists reactive to search term, date range, and reconciliation status filter
@@ -921,6 +1010,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
           {/* Batch Print Button */}
           <button
             type="button"
+            data-testid="database-batch-print-btn"
             onClick={handleBatchPrint}
             disabled={selectedIds.length === 0}
             className={`flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-sm transition ${
@@ -932,6 +1022,36 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
             <Printer className="w-4 h-4" />
             <span>BATCH PRINT ({selectedIds.length})</span>
           </button>
+
+          {/* Batch Export Payment Slips (Combined PDF) Button */}
+          {activeDbType === 'payment' && (
+            <button
+              type="button"
+              data-testid="batch-export-payment-slips-pdf-btn"
+              onClick={handleBatchExportPaymentSlipsPdf}
+              disabled={isExportingBatchSlips || selectedIds.length === 0}
+              className={`flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-sm transition ${
+                selectedIds.length > 0
+                  ? 'bg-purple-700 hover:bg-purple-600 active:bg-purple-800 text-white cursor-pointer ring-1 ring-purple-400/50'
+                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+              } disabled:opacity-50`}
+              title="Batch export multiple selected payment slips as a single combined PDF document"
+            >
+              {isExportingBatchSlips ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-purple-200" />
+                  <span>EXPORTING {selectedIds.length} SLIPS...</span>
+                </>
+              ) : (
+                <>
+                  <FileDown className="w-4 h-4 text-amber-300" />
+                  <span>
+                    BATCH EXPORT SLIPS .PDF {selectedIds.length > 0 ? `(${selectedIds.length})` : ''}
+                  </span>
+                </>
+              )}
+            </button>
+          )}
 
           {/* Database Snapshots (JSON Archive & Recovery) Button */}
           <button
@@ -1613,6 +1733,34 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
           </div>
         )}
       </div>
+
+      {/* Offscreen Host for Direct Batch Payment Slips Combined PDF Export */}
+      {activeDbType === 'payment' && selectedPaymentsForBatch.length > 0 && (
+        <div
+          id="batch-payment-slips-offscreen-host"
+          data-testid="batch-payment-slips-offscreen-host"
+          style={{
+            position: 'fixed',
+            left: -9999,
+            top: 0,
+            opacity: 0,
+            pointerEvents: 'none',
+            width: '800px',
+            zIndex: -1,
+          }}
+        >
+          {selectedPaymentsForBatch.map((pm, idx) => (
+            <PaymentSlipPrintCard
+              key={pm.id}
+              id={`batch-db-slip-${idx}`}
+              payment={pm}
+              companyProfile={companyProfile}
+              pageNumber={idx + 1}
+              totalPages={selectedPaymentsForBatch.length}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 };

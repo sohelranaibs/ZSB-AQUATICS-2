@@ -390,18 +390,16 @@ export const GlobalOffscreenPrintHost: React.FC<GlobalOffscreenPrintHostProps> =
               </tfoot>
             </table>
             <div className="bg-white px-6 py-6 flex justify-end">
-              <div className="text-right space-y-0.5">
+              <div className="text-right space-y-0.5 flex flex-col items-end">
                 <div className="text-xs font-bold text-black uppercase">
                   YOURS FAITHFULLY - 此致
                 </div>
-                <div
-                  style={{
-                    fontFamily:
-                      '"Caveat", "Brush Script MT", "Segoe Script", Georgia, cursive',
-                  }}
-                  className="text-3xl font-bold text-slate-900 py-0.5"
-                >
-                  Md. Sohel Rana
+                <div className="py-1 flex justify-end">
+                  <img
+                    src="/assets/aistudio/Md._Sohel_Rana_38797da9.jpg"
+                    alt="Md. Sohel Rana Signature"
+                    className="h-12 w-auto object-contain select-none"
+                  />
                 </div>
                 <div className="text-xs font-black text-black uppercase">
                   {companyProfile.partner || 'MD. SOHEL RANA'}

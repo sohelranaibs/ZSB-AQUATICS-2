@@ -11,6 +11,7 @@ import {
 import {
   exportElementToPdf,
   exportElementToPng,
+  exportElementsToCombinedPdf,
   openPrintableDocumentWindow,
 } from '../utils/pdfGenerator.ts';
 import {
@@ -30,6 +31,9 @@ import {
   GlobalOffscreenPrintHost,
 } from './GlobalViewTablePrintBody.tsx';
 import { formatMortalityReportFilename } from '../utils/mortalityReport.ts';
+import { formatBatchPaymentSlipsPdfFilename } from '../utils/batchPaymentSlipPdf.ts';
+import { PaymentSlipPrintCard } from './PaymentSlipPrintCard.tsx';
+import { PaymentRecord } from '../types/index.ts';
 
 export const PrintPreviewModal: React.FC = () => {
   const {
@@ -85,6 +89,10 @@ export const PrintPreviewModal: React.FC = () => {
     if (type === 'mortality_report') {
       return formatMortalityReportFilename(data?.targetMonth || '', ext);
     }
+    if (type === 'batch_payment_slips') {
+      const recs = data?.records || [];
+      return formatBatchPaymentSlipsPdfFilename(recs.length, data?.categoryFilter || 'all');
+    }
     const docNo = data?.invoiceNumber || (data?.records?.[0]?.invoiceNumber) || type;
     const cleanDoc = String(docNo).replace(/[^a-zA-Z0-9_-]/g, '_');
     return `ZSB_AQUATICS_${cleanDoc}_${new Date().toISOString().slice(0, 10)}.${ext}`;
@@ -94,7 +102,15 @@ export const PrintPreviewModal: React.FC = () => {
     setIsSavingPdf(true);
     const filename = getCleanFilename('pdf');
     try {
-      const success = await exportElementToPdf('printable-document', filename);
+      let success = false;
+      if (type === 'batch_payment_slips') {
+        const recs = data?.records || [];
+        const slipElementIds = recs.map((_: any, idx: number) => `batch-modal-slip-${idx}`);
+        success = await exportElementsToCombinedPdf(slipElementIds, filename, 800);
+      } else {
+        success = await exportElementToPdf('printable-document', filename);
+      }
+
       if (success) {
         showToast(`PDF downloaded: ${filename}`);
       } else {
@@ -227,8 +243,8 @@ export const PrintPreviewModal: React.FC = () => {
             className="w-full max-w-[800px] bg-white shadow-2xl rounded-sm border border-slate-300 p-6 sm:p-8 space-y-6 text-slate-900 print:shadow-none print:border-none print:p-0 print:max-w-none"
             style={{ backgroundColor: '#ffffff', color: '#000000' }}
           >
-            {/* Official Document Header (Hidden for exporter_payment_slip which has its own custom plum/cream header) */}
-            {type !== 'exporter_payment_slip' && (
+            {/* Official Document Header (Hidden for exporter_payment_slip and batch_payment_slips which have their own headers) */}
+            {type !== 'exporter_payment_slip' && type !== 'batch_payment_slips' && (
               <div
                 style={{ borderBottom: '2px solid #0f172a' }}
                 className="pb-4 text-center space-y-1.5"
@@ -669,6 +685,43 @@ export const PrintPreviewModal: React.FC = () => {
             </div>
           )}
 
+          {/* Type 4B: Batch Payment Slips Combined Export */}
+          {type === 'batch_payment_slips' && data?.records && (
+            <div className="space-y-8" data-testid="batch-payment-slips-preview">
+              <div className="p-3 bg-purple-50 rounded border border-purple-200 text-xs flex flex-wrap justify-between items-center gap-2 print:hidden">
+                <div>
+                  <span className="font-bold text-purple-950 uppercase">
+                    Batch Payment Slips Combined Export:
+                  </span>{' '}
+                  <span className="font-mono text-purple-900 font-black">
+                    {data.records.length} Payment Documents
+                  </span>
+                </div>
+                <div className="text-[11px] text-purple-800">
+                  Each selected voucher is exported on an independent page with full ledger &amp; signature blocks.
+                </div>
+              </div>
+
+              {data.records.map((pm: PaymentRecord, idx: number) => (
+                <div key={pm.id || idx} className="space-y-2">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 px-1 print:hidden">
+                    <span className="uppercase tracking-wider">
+                      Slip {idx + 1} of {data.records.length}
+                    </span>
+                    <span className="font-mono text-purple-900 font-bold">{pm.invoiceNumber}</span>
+                  </div>
+                  <PaymentSlipPrintCard
+                    id={`batch-modal-slip-${idx}`}
+                    payment={pm}
+                    companyProfile={companyProfile}
+                    pageNumber={idx + 1}
+                    totalPages={data.records.length}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Type 5: Profit & Loss Statement */}
           {type === 'profit_loss' && data && (
             <div className="space-y-4">
@@ -1044,17 +1097,16 @@ export const PrintPreviewModal: React.FC = () => {
                 </tfoot>
               </table>
               <div className="bg-white px-6 py-6 flex justify-end">
-                <div className="text-right space-y-0.5">
+                <div className="text-right space-y-0.5 flex flex-col items-end">
                   <div className="text-xs sm:text-sm font-bold text-black uppercase">
                     YOURS FAITHFULLY - 此致
                   </div>
-                  <div
-                    style={{
-                      fontFamily: '"Caveat", "Brush Script MT", "Segoe Script", Georgia, cursive',
-                    }}
-                    className="text-3xl font-bold text-slate-900 py-0.5"
-                  >
-                    Md. Sohel Rana
+                  <div className="py-1 flex justify-end">
+                    <img
+                      src="/assets/aistudio/Md._Sohel_Rana_38797da9.jpg"
+                      alt="Md. Sohel Rana Signature"
+                      className="h-12 sm:h-14 w-auto object-contain select-none"
+                    />
                   </div>
                   <div className="text-xs sm:text-sm font-black text-black uppercase">
                     {companyProfile.partner || 'MD. SOHEL RANA'}
@@ -1066,7 +1118,7 @@ export const PrintPreviewModal: React.FC = () => {
           )}
 
           {/* User Requirement: Signatures Like Managing Partner and Partner with Signature */}
-          {type !== 'exporter_payment_slip' && (
+          {type !== 'exporter_payment_slip' && type !== 'batch_payment_slips' && (
             <div className="pt-12 grid grid-cols-2 gap-8 text-center text-xs">
               {/* Managing Partner Signature */}
               <div className="flex flex-col items-center">

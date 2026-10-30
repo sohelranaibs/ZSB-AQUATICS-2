@@ -37,14 +37,17 @@ function toLegacyRgbColor(cssValue: string, ctx: CanvasRenderingContext2D | null
  * live <input>/<select> controls in the cloned DOM with crisp static text nodes.
  */
 async function renderElementToHighResCanvas(
-  elementId: string,
+  elementOrId: string | HTMLElement,
   targetWidth: number = 800
 ): Promise<HTMLCanvasElement | null> {
-  const element = document.getElementById(elementId);
+  const element =
+    typeof elementOrId === 'string' ? document.getElementById(elementOrId) : elementOrId;
   if (!element) {
-    console.error(`Element #${elementId} not found for export.`);
+    console.error(`Element not found for export:`, elementOrId);
     return null;
   }
+
+  const elementId = typeof elementOrId === 'string' ? elementOrId : element.id;
 
   return html2canvas(element, {
     scale: 2,
@@ -70,7 +73,7 @@ async function renderElementToHighResCanvas(
         }
       });
 
-      const clonedTarget = clonedDoc.getElementById(elementId);
+      const clonedTarget = elementId ? clonedDoc.getElementById(elementId) : null;
       if (clonedTarget) {
         // 2. Remove interactive controls marked to be ignored in exports
         clonedTarget.querySelectorAll('[data-export-ignore="true"]').forEach((node) => {
@@ -288,6 +291,109 @@ export async function exportElementToPdf(
     return true;
   } catch (error) {
     console.error('PDF generation error:', error);
+    return false;
+  }
+}
+
+/**
+ * Exports multiple DOM elements (e.g., individual payment slips) as a single combined multi-page PDF document.
+ * Each element is rendered onto its own discrete A4 page with standard 10mm margins.
+ */
+export async function exportElementsToCombinedPdf(
+  targets: (string | HTMLElement)[],
+  filename: string,
+  targetWidth: number = 800
+): Promise<boolean> {
+  if (!targets || targets.length === 0) return false;
+
+  try {
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+    });
+
+    const pageWidth = 210;
+    const pageHeight = 297;
+    const margin = 10;
+    const printableWidth = pageWidth - margin * 2; // 190mm
+    const printableHeight = pageHeight - margin * 2; // 277mm
+
+    let pagesAdded = 0;
+
+    for (let i = 0; i < targets.length; i++) {
+      const target = targets[i];
+      const canvas = await renderElementToHighResCanvas(target, targetWidth);
+      if (!canvas) continue;
+
+      if (pagesAdded > 0) {
+        pdf.addPage();
+      }
+      pagesAdded++;
+
+      const totalImgHeightMm = (canvas.height * printableWidth) / canvas.width;
+
+      if (totalImgHeightMm <= printableHeight) {
+        const imgData = canvas.toDataURL('image/png', 1.0);
+        pdf.addImage(imgData, 'PNG', margin, margin, printableWidth, totalImgHeightMm);
+      } else {
+        const slicePixelHeight = (printableHeight * canvas.width) / printableWidth;
+        let currentSourceY = 0;
+        let subPageIndex = 0;
+
+        while (currentSourceY < canvas.height) {
+          if (subPageIndex > 0) {
+            pdf.addPage();
+          }
+
+          const currentSlicePixels = Math.min(slicePixelHeight, canvas.height - currentSourceY);
+          const sliceCanvas = document.createElement('canvas');
+          sliceCanvas.width = canvas.width;
+          sliceCanvas.height = currentSlicePixels;
+          const sliceCtx = sliceCanvas.getContext('2d');
+
+          if (sliceCtx) {
+            sliceCtx.fillStyle = '#ffffff';
+            sliceCtx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+            sliceCtx.drawImage(
+              canvas,
+              0,
+              currentSourceY,
+              canvas.width,
+              currentSlicePixels,
+              0,
+              0,
+              canvas.width,
+              currentSlicePixels
+            );
+
+            const sliceData = sliceCanvas.toDataURL('image/png', 1.0);
+            const currentSliceHeightMm = (currentSlicePixels * printableWidth) / canvas.width;
+            pdf.addImage(sliceData, 'PNG', margin, margin, printableWidth, currentSliceHeightMm);
+          }
+
+          currentSourceY += currentSlicePixels;
+          subPageIndex++;
+        }
+      }
+    }
+
+    if (pagesAdded === 0) return false;
+
+    const baseName = filename.replace(/\.(pdf|png)$/i, '');
+    const cleanFilename = `${baseName}.pdf`;
+    if (typeof window !== 'undefined') {
+      (window as unknown as Record<string, unknown>).__LAST_EXPORTED_PDF__ = {
+        filename: cleanFilename,
+        type: 'batch_payment_slips_combined',
+        pageCount: targets.length,
+        timestamp: new Date().toISOString(),
+      };
+    }
+    pdf.save(cleanFilename);
+    return true;
+  } catch (error) {
+    console.error('Combined PDF generation error:', error);
     return false;
   }
 }

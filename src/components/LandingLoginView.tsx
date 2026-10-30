@@ -10,7 +10,6 @@ import {
   ArrowRight,
   ShieldCheck,
   Plane,
-  Scale,
   FileSpreadsheet,
   KeyRound,
   AlertCircle,
@@ -20,10 +19,13 @@ import {
 } from 'lucide-react';
 
 export const LandingLoginView: React.FC = () => {
-  const { login, companyProfile } = useApp();
+  const { login, companyProfile, superAdminPassword } = useApp();
+
+  const activePassword = superAdminPassword || DEFAULT_SUPER_ADMIN_PASSWORD;
+  const isCustomUpdated = Boolean(superAdminPassword) && superAdminPassword !== DEFAULT_SUPER_ADMIN_PASSWORD;
 
   const [username, setUsername] = useState<string>('zsbaquatics@gmail.com');
-  const [password, setPassword] = useState<string>(DEFAULT_SUPER_ADMIN_PASSWORD);
+  const [password, setPassword] = useState<string>(activePassword);
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -42,10 +44,10 @@ export const LandingLoginView: React.FC = () => {
     setErrorMessage(null);
     if (accountType === 'sohel') {
       setUsername('zsbaquatics@gmail.com');
-      setPassword(DEFAULT_SUPER_ADMIN_PASSWORD);
+      setPassword(activePassword);
     } else {
       setUsername('mizanur');
-      setPassword(DEFAULT_SUPER_ADMIN_PASSWORD);
+      setPassword(activePassword);
     }
   };
 
@@ -166,39 +168,48 @@ export const LandingLoginView: React.FC = () => {
                 </div>
               </div>
 
-              <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white leading-tight text-balance">
-                Exporter of Live Crabs, Eel Fish &amp; Chilled Seafood
-              </h1>
+              <div className="flex flex-col md:flex-row items-start md:items-center gap-5">
+                <div className="flex-1 space-y-3">
+                  <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white leading-tight text-balance">
+                    Exporter of Live Crabs, Eel Fish &amp; Chilled Seafood
+                  </h1>
 
-              <p className="text-base sm:text-lg font-semibold text-sky-200">
-                জীবন্ত কাঁকড়া, জীবন্ত কুঁচে ও বরফায়িত মাছ রপ্তানিকারক
-              </p>
+                  <p className="text-base sm:text-lg font-semibold text-sky-200">
+                    জীবন্ত কাঁকড়া, জীবন্ত কুঁচে ও বরফায়িত মাছ রপ্তানিকারক
+                  </p>
 
-              <p className="text-sm text-slate-300 leading-relaxed max-w-2xl">
-                ZSB AQUATICS operates an integrated seafood procurement, holding depot, air-freight packing manifest, and multi-currency (BDT / RMB) trade settlement ledger connecting local fish suppliers in Bangladesh with international buyers across Guangzhou, Shanghai, Kunming, and Xiamen.
-              </p>
+                  <p className="text-sm text-slate-300 leading-relaxed max-w-xl">
+                    ZSB AQUATICS operates an integrated seafood procurement, holding depot, air-freight packing manifest, and multi-currency (BDT / RMB) trade settlement ledger connecting local fish suppliers in Bangladesh with international buyers across Guangzhou, Shanghai, Kunming, and Xiamen.
+                  </p>
+                </div>
+
+                {/* Live Crab Showcase Image */}
+                <div className="shrink-0 self-center md:self-start">
+                  <div className="relative rounded-2xl overflow-hidden border-2 border-amber-400/60 shadow-xl shadow-sky-950/60 bg-slate-900 group">
+                    <img
+                      src="/assets/aistudio/videoframe_2696_57a1efb1.png"
+                      alt="ZSB Live Crab Specimen - Exporter of Live Crabs, Eel Fish & Chilled Seafood"
+                      referrerPolicy="no-referrer"
+                      className="w-32 sm:w-40 md:w-44 h-48 sm:h-56 md:h-60 object-cover rounded-2xl transform group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent pointer-events-none" />
+                    <div className="absolute bottom-2 inset-x-2 text-center">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-amber-300 bg-slate-900/90 px-2 py-0.5 rounded-full border border-amber-400/40 shadow-xs inline-block">
+                        Live Crab Export
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
               {/* Numbered Core Capabilities */}
               <div
                 id="trade-modules"
-                className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-sky-900/70"
+                className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3 border-t border-sky-900/70"
               >
                 <div className="bg-[#06182c]/90 p-4 rounded-xl border border-sky-900/60">
                   <div className="flex items-center justify-between text-xs text-amber-400 font-mono font-bold">
-                    <span>01. Procurement &amp; Grading</span>
-                    <Scale className="w-4 h-4 text-sky-400 shrink-0" />
-                  </div>
-                  <div className="text-sm font-bold text-white mt-1">
-                    Local Supplier Challans &amp; Stock
-                  </div>
-                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                    Grade-wise live eel and crab procurement (FF1, F1, F2, KS/3, XXL), real-time inventory threshold monitoring, and mortality stock adjustments.
-                  </p>
-                </div>
-
-                <div className="bg-[#06182c]/90 p-4 rounded-xl border border-sky-900/60">
-                  <div className="flex items-center justify-between text-xs text-amber-400 font-mono font-bold">
-                    <span>02. Air-Freight Manifests</span>
+                    <span>01. Air-Freight Manifests</span>
                     <Plane className="w-4 h-4 text-teal-400 shrink-0" />
                   </div>
                   <div className="text-sm font-bold text-white mt-1">
@@ -211,7 +222,7 @@ export const LandingLoginView: React.FC = () => {
 
                 <div className="bg-[#06182c]/90 p-4 rounded-xl border border-sky-900/60">
                   <div className="flex items-center justify-between text-xs text-amber-400 font-mono font-bold">
-                    <span>03. Dual-Currency Settlement</span>
+                    <span>02. Dual-Currency Settlement</span>
                     <FileSpreadsheet className="w-4 h-4 text-amber-400 shrink-0" />
                   </div>
                   <div className="text-sm font-bold text-white mt-1">
@@ -224,7 +235,7 @@ export const LandingLoginView: React.FC = () => {
 
                 <div className="bg-[#06182c]/90 p-4 rounded-xl border border-sky-900/60">
                   <div className="flex items-center justify-between text-xs text-amber-400 font-mono font-bold">
-                    <span>04. Security &amp; Audit Trail</span>
+                    <span>03. Security &amp; Audit Trail</span>
                     <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
                   </div>
                   <div className="text-sm font-bold text-white mt-1">
@@ -383,7 +394,7 @@ export const LandingLoginView: React.FC = () => {
                       <span>Verified Partner Accounts</span>
                     </span>
                     <span className="font-mono text-slate-600">
-                      Pass: {DEFAULT_SUPER_ADMIN_PASSWORD}
+                      Pass: {isCustomUpdated ? '(Updated Active Password)' : DEFAULT_SUPER_ADMIN_PASSWORD}
                     </span>
                   </div>
 

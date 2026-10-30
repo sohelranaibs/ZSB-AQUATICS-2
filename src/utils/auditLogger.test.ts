@@ -31,6 +31,28 @@ test('authenticateUser validates admin credentials and rejects empty or wrong in
   assert.equal(validLogin.user?.email, 'zsbaquatics@gmail.com');
 });
 
+test('authenticateUser invalidates all previous default passwords after password update', () => {
+  const customPass = 'NewSecretPassword2026!';
+
+  // Test 1: All previous default passwords must fail when password has been updated
+  const prevDefault1 = authenticateUser('zsbaquatics@gmail.com', 'admin123', customPass);
+  assert.equal(prevDefault1.valid, false);
+  assert.ok(prevDefault1.error?.includes('updated'));
+
+  const prevDefault2 = authenticateUser('zsbaquatics@gmail.com', 'ZSB@Admin2026', customPass);
+  assert.equal(prevDefault2.valid, false);
+  assert.ok(prevDefault2.error?.includes('updated'));
+
+  const prevDefault3 = authenticateUser('admin', 'zsb2026', customPass);
+  assert.equal(prevDefault3.valid, false);
+  assert.ok(prevDefault3.error?.includes('updated'));
+
+  // Test 2: ONLY the updated custom password passes!
+  const updatedLogin = authenticateUser('zsbaquatics@gmail.com', customPass, customPass);
+  assert.equal(updatedLogin.valid, true);
+  assert.equal(updatedLogin.user?.displayName, 'Md. Sohel Rana');
+});
+
 test('createAuditLogEntry, filterAuditLogs, and calculateAuditLogStats track entries, edits, and deletions', () => {
   const logs = [
     createAuditLogEntry({

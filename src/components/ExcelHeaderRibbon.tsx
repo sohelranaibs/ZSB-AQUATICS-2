@@ -93,23 +93,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
     e.target.value = '';
   };
 
-  const tabs: { id: ActiveTab; label: string; number: string; icon: string }[] = [
-    { id: 'dashboard', number: '1', label: 'Dashboard', icon: '📊' },
-    { id: 'purchase_form', number: '2', label: 'Purchase Challan / Bill', icon: '🛒' },
-    { id: 'packing_form', number: '3', label: 'Packing List Form', icon: '📦' },
-    { id: 'air_way_bill', number: 'FRB', label: 'FLIGHT RETURN BILL', icon: '✈️' },
-    { id: 'payment_form', number: '4', label: 'Supplier Payment Form', icon: '💳' },
-    { id: 'exporter_payment_form', number: '5', label: 'Exporter Payment Form', icon: '💱' },
-    { id: 'exporter_payment_slip', number: '6', label: 'Exporter Payment Slip', icon: '🧾' },
-    { id: 'profit_loss', number: '7', label: 'Loss & Profit Analysis', icon: '📈' },
-    { id: 'purchase_db', number: '8', label: 'Purchase DB', icon: '🗄️' },
-    { id: 'packing_db', number: '9', label: 'Packing DB', icon: '📋' },
-    { id: 'payment_db', number: '10', label: 'Payment DB', icon: '📑' },
-    { id: 'search_reports', number: '11', label: 'Search & Reports', icon: '🔍' },
-    { id: 'settings', number: '12', label: 'Settings & Config', icon: '⚙️' },
-    { id: 'audit_logs', number: '13', label: 'Audit Logs', icon: '🛡️' },
-    { id: 'administration', number: 'ADM', label: 'Administration', icon: '👑' },
-  ];
+
 
   const getDatasetForActiveTab = () => {
     if (
@@ -423,32 +407,6 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
         </div>
       </div>
 
-      {/* Workbook Sheet Tabs */}
-      <div className="bg-slate-900 px-3 pt-1.5 border-b border-slate-800 flex items-center space-x-1 overflow-x-auto scrollbar-thin">
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-t-md text-xs font-medium transition-all whitespace-nowrap border-t-2 cursor-pointer ${
-                isActive
-                  ? 'bg-slate-50 text-slate-900 border-amber-500 shadow-sm font-bold'
-                  : 'bg-slate-800/60 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border-transparent'
-              }`}
-            >
-              <span
-                className={`w-4 h-4 rounded text-[10px] font-mono flex items-center justify-center font-bold ${
-                  isActive ? 'bg-slate-900 text-amber-400' : 'bg-slate-700/80 text-slate-300'
-                }`}
-              >
-                {tab.number}
-              </span>
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
     </header>
   );
 };

@@ -97,17 +97,30 @@ export function authenticateUser(
       };
     }
 
-    const validPasswords = new Set([
-      matchedDynamic.password || 'admin123',
-      DEFAULT_SUPER_ADMIN_PASSWORD,
-      'ZSB@Admin2026',
-      ...(customSuperAdminPassword ? [customSuperAdminPassword.trim()] : []),
-    ]);
+    const isCustomPasswordActive =
+      Boolean(customSuperAdminPassword) &&
+      customSuperAdminPassword!.trim().length > 0 &&
+      customSuperAdminPassword!.trim() !== DEFAULT_SUPER_ADMIN_PASSWORD;
+
+    const validPasswords = new Set<string>();
+    if (isCustomPasswordActive) {
+      // Password updated: Previous default passwords will NOT work!
+      validPasswords.add(customSuperAdminPassword!.trim());
+      if (matchedDynamic.password && matchedDynamic.password.trim().length > 0) {
+        validPasswords.add(matchedDynamic.password.trim());
+      }
+    } else {
+      validPasswords.add(matchedDynamic.password || 'admin123');
+      validPasswords.add(DEFAULT_SUPER_ADMIN_PASSWORD);
+      validPasswords.add('ZSB@Admin2026');
+    }
 
     if (!validPasswords.has(cleanPass)) {
       return {
         valid: false,
-        error: 'Invalid password. Please verify your administrator credentials.',
+        error: isCustomPasswordActive
+          ? 'Invalid password. The administrator password was updated — all previous passwords no longer work.'
+          : 'Invalid password. Please verify your administrator credentials.',
       };
     }
 
@@ -135,15 +148,26 @@ export function authenticateUser(
     };
   }
 
-  const validPasswords = new Set([
-    ...matchedAccount.defaultPasswords,
-    ...(customSuperAdminPassword ? [customSuperAdminPassword.trim()] : []),
-  ]);
+  const isCustomPasswordActive =
+    Boolean(customSuperAdminPassword) &&
+    customSuperAdminPassword!.trim().length > 0 &&
+    customSuperAdminPassword!.trim() !== DEFAULT_SUPER_ADMIN_PASSWORD;
+
+  const validPasswords = new Set<string>();
+  if (isCustomPasswordActive) {
+    // Password updated: ONLY the new updated password works! ALL previous default passwords will NOT work!
+    validPasswords.add(customSuperAdminPassword!.trim());
+  } else {
+    matchedAccount.defaultPasswords.forEach((p) => validPasswords.add(p));
+    if (customSuperAdminPassword) validPasswords.add(customSuperAdminPassword.trim());
+  }
 
   if (!validPasswords.has(cleanPass)) {
     return {
       valid: false,
-      error: 'Invalid password. Please verify your administrator credentials.',
+      error: isCustomPasswordActive
+        ? 'Invalid password. The administrator password was updated — all previous passwords no longer work.'
+        : 'Invalid password. Please verify your administrator credentials.',
     };
   }
 

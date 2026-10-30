@@ -1,18 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import {
-  calculatePurchaseRowTotal,
-  calculatePurchaseTotals,
   formatCurrency,
   formatDate,
   formatPurchaseExportFilename,
   generateInvoiceNumber,
   getSupplierLedgerStats,
 } from '../utils/calculations.ts';
+import {
+  GST_RATE_PRESETS,
+  calculatePurchaseRowEngine,
+  recalculatePurchaseRows,
+  runPurchaseAutoCalculationEngine,
+} from '../utils/autoCalculationEngine.ts';
 import { PurchaseItemRow } from '../types/index.ts';
 import { validatePurchaseForm } from '../utils/validation.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
 import { exportElementToPng } from '../utils/pdfGenerator.ts';
+import {
+  ZSB_VIEW_SHORTCUT_EVENT,
+  ViewShortcutEventDetail,
+} from '../utils/keyboardShortcuts.ts';
 import {
   FileText,
   Search,
@@ -55,11 +63,16 @@ export const PurchaseFormView: React.FC = () => {
   const [remarks, setRemarks] = useState<string>('');
   const [lastSavedRecord, setLastSavedRecord] = useState<{ id: string; invoiceNumber: string } | null>(null);
 
-  const createEmptyRow = (id: string): PurchaseItemRow => ({
+  const [defaultGstRate, setDefaultGstRate] = useState<number>(0);
+
+  const createEmptyRow = (id: string, gstRate: number = defaultGstRate): PurchaseItemRow => ({
     id,
     item: '',
     quantity: 0,
     rate: 0,
+    subtotal: 0,
+    gstRate,
+    gstAmount: 0,
     totalAmount: 0,
     previousAmount: 0,
     paidAmount: 0,
@@ -67,11 +80,11 @@ export const PurchaseFormView: React.FC = () => {
   });
 
   const [rows, setRows] = useState<PurchaseItemRow[]>([
-    createEmptyRow('1'),
-    createEmptyRow('2'),
-    createEmptyRow('3'),
-    createEmptyRow('4'),
-    createEmptyRow('5'),
+    createEmptyRow('1', 0),
+    createEmptyRow('2', 0),
+    createEmptyRow('3', 0),
+    createEmptyRow('4', 0),
+    createEmptyRow('5', 0),
   ]);
 
   // Overall invoice-level settlement summary inputs (empty / 0 by default)
@@ -110,10 +123,10 @@ export const PurchaseFormView: React.FC = () => {
     }
   };
 
-  // Handle line-item row changes (Item, Quantity, Rate)
+  // Handle line-item row changes (Item, Quantity, Rate, GST %) in real-time
   const handleRowChange = (
     id: string,
-    field: 'item' | 'quantity' | 'rate',
+    field: 'item' | 'quantity' | 'rate' | 'gstRate',
     value: string | number
   ) => {
     setRows((prev) =>
@@ -121,22 +134,40 @@ export const PurchaseFormView: React.FC = () => {
         if (row.id !== id) return row;
         const updated = { ...row, [field]: value };
 
-        if (field === 'quantity' || field === 'rate') {
-          const qty = field === 'quantity' ? Number(value) : row.quantity;
-          const rt = field === 'rate' ? Number(value) : row.rate;
-          const total = calculatePurchaseRowTotal(qty, rt);
-          updated.totalAmount = total;
-          updated.balance = total;
+        if (field === 'quantity' || field === 'rate' || field === 'gstRate') {
+          const qty = field === 'quantity' ? value : row.quantity;
+          const rt = field === 'rate' ? value : row.rate;
+          const gst =
+            field === 'gstRate'
+              ? value
+              : row.gstRate !== undefined
+              ? row.gstRate
+              : defaultGstRate;
+          const calc = calculatePurchaseRowEngine(qty, rt, gst);
+          updated.quantity = calc.quantity;
+          updated.rate = calc.rate;
+          updated.subtotal = calc.subtotal;
+          updated.gstRate = calc.gstRate;
+          updated.gstAmount = calc.gstAmount;
+          updated.totalAmount = calc.totalAmount;
+          updated.balance = calc.totalAmount;
         }
         return updated;
       })
     );
   };
 
+  // Apply voucher-level GST rate preset across all rows in real-time
+  const handleDefaultGstRateChange = (newGstRate: number) => {
+    const safeRate = Math.max(0, Math.min(100, Number(newGstRate) || 0));
+    setDefaultGstRate(safeRate);
+    setRows((prev) => recalculatePurchaseRows(prev, safeRate, true));
+  };
+
   // Clear or remove a single row
   const handleClearRow = (id: string) => {
     setRows((prev) =>
-      prev.map((row) => (row.id === id ? createEmptyRow(row.id) : row))
+      prev.map((row) => (row.id === id ? createEmptyRow(row.id, defaultGstRate) : row))
     );
   };
 
@@ -144,7 +175,7 @@ export const PurchaseFormView: React.FC = () => {
   const handleAddRow = () => {
     setRows((prev) => [
       ...prev,
-      createEmptyRow(generateRecordId('prow')),
+      createEmptyRow(generateRecordId('prow'), defaultGstRate),
     ]);
   };
 
@@ -152,18 +183,24 @@ export const PurchaseFormView: React.FC = () => {
   const handleLoadForEdit = (idToEdit: string) => {
     const found = purchases.find((p) => p.id === idToEdit);
     if (!found) return;
+    const recordGst = found.gstRate ?? 0;
     setEditingPurchaseId(found.id);
     setInvoiceNumber(found.invoiceNumber);
     setDate(found.date);
     setDescription(found.description);
     setContactNumber(found.contactNumber || '');
     setRemarks(found.remarks || '');
+    setDefaultGstRate(recordGst);
     setOverallPreviousAmount(found.previousAmount || 0);
     setOverallPaidAmount(found.paidAmount || 0);
 
-    const loadedRows = found.items.map((it) => ({ ...it }));
+    const loadedRows = recalculatePurchaseRows(
+      found.items.map((it) => ({ ...it })),
+      recordGst,
+      false
+    );
     while (loadedRows.length < 5) {
-      loadedRows.push(createEmptyRow(generateRecordId('prow')));
+      loadedRows.push(createEmptyRow(generateRecordId('prow'), recordGst));
     }
     setRows(loadedRows);
     setValidationAttempted(false);
@@ -191,16 +228,17 @@ export const PurchaseFormView: React.FC = () => {
     setDescription('');
     setContactNumber('');
     setRemarks('');
+    setDefaultGstRate(0);
     setOverallPreviousAmount(0);
     setOverallPaidAmount(0);
     setSearchDescription('');
     setDate(new Date().toISOString().slice(0, 10));
     setRows([
-      createEmptyRow('1'),
-      createEmptyRow('2'),
-      createEmptyRow('3'),
-      createEmptyRow('4'),
-      createEmptyRow('5'),
+      createEmptyRow('1', 0),
+      createEmptyRow('2', 0),
+      createEmptyRow('3', 0),
+      createEmptyRow('4', 0),
+      createEmptyRow('5', 0),
     ]);
     setValidationAttempted(false);
   };
@@ -212,15 +250,21 @@ export const PurchaseFormView: React.FC = () => {
     showToast('Form cleared and all fillable cells reset.');
   };
 
-  const { totalQty, totalAmount, balance } = calculatePurchaseTotals(
+  const {
+    rows: computedRows,
+    activeRowCount: populatedRowCount,
+    totalQty,
+    subtotalAmount,
+    totalGstAmount,
+    effectiveGstRate,
+    totalAmount,
+    balance,
+  } = runPurchaseAutoCalculationEngine(
     rows,
     overallPreviousAmount,
-    overallPaidAmount
+    overallPaidAmount,
+    defaultGstRate
   );
-
-  const populatedRowCount = rows.filter(
-    (r) => r.item.trim() !== '' || r.quantity !== 0 || r.rate !== 0
-  ).length;
 
   const handleSavePDF = () => {
     const check = validatePurchaseForm({
@@ -229,7 +273,7 @@ export const PurchaseFormView: React.FC = () => {
       supplierName: description,
       overallPreviousAmount,
       overallPaidAmount,
-      rows,
+      rows: computedRows,
     });
 
     if (!check.isValid) {
@@ -251,6 +295,9 @@ export const PurchaseFormView: React.FC = () => {
         contactNumber,
         items: validItems,
         totalQty,
+        subtotalAmount,
+        gstRate: effectiveGstRate,
+        totalGstAmount,
         totalAmount,
         previousAmount: overallPreviousAmount,
         paidAmount: overallPaidAmount,
@@ -285,6 +332,9 @@ export const PurchaseFormView: React.FC = () => {
         contactNumber,
         items: validItems,
         totalQty,
+        subtotalAmount,
+        gstRate: effectiveGstRate,
+        totalGstAmount,
         totalAmount,
         previousAmount: overallPreviousAmount,
         paidAmount: overallPaidAmount,
@@ -311,10 +361,10 @@ export const PurchaseFormView: React.FC = () => {
   };
 
   const exportableRows = (() => {
-    const validItems = rows.filter(
+    const validItems = computedRows.filter(
       (r) => r.item.trim() !== '' || r.quantity > 0 || r.rate > 0
     );
-    return validItems.length > 0 ? validItems : rows.slice(0, 5);
+    return validItems.length > 0 ? validItems : computedRows.slice(0, 5);
   })();
 
   const handlePrintSelected = () => {
@@ -328,6 +378,9 @@ export const PurchaseFormView: React.FC = () => {
         contactNumber,
         items: exportableRows,
         totalQty,
+        subtotalAmount,
+        gstRate: effectiveGstRate,
+        totalGstAmount,
         totalAmount,
         previousAmount: overallPreviousAmount,
         paidAmount: overallPaidAmount,
@@ -345,6 +398,32 @@ export const PurchaseFormView: React.FC = () => {
       handlePrintSelected();
     }
   };
+
+  useEffect(() => {
+    const onShortcut = (event: Event) => {
+      const customEvent = event as CustomEvent<ViewShortcutEventDetail>;
+      const action = customEvent.detail?.action;
+      if (!action) return;
+
+      if (action === 'SAVE_ACTIVE_VIEW') {
+        customEvent.detail.handled = true;
+        handleSavePDF();
+      } else if (action === 'PRINT_ACTIVE_VIEW') {
+        customEvent.detail.handled = true;
+        handlePrintSelected();
+      } else if (action === 'ADD_FORM_ROW') {
+        customEvent.detail.handled = true;
+        handleAddRow();
+        showToast('Added new line item row to Purchase Challan (Alt+N).');
+      } else if (action === 'RESET_FORM') {
+        customEvent.detail.handled = true;
+        handleClear();
+      }
+    };
+
+    window.addEventListener(ZSB_VIEW_SHORTCUT_EVENT, onShortcut);
+    return () => window.removeEventListener(ZSB_VIEW_SHORTCUT_EVENT, onShortcut);
+  });
 
   const handleDirectSavePng = async () => {
     setIsExportingPng(true);
@@ -393,13 +472,13 @@ export const PurchaseFormView: React.FC = () => {
     .slice(0, 3);
 
   return (
-    <div className="p-3 sm:p-5 max-w-7xl mx-auto space-y-5">
+    <div className="p-3 sm:p-5 max-w-[1440px] mx-auto space-y-5">
       {/* Top Banner */}
       <div className="bg-[#1e2548] text-white px-5 py-3.5 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-amber-500">
         <div className="flex flex-wrap items-center gap-3">
           <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
-              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+              src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
               alt={companyProfile.companyName}
               className="w-full h-full object-contain rounded-full"
             />
@@ -427,8 +506,16 @@ export const PurchaseFormView: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-4 text-xs text-slate-300 font-mono tabular-nums">
+        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300 font-mono tabular-nums">
           <span>Active Rows: {populatedRowCount}/{rows.length}</span>
+          <span aria-hidden="true">·</span>
+          <span>
+            Subtotal: {formatCurrency(subtotalAmount, companyProfile.currency)}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span>
+            GST ({effectiveGstRate}%): {formatCurrency(totalGstAmount, companyProfile.currency)}
+          </span>
           <span aria-hidden="true">·</span>
           <span className="text-amber-300 font-bold">
             Bill Total: {formatCurrency(totalAmount, companyProfile.currency)}
@@ -438,17 +525,17 @@ export const PurchaseFormView: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Grid: Redesigned Purchase Voucher Sheet (Left 8 Cols) + Controls & Ledger Context (Right 4 Cols) */}
+      {/* Main Grid: Redesigned Purchase Voucher Sheet (Left 9 Cols) + Controls & Ledger Context (Right 3 Cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* Left: Purchase Data Entry Voucher (8 Cols) */}
-        <div className="lg:col-span-8 space-y-4">
+        {/* Left: Purchase Data Entry Voucher (9 Cols) */}
+        <div className="lg:col-span-9 space-y-4">
           <div className="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden">
             {/* Sheet Title Header */}
             <div className="bg-[#7c2d4d] text-white py-3 px-5 flex flex-wrap items-center justify-between gap-3 border-b border-pink-950">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-amber-300 bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
                   <img
-                    src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+                    src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
                     alt={companyProfile.companyName}
                     className="w-full h-full object-contain rounded-full"
                   />
@@ -760,7 +847,57 @@ export const PurchaseFormView: React.FC = () => {
               </div>
             )}
 
-            {/* Redesigned Line-Item Table (Without Previous Amount and Paid Columns) */}
+            {/* Real-Time Auto-Calculation & GST Engine Toolbar */}
+            <div
+              data-testid="purchase-auto-calc-toolbar"
+              className="px-4 py-2.5 bg-amber-50/70 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-bold uppercase tracking-wider text-[#7c2d4d]">
+                  Auto-Calculation Engine:
+                </span>
+                <span className="text-slate-600 font-mono text-[11px]">
+                  Subtotal = Qty × Rate · GST = Subtotal × GST% · Total = Subtotal + GST
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-bold text-slate-700 uppercase mr-1">
+                  Default GST Rate:
+                </span>
+                {GST_RATE_PRESETS.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => handleDefaultGstRateChange(preset)}
+                    data-testid={`purchase-gst-preset-${preset}`}
+                    className={`px-2 py-1 rounded text-[11px] font-mono font-bold transition cursor-pointer ${
+                      defaultGstRate === preset
+                        ? 'bg-[#7c2d4d] text-white shadow-2xs'
+                        : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
+                    }`}
+                  >
+                    {preset}%
+                  </button>
+                ))}
+                <div className="flex items-center gap-1 ml-1">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.5"
+                    aria-label="Purchase Default GST Percentage"
+                    value={defaultGstRate}
+                    onChange={(e) =>
+                      handleDefaultGstRateChange(parseFloat(e.target.value) || 0)
+                    }
+                    className="w-16 bg-white border border-slate-300 rounded px-2 py-1 text-right font-mono tabular-nums font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="font-mono font-bold text-slate-600">%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Redesigned Line-Item Table with Real-Time Subtotal, GST %, GST Amt & Line Total */}
             <div className="overflow-x-auto">
               <table
                 className="w-full border-collapse text-xs"
@@ -768,38 +905,47 @@ export const PurchaseFormView: React.FC = () => {
               >
                 <thead>
                   <tr className="bg-[#7c2d4d] text-white uppercase text-[11px] font-bold tracking-wider border-b border-pink-950">
-                    <th className="px-3 py-2.5 border-r border-pink-900/60 w-14 text-center whitespace-nowrap">
+                    <th className="px-2 py-2.5 border-r border-pink-900/60 w-10 text-center whitespace-nowrap">
                       SL #
                     </th>
-                    <th className="px-3 py-2.5 border-r border-pink-900/60 text-left min-w-[210px]">
-                      <div className="flex items-center justify-between gap-2">
+                    <th className="px-2.5 py-2.5 border-r border-pink-900/60 text-left min-w-[140px]">
+                      <div className="flex items-center justify-between gap-1.5">
                         <span className="whitespace-nowrap">ITEM / GRADE</span>
                         <button
                           type="button"
                           onClick={() => setIsAddingNewItem(true)}
-                          className="text-[10px] bg-pink-950/90 hover:bg-pink-900 px-2 py-0.5 rounded text-amber-300 font-bold cursor-pointer whitespace-nowrap shrink-0"
+                          className="text-[10px] bg-pink-950/90 hover:bg-pink-900 px-1.5 py-0.5 rounded text-amber-300 font-bold cursor-pointer whitespace-nowrap shrink-0"
                           title="Add new purchase item grade"
                         >
-                          + New Grade
+                          + Grade
                         </button>
                       </div>
                     </th>
-                    <th className="px-3 py-2.5 border-r border-pink-900/60 w-36 text-right whitespace-nowrap">
-                      QUANTITY (KG)
+                    <th className="px-2 py-2.5 border-r border-pink-900/60 w-24 text-right whitespace-nowrap">
+                      QTY (KG)
                     </th>
-                    <th className="px-3 py-2.5 border-r border-pink-900/60 w-36 text-right whitespace-nowrap">
+                    <th className="px-2 py-2.5 border-r border-pink-900/60 w-24 text-right whitespace-nowrap">
                       RATE ({companyProfile.currency})
                     </th>
-                    <th className="px-3 py-2.5 border-r border-pink-900/60 w-44 text-right whitespace-nowrap">
-                      TOTAL AMOUNT ({companyProfile.currency})
+                    <th className="px-2 py-2.5 border-r border-pink-900/60 w-28 text-right whitespace-nowrap">
+                      SUBTOTAL ({companyProfile.currency})
                     </th>
-                    <th className="px-2 py-2.5 w-16 text-center whitespace-nowrap">
-                      CLEAR
+                    <th className="px-1.5 py-2.5 border-r border-pink-900/60 w-16 text-right whitespace-nowrap">
+                      GST (%)
+                    </th>
+                    <th className="px-2 py-2.5 border-r border-pink-900/60 w-24 text-right whitespace-nowrap">
+                      GST AMT ({companyProfile.currency})
+                    </th>
+                    <th className="px-2.5 py-2.5 border-r border-pink-900/60 w-28 text-right whitespace-nowrap">
+                      TOTAL ({companyProfile.currency})
+                    </th>
+                    <th className="px-1.5 py-2.5 w-11 text-center whitespace-nowrap">
+                      CLR
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {rows.map((row, idx) => {
+                  {computedRows.map((row, idx) => {
                     const isFilled =
                       row.item.trim() !== '' || row.quantity !== 0 || row.rate !== 0;
                     const rowErr = validationAttempted
@@ -809,6 +955,9 @@ export const PurchaseFormView: React.FC = () => {
                       validationAttempted &&
                       Boolean(validation.fieldErrors.rows) &&
                       idx === 0;
+                    const rowSubtotal = row.subtotal ?? 0;
+                    const rowGstRate = row.gstRate ?? defaultGstRate;
+                    const rowGstAmount = row.gstAmount ?? 0;
                     return (
                       <tr
                         key={row.id}
@@ -836,7 +985,7 @@ export const PurchaseFormView: React.FC = () => {
                             onChange={(e) =>
                               handleRowChange(row.id, 'item', e.target.value)
                             }
-                            className={`w-full border rounded-md px-2.5 py-1.5 font-semibold focus:bg-white focus:outline-none focus:ring-2 ${
+                            className={`w-full border rounded-md px-2 py-1.5 font-semibold focus:bg-white focus:outline-none focus:ring-2 ${
                               rowErr?.item || highlightFirstEmptyRow
                                 ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 text-rose-900 focus:ring-rose-500'
                                 : row.item
@@ -869,7 +1018,7 @@ export const PurchaseFormView: React.FC = () => {
                                 parseFloat(e.target.value) || 0
                               )
                             }
-                            className={`w-full bg-white border rounded-md px-2.5 py-1.5 text-right font-mono tabular-nums font-semibold text-slate-900 focus:outline-none focus:ring-2 ${
+                            className={`w-full bg-white border rounded-md px-2 py-1.5 text-right font-mono tabular-nums font-semibold text-slate-900 focus:outline-none focus:ring-2 ${
                               rowErr?.quantity || highlightFirstEmptyRow
                                 ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
                                 : 'border-slate-200 focus:ring-blue-500'
@@ -894,7 +1043,7 @@ export const PurchaseFormView: React.FC = () => {
                                 parseFloat(e.target.value) || 0
                               )
                             }
-                            className={`w-full bg-white border rounded-md px-2.5 py-1.5 text-right font-mono tabular-nums font-semibold text-slate-900 focus:outline-none focus:ring-2 ${
+                            className={`w-full bg-white border rounded-md px-2 py-1.5 text-right font-mono tabular-nums font-semibold text-slate-900 focus:outline-none focus:ring-2 ${
                               rowErr?.rate || highlightFirstEmptyRow
                                 ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
                                 : 'border-slate-200 focus:ring-blue-500'
@@ -903,8 +1052,58 @@ export const PurchaseFormView: React.FC = () => {
                           />
                         </td>
 
-                        {/* Row Total Amount (Auto calculated: Quantity * Rate) */}
-                        <td className="px-3 py-1.5 border-r border-slate-200 bg-amber-50/40 text-right font-mono tabular-nums font-bold text-slate-900 text-xs">
+                        {/* Row Subtotal (Auto calculated: Quantity * Rate) */}
+                        <td
+                          data-testid={`purchase-row-${idx + 1}-subtotal`}
+                          className="px-2.5 py-1.5 border-r border-slate-200 bg-slate-50/70 text-right font-mono tabular-nums font-semibold text-slate-800 text-xs"
+                        >
+                          {rowSubtotal > 0
+                            ? rowSubtotal.toLocaleString('en-US', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })
+                            : '0.00'}
+                        </td>
+
+                        {/* Row GST % Input */}
+                        <td className="p-1.5 border-r border-slate-200">
+                          <input
+                            aria-label={`Row ${idx + 1} GST Rate`}
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.5"
+                            value={rowGstRate}
+                            onChange={(e) =>
+                              handleRowChange(
+                                row.id,
+                                'gstRate',
+                                parseFloat(e.target.value) || 0
+                              )
+                            }
+                            className="w-full bg-white border border-slate-200 rounded-md px-1.5 py-1.5 text-right font-mono tabular-nums font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="0"
+                          />
+                        </td>
+
+                        {/* Row GST Amount (Auto calculated: Subtotal * GST%) */}
+                        <td
+                          data-testid={`purchase-row-${idx + 1}-gst`}
+                          className="px-2.5 py-1.5 border-r border-slate-200 bg-slate-50/70 text-right font-mono tabular-nums font-semibold text-teal-800 text-xs"
+                        >
+                          {rowGstAmount > 0
+                            ? rowGstAmount.toLocaleString('en-US', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })
+                            : '0.00'}
+                        </td>
+
+                        {/* Row Total Amount (Auto calculated: Subtotal + GST Amount) */}
+                        <td
+                          data-testid={`purchase-row-${idx + 1}-total`}
+                          className="px-3 py-1.5 border-r border-slate-200 bg-amber-50/40 text-right font-mono tabular-nums font-bold text-slate-900 text-xs"
+                        >
                           {row.totalAmount > 0
                             ? row.totalAmount.toLocaleString('en-US', {
                                 minimumFractionDigits: 2,
@@ -935,7 +1134,7 @@ export const PurchaseFormView: React.FC = () => {
                   })}
                 </tbody>
 
-                {/* Clean 6-Column Aligned Subtotal Footer */}
+                {/* Clean 9-Column Aligned Subtotal, GST & Total Footer */}
                 <tfoot>
                   <tr className="bg-[#7c2d4d] text-white font-bold border-t-2 border-pink-950">
                     <td colSpan={2} className="px-3 py-2.5">
@@ -949,17 +1148,44 @@ export const PurchaseFormView: React.FC = () => {
                           <span>Add Item Row</span>
                         </button>
                         <span className="text-[11px] uppercase tracking-wider text-pink-100">
-                          TOTAL QUANTITY:
+                          TOTAL QTY:
                         </span>
                       </div>
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono tabular-nums text-amber-300 text-sm font-black border-l border-pink-900/60 whitespace-nowrap">
+                    <td
+                      data-testid="purchase-footer-qty"
+                      className="px-2.5 py-2.5 text-right font-mono tabular-nums text-amber-300 text-sm font-black border-l border-pink-900/60 whitespace-nowrap"
+                    >
                       {totalQty}
                     </td>
-                    <td className="px-3 py-2.5 text-right uppercase tracking-wider text-[11px] text-pink-100 border-l border-pink-900/60 whitespace-nowrap">
-                      BILL SUBTOTAL:
+                    <td className="px-2.5 py-2.5 text-right uppercase tracking-wider text-[10px] text-pink-100 border-l border-pink-900/60 whitespace-nowrap">
+                      SUBTOTAL / GST / TOTAL:
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono tabular-nums text-amber-300 text-sm font-black border-l border-pink-900/60 whitespace-nowrap">
+                    <td
+                      data-testid="purchase-footer-subtotal"
+                      className="px-2.5 py-2.5 text-right font-mono tabular-nums text-pink-100 text-xs font-bold border-l border-pink-900/60 whitespace-nowrap"
+                    >
+                      {subtotalAmount.toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </td>
+                    <td className="px-2 py-2.5 text-right font-mono tabular-nums text-pink-200 text-[11px] border-l border-pink-900/60 whitespace-nowrap">
+                      {effectiveGstRate}%
+                    </td>
+                    <td
+                      data-testid="purchase-footer-gst"
+                      className="px-2.5 py-2.5 text-right font-mono tabular-nums text-emerald-300 text-xs font-bold border-l border-pink-900/60 whitespace-nowrap"
+                    >
+                      {totalGstAmount.toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </td>
+                    <td
+                      data-testid="purchase-footer-total"
+                      className="px-3 py-2.5 text-right font-mono tabular-nums text-amber-300 text-sm font-black border-l border-pink-900/60 whitespace-nowrap"
+                    >
                       {totalAmount.toLocaleString('en-US', {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
@@ -1033,9 +1259,12 @@ export const PurchaseFormView: React.FC = () => {
                     Calculation &amp; Ledger Settlement Rules
                   </div>
                   <div className="text-slate-600 font-mono text-[11px] space-y-0.5 tabular-nums">
-                    <div>1. Row Total Amount = Quantity × Unit Rate</div>
+                    <div>1. Row Subtotal = Quantity × Unit Rate · Row GST = Subtotal × GST%</div>
                     <div>
-                      2. Net Closing Balance = Bill Total ({totalAmount.toFixed(2)}) + Previous (
+                      2. Bill Total ({totalAmount.toFixed(2)}) = Subtotal ({subtotalAmount.toFixed(2)}) + GST ({totalGstAmount.toFixed(2)})
+                    </div>
+                    <div>
+                      3. Net Closing Balance = Bill Total ({totalAmount.toFixed(2)}) + Previous (
                       {overallPreviousAmount.toFixed(2)}) − Paid ({overallPaidAmount.toFixed(2)})
                     </div>
                   </div>
@@ -1056,13 +1285,49 @@ export const PurchaseFormView: React.FC = () => {
                   </span>
                 </div>
 
-                <div className="space-y-2.5 text-xs">
+                <div className="space-y-2 text-xs">
+                  {/* Taxable Subtotal */}
+                  <div className="flex items-center justify-between py-0.5 border-b border-amber-200/50">
+                    <span className="font-semibold text-slate-600 uppercase">
+                      TAXABLE SUBTOTAL ({companyProfile.currency}):
+                    </span>
+                    <span
+                      data-testid="purchase-summary-subtotal"
+                      className="font-mono tabular-nums font-bold text-slate-800"
+                    >
+                      {subtotalAmount.toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </span>
+                  </div>
+
+                  {/* Total GST Breakdown */}
+                  <div className="flex items-center justify-between py-0.5 border-b border-amber-200/50">
+                    <span className="font-semibold text-teal-800 uppercase">
+                      TOTAL GST ({effectiveGstRate}%):
+                    </span>
+                    <span
+                      data-testid="purchase-summary-gst"
+                      className="font-mono tabular-nums font-bold text-teal-800"
+                    >
+                      +{' '}
+                      {totalGstAmount.toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </span>
+                  </div>
+
                   {/* Current Bill Total */}
-                  <div className="flex items-center justify-between py-1 border-b border-amber-200/60">
-                    <span className="font-bold text-slate-700 uppercase">
+                  <div className="flex items-center justify-between py-1 border-b border-amber-200/80">
+                    <span className="font-bold text-slate-800 uppercase">
                       CURRENT BILL TOTAL ({companyProfile.currency}):
                     </span>
-                    <span className="font-mono tabular-nums font-black text-sm text-slate-900">
+                    <span
+                      data-testid="purchase-summary-total"
+                      className="font-mono tabular-nums font-black text-sm text-slate-900"
+                    >
                       {totalAmount.toLocaleString('en-US', {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
@@ -1187,8 +1452,8 @@ export const PurchaseFormView: React.FC = () => {
           </div>
         </div>
 
-        {/* Right: ACTION BUTTONS, SEARCH, RECENT BILLS & SYSTEM FLOW (4 Cols) */}
-        <div className="lg:col-span-4 space-y-4">
+        {/* Right: ACTION BUTTONS, SEARCH, RECENT BILLS & SYSTEM FLOW (3 Cols) */}
+        <div className="lg:col-span-3 space-y-4">
           {/* Action Buttons Container */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-2.5">
             <div className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
@@ -1222,10 +1487,14 @@ export const PurchaseFormView: React.FC = () => {
             <button
               type="button"
               onClick={handlePrintOrSaveAction}
+              title="Save Purchase Challan or open Print / PDF Preview (Shortcuts: Ctrl+S to Save, Ctrl+P to Print)"
               className="w-full bg-[#0891b2] hover:bg-[#0e7490] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer whitespace-nowrap"
             >
               <Printer className="w-4 h-4 shrink-0" />
               <span>PRINT / SAVE PDF &amp; .PNG</span>
+              <span className="text-[10px] font-mono bg-cyan-950/60 px-1.5 py-0.5 rounded text-amber-300">
+                Ctrl+S / Ctrl+P
+              </span>
             </button>
 
             {/* MONTHLY STATEMENT (PDF) Button */}
@@ -1252,10 +1521,14 @@ export const PurchaseFormView: React.FC = () => {
             <button
               type="button"
               onClick={handleClear}
+              title="Clear form fields (Shortcut: Alt+R)"
               className="w-full bg-[#dc2626] hover:bg-[#b91c1c] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer whitespace-nowrap"
             >
               <Trash2 className="w-4 h-4 shrink-0" />
               <span>CLEAR</span>
+              <span className="text-[10px] font-mono bg-red-950/60 px-1.5 py-0.5 rounded text-amber-200">
+                Alt+R
+              </span>
             </button>
 
             {/* Quick Edit Existing Invoices Dropdown */}
@@ -1521,7 +1794,7 @@ export const PurchaseFormView: React.FC = () => {
                 }}
               >
                 <img
-                  src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+                  src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
                   alt={companyProfile.companyName}
                   style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '50%' }}
                 />

@@ -266,7 +266,7 @@ export const DashboardView: React.FC = () => {
           <div className="flex items-start sm:items-center gap-3.5">
             <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white p-0.5 border-2 border-amber-400 shadow-md flex items-center justify-center overflow-hidden shrink-0">
               <img
-                src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+                src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
                 alt={companyProfile.companyName}
                 className="w-full h-full object-contain rounded-full"
               />
@@ -1710,6 +1710,27 @@ export const DashboardView: React.FC = () => {
                     className="text-amber-700 hover:text-amber-900 font-semibold inline-flex items-center gap-0.5 mt-0.5 cursor-pointer"
                   >
                     <span>Open Audit Search</span>
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+              <div className="px-5 py-3 flex items-center justify-between gap-4 hover:bg-slate-50 transition">
+                <div>
+                  <div className="font-semibold text-slate-800">
+                    Sheet 13 · System Audit Logs
+                  </div>
+                  <div className="text-slate-500 mt-0.5">
+                    Tracks administrator entries, edits, deletions &amp; security events
+                  </div>
+                </div>
+                <div className="text-right">
+                  <button
+                    type="button"
+                    data-testid="dashboard-open-audit-logs-btn"
+                    onClick={() => setActiveTab('audit_logs')}
+                    className="text-slate-900 hover:text-amber-700 font-semibold inline-flex items-center gap-0.5 cursor-pointer"
+                  >
+                    <span>Open Audit Logs</span>
                     <ArrowUpRight className="w-3.5 h-3.5" />
                   </button>
                 </div>

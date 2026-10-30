@@ -25,6 +25,10 @@ import { ExporterPaymentSlipRow, ExporterStatus } from '../types/index.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
 import { exportElementToPng } from '../utils/pdfGenerator.ts';
 import {
+  ZSB_VIEW_SHORTCUT_EVENT,
+  ViewShortcutEventDetail,
+} from '../utils/keyboardShortcuts.ts';
+import {
   Printer,
   Filter,
   RotateCcw,
@@ -280,10 +284,9 @@ export const ExporterPaymentSlipView: React.FC = () => {
   );
 
   const statusOptions = useMemo(() => {
-    const merged = Array.from(
-      new Set([...EXPORTER_STATUS_OPTIONS, ...dropdownOptions.paymentStatuses])
-    );
-    return merged;
+    return dropdownOptions.paymentStatuses.length > 0
+      ? dropdownOptions.paymentStatuses
+      : ['PAID', 'UNPAID'];
   }, [dropdownOptions.paymentStatuses]);
 
   const handleUpdateHistoryRow = (
@@ -523,6 +526,36 @@ export const ExporterPaymentSlipView: React.FC = () => {
     });
   };
 
+  useEffect(() => {
+    const onShortcut = (event: Event) => {
+      const customEvent = event as CustomEvent<ViewShortcutEventDetail>;
+      const action = customEvent.detail?.action;
+      if (!action) return;
+
+      if (action === 'SAVE_ACTIVE_VIEW') {
+        customEvent.detail.handled = true;
+        if (populatedCustomRows.length > 0) {
+          handleSaveCustomRowToDb(populatedCustomRows[0]);
+        } else {
+          showToast('Exporter Payment Slip synced — opening Print / Save PDF preview (Ctrl+S).');
+          handlePrintSlip();
+        }
+      } else if (action === 'PRINT_ACTIVE_VIEW') {
+        customEvent.detail.handled = true;
+        handlePrintSlip();
+      } else if (action === 'ADD_FORM_ROW') {
+        customEvent.detail.handled = true;
+        handleAddRow();
+      } else if (action === 'RESET_FORM') {
+        customEvent.detail.handled = true;
+        handleResetFilters();
+      }
+    };
+
+    window.addEventListener(ZSB_VIEW_SHORTCUT_EVENT, onShortcut);
+    return () => window.removeEventListener(ZSB_VIEW_SHORTCUT_EVENT, onShortcut);
+  });
+
   const handleSavePngSlip = async () => {
     setIsExportingPng(true);
     const filename = formatExporterSlipExportFilename(selectedMark, selectedDate, 'png');
@@ -561,7 +594,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
         <div className="flex items-center space-x-3">
           <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
-              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+              src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
               alt={companyProfile.companyName}
               className="w-full h-full object-contain rounded-full"
             />
@@ -822,7 +855,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
               className="flex items-center space-x-1 text-[11px] font-black uppercase text-slate-700 mb-1.5"
             >
               <CheckCircle2 className="w-3.5 h-3.5 text-slate-600" />
-              <span>Status (Report, No Report &amp; Paid)</span>
+              <span>Status (PAID &amp; UNPAID)</span>
             </label>
             <select
               id="exporter-slip-status-select"
@@ -831,7 +864,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
               onChange={(e) => setSelectedStatus(e.target.value)}
               className="w-full px-3 py-2 text-xs sm:text-sm font-semibold border border-slate-300 rounded-lg bg-slate-50 text-slate-800 focus:bg-white focus:border-[#98486f] focus:outline-none transition"
             >
-              <option value="ALL">-- All Statuses (Report, No Report, Paid) --</option>
+              <option value="ALL">-- All Statuses (PAID, UNPAID) --</option>
               {statusOptions.map((st) => (
                 <option key={st} value={st}>
                   {st}
@@ -860,11 +893,8 @@ export const ExporterPaymentSlipView: React.FC = () => {
               <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 font-bold border border-emerald-200">
                 PAID: {historyTotals.paidCount}
               </span>
-              <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-800 font-bold border border-blue-200">
-                REPORT: {historyTotals.reportCount}
-              </span>
               <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-800 font-bold border border-rose-200">
-                NO REPORT: {historyTotals.noReportCount}
+                UNPAID: {historyTotals.reportCount + historyTotals.noReportCount}
               </span>
             </div>
           </div>
@@ -896,7 +926,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
                     BALANCE (RMB)
                   </th>
                   <th className="py-2 px-2.5 text-center w-44">
-                    STATUS (REPORT / NO REPORT / PAID)
+                    STATUS (PAID / UNPAID)
                   </th>
                 </tr>
               </thead>
@@ -983,15 +1013,13 @@ export const ExporterPaymentSlipView: React.FC = () => {
                       <td className="py-1 px-2 text-center">
                         <select
                           aria-label={`History Row ${idx + 1} Status`}
-                          value={row.status}
+                          value={row.status === 'PAID' ? 'PAID' : 'UNPAID'}
                           onChange={(e) =>
                             handleUpdateHistoryRow(row, 'status', e.target.value)
                           }
                           className={`w-full text-center text-xs font-black uppercase rounded px-2 py-1 border cursor-pointer focus:outline-none ${
                             row.status === 'PAID'
                               ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                              : row.status === 'REPORT'
-                              ? 'bg-blue-100 text-blue-900 border-blue-300'
                               : 'bg-rose-100 text-rose-900 border-rose-300'
                           }`}
                         >
@@ -1030,8 +1058,8 @@ export const ExporterPaymentSlipView: React.FC = () => {
                     {formatRMB(historyTotals.totalBalance)}
                   </td>
                   <td className="py-2 px-2.5 text-center font-mono text-[11px] text-slate-200 border-l border-slate-700">
-                    {historyTotals.paidCount} PAID · {historyTotals.reportCount} REPORT ·{' '}
-                    {historyTotals.noReportCount} NO REPORT
+                    {historyTotals.paidCount} PAID ·{' '}
+                    {historyTotals.reportCount + historyTotals.noReportCount} UNPAID
                   </td>
                 </tr>
               </tfoot>
@@ -1048,7 +1076,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
             <div className="bg-[#98486f] text-white py-3 px-6 flex items-center justify-center gap-3.5 border-b-2 border-black">
               <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-300 bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
                 <img
-                  src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+                  src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
                   alt={companyProfile.companyName}
                   className="w-full h-full object-contain rounded-full"
                 />
@@ -1217,17 +1245,15 @@ export const ExporterPaymentSlipView: React.FC = () => {
                         <div className="flex items-center justify-between gap-1">
                           <select
                             aria-label={`Exporter Status Row ${idx + 1}`}
-                            value={row.status}
+                            value={row.status === 'PAID' ? 'PAID' : 'UNPAID'}
                             onChange={(e) => handleUpdateRow(row, 'status', e.target.value)}
                             className={`flex-1 text-center text-xs font-black uppercase rounded px-1.5 py-1 border border-transparent hover:border-black/30 focus:outline-none cursor-pointer ${
                               row.status === 'PAID'
                                 ? 'text-emerald-900 bg-emerald-500/15'
-                                : row.status === 'REPORT'
-                                ? 'text-blue-900 bg-blue-500/15'
                                 : 'text-rose-900 bg-rose-500/15'
                             }`}
                           >
-                            {dropdownOptions.paymentStatuses.map((st) => (
+                            {statusOptions.map((st) => (
                               <option key={st} value={st} className="bg-white text-black">
                                 {st}
                               </option>

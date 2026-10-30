@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import {
   calculatePaymentRow,
@@ -19,6 +19,10 @@ import {
 import { PaymentItemRow, ExporterStatus } from '../types/index.ts';
 import { validateExporterPaymentForm } from '../utils/validation.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
+import {
+  ZSB_VIEW_SHORTCUT_EVENT,
+  ViewShortcutEventDetail,
+} from '../utils/keyboardShortcuts.ts';
 import {
   Save,
   FileText,
@@ -69,7 +73,7 @@ export const ExporterPaymentFormView: React.FC = () => {
   const [contactNumber, setContactNumber] = useState<string>('');
 
   // Exporter Specific Fields
-  const [exporterStatus, setExporterStatus] = useState<ExporterStatus>('REPORT');
+  const [exporterStatus, setExporterStatus] = useState<ExporterStatus>('UNPAID');
   const [returnRMB, setReturnRMB] = useState<number>(0);
   const [exportGoodsRef, setExportGoodsRef] = useState<string>('');
   const [remarks, setRemarks] = useState<string>('');
@@ -81,7 +85,7 @@ export const ExporterPaymentFormView: React.FC = () => {
     debitAmount: 0,
     creditAmount: 0,
     balance: 0,
-    status: 'REPORT',
+    status: 'UNPAID',
   });
 
   // Optional custom rows added on top of automatic Exporter DB record history
@@ -96,9 +100,9 @@ export const ExporterPaymentFormView: React.FC = () => {
   const [validationAttempted, setValidationAttempted] = useState<boolean>(false);
 
   const statusOptions = useMemo(() => {
-    return Array.from(
-      new Set([...EXPORTER_STATUS_OPTIONS, ...dropdownOptions.paymentStatuses])
-    );
+    return dropdownOptions.paymentStatuses.length > 0
+      ? dropdownOptions.paymentStatuses
+      : ['PAID', 'UNPAID'];
   }, [dropdownOptions.paymentStatuses]);
 
   // Available Shipping Marks & Packing Dates for Automatic Exporter Database Lookup
@@ -342,7 +346,7 @@ export const ExporterPaymentFormView: React.FC = () => {
     setSelectedPackingDate('ALL');
     setSelectedStatusFilter('ALL');
     setContactNumber('');
-    setExporterStatus('REPORT');
+    setExporterStatus('UNPAID');
     setReturnRMB(0);
     setExportGoodsRef('');
     setRemarks('');
@@ -481,6 +485,32 @@ export const ExporterPaymentFormView: React.FC = () => {
     });
   };
 
+  useEffect(() => {
+    const onShortcut = (event: Event) => {
+      const customEvent = event as CustomEvent<ViewShortcutEventDetail>;
+      const action = customEvent.detail?.action;
+      if (!action) return;
+
+      if (action === 'SAVE_ACTIVE_VIEW') {
+        customEvent.detail.handled = true;
+        handleSavePDF();
+      } else if (action === 'PRINT_ACTIVE_VIEW') {
+        customEvent.detail.handled = true;
+        handlePrintSelected();
+      } else if (action === 'ADD_FORM_ROW') {
+        customEvent.detail.handled = true;
+        handleAddRow();
+        showToast('Added new line item row to Exporter Payment Form (Alt+N).');
+      } else if (action === 'RESET_FORM') {
+        customEvent.detail.handled = true;
+        handleClear();
+      }
+    };
+
+    window.addEventListener(ZSB_VIEW_SHORTCUT_EVENT, onShortcut);
+    return () => window.removeEventListener(ZSB_VIEW_SHORTCUT_EVENT, onShortcut);
+  });
+
   const handleMonthlyStatement = () => {
     const targetMark = shippingMark === 'ALL' ? '' : shippingMark.toLowerCase();
     const matched = targetMark
@@ -524,7 +554,7 @@ export const ExporterPaymentFormView: React.FC = () => {
         <div className="flex flex-wrap items-center gap-3">
           <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
-              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+              src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
               alt={companyProfile.companyName}
               className="w-full h-full object-contain rounded-full"
             />
@@ -575,7 +605,7 @@ export const ExporterPaymentFormView: React.FC = () => {
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="font-mono bg-teal-50 text-teal-900 border border-teal-200 px-2.5 py-0.5 rounded font-bold">
-              Showing {rows.length} Record{rows.length === 1 ? '' : 's'} ({historyTotals.paidCount} PAID · {historyTotals.reportCount} REPORT · {historyTotals.noReportCount} NO REPORT)
+              Showing {rows.length} Record{rows.length === 1 ? '' : 's'} ({historyTotals.paidCount} PAID · {historyTotals.reportCount + historyTotals.noReportCount} UNPAID)
             </span>
             <button
               type="button"
@@ -654,7 +684,7 @@ export const ExporterPaymentFormView: React.FC = () => {
             </select>
           </div>
 
-          {/* 3. Filter by Status (Report, No Report, Paid) */}
+          {/* 3. Filter by Status (PAID, UNPAID) */}
           <div>
             <label
               htmlFor="exporter-lookup-status-filter"
@@ -662,7 +692,7 @@ export const ExporterPaymentFormView: React.FC = () => {
             >
               <span className="flex items-center gap-1">
                 <CheckCircle className="w-3.5 h-3.5 text-[#126b62]" />
-                <span>Status Filter (Report / No Report / Paid)</span>
+                <span>Status Filter (PAID / UNPAID)</span>
               </span>
             </label>
             <select
@@ -671,7 +701,7 @@ export const ExporterPaymentFormView: React.FC = () => {
               onChange={(e) => setSelectedStatusFilter(e.target.value)}
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-900 focus:bg-white focus:border-teal-700 focus:outline-none"
             >
-              <option value="ALL">-- All Statuses (Report, No Report, Paid) --</option>
+              <option value="ALL">-- All Statuses (PAID, UNPAID) --</option>
               {statusOptions.map((st) => (
                 <option key={st} value={st}>
                   {st}
@@ -692,7 +722,7 @@ export const ExporterPaymentFormView: React.FC = () => {
               <div className="flex items-center justify-center gap-2.5">
                 <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-amber-300 bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
                   <img
-                    src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+                    src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
                     alt={companyProfile.companyName}
                     className="w-full h-full object-contain rounded-full"
                   />
@@ -952,7 +982,7 @@ export const ExporterPaymentFormView: React.FC = () => {
                       BALANCE (RMB)
                     </th>
                     <th className="px-2.5 py-2.5 border-r border-teal-800/60 w-36">
-                      STATUS (REPORT / NO REPORT / PAID)
+                      STATUS (PAID / UNPAID)
                     </th>
                     <th className="px-2 py-2.5 w-10">CLR</th>
                   </tr>
@@ -966,7 +996,7 @@ export const ExporterPaymentFormView: React.FC = () => {
                       validationAttempted &&
                       Boolean(validation.fieldErrors.rows) &&
                       idx === 0;
-                    const rowStatus = row.status || exporterStatus || 'REPORT';
+                    const rowStatus = row.status === 'PAID' ? 'PAID' : 'UNPAID';
                     return (
                       <tr
                         key={row.id}
@@ -1073,7 +1103,7 @@ export const ExporterPaymentFormView: React.FC = () => {
                           {row.balance.toFixed(2)}
                         </td>
 
-                        {/* Status Column (Report, No Report, Paid) */}
+                        {/* Status Column (PAID, UNPAID) */}
                         <td className="p-1 border-r border-slate-200 text-center">
                           <select
                             aria-label={`Exporter payment row ${idx + 1} status`}
@@ -1084,8 +1114,6 @@ export const ExporterPaymentFormView: React.FC = () => {
                             className={`w-full text-center text-[11px] font-black uppercase rounded px-1.5 py-1.5 border cursor-pointer focus:outline-none ${
                               rowStatus === 'PAID'
                                 ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                                : rowStatus === 'REPORT'
-                                ? 'bg-blue-100 text-blue-900 border-blue-300'
                                 : 'bg-rose-100 text-rose-900 border-rose-300'
                             }`}
                           >
@@ -1237,10 +1265,14 @@ export const ExporterPaymentFormView: React.FC = () => {
             <button
               type="button"
               onClick={handleSavePDF}
+              title="Save Exporter Payment Voucher (Shortcut: Ctrl+S)"
               className="w-full bg-[#129c54] hover:bg-[#0e8346] text-white py-2.5 px-4 rounded-lg font-bold text-sm shadow flex items-center justify-center space-x-2 transition transform active:scale-95 cursor-pointer"
             >
               <Save className="w-5 h-5" />
               <span>SAVE (PDF)</span>
+              <span className="text-[10px] font-mono bg-emerald-950/60 px-1.5 py-0.5 rounded text-amber-200">
+                Ctrl+S
+              </span>
             </button>
 
             {/* OPEN EXPORTER PAYMENT SLIP (付款单) Button - Plum/Gold */}
@@ -1277,20 +1309,28 @@ export const ExporterPaymentFormView: React.FC = () => {
             <button
               type="button"
               onClick={handleClear}
+              title="Reset form fields (Shortcut: Alt+R)"
               className="w-full bg-[#dc2626] hover:bg-[#b91c1c] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow flex items-center justify-center space-x-2 transition cursor-pointer"
             >
               <Trash2 className="w-4 h-4" />
               <span>CLEAR</span>
+              <span className="text-[10px] font-mono bg-red-950/60 px-1.5 py-0.5 rounded text-amber-200">
+                Alt+R
+              </span>
             </button>
 
             {/* PRINT (Selected Cells) Button */}
             <button
               type="button"
               onClick={handlePrintSelected}
+              title="Open Print / PDF Preview (Shortcut: Ctrl+P)"
               className="w-full bg-[#0891b2] hover:bg-[#0e7490] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow flex items-center justify-center space-x-2 transition cursor-pointer"
             >
               <Printer className="w-4 h-4" />
               <span>PRINT (Selected Cells)</span>
+              <span className="text-[10px] font-mono bg-cyan-950/60 px-1.5 py-0.5 rounded text-amber-200">
+                Ctrl+P
+              </span>
             </button>
           </div>
 

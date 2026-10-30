@@ -5,10 +5,10 @@ import {
   calculateProfitLossMonthlyTrends,
 } from './profitLossTrends.ts';
 import {
-  initialPurchases,
-  initialPackings,
-  initialPayments,
-  initialOtherCosts,
+  samplePurchases as initialPurchases,
+  samplePackings as initialPackings,
+  samplePayments as initialPayments,
+  sampleOtherCosts as initialOtherCosts,
 } from '../context/initialData.ts';
 import { PurchaseRecord, PaymentRecord, PackingRecord } from '../types/index.ts';
 

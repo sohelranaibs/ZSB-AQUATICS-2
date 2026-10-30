@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import {
   calculatePaymentRow,
@@ -29,6 +29,10 @@ import {
 } from '../types/index.ts';
 import { validateSupplierPaymentForm } from '../utils/validation.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
+import {
+  ZSB_VIEW_SHORTCUT_EVENT,
+  ViewShortcutEventDetail,
+} from '../utils/keyboardShortcuts.ts';
 import {
   Save,
   FileText,
@@ -471,6 +475,32 @@ export const PaymentFormView: React.FC = () => {
     });
   };
 
+  useEffect(() => {
+    const onShortcut = (event: Event) => {
+      const customEvent = event as CustomEvent<ViewShortcutEventDetail>;
+      const action = customEvent.detail?.action;
+      if (!action) return;
+
+      if (action === 'SAVE_ACTIVE_VIEW') {
+        customEvent.detail.handled = true;
+        handleSavePDF();
+      } else if (action === 'PRINT_ACTIVE_VIEW') {
+        customEvent.detail.handled = true;
+        handlePrintSelected();
+      } else if (action === 'ADD_FORM_ROW') {
+        customEvent.detail.handled = true;
+        handleAddRow();
+        showToast('Added new line item row to Supplier Payment Voucher (Alt+N).');
+      } else if (action === 'RESET_FORM') {
+        customEvent.detail.handled = true;
+        handleClear();
+      }
+    };
+
+    window.addEventListener(ZSB_VIEW_SHORTCUT_EVENT, onShortcut);
+    return () => window.removeEventListener(ZSB_VIEW_SHORTCUT_EVENT, onShortcut);
+  });
+
   const handleMonthlyStatement = () => {
     const matched = supplierPayments.filter((p) =>
       p.description.toLowerCase().includes(supplierName.toLowerCase())
@@ -506,7 +536,7 @@ export const PaymentFormView: React.FC = () => {
         <div className="flex flex-wrap items-center gap-3">
           <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
-              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+              src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
               alt={companyProfile.companyName}
               className="w-full h-full object-contain rounded-full"
             />
@@ -552,8 +582,7 @@ export const PaymentFormView: React.FC = () => {
             <span className="font-mono bg-purple-50 text-purple-900 border border-purple-200 px-2.5 py-0.5 rounded font-bold">
               Showing {supplierRecordHistory.length} Record{supplierRecordHistory.length === 1 ? '' : 's'} (
               <span className="text-emerald-700 font-extrabold">{supplierHistoryTotals.paidCount} PAID</span> ·{' '}
-              <span className="text-blue-700 font-extrabold">{supplierHistoryTotals.reportCount} REPORT</span> ·{' '}
-              <span className="text-rose-700 font-extrabold">{supplierHistoryTotals.noReportCount} NO REPORT</span>)
+              <span className="text-rose-700 font-extrabold">{supplierHistoryTotals.reportCount + supplierHistoryTotals.noReportCount} UNPAID</span>)
             </span>
             <button
               type="button"
@@ -622,12 +651,10 @@ export const PaymentFormView: React.FC = () => {
                 className={`inline-block px-2.5 py-1 text-xs font-black uppercase rounded border ${
                   supplierHistoryTotals.computedOverallStatus === 'PAID'
                     ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                    : supplierHistoryTotals.computedOverallStatus === 'REPORT'
-                    ? 'bg-blue-100 text-blue-900 border-blue-300'
                     : 'bg-rose-100 text-rose-900 border-rose-300'
                 }`}
               >
-                {supplierHistoryTotals.computedOverallStatus}
+                {supplierHistoryTotals.computedOverallStatus === 'PAID' ? 'PAID' : 'UNPAID'}
               </span>
             </div>
             <div className="text-[10px] text-slate-500 font-medium mt-0.5 truncate">
@@ -658,19 +685,16 @@ export const PaymentFormView: React.FC = () => {
 
           <div>
             <label className="font-bold text-slate-700 uppercase block mb-1">
-              Status (Debit / Credit / Balance)
+              Status (PAID / UNPAID)
             </label>
             <select
               value={historyStatusFilter}
               onChange={(e) => setHistoryStatusFilter(e.target.value)}
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-purple-500"
             >
-              <option value="ALL">-- ALL STATUSES (PAID, REPORT, NO REPORT) --</option>
-              {SUPPLIER_STATUS_OPTIONS.map((st) => (
-                <option key={st} value={st}>
-                  {st}
-                </option>
-              ))}
+              <option value="ALL">-- ALL STATUSES (PAID, UNPAID) --</option>
+              <option value="PAID">PAID</option>
+              <option value="UNPAID">UNPAID</option>
             </select>
           </div>
 
@@ -891,7 +915,7 @@ export const PaymentFormView: React.FC = () => {
               <div className="flex items-center justify-center gap-2.5">
                 <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-amber-300 bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
                   <img
-                    src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+                    src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
                     alt={companyProfile.companyName}
                     className="w-full h-full object-contain rounded-full"
                   />
@@ -1674,25 +1698,22 @@ export const PaymentFormView: React.FC = () => {
                           {row.balance.toFixed(2)}
                         </td>
 
-                        {/* Row Status Column (PAID, REPORT, NO REPORT) */}
+                        {/* Row Status Column (PAID, UNPAID) */}
                         <td className="p-1 border-r border-slate-200 text-center">
                           <select
                             aria-label={`Supplier payment row ${idx + 1} status`}
-                            value={rowStatus}
+                            value={rowStatus === 'PAID' ? 'PAID' : 'UNPAID'}
                             onChange={(e) =>
                               handleRowChange(row.id, 'status', e.target.value)
                             }
                             className={`w-full text-center text-[10px] font-black uppercase rounded px-1 py-1.5 border cursor-pointer focus:outline-none ${
                               rowStatus === 'PAID'
                                 ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                                : rowStatus === 'REPORT'
-                                ? 'bg-blue-100 text-blue-900 border-blue-300'
                                 : 'bg-rose-100 text-rose-900 border-rose-300'
                             }`}
                           >
                             <option value="PAID">PAID</option>
-                            <option value="REPORT">REPORT</option>
-                            <option value="NO REPORT">NO REPORT</option>
+                            <option value="UNPAID">UNPAID</option>
                           </select>
                         </td>
 
@@ -1835,20 +1856,17 @@ export const PaymentFormView: React.FC = () => {
                     </td>
                     <td colSpan={3} className="px-2 py-1.5">
                       <select
-                        value={voucherStatus}
+                        value={voucherStatus === 'PAID' ? 'PAID' : 'UNPAID'}
                         onChange={(e) => setVoucherStatus(e.target.value as ExporterStatus)}
                         aria-label="Supplier Voucher Status"
                         className={`w-full border rounded px-2.5 py-1 text-xs font-black uppercase cursor-pointer ${
                           voucherStatus === 'PAID'
                             ? 'bg-emerald-50 border-emerald-400 text-emerald-900'
-                            : voucherStatus === 'REPORT'
-                            ? 'bg-blue-50 border-blue-400 text-blue-900'
                             : 'bg-rose-50 border-rose-400 text-rose-900'
                         }`}
                       >
                         <option value="PAID">PAID</option>
-                        <option value="REPORT">REPORT</option>
-                        <option value="NO REPORT">NO REPORT</option>
+                        <option value="UNPAID">UNPAID</option>
                       </select>
                     </td>
                   </tr>
@@ -1897,10 +1915,14 @@ export const PaymentFormView: React.FC = () => {
             <button
               type="button"
               onClick={handleSavePDF}
+              title="Save Supplier Payment Voucher (Shortcut: Ctrl+S)"
               className="w-full bg-[#129c54] hover:bg-[#0e8346] text-white py-2.5 px-4 rounded-lg font-bold text-sm shadow flex items-center justify-center space-x-2 transition transform active:scale-95 cursor-pointer"
             >
               <Save className="w-5 h-5" />
               <span>SAVE (PDF)</span>
+              <span className="text-[10px] font-mono bg-emerald-950/60 px-1.5 py-0.5 rounded text-amber-200">
+                Ctrl+S
+              </span>
             </button>
 
             {/* MONTHLY STATEMENT (PDF) Button - Violet/Purple */}
@@ -1927,20 +1949,28 @@ export const PaymentFormView: React.FC = () => {
             <button
               type="button"
               onClick={handleClear}
+              title="Clear form fields (Shortcut: Alt+R)"
               className="w-full bg-[#dc2626] hover:bg-[#b91c1c] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow flex items-center justify-center space-x-2 transition cursor-pointer"
             >
               <Trash2 className="w-4 h-4" />
               <span>CLEAR</span>
+              <span className="text-[10px] font-mono bg-red-950/60 px-1.5 py-0.5 rounded text-amber-200">
+                Alt+R
+              </span>
             </button>
 
             {/* PRINT (Selected Cells) Button - Cyan */}
             <button
               type="button"
               onClick={handlePrintSelected}
+              title="Open Print / PDF Preview (Shortcut: Ctrl+P)"
               className="w-full bg-[#0891b2] hover:bg-[#0e7490] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow flex items-center justify-center space-x-2 transition cursor-pointer"
             >
               <Printer className="w-4 h-4" />
               <span>PRINT (Selected Cells)</span>
+              <span className="text-[10px] font-mono bg-cyan-950/60 px-1.5 py-0.5 rounded text-amber-200">
+                Ctrl+P
+              </span>
             </button>
           </div>
 

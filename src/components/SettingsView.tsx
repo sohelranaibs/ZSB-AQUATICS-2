@@ -94,7 +94,7 @@ export const SettingsView: React.FC = () => {
     purchaseItems: 'Purchase Items (FF1, F1, KS/3, etc.)',
     suppliers: 'Supplier Names',
     paymentDescriptions: 'Payment Ledger Descriptions',
-    paymentStatuses: 'Payment Statuses (NO REPORT, REPORT, PAID)',
+    paymentStatuses: 'Payment Statuses (PAID, UNPAID)',
     costingCategories: 'Expense / Other Costing Categories',
   };
 
@@ -129,7 +129,7 @@ export const SettingsView: React.FC = () => {
         <div className="flex items-center space-x-3">
           <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
-              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+              src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
               alt={companyProfile.companyName}
               className="w-full h-full object-contain rounded-full"
             />
@@ -194,7 +194,7 @@ export const SettingsView: React.FC = () => {
                 <div className="p-3 bg-slate-900 rounded-lg border border-slate-700 flex items-center gap-3.5">
                   <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-md flex items-center justify-center">
                     <img
-                      src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+                      src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
                       alt={companyProfile.companyName}
                       className="w-full h-full object-contain rounded-full"
                     />

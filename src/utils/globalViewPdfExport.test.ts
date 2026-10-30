@@ -9,11 +9,11 @@ import {
 import {
   initialCompanyProfile,
   initialDropdownOptions,
-  initialOtherCosts,
-  initialPackings,
-  initialPayments,
-  initialPurchases,
-  initialSupplierCredits,
+  sampleOtherCosts as initialOtherCosts,
+  samplePackings as initialPackings,
+  samplePayments as initialPayments,
+  samplePurchases as initialPurchases,
+  sampleSupplierCredits as initialSupplierCredits,
 } from '../context/initialData.ts';
 import { ActiveTab } from '../types/index.ts';
 

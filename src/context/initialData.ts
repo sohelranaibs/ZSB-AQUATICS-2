@@ -1,6 +1,6 @@
 import { CompanyProfile, DropdownOptions, PurchaseRecord, PackingRecord, PaymentRecord, OtherCostRecord, SupplierCreditRecord, MortalityRecord } from '../types/index.ts';
 
-export const COMPANY_LOGO_URL = '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg';
+export const COMPANY_LOGO_URL = '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg';
 
 export const initialCompanyProfile: CompanyProfile = {
   companyName: 'ZSB AQUATICS',
@@ -67,7 +67,7 @@ export const initialDropdownOptions: DropdownOptions = {
     'COMMISSION / DISCOUNT',
     'OTHER PAYMENT',
   ],
-  paymentStatuses: ['NO REPORT', 'REPORT', 'PAID'],
+  paymentStatuses: ['PAID', 'UNPAID'],
   costingCategories: [
     'Air Freight & Cargo',
     'Airport Handling & Customs',

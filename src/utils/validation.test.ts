@@ -188,6 +188,31 @@ describe('validatePackingForm', () => {
     assert.equal(result.isValid, true);
     assert.equal(result.validItems.length, 1);
     assert.equal(result.validItems[0].rate, 0);
+
+    const unpaidResult = validatePackingForm({
+      invoiceNumber: 'PKG-2026-0005B',
+      packingDate: '2026-03-15',
+      shippingMark: 'AAD',
+      flight: 'CAN',
+      destination: 'GUANGZHOU',
+      shipper: 'ZSB AQUATICS',
+      paymentStatus: 'UNPAID',
+      customRmbAmount: '0',
+      rows: [
+        {
+          id: '1',
+          item: '2F',
+          box: 4,
+          weight: 15,
+          totalWeight: 60,
+          unit: 'KG',
+          rate: 0,
+          amount: 0,
+        },
+      ],
+    });
+    assert.equal(unpaidResult.isValid, true);
+    assert.equal(unpaidResult.validItems[0].rate, 0);
   });
 
   it('requires rate > 0 when status is "REPORT" or "PAID"', () => {

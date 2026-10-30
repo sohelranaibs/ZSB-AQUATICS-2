@@ -204,7 +204,7 @@ export const GlobalOffscreenPrintHost: React.FC<GlobalOffscreenPrintHostProps> =
                 <img
                   src={
                     companyProfile.logoUrl ||
-                    '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'
+                    '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'
                   }
                   alt={companyProfile.companyName}
                   className="w-full h-full object-contain rounded-full"
@@ -260,7 +260,7 @@ export const GlobalOffscreenPrintHost: React.FC<GlobalOffscreenPrintHostProps> =
                 <img
                   src={
                     companyProfile.logoUrl ||
-                    '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'
+                    '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'
                   }
                   alt={companyProfile.companyName}
                   className="w-full h-full object-contain rounded-full"

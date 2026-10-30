@@ -33,6 +33,9 @@ export interface PurchaseItemRow {
   item: string;
   quantity: number;
   rate: number;
+  subtotal?: number;
+  gstRate?: number;
+  gstAmount?: number;
   totalAmount: number;
   previousAmount: number;
   paidAmount: number;
@@ -47,6 +50,9 @@ export interface PurchaseRecord {
   contactNumber: string;
   items: PurchaseItemRow[];
   totalQty: number;
+  subtotalAmount?: number;
+  gstRate?: number;
+  totalGstAmount?: number;
   totalAmount: number;
   previousAmount: number;
   paidAmount: number;
@@ -63,7 +69,10 @@ export interface PackingItemRow {
   totalWeight: number; // box * weight
   unit: string;
   rate: number;
-  amount: number; // totalWeight * rate
+  subtotal?: number; // totalWeight * rate
+  gstRate?: number;
+  gstAmount?: number;
+  amount: number; // subtotal + gstAmount (or totalWeight * rate when gstRate = 0)
 }
 
 export interface PackingRecord {
@@ -79,6 +88,9 @@ export interface PackingRecord {
   items: PackingItemRow[];
   totalBox: number;
   totalWeight: number;
+  subtotalAmount?: number;
+  gstRate?: number;
+  totalGstAmount?: number;
   totalAmount: number;
   rmbRate?: number;
   totalAmountBDT?: number;
@@ -104,6 +116,7 @@ export interface PackingFormDraft {
   shipper: string;
   paymentStatus: ExporterStatus;
   customRmbAmount: string;
+  gstRate?: number;
   remarks: string;
   rows: PackingItemRow[];
 }
@@ -146,7 +159,7 @@ export interface PaymentItemRow {
   status?: ExporterStatus;
 }
 
-export type ExporterStatus = 'NO REPORT' | 'REPORT' | 'PAID' | string;
+export type ExporterStatus = 'PAID' | 'UNPAID' | 'NO REPORT' | 'REPORT' | string;
 
 export type RecurrenceFrequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly';
 
@@ -231,6 +244,44 @@ export interface MortalityRecord {
   createdAt: string;
 }
 
+export type AuditLogAction =
+  | 'CREATE'
+  | 'UPDATE'
+  | 'DELETE'
+  | 'CLEAR'
+  | 'IMPORT'
+  | 'AUTH';
+
+export type AuditLogModule =
+  | 'Purchase'
+  | 'Packing'
+  | 'Payment'
+  | 'OtherCost'
+  | 'SupplierCredit'
+  | 'Mortality'
+  | 'Settings'
+  | 'Database'
+  | 'Authentication';
+
+export interface AuditLogRecord {
+  id: string;
+  timestamp: string; // ISO 8601 timestamp
+  action: AuditLogAction;
+  module: AuditLogModule;
+  entityId?: string; // e.g., INV-2026-0001, PKG-2026-0001
+  summary: string;
+  details?: string;
+  actor: string;
+}
+
+export interface AuthUser {
+  username: string;
+  displayName: string;
+  role: string;
+  email: string;
+  loginAt: string;
+}
+
 export type ActiveTab =
   | 'dashboard'
   | 'purchase_form'
@@ -243,6 +294,5 @@ export type ActiveTab =
   | 'packing_db'
   | 'payment_db'
   | 'search_reports'
+  | 'audit_logs'
   | 'settings';
-
-

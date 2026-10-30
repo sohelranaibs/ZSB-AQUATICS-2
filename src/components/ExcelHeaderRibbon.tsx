@@ -25,9 +25,18 @@ import {
   Database,
   FileDown,
   Loader2,
+  LogOut,
+  ShieldCheck,
+  Keyboard,
 } from 'lucide-react';
 
-export const ExcelHeaderRibbon: React.FC = () => {
+interface ExcelHeaderRibbonProps {
+  onOpenShortcutsModal?: () => void;
+}
+
+export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
+  onOpenShortcutsModal,
+}) => {
   const {
     activeTab,
     setActiveTab,
@@ -49,6 +58,9 @@ export const ExcelHeaderRibbon: React.FC = () => {
     exportCurrentViewToPdf,
     isExportingGlobalPdf,
     lastExportedPdfFilename,
+    currentUser,
+    logout,
+    auditLogs,
   } = useApp();
 
   const totalRecordsCount = computeTotalPersistedRecords({
@@ -94,6 +106,7 @@ export const ExcelHeaderRibbon: React.FC = () => {
     { id: 'payment_db', number: '10', label: 'Payment DB', icon: '📑' },
     { id: 'search_reports', number: '11', label: 'Search & Reports', icon: '🔍' },
     { id: 'settings', number: '12', label: 'Settings & Config', icon: '⚙️' },
+    { id: 'audit_logs', number: '13', label: 'Audit Logs', icon: '🛡️' },
   ];
 
   const getDatasetForActiveTab = () => {
@@ -125,6 +138,8 @@ export const ExcelHeaderRibbon: React.FC = () => {
         return '=Weight * RMB = Amount | FILTER(EXPORTER_DB!A:H, (MARK=Selected_Mark) * (DATE=Selected_Packing_Date))';
       case 'profit_loss':
         return '=Total_Export_Value - Total_Purchases - Total_Other_Costing = NET_PROFIT';
+      case 'audit_logs':
+        return `=COUNTIF(AUDIT_TRAIL!A:G, "ENTRY | EDIT | DELETE") [TOTAL_LOGGED: ${auditLogs.length}]`;
       default:
         return '=VLOOKUP(Invoice_Number, MASTER_DATABASE, 2, FALSE)';
     }
@@ -138,7 +153,7 @@ export const ExcelHeaderRibbon: React.FC = () => {
         <div className="flex items-center space-x-3">
           <div className="w-11 h-11 rounded-full bg-white p-0.5 border-2 border-amber-400 shadow-md flex items-center justify-center overflow-hidden shrink-0">
             <img
-              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+              src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
               alt={companyProfile.companyName}
               className="w-full h-full object-contain rounded-full"
             />
@@ -212,7 +227,7 @@ export const ExcelHeaderRibbon: React.FC = () => {
             data-testid="ribbon-excel-csv-btn"
             onClick={() => openDataCenterModal('import', getDatasetForActiveTab())}
             className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded shadow-sm transition cursor-pointer"
-            title="Import & Export Data from Excel (.xlsx) and CSV (.csv)"
+            title="Import & Export Data from Excel (.xlsx) and CSV (.csv) (Shortcut: Ctrl+E)"
           >
             <FileSpreadsheet className="w-3.5 h-3.5 stroke-[2.2]" />
             <span>Excel / CSV</span>
@@ -249,7 +264,7 @@ export const ExcelHeaderRibbon: React.FC = () => {
               void exportCurrentViewToPdf({ openPreviewOnly: true });
             }}
             className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded shadow-sm transition cursor-pointer"
-            title="Open Document Print & PDF Download Preview for Current View"
+            title="Open Document Print & PDF Download Preview for Current View (Shortcut: Ctrl+P)"
           >
             <Printer className="w-3.5 h-3.5" />
             <span>Print / PDF</span>
@@ -260,10 +275,24 @@ export const ExcelHeaderRibbon: React.FC = () => {
             data-testid="ribbon-snapshots-btn"
             onClick={openSnapshotModal}
             className="flex items-center space-x-1.5 px-2.5 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded shadow-sm transition whitespace-nowrap shrink-0 cursor-pointer"
-            title="Open Database Snapshot & Local JSON Recovery Manager"
+            title="Open Database Snapshot & Local JSON Recovery Manager (Shortcut: Ctrl+Shift+S)"
           >
             <Archive className="w-3.5 h-3.5 text-amber-300" />
             <span>Snapshots ({snapshots.length})</span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="ribbon-shortcuts-btn"
+            onClick={onOpenShortcutsModal}
+            className="flex items-center space-x-1.5 px-2.5 py-1.5 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/40 rounded shadow-sm transition whitespace-nowrap shrink-0 cursor-pointer"
+            title="Open Global Keyboard Shortcuts Reference (Shortcut: Ctrl+/ or ?)"
+          >
+            <Keyboard className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="hidden md:inline">Shortcuts</span>
+            <kbd className="px-1 py-0.2 bg-slate-900 border border-slate-700 rounded text-[10px] font-mono text-amber-300">
+              Ctrl+/
+            </kbd>
           </button>
 
           <button
@@ -283,6 +312,36 @@ export const ExcelHeaderRibbon: React.FC = () => {
           >
             <Upload className="w-3.5 h-3.5 text-blue-400" />
             <span className="hidden sm:inline">Restore</span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="ribbon-audit-logs-btn"
+            onClick={() => setActiveTab('audit_logs')}
+            className={`flex items-center space-x-1 px-2.5 py-1.5 text-xs font-semibold rounded border transition cursor-pointer whitespace-nowrap shrink-0 ${
+              activeTab === 'audit_logs'
+                ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+            }`}
+            title="Open System Audit Logs (Entries, Edits & Deletions)"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="hidden lg:inline">Audit Logs ({auditLogs.length})</span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="ribbon-logout-btn"
+            onClick={logout}
+            className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-rose-950/90 text-slate-200 hover:text-rose-200 border border-slate-700 hover:border-rose-700/70 rounded transition cursor-pointer whitespace-nowrap shrink-0"
+            title={
+              currentUser
+                ? `Signed in as ${currentUser.displayName} (${currentUser.role}). Click to lock & sign out.`
+                : 'Sign out to login screen'
+            }
+          >
+            <LogOut className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+            <span className="hidden sm:inline">Sign Out</span>
           </button>
 
           <input

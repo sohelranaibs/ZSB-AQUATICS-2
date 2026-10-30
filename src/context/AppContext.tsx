@@ -10,6 +10,8 @@ import {
   OtherCostRecord,
   SupplierCreditRecord,
   MortalityRecord,
+  AuditLogRecord,
+  AuthUser,
   ActiveTab,
 } from '../types/index.ts';
 import {
@@ -56,6 +58,13 @@ import {
   extractLiveDomTablesFromContainer,
 } from '../utils/globalViewPdfExport.ts';
 import { exportElementToPdf } from '../utils/pdfGenerator.ts';
+import {
+  authenticateUser,
+  AuthVerificationResult,
+  createAuditLogEntry,
+  CreateAuditLogInput,
+  DEFAULT_ADMIN_ACCOUNTS,
+} from '../utils/auditLogger.ts';
 
 const createEmptyPackingDraftRows = (): PackingItemRow[] =>
   ['1', '2', '3', '4', '5'].map((id) => ({
@@ -76,7 +85,7 @@ export const createInitialPackingDraft = (packingCount: number = 0): PackingForm
   flight: '',
   destination: '',
   shipper: '',
-  paymentStatus: 'NO REPORT',
+  paymentStatus: 'UNPAID',
   customRmbAmount: '',
   remarks: '',
   rows: createEmptyPackingDraftRows(),
@@ -113,6 +122,15 @@ export interface SuperAdminClearModalConfig {
 }
 
 interface AppContextType {
+  isAuthenticated: boolean;
+  currentUser: AuthUser | null;
+  login: (usernameOrEmail: string, password: string) => AuthVerificationResult;
+  logout: () => void;
+
+  auditLogs: AuditLogRecord[];
+  addAuditLog: (input: CreateAuditLogInput) => AuditLogRecord;
+  clearAuditLogs: () => void;
+
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
   companyProfile: CompanyProfile;
@@ -291,11 +309,53 @@ const STORAGE_KEYS = {
   MORTALITIES: 'zsb_mortalities_v2',
   SUPER_ADMIN_PASSWORD: 'zsb_super_admin_password_v1',
   SNAPSHOTS: 'zsb_database_snapshots_v1',
+  AUTH_USER: 'zsb_auth_user_v1',
+  AUDIT_LOGS: 'zsb_audit_logs_v1',
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const initialDeepLink =
     typeof window !== 'undefined' ? parseShipmentDeepLink(window.location.search) : null;
+
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = sessionStorage.getItem(STORAGE_KEYS.AUTH_USER);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && typeof parsed === 'object' && parsed.username) {
+            return parsed as AuthUser;
+          }
+        }
+        const searchParams = new URLSearchParams(window.location.search);
+        if (searchParams.get('autostart') === '1' || initialDeepLink?.isShipmentLink) {
+          return {
+            username: DEFAULT_ADMIN_ACCOUNTS[0].username,
+            displayName: DEFAULT_ADMIN_ACCOUNTS[0].displayName,
+            role: DEFAULT_ADMIN_ACCOUNTS[0].role,
+            email: DEFAULT_ADMIN_ACCOUNTS[0].email,
+            loginAt: new Date().toISOString(),
+          };
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  });
+
+  const isAuthenticated = Boolean(currentUser);
+
+  const [auditLogs, setAuditLogs] = useState<AuditLogRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS);
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
 
   const [activeTab, setActiveTab] = useState<ActiveTab>(() =>
     initialDeepLink?.isShipmentLink ? 'packing_db' : 'dashboard'
@@ -318,7 +378,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...initialCompanyProfile,
         ...parsed,
         email: parsed.email || initialCompanyProfile.email,
-        logoUrl: parsed.logoUrl || COMPANY_LOGO_URL,
+        logoUrl:
+          !parsed.logoUrl ||
+          parsed.logoUrl === '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'
+            ? COMPANY_LOGO_URL
+            : parsed.logoUrl,
         minInventoryThresholdKg:
           parsed.minInventoryThresholdKg !== undefined
             ? Number(parsed.minInventoryThresholdKg)
@@ -349,6 +413,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         parsed.paymentDescriptions.includes('ABDULLAH VAI')
       ) {
         parsed.paymentDescriptions = initialDropdownOptions.paymentDescriptions;
+      }
+      if (
+        !parsed.paymentStatuses ||
+        parsed.paymentStatuses.includes('NO REPORT') ||
+        parsed.paymentStatuses.includes('REPORT') ||
+        !parsed.paymentStatuses.includes('UNPAID')
+      ) {
+        parsed.paymentStatuses = initialDropdownOptions.paymentStatuses;
       }
       return { ...initialDropdownOptions, ...parsed };
     } catch {
@@ -670,6 +742,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [snapshots]);
 
   useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(auditLogs));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [auditLogs]);
+
+  useEffect(() => {
     isInitialMountRef.current = false;
     return () => {
       if (syncTimerRef.current) {
@@ -709,8 +789,81 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, 3500);
   };
 
+  const addAuditLog = (input: CreateAuditLogInput): AuditLogRecord => {
+    const entry = createAuditLogEntry({
+      ...input,
+      actor:
+        input.actor ||
+        (currentUser
+          ? `${currentUser.displayName} (${currentUser.role})`
+          : 'Md. Sohel Rana (Partner & Administrator)'),
+    });
+    setAuditLogs((prev) => [entry, ...prev].slice(0, 500));
+    return entry;
+  };
+
+  const clearAuditLogs = () => {
+    setAuditLogs([]);
+    try {
+      localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify([]));
+    } catch (e) {
+      console.error(e);
+    }
+    showToast('System audit trail cleared.');
+  };
+
+  const login = (usernameOrEmail: string, password: string): AuthVerificationResult => {
+    const verification = authenticateUser(usernameOrEmail, password, superAdminPassword);
+    if (!verification.valid || !verification.user) {
+      return verification;
+    }
+    setCurrentUser(verification.user);
+    try {
+      sessionStorage.setItem(STORAGE_KEYS.AUTH_USER, JSON.stringify(verification.user));
+    } catch (e) {
+      console.error(e);
+    }
+    addAuditLog({
+      action: 'AUTH',
+      module: 'Authentication',
+      entityId: 'AUTH-LOGIN',
+      summary: `Administrator "${verification.user.displayName}" (${verification.user.role}) signed in to ZSB Aquatics Trade Ledger`,
+      details: `Email: ${verification.user.email} · Verified Session`,
+      actor: `${verification.user.displayName} (${verification.user.role})`,
+    });
+    showToast(`Welcome back, ${verification.user.displayName}!`);
+    return verification;
+  };
+
+  const logout = () => {
+    if (currentUser) {
+      addAuditLog({
+        action: 'AUTH',
+        module: 'Authentication',
+        entityId: 'AUTH-LOGOUT',
+        summary: `Administrator "${currentUser.displayName}" signed out of the session`,
+        details: `Account: ${currentUser.email}`,
+        actor: `${currentUser.displayName} (${currentUser.role})`,
+      });
+    }
+    setCurrentUser(null);
+    try {
+      sessionStorage.removeItem(STORAGE_KEYS.AUTH_USER);
+    } catch (e) {
+      console.error(e);
+    }
+    showToast('Signed out of ZSB Aquatics Control Center.');
+  };
+
   const updateCompanyProfile = (profile: Partial<CompanyProfile>) => {
     setCompanyProfile((prev) => ({ ...prev, ...profile }));
+    addAuditLog({
+      action: 'UPDATE',
+      module: 'Settings',
+      entityId: 'CFG-PROFILE',
+      summary: 'Updated company profile and system configuration settings',
+      details: `Company: ${profile.companyName || companyProfile.companyName}`,
+    });
     showToast('Company profile updated successfully.');
   };
 
@@ -759,17 +912,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString(),
     };
     setPurchases((prev) => [newRecord, ...prev]);
+    addAuditLog({
+      action: 'CREATE',
+      module: 'Purchase',
+      entityId: newRecord.invoiceNumber,
+      summary: `Created purchase challan ${newRecord.invoiceNumber} for supplier ${newRecord.description}`,
+      details: `Subtotal: ${companyProfile.currency} ${newRecord.totalAmount.toLocaleString()} · Paid: ${companyProfile.currency} ${newRecord.paidAmount.toLocaleString()}`,
+    });
     showToast(`Purchase invoice ${newRecord.invoiceNumber} saved to database!`);
     return id;
   };
 
   const updatePurchase = (id: string, record: Partial<PurchaseRecord>) => {
+    const target = purchases.find((p) => p.id === id);
     setPurchases((prev) => prev.map((p) => (p.id === id ? { ...p, ...record } : p)));
+    addAuditLog({
+      action: 'UPDATE',
+      module: 'Purchase',
+      entityId: record.invoiceNumber || target?.invoiceNumber || id,
+      summary: `Modified purchase challan ${record.invoiceNumber || target?.invoiceNumber || id}`,
+      details: `Supplier: ${record.description || target?.description || '-'} · Subtotal: ${companyProfile.currency} ${(record.totalAmount ?? target?.totalAmount ?? 0).toLocaleString()}`,
+    });
     showToast(`Purchase invoice updated.`);
   };
 
   const deletePurchase = (id: string) => {
+    const target = purchases.find((p) => p.id === id);
     setPurchases((prev) => prev.filter((p) => p.id !== id));
+    addAuditLog({
+      action: 'DELETE',
+      module: 'Purchase',
+      entityId: target?.invoiceNumber || id,
+      summary: `Deleted purchase challan ${target?.invoiceNumber || id} (${target?.description || 'Unknown Supplier'})`,
+      details: `Deleted Amount: ${companyProfile.currency} ${(target?.totalAmount ?? 0).toLocaleString()}`,
+    });
     showToast(`Purchase record deleted from database.`);
   };
 
@@ -785,6 +961,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: now,
     }));
     setPurchases((prev) => (mode === 'replace' ? hydrated : [...hydrated, ...prev]));
+    addAuditLog({
+      action: 'IMPORT',
+      module: 'Purchase',
+      entityId: `BULK-PUR-${hydrated.length}`,
+      summary: `Bulk imported ${hydrated.length} purchase challan record(s) (${mode} mode)`,
+    });
     return hydrated.length;
   };
 
@@ -797,19 +979,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString(),
     };
     setPackings((prev) => [newRecord, ...prev]);
+    addAuditLog({
+      action: 'CREATE',
+      module: 'Packing',
+      entityId: newRecord.invoiceNumber,
+      summary: `Created export packing list ${newRecord.invoiceNumber} (${newRecord.shippingMark} · ${newRecord.totalWeight} KG)`,
+      details: `Total Boxes: ${newRecord.totalBox} · Value: RMB ${newRecord.totalAmount.toLocaleString()}`,
+    });
     showToast(`Packing list ${newRecord.invoiceNumber} saved to database!`);
     return id;
   };
 
   const updatePacking = (id: string, record: Partial<PackingRecord>, silent: boolean = false) => {
+    const target = packings.find((p) => p.id === id);
     setPackings((prev) => prev.map((p) => (p.id === id ? { ...p, ...record } : p)));
     if (!silent) {
+      addAuditLog({
+        action: 'UPDATE',
+        module: 'Packing',
+        entityId: record.invoiceNumber || target?.invoiceNumber || id,
+        summary: `Updated export packing list ${record.invoiceNumber || target?.invoiceNumber || id}`,
+        details: `Mark: ${record.shippingMark || target?.shippingMark || '-'} · Value: RMB ${(record.totalAmount ?? target?.totalAmount ?? 0).toLocaleString()}`,
+      });
       showToast(`Packing list updated.`);
     }
   };
 
   const deletePacking = (id: string) => {
+    const target = packings.find((p) => p.id === id);
     setPackings((prev) => prev.filter((p) => p.id !== id));
+    addAuditLog({
+      action: 'DELETE',
+      module: 'Packing',
+      entityId: target?.invoiceNumber || id,
+      summary: `Deleted export packing list ${target?.invoiceNumber || id} (${target?.shippingMark || 'Unknown Mark'})`,
+      details: `Weight: ${target?.totalWeight ?? 0} KG · Value: RMB ${(target?.totalAmount ?? 0).toLocaleString()}`,
+    });
     showToast(`Packing record deleted from database.`);
   };
 
@@ -825,6 +1030,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: now,
     }));
     setPackings((prev) => (mode === 'replace' ? hydrated : [...hydrated, ...prev]));
+    addAuditLog({
+      action: 'IMPORT',
+      module: 'Packing',
+      entityId: `BULK-PKG-${hydrated.length}`,
+      summary: `Bulk imported ${hydrated.length} packing list manifest(s) (${mode} mode)`,
+    });
     return hydrated.length;
   };
 
@@ -837,17 +1048,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString(),
     };
     setPayments((prev) => [newRecord, ...prev]);
+    addAuditLog({
+      action: 'CREATE',
+      module: 'Payment',
+      entityId: newRecord.invoiceNumber,
+      summary: `Recorded ${newRecord.paymentCategory === 'exporter' ? 'exporter' : 'supplier'} payment voucher ${newRecord.invoiceNumber} (${newRecord.description})`,
+      details: `Amount: ${companyProfile.currency} ${newRecord.totalAmount.toLocaleString()} · Status: ${newRecord.status}`,
+    });
     showToast(`Payment voucher ${newRecord.invoiceNumber} saved to database!`);
     return id;
   };
 
   const updatePayment = (id: string, record: Partial<PaymentRecord>) => {
+    const target = payments.find((p) => p.id === id);
     setPayments((prev) => prev.map((p) => (p.id === id ? { ...p, ...record } : p)));
+    addAuditLog({
+      action: 'UPDATE',
+      module: 'Payment',
+      entityId: record.invoiceNumber || target?.invoiceNumber || id,
+      summary: `Edited payment voucher ${record.invoiceNumber || target?.invoiceNumber || id}`,
+      details: `Party: ${record.description || target?.description || '-'} · Total: ${companyProfile.currency} ${(record.totalAmount ?? target?.totalAmount ?? 0).toLocaleString()}`,
+    });
     showToast(`Payment voucher updated.`);
   };
 
   const deletePayment = (id: string) => {
+    const target = payments.find((p) => p.id === id);
     setPayments((prev) => prev.filter((p) => p.id !== id));
+    addAuditLog({
+      action: 'DELETE',
+      module: 'Payment',
+      entityId: target?.invoiceNumber || id,
+      summary: `Deleted payment voucher ${target?.invoiceNumber || id} (${target?.description || 'Unknown Party'})`,
+      details: `Amount: ${companyProfile.currency} ${(target?.totalAmount ?? 0).toLocaleString()}`,
+    });
     showToast(`Payment record deleted from database.`);
   };
 
@@ -863,6 +1097,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: now,
     }));
     setPayments((prev) => (mode === 'replace' ? hydrated : [...hydrated, ...prev]));
+    addAuditLog({
+      action: 'IMPORT',
+      module: 'Payment',
+      entityId: `BULK-PAY-${hydrated.length}`,
+      summary: `Bulk imported ${hydrated.length} payment voucher(s) (${mode} mode)`,
+    });
     return hydrated.length;
   };
 
@@ -875,12 +1115,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString(),
     };
     setOtherCosts((prev) => [newRecord, ...prev]);
+    addAuditLog({
+      action: 'CREATE',
+      module: 'OtherCost',
+      entityId: id,
+      summary: `Recorded operating expense "${newRecord.category}" (${newRecord.description || 'General Cost'})`,
+      details: `Amount: ${companyProfile.currency} ${newRecord.amount.toLocaleString()}`,
+    });
     showToast(`Expense recorded in Profit & Loss.`);
     return id;
   };
 
   const deleteOtherCost = (id: string) => {
+    const target = otherCosts.find((c) => c.id === id);
     setOtherCosts((prev) => prev.filter((c) => c.id !== id));
+    addAuditLog({
+      action: 'DELETE',
+      module: 'OtherCost',
+      entityId: id,
+      summary: `Deleted operating expense "${target?.category || id}"`,
+      details: `Amount: ${companyProfile.currency} ${(target?.amount ?? 0).toLocaleString()}`,
+    });
     showToast(`Expense deleted.`);
   };
 
@@ -896,6 +1151,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: now,
     }));
     setOtherCosts((prev) => (mode === 'replace' ? hydrated : [...hydrated, ...prev]));
+    addAuditLog({
+      action: 'IMPORT',
+      module: 'OtherCost',
+      entityId: `BULK-COST-${hydrated.length}`,
+      summary: `Bulk imported ${hydrated.length} operating expense record(s) (${mode} mode)`,
+    });
     return hydrated.length;
   };
 
@@ -911,6 +1172,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }): SupplierCreditRecord => {
     const newCredit = createSupplierCreditRecord(input, supplierCredits.length);
     setSupplierCredits((prev) => [newCredit, ...prev]);
+    addAuditLog({
+      action: 'CREATE',
+      module: 'SupplierCredit',
+      entityId: newCredit.creditNoteNumber,
+      summary: `Issued Supplier Credit Note ${newCredit.creditNoteNumber} for ${newCredit.supplierName}`,
+      details: `Amount: ${companyProfile.currency} ${newCredit.amount.toLocaleString()} · Reason: ${newCredit.reason}`,
+    });
     showToast(
       `Supplier Credit Note ${newCredit.creditNoteNumber} (${newCredit.supplierName}) recorded.`
     );
@@ -942,6 +1210,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
     );
     if (appliedDeltaResult > 0) {
+      addAuditLog({
+        action: 'UPDATE',
+        module: 'SupplierCredit',
+        entityId: targetNoteNo,
+        summary: `Applied credit note ${targetNoteNo} towards supplier balance`,
+        details: `Applied Amount: ${companyProfile.currency} ${appliedDeltaResult.toLocaleString()}`,
+      });
       showToast(
         `Applied ${companyProfile.currency} ${appliedDeltaResult.toLocaleString()} from credit note ${targetNoteNo}.`
       );
@@ -979,7 +1254,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteSupplierCredit = (id: string) => {
+    const target = supplierCredits.find((cn) => cn.id === id);
     setSupplierCredits((prev) => prev.filter((cn) => cn.id !== id));
+    addAuditLog({
+      action: 'DELETE',
+      module: 'SupplierCredit',
+      entityId: target?.creditNoteNumber || id,
+      summary: `Deleted supplier credit note ${target?.creditNoteNumber || id}`,
+      details: `Supplier: ${target?.supplierName || '-'} · Amount: ${companyProfile.currency} ${(target?.amount ?? 0).toLocaleString()}`,
+    });
     showToast('Supplier credit note deleted.');
   };
 
@@ -991,6 +1274,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString(),
     };
     setMortalities((prev) => [newRecord, ...prev]);
+    addAuditLog({
+      action: 'CREATE',
+      module: 'Mortality',
+      entityId: newId,
+      summary: `Logged mortality of ${newRecord.quantityKg} KG for ${newRecord.species}`,
+      details: `Cause: ${newRecord.cause || 'Unspecified'} · Date: ${newRecord.date}`,
+    });
     showToast(
       `Recorded mortality of ${newRecord.quantityKg} KG for ${newRecord.species}. Stock adjustment applied.`
     );
@@ -998,14 +1288,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateMortality = (id: string, record: Partial<MortalityRecord>) => {
+    const target = mortalities.find((m) => m.id === id);
     setMortalities((prev) =>
       prev.map((m) => (m.id === id ? { ...m, ...record } : m))
     );
+    addAuditLog({
+      action: 'UPDATE',
+      module: 'Mortality',
+      entityId: id,
+      summary: `Updated mortality log for ${record.species || target?.species || id}`,
+      details: `Quantity: ${record.quantityKg ?? target?.quantityKg ?? 0} KG`,
+    });
     showToast('Updated mortality record and recalculated inventory stock.');
   };
 
   const deleteMortality = (id: string) => {
+    const target = mortalities.find((m) => m.id === id);
     setMortalities((prev) => prev.filter((m) => m.id !== id));
+    addAuditLog({
+      action: 'DELETE',
+      module: 'Mortality',
+      entityId: id,
+      summary: `Deleted mortality record (${target?.quantityKg || 0} KG · ${target?.species || id})`,
+    });
     showToast('Deleted mortality record. Stock adjustment restored.');
   };
 
@@ -1434,6 +1739,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     }
 
+    addAuditLog({
+      action: 'CLEAR',
+      module: 'Database',
+      entityId: `CLEAR-${scope.toUpperCase()}`,
+      summary: `Super Admin cleared database records (scope: ${scope.toUpperCase()})`,
+    });
+
     window.dispatchEvent(new CustomEvent('zsb-records-cleared', { detail: { scope } }));
     return { valid: true };
   };
@@ -1503,6 +1815,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider
       value={{
+        isAuthenticated,
+        currentUser,
+        login,
+        logout,
+        auditLogs,
+        addAuditLog,
+        clearAuditLogs,
         activeTab,
         setActiveTab,
         companyProfile,

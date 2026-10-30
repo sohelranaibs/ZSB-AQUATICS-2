@@ -180,6 +180,13 @@ const TAB_METADATA: Record<
     sheetReference: 'REPORTS_ALL',
     slug: 'SEARCH_REPORTS_TABLE',
   },
+  audit_logs: {
+    viewLabel: 'Audit Logs',
+    documentTitle: 'System Audit Logs — Entries, Edits & Deletions Activity Report',
+    documentBadge: 'SYSTEM AUDIT TRAIL & ADMINISTRATOR ACTIVITY LOG — TABLE REPORT',
+    sheetReference: 'AUDIT_LOG_DB',
+    slug: 'AUDIT_LOGS_TABLE',
+  },
   settings: {
     viewLabel: 'Settings & Config',
     documentTitle: 'System Configuration & Master Dropdown Lists Table Report',

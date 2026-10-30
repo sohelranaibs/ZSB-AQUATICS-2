@@ -222,7 +222,8 @@ export function validatePackingForm(
         row.rate !== 0
     );
 
-  const isNoReport = input.paymentStatus === 'NO REPORT';
+  const isNoReport =
+    input.paymentStatus === 'NO REPORT' || input.paymentStatus === 'UNPAID';
 
   if (touchedRows.length === 0) {
     const msg = isNoReport

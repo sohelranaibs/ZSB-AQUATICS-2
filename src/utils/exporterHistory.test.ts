@@ -6,7 +6,10 @@ import {
   buildExporterRecordHistory,
   calculateExporterHistoryTotals,
 } from './exporterHistory.ts';
-import { initialPackings, initialPayments } from '../context/initialData.ts';
+import {
+  samplePackings as initialPackings,
+  samplePayments as initialPayments,
+} from '../context/initialData.ts';
 
 describe('exporterHistory utilities', () => {
   it('EXPORTER_STATUS_OPTIONS includes REPORT, NO REPORT, and PAID', () => {

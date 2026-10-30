@@ -1,18 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import {
-  calculatePackingRow,
-  calculatePackingTotals,
   calculatePackingTotalAmountBDT,
   formatCurrency,
   formatDate,
   formatPackingExportFilename,
   generateInvoiceNumber,
 } from '../utils/calculations.ts';
+import {
+  GST_RATE_PRESETS,
+  calculatePackingRowEngine,
+  recalculatePackingRows,
+  runPackingAutoCalculationEngine,
+} from '../utils/autoCalculationEngine.ts';
 import { PackingItemRow } from '../types/index.ts';
 import { validatePackingForm } from '../utils/validation.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
 import { exportElementToPng } from '../utils/pdfGenerator.ts';
+import {
+  ZSB_VIEW_SHORTCUT_EVENT,
+  ViewShortcutEventDetail,
+} from '../utils/keyboardShortcuts.ts';
 import {
   Save,
   FileText,
@@ -62,14 +70,16 @@ export const PackingListView: React.FC = () => {
   const [flight, setFlight] = useState<string>('');
   const [destination, setDestination] = useState<string>('');
   const [shipper, setShipper] = useState<string>('');
-  const [paymentStatus, setPaymentStatus] = useState<'NO REPORT' | 'REPORT' | 'PAID'>(
-    'NO REPORT'
+  const [paymentStatus, setPaymentStatus] = useState<'PAID' | 'UNPAID'>(
+    'UNPAID'
   );
   const [remarks, setRemarks] = useState<string>('');
   const [lastSavedRecord, setLastSavedRecord] = useState<{ id: string; invoiceNumber: string } | null>(null);
 
+  const [defaultGstRate, setDefaultGstRate] = useState<number>(0);
+
   // 5 standard empty rows ready for data entry
-  const createEmptyRow = (id: string): PackingItemRow => ({
+  const createEmptyRow = (id: string, gstRate: number = defaultGstRate): PackingItemRow => ({
     id,
     item: '',
     box: 0,
@@ -77,15 +87,18 @@ export const PackingListView: React.FC = () => {
     totalWeight: 0,
     unit: 'KG',
     rate: 0,
+    subtotal: 0,
+    gstRate,
+    gstAmount: 0,
     amount: 0,
   });
 
   const [rows, setRows] = useState<PackingItemRow[]>([
-    createEmptyRow('1'),
-    createEmptyRow('2'),
-    createEmptyRow('3'),
-    createEmptyRow('4'),
-    createEmptyRow('5'),
+    createEmptyRow('1', 0),
+    createEmptyRow('2', 0),
+    createEmptyRow('3', 0),
+    createEmptyRow('4', 0),
+    createEmptyRow('5', 0),
   ]);
 
   // Search by dropdowns
@@ -113,6 +126,7 @@ export const PackingListView: React.FC = () => {
   const handleLoadForEdit = (idToEdit: string) => {
     const found = packings.find((p) => p.id === idToEdit);
     if (!found) return;
+    const recordGst = found.gstRate ?? 0;
     setEditingPackingId(found.id);
     setInvoiceNumber(found.invoiceNumber);
     setPackingDate(found.packingDate);
@@ -120,12 +134,17 @@ export const PackingListView: React.FC = () => {
     setFlight(found.flight);
     setDestination(found.destination);
     setShipper(found.shipper);
-    setPaymentStatus((found.paymentStatus as 'NO REPORT' | 'REPORT' | 'PAID') || 'NO REPORT');
+    setPaymentStatus(found.paymentStatus === 'PAID' ? 'PAID' : 'UNPAID');
+    setDefaultGstRate(recordGst);
     setRemarks(found.remarks || '');
 
-    const loadedRows = found.items.map((it) => ({ ...it }));
+    const loadedRows = recalculatePackingRows(
+      found.items.map((it) => ({ ...it })),
+      recordGst,
+      false
+    );
     while (loadedRows.length < 5) {
-      loadedRows.push(createEmptyRow(generateRecordId('pkgrow')));
+      loadedRows.push(createEmptyRow(generateRecordId('pkgrow'), recordGst));
     }
     setRows(loadedRows);
     setValidationAttempted(false);
@@ -149,7 +168,7 @@ export const PackingListView: React.FC = () => {
     }
   }, [editingPackingId]);
 
-  // Row update logic
+  // Real-time row update logic (Box, Weight, Rate, GST %)
   const handleRowChange = (
     id: string,
     field: keyof PackingItemRow,
@@ -160,12 +179,24 @@ export const PackingListView: React.FC = () => {
         if (row.id !== id) return row;
         const updated = { ...row, [field]: value };
 
-        const b = field === 'box' ? Number(value) : row.box;
-        const w = field === 'weight' ? Number(value) : row.weight;
-        const r = field === 'rate' ? Number(value) : row.rate;
+        const b = field === 'box' ? value : row.box;
+        const w = field === 'weight' ? value : row.weight;
+        const r = field === 'rate' ? value : row.rate;
+        const gst =
+          field === 'gstRate'
+            ? value
+            : row.gstRate !== undefined
+            ? row.gstRate
+            : defaultGstRate;
 
-        const calcs = calculatePackingRow(b, w, r);
+        const calcs = calculatePackingRowEngine(b, w, r, gst);
+        updated.box = calcs.box;
+        updated.weight = calcs.weight;
         updated.totalWeight = calcs.totalWeight;
+        updated.rate = calcs.rate;
+        updated.subtotal = calcs.subtotal;
+        updated.gstRate = calcs.gstRate;
+        updated.gstAmount = calcs.gstAmount;
         updated.amount = calcs.amount;
 
         return updated;
@@ -173,10 +204,17 @@ export const PackingListView: React.FC = () => {
     );
   };
 
+  // Apply manifest-level GST rate preset across all rows in real-time
+  const handleDefaultGstRateChange = (newGstRate: number) => {
+    const safeRate = Math.max(0, Math.min(100, Number(newGstRate) || 0));
+    setDefaultGstRate(safeRate);
+    setRows((prev) => recalculatePackingRows(prev, safeRate, true));
+  };
+
   // Clear single row
   const handleClearRow = (id: string) => {
     setRows((prev) =>
-      prev.map((row) => (row.id === id ? createEmptyRow(row.id) : row))
+      prev.map((row) => (row.id === id ? createEmptyRow(row.id, defaultGstRate) : row))
     );
   };
 
@@ -184,7 +222,7 @@ export const PackingListView: React.FC = () => {
   const handleAddRow = () => {
     setRows((prev) => [
       ...prev,
-      createEmptyRow(generateRecordId('pkgrow')),
+      createEmptyRow(generateRecordId('pkgrow'), defaultGstRate),
     ]);
   };
 
@@ -194,14 +232,15 @@ export const PackingListView: React.FC = () => {
     setDestination('');
     setShipper('');
     setRemarks('');
-    setPaymentStatus('NO REPORT');
+    setDefaultGstRate(0);
+    setPaymentStatus('UNPAID');
     setPackingDate(new Date().toISOString().slice(0, 10));
     setRows([
-      createEmptyRow('1'),
-      createEmptyRow('2'),
-      createEmptyRow('3'),
-      createEmptyRow('4'),
-      createEmptyRow('5'),
+      createEmptyRow('1', 0),
+      createEmptyRow('2', 0),
+      createEmptyRow('3', 0),
+      createEmptyRow('4', 0),
+      createEmptyRow('5', 0),
     ]);
     setValidationAttempted(false);
   };
@@ -213,13 +252,17 @@ export const PackingListView: React.FC = () => {
     showToast('Packing list form cleared and all cells reset.');
   };
 
-  const { totalBox, totalWeight, totalAmount } = calculatePackingTotals(rows);
-
-  const populatedRowCount = rows.filter(
-    (r) => r.item.trim() !== '' || r.box !== 0 || r.weight !== 0 || r.rate !== 0
-  ).length;
-
-  const avgRatePerKg = totalWeight > 0 ? totalAmount / totalWeight : 0;
+  const {
+    rows: computedRows,
+    activeRowCount: populatedRowCount,
+    totalBox,
+    totalWeight,
+    subtotalAmount,
+    totalGstAmount,
+    effectiveGstRate,
+    totalAmount,
+    avgRatePerKg,
+  } = runPackingAutoCalculationEngine(rows, defaultGstRate);
 
   // Historical stats for the currently selected Shipping Mark
   const markShipments = packings.filter(
@@ -246,7 +289,7 @@ export const PackingListView: React.FC = () => {
       destination,
       shipper,
       paymentStatus,
-      rows,
+      rows: computedRows,
     });
 
     if (!check.isValid) {
@@ -275,6 +318,9 @@ export const PackingListView: React.FC = () => {
         items: validItems,
         totalBox,
         totalWeight,
+        subtotalAmount,
+        gstRate: effectiveGstRate,
+        totalGstAmount,
         totalAmount,
         rmbRate: preservedRmbRate,
         totalAmountBDT: calculatePackingTotalAmountBDT(totalAmount, preservedRmbRate),
@@ -324,6 +370,9 @@ export const PackingListView: React.FC = () => {
       items: validItems,
       totalBox,
       totalWeight,
+      subtotalAmount,
+      gstRate: effectiveGstRate,
+      totalGstAmount,
       totalAmount,
       rmbAmount: totalWeight > 0 ? Math.round((totalAmount / totalWeight) * 100) / 100 : 0,
       settledAmount: totalAmount,
@@ -352,10 +401,10 @@ export const PackingListView: React.FC = () => {
   };
 
   const exportableRows = (() => {
-    const validItems = rows.filter(
+    const validItems = computedRows.filter(
       (r) => r.item.trim() !== '' || r.box > 0 || r.weight > 0 || r.rate > 0
     );
-    return validItems.length > 0 ? validItems : rows.slice(0, 5);
+    return validItems.length > 0 ? validItems : computedRows.slice(0, 5);
   })();
 
   const handlePrintSelected = () => {
@@ -374,12 +423,41 @@ export const PackingListView: React.FC = () => {
         items: exportableRows,
         totalBox,
         totalWeight,
+        subtotalAmount,
+        gstRate: effectiveGstRate,
+        totalGstAmount,
         totalAmount,
         remarks,
       },
       items: exportableRows,
     });
   };
+
+  useEffect(() => {
+    const onShortcut = (event: Event) => {
+      const customEvent = event as CustomEvent<ViewShortcutEventDetail>;
+      const action = customEvent.detail?.action;
+      if (!action) return;
+
+      if (action === 'SAVE_ACTIVE_VIEW') {
+        customEvent.detail.handled = true;
+        handleSavePDF();
+      } else if (action === 'PRINT_ACTIVE_VIEW') {
+        customEvent.detail.handled = true;
+        handlePrintSelected();
+      } else if (action === 'ADD_FORM_ROW') {
+        customEvent.detail.handled = true;
+        handleAddRow();
+        showToast('Added new line item row to Export Packing List (Alt+N).');
+      } else if (action === 'RESET_FORM') {
+        customEvent.detail.handled = true;
+        handleClear();
+      }
+    };
+
+    window.addEventListener(ZSB_VIEW_SHORTCUT_EVENT, onShortcut);
+    return () => window.removeEventListener(ZSB_VIEW_SHORTCUT_EVENT, onShortcut);
+  });
 
   const handleDirectSavePng = async () => {
     setIsExportingPng(true);
@@ -434,13 +512,13 @@ export const PackingListView: React.FC = () => {
   };
 
   return (
-    <div className="p-3 sm:p-5 max-w-7xl mx-auto space-y-5">
+    <div className="p-3 sm:p-5 max-w-[1440px] mx-auto space-y-5">
       {/* Top Banner with Official ZSB Branding */}
       <div className="bg-[#1e2548] text-white px-5 py-3.5 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-amber-500">
         <div className="flex flex-wrap items-center gap-3">
           <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
-              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+              src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
               alt={companyProfile.companyName}
               className="w-full h-full object-contain rounded-full"
             />
@@ -488,17 +566,17 @@ export const PackingListView: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Grid: Redesigned Packing List Voucher (Left 8 Cols) + Action & Search Controls (Right 4 Cols) */}
+      {/* Main Grid: Redesigned Packing List Voucher (Left 9 Cols) + Action & Search Controls (Right 3 Cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* Left: Packing List Data Entry Sheet (8 Cols) */}
-        <div className="lg:col-span-8 space-y-4">
+        {/* Left: Packing List Data Entry Sheet (9 Cols) */}
+        <div className="lg:col-span-9 space-y-4">
           <div className="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden">
             {/* Sheet Title Header */}
             <div className="bg-[#8b3858] text-white py-3 px-5 flex flex-wrap items-center justify-between gap-3 border-b border-pink-950">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-amber-300 bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
                   <img
-                    src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+                    src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
                     alt={companyProfile.companyName}
                     className="w-full h-full object-contain rounded-full"
                   />
@@ -842,28 +920,23 @@ export const PackingListView: React.FC = () => {
                     value={paymentStatus}
                     onChange={(e) =>
                       setPaymentStatus(
-                        e.target.value as 'NO REPORT' | 'REPORT' | 'PAID'
+                        e.target.value as 'PAID' | 'UNPAID'
                       )
                     }
                     className="bg-white border border-slate-300 rounded-md px-2 py-1 text-[11px] font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
                   >
-                    <option value="NO REPORT">STATUS: NO REPORT (Rate counts from 0)</option>
-                    <option value="REPORT">STATUS: REPORT (Rate &gt; 0)</option>
-                    <option value="PAID">STATUS: PAID (Rate &gt; 0)</option>
+                    <option value="PAID">PAID</option>
+                    <option value="UNPAID">UNPAID</option>
                   </select>
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                      paymentStatus === 'NO REPORT'
-                        ? 'bg-slate-200 text-slate-700'
-                        : paymentStatus === 'REPORT'
-                        ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                      paymentStatus === 'UNPAID'
+                        ? 'bg-rose-100 text-rose-900 border border-rose-300'
                         : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
                     }`}
                   >
-                    {paymentStatus === 'NO REPORT'
-                      ? 'Rate: ≥ 0 (Pending Report)'
-                      : paymentStatus === 'REPORT'
-                      ? 'Rate: > 0 Required (Report Ready)'
+                    {paymentStatus === 'UNPAID'
+                      ? 'Rate: ≥ 0 (Unpaid)'
                       : 'Rate: > 0 Required (Paid)'}
                   </span>
                 </div>
@@ -903,7 +976,57 @@ export const PackingListView: React.FC = () => {
               </div>
             )}
 
-            {/* Redesigned Manifest Line-Item Table Grid */}
+            {/* Real-Time Auto-Calculation & GST Engine Toolbar */}
+            <div
+              data-testid="packing-auto-calc-toolbar"
+              className="px-4 py-2.5 bg-amber-50/70 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-bold uppercase tracking-wider text-[#8b3858]">
+                  Auto-Calculation Engine:
+                </span>
+                <span className="text-slate-600 font-mono text-[11px]">
+                  Total Wt = Box × Wt · Subtotal = Total Wt × Rate · GST = Subtotal × GST% · Total = Subtotal + GST
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-bold text-slate-700 uppercase mr-1">
+                  Default GST Rate:
+                </span>
+                {GST_RATE_PRESETS.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => handleDefaultGstRateChange(preset)}
+                    data-testid={`packing-gst-preset-${preset}`}
+                    className={`px-2 py-1 rounded text-[11px] font-mono font-bold transition cursor-pointer ${
+                      defaultGstRate === preset
+                        ? 'bg-[#e67327] text-white shadow-2xs'
+                        : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
+                    }`}
+                  >
+                    {preset}%
+                  </button>
+                ))}
+                <div className="flex items-center gap-1 ml-1">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.5"
+                    aria-label="Packing Default GST Percentage"
+                    value={defaultGstRate}
+                    onChange={(e) =>
+                      handleDefaultGstRateChange(parseFloat(e.target.value) || 0)
+                    }
+                    className="w-16 bg-white border border-slate-300 rounded px-2 py-1 text-right font-mono tabular-nums font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                  <span className="font-mono font-bold text-slate-600">%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Redesigned Manifest Line-Item Table Grid with Subtotal, GST % & GST Amount */}
             <div className="overflow-x-auto">
               <table
                 className="w-full border-collapse text-xs"
@@ -911,11 +1034,11 @@ export const PackingListView: React.FC = () => {
               >
                 <thead>
                   <tr className="bg-[#e67327] text-white uppercase text-[11px] font-bold tracking-wider border-b border-amber-800">
-                    <th className="px-2.5 py-2.5 border-r border-amber-600/60 w-12 text-center whitespace-nowrap">
+                    <th className="px-1.5 py-2.5 border-r border-amber-600/60 w-9 text-center whitespace-nowrap">
                       SL #
                     </th>
-                    <th className="px-3 py-2.5 border-r border-amber-600/60 text-left min-w-[160px]">
-                      <div className="flex items-center justify-between gap-1.5">
+                    <th className="px-2 py-2.5 border-r border-amber-600/60 text-left min-w-[130px]">
+                      <div className="flex items-center justify-between gap-1">
                         <span>ITEM / SIZE</span>
                         <button
                           type="button"
@@ -927,7 +1050,7 @@ export const PackingListView: React.FC = () => {
                         </button>
                       </div>
                     </th>
-                    <th className="px-2.5 py-2.5 border-r border-amber-600/60 w-24 text-center">
+                    <th className="px-1.5 py-2.5 border-r border-amber-600/60 w-16 text-center">
                       <div className="flex items-center justify-between px-0.5">
                         <span>BOX</span>
                         <button
@@ -940,9 +1063,9 @@ export const PackingListView: React.FC = () => {
                         </button>
                       </div>
                     </th>
-                    <th className="px-2.5 py-2.5 border-r border-amber-600/60 w-28 text-center">
+                    <th className="px-1.5 py-2.5 border-r border-amber-600/60 w-20 text-center">
                       <div className="flex items-center justify-between px-0.5">
-                        <span>WT / BOX</span>
+                        <span>WT/BOX</span>
                         <button
                           type="button"
                           onClick={() => setAddingCategory('weights')}
@@ -953,28 +1076,37 @@ export const PackingListView: React.FC = () => {
                         </button>
                       </div>
                     </th>
-                    <th className="px-3 py-2.5 border-r border-amber-600/60 w-32 text-right whitespace-nowrap">
-                      TOTAL WT (KG)
+                    <th className="px-1.5 py-2.5 border-r border-amber-600/60 w-20 text-right whitespace-nowrap">
+                      TOTAL WT
                     </th>
-                    <th className="px-2 py-2.5 border-r border-amber-600/60 w-20 text-center whitespace-nowrap">
+                    <th className="px-1 py-2.5 border-r border-amber-600/60 w-14 text-center whitespace-nowrap">
                       UNIT
                     </th>
-                    <th className="px-3 py-2.5 border-r border-amber-600/60 w-28 text-right whitespace-nowrap">
+                    <th className="px-1.5 py-2.5 border-r border-amber-600/60 w-20 text-right whitespace-nowrap">
                       <div>RATE (RMB)</div>
                       <div className="text-[9px] font-normal lowercase tracking-normal text-amber-100">
-                        {paymentStatus === 'NO REPORT' ? '≥ 0 (Pending)' : '> 0 (Required)'}
+                        {paymentStatus === 'UNPAID' ? '≥ 0 (Unpaid)' : '> 0 (Required)'}
                       </div>
                     </th>
-                    <th className="px-3 py-2.5 border-r border-amber-600/60 w-36 text-right whitespace-nowrap">
-                      AMOUNT (RMB)
+                    <th className="px-2 py-2.5 border-r border-amber-600/60 w-24 text-right whitespace-nowrap">
+                      SUBTOTAL
                     </th>
-                    <th className="px-2 py-2.5 w-14 text-center whitespace-nowrap">
+                    <th className="px-1.5 py-2.5 border-r border-amber-600/60 w-16 text-right whitespace-nowrap">
+                      GST (%)
+                    </th>
+                    <th className="px-1.5 py-2.5 border-r border-amber-600/60 w-20 text-right whitespace-nowrap">
+                      GST AMT
+                    </th>
+                    <th className="px-2 py-2.5 border-r border-amber-600/60 w-24 text-right whitespace-nowrap">
+                      TOTAL (RMB)
+                    </th>
+                    <th className="px-1 py-2.5 w-10 text-center whitespace-nowrap">
                       CLR
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {rows.map((row, idx) => {
+                  {computedRows.map((row, idx) => {
                     const isFilled =
                       row.item.trim() !== '' ||
                       row.box !== 0 ||
@@ -987,6 +1119,9 @@ export const PackingListView: React.FC = () => {
                       validationAttempted &&
                       Boolean(validation.fieldErrors.rows) &&
                       idx === 0;
+                    const rowSubtotal = row.subtotal ?? 0;
+                    const rowGstRate = row.gstRate ?? defaultGstRate;
+                    const rowGstAmount = row.gstAmount ?? 0;
                     return (
                       <tr
                         key={row.id}
@@ -1088,7 +1223,10 @@ export const PackingListView: React.FC = () => {
                         </td>
 
                         {/* Total Weight (Auto calculated: Box * Weight) */}
-                        <td className="p-1.5 border-r border-slate-200 bg-amber-50/40 text-right font-mono font-bold tabular-nums text-teal-800 pr-3">
+                        <td
+                          data-testid={`packing-row-${idx + 1}-weight`}
+                          className="p-1.5 border-r border-slate-200 bg-amber-50/40 text-right font-mono font-bold tabular-nums text-teal-800 pr-2"
+                        >
                           {row.totalWeight > 0 ? row.totalWeight.toFixed(2) : '0.00'}
                         </td>
 
@@ -1131,14 +1269,64 @@ export const PackingListView: React.FC = () => {
                                 ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
                                 : 'border-slate-200 focus:ring-amber-500'
                             }`}
-                            placeholder={paymentStatus === 'NO REPORT' ? '0.00' : 'Rate > 0'}
+                            placeholder={paymentStatus === 'UNPAID' ? '0.00' : 'Rate > 0'}
                           />
                         </td>
 
-                        {/* Amount (Auto calculated: Total Weight * Rate) */}
-                        <td className="p-1.5 border-r border-slate-200 text-right font-mono font-black tabular-nums text-slate-900 pr-3 bg-slate-50/80">
+                        {/* Row Subtotal (Auto calculated: Total Weight * Rate) */}
+                        <td
+                          data-testid={`packing-row-${idx + 1}-subtotal`}
+                          className="p-1.5 border-r border-slate-200 bg-slate-50/60 text-right font-mono font-semibold tabular-nums text-slate-800 pr-2"
+                        >
+                          {rowSubtotal > 0
+                            ? rowSubtotal.toLocaleString('en-US', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })
+                            : '0.00'}
+                        </td>
+
+                        {/* Row GST % Input */}
+                        <td className="p-1.5 border-r border-slate-200">
+                          <input
+                            aria-label={`Row ${idx + 1} GST Rate`}
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.5"
+                            value={rowGstRate}
+                            onChange={(e) =>
+                              handleRowChange(
+                                row.id,
+                                'gstRate',
+                                parseFloat(e.target.value) || 0
+                              )
+                            }
+                            className="w-full bg-white border border-slate-200 rounded-md px-1.5 py-1.5 text-right font-mono tabular-nums font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            placeholder="0"
+                          />
+                        </td>
+
+                        {/* Row GST Amount (Auto calculated: Subtotal * GST%) */}
+                        <td
+                          data-testid={`packing-row-${idx + 1}-gst`}
+                          className="p-1.5 border-r border-slate-200 bg-slate-50/60 text-right font-mono font-semibold tabular-nums text-teal-800 pr-2"
+                        >
+                          {rowGstAmount > 0
+                            ? rowGstAmount.toLocaleString('en-US', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })
+                            : '0.00'}
+                        </td>
+
+                        {/* Amount (Auto calculated: Subtotal + GST Amount) */}
+                        <td
+                          data-testid={`packing-row-${idx + 1}-total`}
+                          className="p-1.5 border-r border-slate-200 text-right font-mono font-black tabular-nums text-slate-900 pr-2.5 bg-amber-50/40"
+                        >
                           {row.amount > 0
-                            ? row.amount.toLocaleString('en-BD', {
+                            ? row.amount.toLocaleString('en-US', {
                                 minimumFractionDigits: 2,
                                 maximumFractionDigits: 2,
                               })
@@ -1166,12 +1354,12 @@ export const PackingListView: React.FC = () => {
                   })}
                 </tbody>
 
-                {/* Subtotals & Totals Row */}
+                {/* Subtotals, GST & Totals Row */}
                 <tfoot>
                   <tr className="bg-[#e67327] text-white font-bold border-t-2 border-amber-800">
                     <td
                       colSpan={2}
-                      className="px-3 py-2.5 text-right uppercase tracking-wider text-[11px] border-r border-amber-600/60"
+                      className="px-2.5 py-2.5 text-right uppercase tracking-wider text-[11px] border-r border-amber-600/60"
                     >
                       MANIFEST TOTALS:
                     </td>
@@ -1181,18 +1369,43 @@ export const PackingListView: React.FC = () => {
                     <td className="px-2 py-2.5 text-right uppercase text-[10px] border-r border-amber-600/60">
                       NET WT:
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono tabular-nums text-amber-100 text-sm font-black border-r border-amber-600/60">
+                    <td
+                      data-testid="packing-footer-weight"
+                      className="px-2 py-2.5 text-right font-mono tabular-nums text-amber-100 text-xs font-black border-r border-amber-600/60"
+                    >
                       {totalWeight.toFixed(2)} KG
                     </td>
                     <td
                       colSpan={2}
                       className="px-2 py-2.5 text-right uppercase text-[10px] border-r border-amber-600/60"
                     >
-                      EXPORT VALUE:
+                      SUBTOTAL / GST / TOTAL:
+                    </td>
+                    <td
+                      data-testid="packing-footer-subtotal"
+                      className="px-2 py-2.5 text-right font-mono tabular-nums text-amber-50 text-xs font-bold border-r border-amber-600/60"
+                    >
+                      {subtotalAmount.toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </td>
+                    <td className="px-1.5 py-2.5 text-right font-mono tabular-nums text-amber-100 text-[11px] border-r border-amber-600/60">
+                      {effectiveGstRate}%
+                    </td>
+                    <td
+                      data-testid="packing-footer-gst"
+                      className="px-2 py-2.5 text-right font-mono tabular-nums text-amber-100 text-xs font-bold border-r border-amber-600/60"
+                    >
+                      {totalGstAmount.toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
                     </td>
                     <td
                       colSpan={2}
-                      className="px-3 py-2.5 text-right font-mono tabular-nums text-amber-100 text-base font-black pr-3"
+                      data-testid="packing-footer-total"
+                      className="px-2.5 py-2.5 text-right font-mono tabular-nums text-white text-sm font-black pr-3"
                     >
                       {formatCurrency(totalAmount, 'RMB')}
                     </td>
@@ -1218,13 +1431,14 @@ export const PackingListView: React.FC = () => {
               </div>
               <div className="text-[11px] text-slate-600 font-mono">
                 Formula: <strong>Total Wt = Box × Wt/Box</strong> ·{' '}
-                <strong>Amount = Total Wt × Rate</strong>
+                <strong>Subtotal = Total Wt × Rate</strong> ·{' '}
+                <strong>Total = Subtotal + GST</strong>
               </div>
             </div>
 
             {/* Manifest KPI Summary Strip & Remarks */}
             <div className="p-4 bg-slate-50 border-t border-slate-200 space-y-3">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                 <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
                   <div className="text-[10px] font-bold uppercase text-slate-500">
                     TOTAL CARTONS / BOXES
@@ -1246,10 +1460,25 @@ export const PackingListView: React.FC = () => {
 
                 <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
                   <div className="text-[10px] font-bold uppercase text-slate-500">
-                    AVG EXPORT RATE / KG
+                    TAXABLE SUBTOTAL
                   </div>
-                  <div className="text-base font-black font-mono tabular-nums text-blue-900 mt-0.5">
-                    {formatCurrency(avgRatePerKg, 'RMB')}
+                  <div
+                    data-testid="packing-summary-subtotal"
+                    className="text-base font-black font-mono tabular-nums text-slate-900 mt-0.5"
+                  >
+                    {formatCurrency(subtotalAmount, 'RMB')}
+                  </div>
+                </div>
+
+                <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
+                  <div className="text-[10px] font-bold uppercase text-teal-800">
+                    TOTAL GST ({effectiveGstRate}%)
+                  </div>
+                  <div
+                    data-testid="packing-summary-gst"
+                    className="text-base font-black font-mono tabular-nums text-teal-800 mt-0.5"
+                  >
+                    {formatCurrency(totalGstAmount, 'RMB')}
                   </div>
                 </div>
 
@@ -1257,7 +1486,10 @@ export const PackingListView: React.FC = () => {
                   <div className="text-[10px] font-bold uppercase text-amber-900">
                     TOTAL MANIFEST VALUE
                   </div>
-                  <div className="text-base font-black font-mono tabular-nums text-amber-950 mt-0.5">
+                  <div
+                    data-testid="packing-summary-total"
+                    className="text-base font-black font-mono tabular-nums text-amber-950 mt-0.5"
+                  >
                     {formatCurrency(totalAmount, 'RMB')}
                   </div>
                 </div>
@@ -1302,8 +1534,8 @@ export const PackingListView: React.FC = () => {
           </div>
         </div>
 
-        {/* Right: ACTION BUTTONS, SEARCH BY, & RECENT MARK SHIPMENTS (4 Cols) */}
-        <div className="lg:col-span-4 space-y-4">
+        {/* Right: ACTION BUTTONS, SEARCH BY, & RECENT MARK SHIPMENTS (3 Cols) */}
+        <div className="lg:col-span-3 space-y-4">
           {/* Action Buttons Container */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-2.5">
             <div className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
@@ -1336,10 +1568,13 @@ export const PackingListView: React.FC = () => {
                 type="button"
                 onClick={handleSavePDF}
                 className="w-full text-white py-2.5 px-4 rounded-lg font-bold text-sm shadow-xs flex items-center justify-center space-x-2 transition transform active:scale-95 cursor-pointer bg-[#129c54] hover:bg-[#0e8346] whitespace-nowrap"
-                title="Save Manifest and open Document Print Preview (PDF / .PNG)"
+                title="Save Manifest and open Document Print Preview (Shortcut: Ctrl+S)"
               >
                 <Save className="w-5 h-5 shrink-0" />
                 <span>SAVE (PDF / .PNG)</span>
+                <span className="text-[10px] font-mono bg-emerald-950/60 px-1.5 py-0.5 rounded text-amber-200">
+                  Ctrl+S
+                </span>
               </button>
             )}
 
@@ -1423,7 +1658,7 @@ export const PackingListView: React.FC = () => {
                 </option>
                 {packings.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.invoiceNumber} — {p.shippingMark} ({p.paymentStatus || 'NO REPORT'})
+                    {p.invoiceNumber} — {p.shippingMark} ({p.paymentStatus === 'PAID' ? 'PAID' : 'UNPAID'})
                   </option>
                 ))}
               </select>
@@ -1605,7 +1840,7 @@ export const PackingListView: React.FC = () => {
                 }}
               >
                 <img
-                  src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'}
+                  src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
                   alt={companyProfile.companyName}
                   style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '50%' }}
                 />

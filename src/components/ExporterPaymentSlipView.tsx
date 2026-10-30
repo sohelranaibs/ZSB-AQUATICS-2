@@ -46,6 +46,12 @@ import {
   Loader2,
 } from 'lucide-react';
 
+import {
+  PngShareModal,
+  WhatsAppIcon,
+  WeChatIcon,
+} from './PngShareModal.tsx';
+
 const CUSTOM_SLIP_ROWS_STORAGE_KEY = 'zsb_exporter_slip_custom_rows_v3';
 
 export const ExporterPaymentSlipView: React.FC = () => {
@@ -68,6 +74,8 @@ export const ExporterPaymentSlipView: React.FC = () => {
   const [selectedFlight, setSelectedFlight] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [isExportingPng, setIsExportingPng] = useState<boolean>(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
+  const [shareChannel, setShareChannel] = useState<'whatsapp' | 'wechat'>('wechat');
 
   // Custom / manual rows added directly inside the Payment Slip form (defaults to 3 rows)
   const [customRows, setCustomRows] = useState<ExporterPaymentSlipRow[]>(() => {
@@ -671,6 +679,36 @@ export const ExporterPaymentSlipView: React.FC = () => {
                 <span>SAVE .PNG (付款单)</span>
               </>
             )}
+          </button>
+
+          {/* Share via WeChat (微信分享) Button */}
+          <button
+            type="button"
+            data-testid="exporter-share-wechat-btn"
+            onClick={() => {
+              setShareChannel('wechat');
+              setIsShareModalOpen(true);
+            }}
+            className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-black bg-[#07C160] hover:bg-[#06a853] text-white rounded-lg shadow-md transition cursor-pointer"
+            title="Share Payment Slip .PNG directly to Chinese buyers via WeChat (微信)"
+          >
+            <WeChatIcon className="w-4 h-4 text-white" />
+            <span>SHARE WECHAT (微信)</span>
+          </button>
+
+          {/* Share via WhatsApp Button */}
+          <button
+            type="button"
+            data-testid="exporter-share-whatsapp-btn"
+            onClick={() => {
+              setShareChannel('whatsapp');
+              setIsShareModalOpen(true);
+            }}
+            className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-black bg-[#25D366] hover:bg-[#20ba5a] text-white rounded-lg shadow-md transition cursor-pointer"
+            title="Share Payment Slip .PNG via WhatsApp"
+          >
+            <WhatsAppIcon className="w-4 h-4 text-white" />
+            <span>SHARE WHATSAPP</span>
           </button>
         </div>
       </div>
@@ -1403,6 +1441,26 @@ export const ExporterPaymentSlipView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Interactive PNG WeChat & WhatsApp Share Modal */}
+      {isShareModalOpen && (
+        <PngShareModal
+          isOpen={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
+          title={`Exporter Payment Slip (付款单) — ${selectedMark} (${selectedDate})`}
+          documentType="exporter_payment_slip"
+          documentData={{
+            shippingMark: selectedMark,
+            packingDate: selectedDate,
+            totalRmb: totals.totalAmount,
+            totalBdt: totals.totalAmount * (companyProfile.rmbExchangeRate || 16.5),
+            flight: selectedFlight,
+          }}
+          targetElementId="exporter-payment-slip-canvas"
+          defaultFilename={formatExporterSlipExportFilename(selectedMark, selectedDate, 'png')}
+          defaultPhone=""
+        />
+      )}
     </div>
   );
 };

@@ -37,6 +37,11 @@ import { formatAirWayBillExportFilename } from '../utils/airWayBill.ts';
 import { PaymentSlipPrintCard } from './PaymentSlipPrintCard.tsx';
 import { PaymentRecord } from '../types/index.ts';
 import { COMPANY_LOGO_URL } from '../context/initialData.ts';
+import {
+  PngShareModal,
+  WhatsAppIcon,
+  WeChatIcon,
+} from './PngShareModal.tsx';
 
 export const PrintPreviewModal: React.FC = () => {
   const {
@@ -49,6 +54,8 @@ export const PrintPreviewModal: React.FC = () => {
   } = useApp();
   const [isSavingPdf, setIsSavingPdf] = useState(false);
   const [isSavingPng, setIsSavingPng] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [shareModalChannel, setShareModalChannel] = useState<'whatsapp' | 'wechat'>('whatsapp');
 
   if (!printModalData.isOpen) {
     return (
@@ -256,6 +263,38 @@ export const PrintPreviewModal: React.FC = () => {
                   <span>Save as PNG (.png)</span>
                 </>
               )}
+            </button>
+
+            {/* Share via WhatsApp Button */}
+            <button
+              type="button"
+              data-testid="print-share-whatsapp-btn"
+              onClick={() => {
+                setShareModalChannel('whatsapp');
+                setIsShareModalOpen(true);
+              }}
+              disabled={isSavingPng || isSavingPdf}
+              className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#25D366] hover:bg-[#20ba5a] text-white rounded text-xs font-bold shadow transition cursor-pointer disabled:opacity-50"
+              title="Share .PNG image via WhatsApp"
+            >
+              <WhatsAppIcon className="w-4 h-4 text-white" />
+              <span>WhatsApp</span>
+            </button>
+
+            {/* Share via WeChat (微信) Button */}
+            <button
+              type="button"
+              data-testid="print-share-wechat-btn"
+              onClick={() => {
+                setShareModalChannel('wechat');
+                setIsShareModalOpen(true);
+              }}
+              disabled={isSavingPng || isSavingPdf}
+              className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#07C160] hover:bg-[#06a853] text-white rounded text-xs font-bold shadow transition cursor-pointer disabled:opacity-50"
+              title="Share .PNG image via WeChat (微信)"
+            >
+              <WeChatIcon className="w-4 h-4 text-white" />
+              <span>WeChat (微信)</span>
             </button>
 
             {/* Print Document Button */}
@@ -1568,6 +1607,20 @@ export const PrintPreviewModal: React.FC = () => {
       report={globalViewReport}
       companyProfile={companyProfile}
     />
+
+    {/* Interactive PNG WhatsApp & WeChat Share Modal */}
+    {isShareModalOpen && (
+      <PngShareModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        title={title}
+        documentType={type}
+        documentData={data}
+        targetElementId="printable-document"
+        defaultFilename={getCleanFilename('png')}
+        defaultPhone=""
+      />
+    )}
   </div>
 );
 };

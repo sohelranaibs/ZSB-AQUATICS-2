@@ -383,3 +383,70 @@ export function generateQrMatrix(text: string): boolean[][] {
 
   return modules;
 }
+
+/**
+ * Generates a data URL for a shipment QR code (PNG dataUrl in browser, SVG dataUrl fallback).
+ */
+export async function generateShipmentQrDataUrl(
+  invoiceNumber: string,
+  shippingMark?: string
+): Promise<string> {
+  const origin =
+    typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : 'http://localhost:3000';
+
+  const url = buildShipmentDetailUrl(origin, {
+    invoiceNumber,
+    shippingMark,
+  });
+
+  const matrix = generateQrMatrix(url);
+  const size = matrix.length;
+  const quietZone = 2;
+  const totalSize = size + quietZone * 2;
+
+  if (typeof document !== 'undefined') {
+    try {
+      const canvas = document.createElement('canvas');
+      const scale = 6;
+      const canvasSize = totalSize * scale;
+      canvas.width = canvasSize;
+      canvas.height = canvasSize;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvasSize, canvasSize);
+        ctx.fillStyle = '#0f172a';
+        for (let r = 0; r < size; r++) {
+          for (let c = 0; c < size; c++) {
+            if (matrix[r][c]) {
+              ctx.fillRect(
+                (c + quietZone) * scale,
+                (r + quietZone) * scale,
+                scale,
+                scale
+              );
+            }
+          }
+        }
+        return canvas.toDataURL('image/png');
+      }
+    } catch {
+      // Fall through to SVG data URL
+    }
+  }
+
+  let rects = '';
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      if (matrix[r][c]) {
+        rects += `<rect x="${c + quietZone}" y="${r + quietZone}" width="1" height="1" fill="#0f172a"/>`;
+      }
+    }
+  }
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalSize} ${totalSize}" width="200" height="200"><rect width="${totalSize}" height="${totalSize}" fill="#ffffff"/>${rects}</svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+

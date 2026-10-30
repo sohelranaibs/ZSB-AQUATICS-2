@@ -239,6 +239,7 @@ export type AuditLogAction =
   | 'DELETE'
   | 'CLEAR'
   | 'IMPORT'
+  | 'EXPORT'
   | 'AUTH';
 
 export type AuditLogModule =
@@ -250,7 +251,9 @@ export type AuditLogModule =
   | 'Mortality'
   | 'Settings'
   | 'Database'
-  | 'Authentication';
+  | 'Authentication'
+  | 'Logistics'
+  | 'Administration';
 
 export interface AuditLogRecord {
   id: string;

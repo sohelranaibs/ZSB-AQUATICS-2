@@ -34,6 +34,11 @@ import {
   ImageDown,
   Loader2,
 } from 'lucide-react';
+import {
+  PngShareModal,
+  WhatsAppIcon,
+  WeChatIcon,
+} from './PngShareModal.tsx';
 
 export const PurchaseFormView: React.FC = () => {
   const {
@@ -58,6 +63,8 @@ export const PurchaseFormView: React.FC = () => {
   const [contactNumber, setContactNumber] = useState<string>('');
   const [remarks, setRemarks] = useState<string>('');
   const [lastSavedRecord, setLastSavedRecord] = useState<{ id: string; invoiceNumber: string } | null>(null);
+  const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
+  const [shareChannel, setShareChannel] = useState<'whatsapp' | 'wechat'>('whatsapp');
 
   const createEmptyRow = (id: string): PurchaseItemRow => ({
     id,
@@ -1273,6 +1280,37 @@ export const PurchaseFormView: React.FC = () => {
               </span>
             </button>
 
+            {/* Share via WhatsApp & WeChat (.PNG) */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                data-testid="purchase-share-whatsapp-btn"
+                onClick={() => {
+                  setShareChannel('whatsapp');
+                  setIsShareModalOpen(true);
+                }}
+                className="w-full bg-[#25D366] hover:bg-[#20ba5a] text-white py-2 px-2 rounded-lg font-bold text-xs shadow-xs flex items-center justify-center space-x-1 transition cursor-pointer"
+                title="Share Purchase Challan .PNG to WhatsApp"
+              >
+                <WhatsAppIcon className="w-3.5 h-3.5 shrink-0" />
+                <span>WHATSAPP</span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="purchase-share-wechat-btn"
+                onClick={() => {
+                  setShareChannel('wechat');
+                  setIsShareModalOpen(true);
+                }}
+                className="w-full bg-[#07C160] hover:bg-[#06a853] text-white py-2 px-2 rounded-lg font-bold text-xs shadow-xs flex items-center justify-center space-x-1 transition cursor-pointer"
+                title="Share Purchase Challan .PNG to WeChat (微信)"
+              >
+                <WeChatIcon className="w-3.5 h-3.5 shrink-0" />
+                <span>WECHAT (微信)</span>
+              </button>
+            </div>
+
             {/* MONTHLY STATEMENT (PDF) Button */}
             <button
               type="button"
@@ -1965,6 +2003,28 @@ export const PurchaseFormView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Interactive PNG WeChat & WhatsApp Share Modal */}
+      {isShareModalOpen && (
+        <PngShareModal
+          isOpen={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
+          title={`Procurement Challan / Purchase Voucher — #${invoiceNumber} (${description || 'Supplier'})`}
+          documentType="purchase"
+          documentData={{
+            invoiceNumber,
+            description,
+            contactNumber,
+            date,
+            totalQty,
+            billAmount: totalAmount,
+            remarks,
+          }}
+          targetElementId="purchase-voucher-export-canvas"
+          defaultFilename={formatPurchaseExportFilename(invoiceNumber, description, date, 'png')}
+          defaultPhone={contactNumber}
+        />
+      )}
     </div>
   );
 };

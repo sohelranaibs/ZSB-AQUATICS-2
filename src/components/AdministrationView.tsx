@@ -1578,7 +1578,7 @@ export const AdministrationView: React.FC = () => {
                         </span>
                       </div>
                       <div className="text-xs text-slate-500 font-mono mt-0.5">
-                        {formatDate(snap.timestamp)} {new Date(snap.timestamp).toLocaleTimeString()} ·{' '}
+                        {formatDate(snap.createdAt)} {new Date(snap.createdAt).toLocaleTimeString()} ·{' '}
                         {snap.recordCounts.totalRecords} Total Records (
                         {snap.recordCounts.purchases} Purchases, {snap.recordCounts.packings} Packings,{' '}
                         {snap.recordCounts.payments} Payments)

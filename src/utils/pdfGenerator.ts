@@ -136,7 +136,7 @@ function toLegacyRgbColor(cssValue: string, ctx: CanvasRenderingContext2D | null
  * strips interactive toolbar controls marked with [data-export-ignore="true"], and replaces
  * live <input>/<select> controls in the cloned DOM with crisp static text nodes.
  */
-async function renderElementToHighResCanvas(
+export async function renderElementToHighResCanvas(
   elementOrId: string | HTMLElement,
   targetWidth: number = 800
 ): Promise<HTMLCanvasElement | null> {

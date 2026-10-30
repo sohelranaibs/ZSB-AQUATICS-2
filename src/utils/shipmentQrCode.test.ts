@@ -5,6 +5,7 @@ import {
   parseShipmentDeepLink,
   findShipmentByDeepLink,
   generateQrMatrix,
+  generateShipmentQrDataUrl,
 } from './shipmentQrCode.ts';
 import { PackingRecord } from '../types/index.ts';
 
@@ -112,4 +113,11 @@ describe('shipmentQrCode utility', () => {
     assert.equal(matrix1[7][0], false);
     assert.equal(matrix1[0][7], false);
   });
+
+  it('generates shipment QR data url string asynchronously', async () => {
+    const dataUrl = await generateShipmentQrDataUrl('PKG-2026-9001', 'SMR');
+    assert.ok(typeof dataUrl === 'string');
+    assert.ok(dataUrl.startsWith('data:image/'));
+  });
 });
+

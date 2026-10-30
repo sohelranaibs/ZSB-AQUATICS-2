@@ -39,6 +39,11 @@ import {
   ArrowUpRight,
   Check,
 } from 'lucide-react';
+import {
+  PngShareModal,
+  WhatsAppIcon,
+  WeChatIcon,
+} from './PngShareModal.tsx';
 
 const AWB_OVERRIDES_STORAGE_KEY = 'zsb_awb_row_overrides_v1';
 
@@ -58,6 +63,8 @@ export const AirWayBillView: React.FC = () => {
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
   const [selectedShipper, setSelectedShipper] = useState<string>('ALL');
   const [selectedFlight, setSelectedFlight] = useState<string>('ALL');
+  const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
+  const [shareChannel, setShareChannel] = useState<'whatsapp' | 'wechat'>('whatsapp');
 
   const [rowOverrides, setRowOverrides] = useState<Record<string, AirWayBillRowOverride>>(() => {
     try {
@@ -399,6 +406,36 @@ export const AirWayBillView: React.FC = () => {
               <ImageIcon className="w-3.5 h-3.5" />
             )}
             <span>SAVE .PNG</span>
+          </button>
+
+          {/* Share via WhatsApp Button */}
+          <button
+            type="button"
+            data-testid="awb-share-whatsapp-btn"
+            onClick={() => {
+              setShareChannel('whatsapp');
+              setIsShareModalOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-[#25D366] hover:bg-[#20ba5a] text-white rounded shadow transition cursor-pointer"
+            title="Share Flight Return Bill .PNG via WhatsApp"
+          >
+            <WhatsAppIcon className="w-3.5 h-3.5 text-white" />
+            <span>WHATSAPP</span>
+          </button>
+
+          {/* Share via WeChat (微信) Button */}
+          <button
+            type="button"
+            data-testid="awb-share-wechat-btn"
+            onClick={() => {
+              setShareChannel('wechat');
+              setIsShareModalOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-[#07C160] hover:bg-[#06a853] text-white rounded shadow transition cursor-pointer"
+            title="Share Flight Return Bill .PNG via WeChat (微信)"
+          >
+            <WeChatIcon className="w-3.5 h-3.5 text-white" />
+            <span>WECHAT (微信)</span>
           </button>
 
           <button

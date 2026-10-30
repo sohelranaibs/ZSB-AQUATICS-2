@@ -285,4 +285,5 @@ export type ActiveTab =
   | 'payment_db'
   | 'search_reports'
   | 'audit_logs'
-  | 'settings';
+  | 'settings'
+  | 'administration';

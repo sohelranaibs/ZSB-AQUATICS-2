@@ -397,5 +397,5 @@ export function formatAirWayBillExportFilename(
       ? shipper.trim().replace(/[^a-zA-Z0-9_-]/g, '_')
       : 'ALL_SHIPPERS';
   const ext = extension.toLowerCase() === 'png' ? 'png' : 'pdf';
-  return `ZSB_AQUATICS_Air_Way_Bill_${cleanMonth}_${cleanShipper}.${ext}`;
+  return `ZSB_AQUATICS_Flight_Return_Bill_${cleanMonth}_${cleanShipper}.${ext}`;
 }

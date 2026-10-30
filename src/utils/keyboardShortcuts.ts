@@ -62,7 +62,8 @@ export const ORDERED_WORKBOOK_TABS: { id: ActiveTab; label: string; number: numb
   { id: 'search_reports', label: 'Search & Reports', number: 11 },
   { id: 'settings', label: 'Settings & Config', number: 12 },
   { id: 'audit_logs', label: 'Audit Logs', number: 13 },
-  { id: 'air_way_bill', label: 'AIR WAY BILL', number: 14 },
+  { id: 'air_way_bill', label: 'FLIGHT RETURN BILL', number: 14 },
+  { id: 'administration', label: 'Administration', number: 15 },
 ];
 
 export const GLOBAL_SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [

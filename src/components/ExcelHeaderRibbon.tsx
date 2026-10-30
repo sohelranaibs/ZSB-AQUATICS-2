@@ -97,7 +97,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
     { id: 'dashboard', number: '1', label: 'Dashboard', icon: '📊' },
     { id: 'purchase_form', number: '2', label: 'Purchase Challan / Bill', icon: '🛒' },
     { id: 'packing_form', number: '3', label: 'Packing List Form', icon: '📦' },
-    { id: 'air_way_bill', number: 'AWB', label: 'AIR WAY BILL', icon: '✈️' },
+    { id: 'air_way_bill', number: 'FRB', label: 'FLIGHT RETURN BILL', icon: '✈️' },
     { id: 'payment_form', number: '4', label: 'Supplier Payment Form', icon: '💳' },
     { id: 'exporter_payment_form', number: '5', label: 'Exporter Payment Form', icon: '💱' },
     { id: 'exporter_payment_slip', number: '6', label: 'Exporter Payment Slip', icon: '🧾' },
@@ -108,6 +108,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
     { id: 'search_reports', number: '11', label: 'Search & Reports', icon: '🔍' },
     { id: 'settings', number: '12', label: 'Settings & Config', icon: '⚙️' },
     { id: 'audit_logs', number: '13', label: 'Audit Logs', icon: '🛡️' },
+    { id: 'administration', number: 'ADM', label: 'Administration', icon: '👑' },
   ];
 
   const getDatasetForActiveTab = () => {
@@ -137,7 +138,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
       case 'packing_form':
         return '=Box * Weight (Total Weight KG) * Rate (RMB) = Total Export Value (RMB)';
       case 'air_way_bill':
-        return '=TOTAL_BOX * RMB/PER_BOX = TOTAL_RMB | TOTAL_RMB * RATE = BDT_AMOUNT';
+        return '=TOTAL_BOX * RMB/PER_BOX = TOTAL_RMB | TOTAL_RMB * RATE = BDT_AMOUNT [FLIGHT RETURN BILL]';
       case 'payment_form':
         return '=Supplier_Debit_Paid - Supplier_Credit_Rebate | Previous_Balance - Paid_Amount';
       case 'exporter_payment_form':
@@ -148,6 +149,10 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
         return '=Total_Export_Value - Total_Purchases - Total_Other_Costing = NET_PROFIT';
       case 'audit_logs':
         return `=COUNTIF(AUDIT_TRAIL!A:G, "ENTRY | EDIT | DELETE") [TOTAL_LOGGED: ${auditLogs.length}]`;
+      case 'administration':
+        return '=AUTH.ROLE("SUPER_ADMIN") & VAULT.MANAGE("ACCOUNTS", "TEAM", "AUDIT", "BACKUPS") [SUPER ADMIN SECURE CONSOLE]';
+      case 'settings':
+        return '=CONFIG.SYSTEM("COMPANY_PROFILE", "DROPDOWNS", "THRESHOLDS") [SETTINGS & CONFIGURATION]';
       default:
         return '=VLOOKUP(Invoice_Number, MASTER_DATABASE, 2, FALSE)';
     }

@@ -301,13 +301,13 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const STORAGE_KEYS = {
   PROFILE: 'zsb_company_profile_v1',
   DROPDOWNS: 'zsb_dropdown_options_v1',
-  PURCHASES: 'zsb_purchases_v4',
-  PACKINGS: 'zsb_packings_v4',
-  PACKING_DRAFT: 'zsb_packing_draft_v4',
-  PAYMENTS: 'zsb_payments_v4',
-  OTHER_COSTS: 'zsb_other_costs_v4',
-  SUPPLIER_CREDITS: 'zsb_supplier_credits_v2',
-  MORTALITIES: 'zsb_mortalities_v2',
+  PURCHASES: 'zsb_purchases_v5',
+  PACKINGS: 'zsb_packings_v5',
+  PACKING_DRAFT: 'zsb_packing_draft_v5',
+  PAYMENTS: 'zsb_payments_v5',
+  OTHER_COSTS: 'zsb_other_costs_v5',
+  SUPPLIER_CREDITS: 'zsb_supplier_credits_v3',
+  MORTALITIES: 'zsb_mortalities_v3',
   SUPER_ADMIN_PASSWORD: 'zsb_super_admin_password_v1',
   SNAPSHOTS: 'zsb_database_snapshots_v1',
   AUTH_USER: 'zsb_auth_user_v1',
@@ -433,6 +433,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('zsb_purchases_v1');
       localStorage.removeItem('zsb_purchases_v2');
       localStorage.removeItem('zsb_purchases_v3');
+      localStorage.removeItem('zsb_purchases_v4');
       const saved = localStorage.getItem(STORAGE_KEYS.PURCHASES);
       if (!saved) return [];
       const parsed = JSON.parse(saved);
@@ -447,7 +448,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('zsb_packings_v1');
       localStorage.removeItem('zsb_packings_v2');
       localStorage.removeItem('zsb_packings_v3');
-      localStorage.removeItem('zsb_packings_v5');
+      localStorage.removeItem('zsb_packings_v4');
       const saved = localStorage.getItem(STORAGE_KEYS.PACKINGS);
       if (!saved) return [];
       const parsed = JSON.parse(saved);
@@ -462,6 +463,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('zsb_packing_draft_v1');
       localStorage.removeItem('zsb_packing_draft_v2');
       localStorage.removeItem('zsb_packing_draft_v3');
+      localStorage.removeItem('zsb_packing_draft_v4');
       const saved = localStorage.getItem(STORAGE_KEYS.PACKING_DRAFT);
       if (!saved) return createInitialPackingDraft(0);
       const parsed = JSON.parse(saved);
@@ -487,6 +489,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('zsb_payments_v1');
       localStorage.removeItem('zsb_payments_v2');
       localStorage.removeItem('zsb_payments_v3');
+      localStorage.removeItem('zsb_payments_v4');
       const saved = localStorage.getItem(STORAGE_KEYS.PAYMENTS);
       if (!saved) return [];
       const parsed = JSON.parse(saved);
@@ -501,6 +504,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('zsb_other_costs_v1');
       localStorage.removeItem('zsb_other_costs_v2');
       localStorage.removeItem('zsb_other_costs_v3');
+      localStorage.removeItem('zsb_other_costs_v4');
       const saved = localStorage.getItem(STORAGE_KEYS.OTHER_COSTS);
       if (!saved) return [];
       const parsed = JSON.parse(saved);
@@ -513,6 +517,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [supplierCredits, setSupplierCredits] = useState<SupplierCreditRecord[]>(() => {
     try {
       localStorage.removeItem('zsb_supplier_credits_v1');
+      localStorage.removeItem('zsb_supplier_credits_v2');
       const saved = localStorage.getItem(STORAGE_KEYS.SUPPLIER_CREDITS);
       if (!saved) return [];
       const parsed = JSON.parse(saved);
@@ -525,6 +530,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [mortalities, setMortalities] = useState<MortalityRecord[]>(() => {
     try {
       localStorage.removeItem('zsb_mortalities_v1');
+      localStorage.removeItem('zsb_mortalities_v2');
       const saved = localStorage.getItem(STORAGE_KEYS.MORTALITIES);
       if (!saved) return [];
       const parsed = JSON.parse(saved);
@@ -1474,21 +1480,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         'zsb_purchases_v1',
         'zsb_purchases_v2',
         'zsb_purchases_v3',
+        'zsb_purchases_v4',
+        'zsb_purchases_v5',
         'zsb_packings_v1',
         'zsb_packings_v2',
         'zsb_packings_v3',
+        'zsb_packings_v4',
         'zsb_packings_v5',
         'zsb_packing_draft_v1',
         'zsb_packing_draft_v2',
         'zsb_packing_draft_v3',
+        'zsb_packing_draft_v4',
+        'zsb_packing_draft_v5',
         'zsb_payments_v1',
         'zsb_payments_v2',
         'zsb_payments_v3',
+        'zsb_payments_v4',
+        'zsb_payments_v5',
         'zsb_other_costs_v1',
         'zsb_other_costs_v2',
         'zsb_other_costs_v3',
+        'zsb_other_costs_v4',
+        'zsb_other_costs_v5',
         'zsb_supplier_credits_v1',
+        'zsb_supplier_credits_v2',
+        'zsb_supplier_credits_v3',
         'zsb_mortalities_v1',
+        'zsb_mortalities_v2',
+        'zsb_mortalities_v3',
+        'zsb_awb_row_overrides_v1',
+        'zsb_awb_custom_rows_v1',
+        'zsb_frb_row_overrides_v1',
+        'zsb_frb_custom_rows_v1',
         'zsb_exporter_slip_custom_rows_v1',
         'zsb_exporter_slip_custom_rows_v2',
         'zsb_exporter_slip_custom_rows_v3',

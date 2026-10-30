@@ -373,7 +373,7 @@ export const PrintPreviewModal: React.FC = () => {
                     : type === 'packing'
                     ? 'EXPORT AIR PACKING LIST MANIFEST'
                     : type === 'air_way_bill'
-                    ? `AIR WAY BILL — MONTHLY STATEMENT (${data?.monthLabel || 'ALL MONTHS'})`
+                    ? `FLIGHT RETURN BILL — MONTHLY STATEMENT (${data?.monthLabel || 'ALL MONTHS'})`
                     : type === 'payment'
                     ? data?.paymentCategory === 'exporter'
                       ? 'EXPORTER PAYMENT & RMB SETTLEMENT VOUCHER'
@@ -629,7 +629,7 @@ export const PrintPreviewModal: React.FC = () => {
                       }}
                       className="py-1.5 px-3 text-center text-base font-extrabold uppercase"
                     >
-                      AIR WAY BILL
+                      FLIGHT RETURN BILL
                     </th>
                   </tr>
                   <tr

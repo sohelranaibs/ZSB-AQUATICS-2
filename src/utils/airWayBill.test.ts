@@ -111,5 +111,5 @@ test('extractAirWayBillFilterOptions and formatAirWayBillExportFilename work acc
   assert.deepEqual(opts.flights, ['CZ-392', 'MU-2036']);
 
   const filename = formatAirWayBillExportFilename('2026-10', 'ZSB AQUATICS', 'pdf');
-  assert.equal(filename, 'ZSB_AQUATICS_Air_Way_Bill_2026-10_ZSB_AQUATICS.pdf');
+  assert.equal(filename, 'ZSB_AQUATICS_Flight_Return_Bill_2026-10_ZSB_AQUATICS.pdf');
 });

@@ -1417,7 +1417,7 @@ export const PackingListView: React.FC = () => {
             </div>
 
             {/* SEARCH Button - Royal Blue */}
-            {/* AIR WAY BILL Monthly Statement Button */}
+            {/* FLIGHT RETURN BILL Monthly Statement Button */}
             <button
               type="button"
               data-testid="packing-open-awb-btn"
@@ -1425,7 +1425,7 @@ export const PackingListView: React.FC = () => {
               className="w-full bg-[#2f75b5] hover:bg-[#245c8f] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
             >
               <Printer className="w-4 h-4" />
-              <span>AIR WAY BILL STATEMENT</span>
+              <span>FLIGHT RETURN BILL STATEMENT</span>
             </button>
 
             <button

@@ -223,7 +223,7 @@ export const AirWayBillView: React.FC = () => {
       })
     );
 
-    showToast('Applied RMB/Per Box and Rate across active Air Way Bill rows.');
+    showToast('Applied RMB/Per Box and Rate across active Flight Return Bill rows.');
   };
 
   const handleAddRow = () => {
@@ -238,7 +238,7 @@ export const AirWayBillView: React.FC = () => {
     setSelectedShipper('ALL');
     setSelectedFlight('ALL');
     setCustomRows(createInitialAirWayBillRows(4));
-    showToast('Reset Air Way Bill filters.');
+    showToast('Reset Flight Return Bill filters.');
   };
 
   const handleOpenPrintPreview = () => {
@@ -246,8 +246,8 @@ export const AirWayBillView: React.FC = () => {
       type: 'air_way_bill',
       title:
         selectedMonth !== 'all'
-          ? `AIR WAY BILL — Monthly Statement (${formatYearMonthLabel(selectedMonth)})`
-          : 'AIR WAY BILL — Monthly Statement',
+          ? `FLIGHT RETURN BILL — Monthly Statement (${formatYearMonthLabel(selectedMonth)})`
+          : 'FLIGHT RETURN BILL — Monthly Statement',
       data: {
         yearMonth: selectedMonth,
         monthLabel:
@@ -267,10 +267,10 @@ export const AirWayBillView: React.FC = () => {
     try {
       if (format === 'pdf') {
         await exportElementToPdf(sheetCaptureRef.current, filename);
-        showToast(`Saved Air Way Bill PDF: ${filename}`);
+        showToast(`Saved Flight Return Bill PDF: ${filename}`);
       } else {
         await exportElementToPng(sheetCaptureRef.current, filename);
-        showToast(`Saved Air Way Bill PNG: ${filename}`);
+        showToast(`Saved Flight Return Bill PNG: ${filename}`);
       }
     } catch {
       showToast(`Failed to export ${format.toUpperCase()}. Opening print preview...`);
@@ -301,6 +301,27 @@ export const AirWayBillView: React.FC = () => {
     window.addEventListener(ZSB_VIEW_SHORTCUT_EVENT, onShortcut);
     return () => window.removeEventListener(ZSB_VIEW_SHORTCUT_EVENT, onShortcut);
   });
+
+  useEffect(() => {
+    const handleClearDb = () => {
+      setRowOverrides({});
+      setCustomRows(createInitialAirWayBillRows(4));
+      setSelectedMonth('all');
+      setSelectedShipper('ALL');
+      setSelectedFlight('ALL');
+      try {
+        localStorage.removeItem(AWB_OVERRIDES_STORAGE_KEY);
+      } catch {
+        // Ignore quota/access errors
+      }
+    };
+    window.addEventListener('zsb-clear-all-db', handleClearDb);
+    window.addEventListener('zsb-records-cleared', handleClearDb);
+    return () => {
+      window.removeEventListener('zsb-clear-all-db', handleClearDb);
+      window.removeEventListener('zsb-records-cleared', handleClearDb);
+    };
+  }, []);
 
   const formatCellNumber = (val: number) => {
     if (!val || val === 0) return '';
@@ -340,7 +361,7 @@ export const AirWayBillView: React.FC = () => {
               </span>
               <span className="text-slate-400">•</span>
               <span className="text-sm sm:text-base font-bold text-white uppercase tracking-wide">
-                AIR WAY BILL — Monthly Statement
+                FLIGHT RETURN BILL — Monthly Statement
               </span>
             </div>
             <p className="text-xs text-slate-300 mt-0.5">
@@ -654,7 +675,7 @@ export const AirWayBillView: React.FC = () => {
                 }}
                 className="py-1.5 px-3 text-center text-base sm:text-lg font-extrabold uppercase"
               >
-                AIR WAY BILL
+                FLIGHT RETURN BILL
               </th>
             </tr>
 

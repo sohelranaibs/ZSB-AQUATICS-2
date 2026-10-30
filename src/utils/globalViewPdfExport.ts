@@ -123,11 +123,11 @@ const TAB_METADATA: Record<
     slug: 'PACKING_FORM_TABLE',
   },
   air_way_bill: {
-    viewLabel: 'AIR WAY BILL',
-    documentTitle: 'AIR WAY BILL — Monthly Statement Report',
-    documentBadge: 'AIR WAY BILL — MONTHLY STATEMENT REPORT',
-    sheetReference: 'AWB_A1:H10',
-    slug: 'AIR_WAY_BILL_TABLE',
+    viewLabel: 'FLIGHT RETURN BILL',
+    documentTitle: 'FLIGHT RETURN BILL — Monthly Statement Report',
+    documentBadge: 'FLIGHT RETURN BILL — MONTHLY STATEMENT REPORT',
+    sheetReference: 'FRB_A1:H10',
+    slug: 'FLIGHT_RETURN_BILL_TABLE',
   },
   payment_form: {
     viewLabel: 'Supplier Payment Form',
@@ -200,6 +200,13 @@ const TAB_METADATA: Record<
     documentBadge: 'SYSTEM CONFIGURATION & MASTER DROPDOWN LISTS — TABLE REPORT',
     sheetReference: 'CONFIG_DB',
     slug: 'SETTINGS_CONFIG_TABLE',
+  },
+  administration: {
+    viewLabel: 'Accounts & Administration',
+    documentTitle: 'Accounts & Administration — Security, Team & Backup Report',
+    documentBadge: 'ACCOUNTS & ADMINISTRATION — SECURITY & GOVERNANCE REPORT',
+    sheetReference: 'ADMIN_VAULT',
+    slug: 'ADMINISTRATION_REPORT',
   },
 };
 

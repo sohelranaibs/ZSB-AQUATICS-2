@@ -18,6 +18,7 @@ import { DatabaseView } from './components/DatabaseView.tsx';
 import { SearchReportsView } from './components/SearchReportsView.tsx';
 import { AuditLogsView } from './components/AuditLogsView.tsx';
 import { SettingsView } from './components/SettingsView.tsx';
+import { AdministrationView } from './components/AdministrationView.tsx';
 import { LandingLoginView } from './components/LandingLoginView.tsx';
 import { PrintPreviewModal } from './components/PrintPreviewModal.tsx';
 import { QuickEntryModal } from './components/QuickEntryModal.tsx';
@@ -268,6 +269,7 @@ const MainContent: React.FC = () => {
         {activeTab === 'search_reports' && <SearchReportsView />}
         {activeTab === 'audit_logs' && <AuditLogsView />}
         {activeTab === 'settings' && <SettingsView />}
+        {activeTab === 'administration' && <AdministrationView />}
       </main>
 
       {/* Printable Modal (Voucher / Statement / PDF) */}

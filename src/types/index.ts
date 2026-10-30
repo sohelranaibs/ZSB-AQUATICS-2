@@ -82,6 +82,8 @@ export interface PackingRecord {
   totalAmount: number;
   rmbRate?: number;
   totalAmountBDT?: number;
+  awbRmbPerBox?: number;
+  awbRate?: number;
   rmbAmount?: number;
   settledAmount?: number;
   debitAmount?: number;
@@ -273,6 +275,7 @@ export type ActiveTab =
   | 'dashboard'
   | 'purchase_form'
   | 'packing_form'
+  | 'air_way_bill'
   | 'payment_form'
   | 'exporter_payment_form'
   | 'exporter_payment_slip'

@@ -96,6 +96,7 @@ export interface PrintModalData {
   type:
     | 'purchase'
     | 'packing'
+    | 'air_way_bill'
     | 'payment'
     | 'exporter_payment_slip'
     | 'monthly_statement'
@@ -379,10 +380,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...parsed,
         email: parsed.email || initialCompanyProfile.email,
         logoUrl:
-          !parsed.logoUrl ||
-          parsed.logoUrl === '/assets/aistudio/Image_20260915140834_5_203_3ce3afae.jpg'
-            ? COMPANY_LOGO_URL
-            : parsed.logoUrl,
+          typeof parsed.logoUrl === 'string' && parsed.logoUrl.startsWith('data:image/')
+            ? parsed.logoUrl
+            : COMPANY_LOGO_URL,
         minInventoryThresholdKg:
           parsed.minInventoryThresholdKg !== undefined
             ? Number(parsed.minInventoryThresholdKg)

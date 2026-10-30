@@ -6,6 +6,8 @@ import {
   formatRMB,
   classifyPaymentCategory,
 } from '../utils/calculations.ts';
+import { resolveCompanyLogoSrc } from '../utils/pdfGenerator.ts';
+import { COMPANY_LOGO_URL } from '../context/initialData.ts';
 
 interface PaymentSlipPrintCardProps {
   payment: PaymentRecord;
@@ -59,13 +61,38 @@ export const PaymentSlipPrintCard: React.FC<PaymentSlipPrintCardProps> = ({
       >
         {/* Company Logo Emblem */}
         <div className="flex justify-center mb-1">
-          <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shadow-xs">
+          <div
+            style={{
+              width: '68px',
+              height: '68px',
+              borderRadius: '9999px',
+              overflow: 'hidden',
+              border: '2px solid #fbbf24',
+              backgroundColor: '#ffffff',
+              padding: '2px',
+              margin: '0 auto',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            className="w-16 h-16 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shadow-xs flex items-center justify-center"
+          >
             <img
-              src={
-                companyProfile.logoUrl ||
-                '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'
-              }
+              src={resolveCompanyLogoSrc(companyProfile.logoUrl)}
               alt={companyProfile.companyName}
+              onError={(e) => {
+                const target = e.currentTarget;
+                if (!target.src.endsWith(COMPANY_LOGO_URL)) {
+                  target.src = COMPANY_LOGO_URL;
+                }
+              }}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+                borderRadius: '9999px',
+                display: 'block',
+              }}
               className="w-full h-full object-contain rounded-full"
             />
           </div>

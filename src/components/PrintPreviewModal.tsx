@@ -13,6 +13,7 @@ import {
   exportElementToPng,
   exportElementsToCombinedPdf,
   openPrintableDocumentWindow,
+  resolveCompanyLogoSrc,
 } from '../utils/pdfGenerator.ts';
 import {
   Printer,
@@ -32,8 +33,10 @@ import {
 } from './GlobalViewTablePrintBody.tsx';
 import { formatMortalityReportFilename } from '../utils/mortalityReport.ts';
 import { formatBatchPaymentSlipsPdfFilename } from '../utils/batchPaymentSlipPdf.ts';
+import { formatAirWayBillExportFilename } from '../utils/airWayBill.ts';
 import { PaymentSlipPrintCard } from './PaymentSlipPrintCard.tsx';
 import { PaymentRecord } from '../types/index.ts';
+import { COMPANY_LOGO_URL } from '../context/initialData.ts';
 
 export const PrintPreviewModal: React.FC = () => {
   const {
@@ -82,6 +85,13 @@ export const PrintPreviewModal: React.FC = () => {
         ext
       );
     }
+    if (type === 'air_way_bill') {
+      return formatAirWayBillExportFilename(
+        data?.yearMonth || 'all',
+        data?.shipper || 'ALL',
+        ext
+      );
+    }
     if (type === 'global_view_table' && data?.filename) {
       const base = String(data.filename).replace(/\.(pdf|png)$/i, '');
       return `${base}.${ext}`;
@@ -97,6 +107,8 @@ export const PrintPreviewModal: React.FC = () => {
     const cleanDoc = String(docNo).replace(/[^a-zA-Z0-9_-]/g, '_');
     return `ZSB_AQUATICS_${cleanDoc}_${new Date().toISOString().slice(0, 10)}.${ext}`;
   };
+
+  const resolvedLogoSrc = resolveCompanyLogoSrc(companyProfile.logoUrl);
 
   const handleDirectSavePdf = async () => {
     setIsSavingPdf(true);
@@ -168,8 +180,40 @@ export const PrintPreviewModal: React.FC = () => {
       >
         {/* Modal Top Control Bar (Hidden in Print) */}
         <div className="bg-slate-900 text-white px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 print:hidden">
-          <div className="flex items-center space-x-2">
-            <FileSpreadsheet className="w-5 h-5 text-amber-400" />
+          <div className="flex items-center space-x-2.5">
+            <div
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '9999px',
+                overflow: 'hidden',
+                border: '1.5px solid #fbbf24',
+                backgroundColor: '#ffffff',
+                padding: '1.5px',
+                flexShrink: 0,
+              }}
+              className="w-8 h-8 rounded-full overflow-hidden border border-amber-400 bg-white p-0.5 shrink-0 flex items-center justify-center"
+            >
+              <img
+                src={resolvedLogoSrc}
+                alt={companyProfile.companyName}
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  if (!target.src.endsWith(COMPANY_LOGO_URL)) {
+                    target.src = COMPANY_LOGO_URL;
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  borderRadius: '9999px',
+                  display: 'block',
+                }}
+                className="w-full h-full object-contain rounded-full"
+              />
+            </div>
+            <FileSpreadsheet className="w-4 h-4 text-amber-400 shrink-0" />
             <span className="font-bold text-sm tracking-wide truncate max-w-xs sm:max-w-md">{title}</span>
           </div>
 
@@ -237,24 +281,53 @@ export const PrintPreviewModal: React.FC = () => {
 
         {/* Preview Paper Desk Workspace */}
         <div className="bg-slate-200/80 p-3 sm:p-6 overflow-y-auto flex justify-center items-start flex-1 min-h-0 print:p-0 print:bg-white">
-          {/* Printable Voucher Paper Content (Matches 800px PDF export width) */}
+          {/* Printable Voucher Paper Content (A4 Portrait Printable Width: 760px / 190mm) */}
           <div
             id="printable-document"
-            className="w-full max-w-[800px] bg-white shadow-2xl rounded-sm border border-slate-300 p-6 sm:p-8 space-y-6 text-slate-900 print:shadow-none print:border-none print:p-0 print:max-w-none"
+            className="w-full max-w-[760px] bg-white shadow-2xl rounded-sm border border-slate-300 p-5 sm:p-7 space-y-5 text-slate-900 print:shadow-none print:border-none print:p-0 print:max-w-none"
             style={{ backgroundColor: '#ffffff', color: '#000000' }}
           >
             {/* Official Document Header (Hidden for exporter_payment_slip and batch_payment_slips which have their own headers) */}
             {type !== 'exporter_payment_slip' && type !== 'batch_payment_slips' && (
               <div
                 style={{ borderBottom: '2px solid #0f172a' }}
-                className="pb-4 text-center space-y-1.5"
+                className="pb-3.5 text-center space-y-1"
               >
                 {/* Official Company Logo Emblem */}
                 <div className="flex justify-center mb-1">
-                  <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shadow-xs">
+                  <div
+                    style={{
+                      width: '68px',
+                      height: '68px',
+                      borderRadius: '9999px',
+                      overflow: 'hidden',
+                      border: '2px solid #fbbf24',
+                      backgroundColor: '#ffffff',
+                      padding: '2px',
+                      margin: '0 auto',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                    className="w-16 h-16 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shadow-xs flex items-center justify-center"
+                  >
                     <img
-                      src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
+                      data-testid="print-preview-company-logo"
+                      src={resolvedLogoSrc}
                       alt={companyProfile.companyName}
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        if (!target.src.endsWith(COMPANY_LOGO_URL)) {
+                          target.src = COMPANY_LOGO_URL;
+                        }
+                      }}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'contain',
+                        borderRadius: '9999px',
+                        display: 'block',
+                      }}
                       className="w-full h-full object-contain rounded-full"
                     />
                   </div>
@@ -299,6 +372,8 @@ export const PrintPreviewModal: React.FC = () => {
                     ? 'PURCHASE DATA ENTRY FORM (LIVE CRABS, EEL FISH & CHILLED FISH GRADES) — CHALLAN / BILL'
                     : type === 'packing'
                     ? 'EXPORT AIR PACKING LIST MANIFEST'
+                    : type === 'air_way_bill'
+                    ? `AIR WAY BILL — MONTHLY STATEMENT (${data?.monthLabel || 'ALL MONTHS'})`
                     : type === 'payment'
                     ? data?.paymentCategory === 'exporter'
                       ? 'EXPORTER PAYMENT & RMB SETTLEMENT VOUCHER'
@@ -518,6 +593,177 @@ export const PrintPreviewModal: React.FC = () => {
                 onOpenInSystem={openShipmentDetails}
                 testIdPrefix="print-modal-shipment-qr"
               />
+            </div>
+          )}
+
+          {/* Type 2B: Air Way Bill Monthly Statement (A4 Portrait Optimized Column Widths & Print Area) */}
+          {type === 'air_way_bill' && data && (
+            <div className="space-y-3" data-testid="printable-air-way-bill">
+              <table
+                style={{
+                  borderCollapse: 'collapse',
+                  width: '100%',
+                  tableLayout: 'fixed',
+                }}
+                className="text-[11px] font-sans"
+              >
+                <colgroup>
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '13%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '9%' }} />
+                  <col style={{ width: '16%' }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th
+                      colSpan={8}
+                      style={{
+                        backgroundColor: '#2f75b5',
+                        color: '#ffffff',
+                        border: '1.5px solid #000000',
+                        letterSpacing: '0.04em',
+                      }}
+                      className="py-1.5 px-3 text-center text-base font-extrabold uppercase"
+                    >
+                      AIR WAY BILL
+                    </th>
+                  </tr>
+                  <tr
+                    style={{
+                      backgroundColor: '#bdd7ee',
+                      color: '#000000',
+                    }}
+                    className="text-[10px] font-extrabold uppercase text-center leading-tight"
+                  >
+                    <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+                      DATE
+                    </th>
+                    <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+                      SHIPPER
+                    </th>
+                    <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+                      FLIGHT
+                    </th>
+                    <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+                      TOTAL BOX
+                    </th>
+                    <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+                      RMB/PER BOX
+                    </th>
+                    <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+                      TOTAL RMB
+                    </th>
+                    <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+                      RATE
+                    </th>
+                    <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+                      BDT AMOUNT
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data.rows || []).map((row: any, idx: number) => (
+                    <tr
+                      key={row.id || idx}
+                      style={{ backgroundColor: '#ffffff', color: '#000000' }}
+                    >
+                      <td
+                        style={{ border: '1.5px solid #000000', height: '27px' }}
+                        className="py-1 px-1 text-center font-mono font-semibold text-[10.5px] truncate"
+                      >
+                        {row.date ? formatDate(row.date) : ''}
+                      </td>
+                      <td
+                        style={{ border: '1.5px solid #000000', height: '27px' }}
+                        className="py-1 px-1 text-center font-bold text-[10.5px] truncate"
+                      >
+                        {row.shipper || ''}
+                      </td>
+                      <td
+                        style={{ border: '1.5px solid #000000', height: '27px' }}
+                        className="py-1 px-1 text-center font-mono font-bold text-[10.5px] truncate"
+                      >
+                        {row.flight || ''}
+                      </td>
+                      <td
+                        style={{ border: '1.5px solid #000000', height: '27px' }}
+                        className="py-1 px-1 text-center font-mono font-bold text-[10.5px] tabular-nums"
+                      >
+                        {row.totalBox > 0 ? row.totalBox : ''}
+                      </td>
+                      <td
+                        style={{ border: '1.5px solid #000000', height: '27px' }}
+                        className="py-1 px-1 text-center font-mono font-bold text-[10.5px] tabular-nums"
+                      >
+                        {row.rmbPerBox > 0 ? row.rmbPerBox : ''}
+                      </td>
+                      <td
+                        style={{ border: '1.5px solid #000000', height: '27px' }}
+                        className="py-1 px-1 text-center font-mono font-bold text-[10.5px] tabular-nums"
+                      >
+                        {row.totalRmb > 0
+                          ? row.totalRmb.toLocaleString('en-US', {
+                              minimumFractionDigits: row.totalRmb % 1 === 0 ? 0 : 2,
+                              maximumFractionDigits: 2,
+                            })
+                          : ''}
+                      </td>
+                      <td
+                        style={{ border: '1.5px solid #000000', height: '27px' }}
+                        className="py-1 px-1 text-center font-mono font-bold text-[10.5px] tabular-nums"
+                      >
+                        {row.rate > 0 ? row.rate : ''}
+                      </td>
+                      <td
+                        style={{ border: '1.5px solid #000000', height: '27px' }}
+                        className="py-1 px-1 text-center font-mono font-extrabold text-[10.5px] tabular-nums"
+                      >
+                        {row.bdtAmount > 0
+                          ? row.bdtAmount.toLocaleString('en-US', {
+                              minimumFractionDigits: row.bdtAmount % 1 === 0 ? 0 : 2,
+                              maximumFractionDigits: 2,
+                            })
+                          : ''}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={4} style={{ border: 'none' }} className="p-1"></td>
+                    <td
+                      colSpan={3}
+                      style={{
+                        backgroundColor: '#bdd7ee',
+                        color: '#000000',
+                        border: '1.5px solid #000000',
+                        height: '29px',
+                      }}
+                      className="py-1 px-2 text-center text-[10.5px] font-extrabold uppercase"
+                    >
+                      TOTAL AMOUNT (BDT)
+                    </td>
+                    <td
+                      style={{
+                        backgroundColor: '#ffffff',
+                        color: '#000000',
+                        border: '1.5px solid #000000',
+                        height: '29px',
+                      }}
+                      className="py-1 px-1.5 text-center font-mono font-black text-[11px] tabular-nums"
+                    >
+                      {(data.totals?.totalAmountBDT || 0).toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           )}
 
@@ -1079,10 +1325,39 @@ export const PrintPreviewModal: React.FC = () => {
                 style={{ backgroundColor: '#98486f', color: '#ffffff' }}
                 className="py-3 px-4 flex items-center justify-center gap-3 border-b-2 border-black"
               >
-                <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-300 bg-white p-0.5 shrink-0 shadow-xs">
+                <div
+                  style={{
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '9999px',
+                    overflow: 'hidden',
+                    border: '2px solid #fcd34d',
+                    backgroundColor: '#ffffff',
+                    padding: '2px',
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-300 bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center"
+                >
                   <img
-                    src={companyProfile.logoUrl || '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'}
+                    data-testid="print-preview-slip-logo"
+                    src={resolvedLogoSrc}
                     alt={companyProfile.companyName}
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      if (!target.src.endsWith(COMPANY_LOGO_URL)) {
+                        target.src = COMPANY_LOGO_URL;
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'contain',
+                      borderRadius: '9999px',
+                      display: 'block',
+                    }}
                     className="w-full h-full object-contain rounded-full"
                   />
                 </div>

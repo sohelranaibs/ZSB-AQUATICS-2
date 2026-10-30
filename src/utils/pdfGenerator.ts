@@ -1,6 +1,106 @@
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { formatDate } from './calculations.ts';
+import { COMPANY_LOGO_URL } from '../context/initialData.ts';
+
+let cachedCompanyLogoDataUrl: string | null = null;
+let cachedSignatureDataUrl: string | null = null;
+
+function preloadAssetAsDataUrl(assetPath: string, onLoaded: (dataUrl: string) => void): void {
+  if (typeof window === 'undefined' || typeof fetch === 'undefined') return;
+  try {
+    const absUrl = new URL(assetPath, window.location.origin).href;
+    fetch(absUrl)
+      .then((res) => (res.ok ? res.blob() : Promise.reject(new Error('Failed to fetch asset'))))
+      .then((blob) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (typeof reader.result === 'string' && reader.result.startsWith('data:image/')) {
+            onLoaded(reader.result);
+          }
+        };
+        reader.readAsDataURL(blob);
+      })
+      .catch(() => {
+        // Fallback ignored; absolute URL will still be used
+      });
+  } catch {
+    // Ignore in non-browser test environments
+  }
+}
+
+if (typeof window !== 'undefined') {
+  preloadAssetAsDataUrl(COMPANY_LOGO_URL, (dataUrl) => {
+    cachedCompanyLogoDataUrl = dataUrl;
+  });
+  preloadAssetAsDataUrl('/assets/aistudio/Md._Sohel_Rana_38797da9.jpg', (dataUrl) => {
+    cachedSignatureDataUrl = dataUrl;
+  });
+}
+
+/**
+ * Resolves the official company logo URL to a preloaded data URL or full absolute URL
+ * so it works reliably in Print Preview modals, blob: print windows, and PDF/PNG exports.
+ */
+export function resolveCompanyLogoSrc(logoUrl?: string): string {
+  if (cachedCompanyLogoDataUrl && (!logoUrl || logoUrl === COMPANY_LOGO_URL || logoUrl.includes('Gemini_Generated_Image_x7u4nx'))) {
+    return cachedCompanyLogoDataUrl;
+  }
+  const raw =
+    logoUrl && (logoUrl.startsWith('data:image/') || logoUrl.includes('Gemini_Generated_Image_x7u4nx'))
+      ? logoUrl
+      : COMPANY_LOGO_URL;
+  if (raw.startsWith('data:image/') || raw.startsWith('http://') || raw.startsWith('https://')) {
+    return raw;
+  }
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    try {
+      return new URL(raw, window.location.origin).href;
+    } catch {
+      return raw;
+    }
+  }
+  return raw;
+}
+
+/**
+ * Converts a live loaded HTMLImageElement into a base64 data URL using an offscreen canvas,
+ * falling back to preloaded cache or full absolute URL.
+ */
+function imageElementToDataUrlOrAbsolute(img: HTMLImageElement): string {
+  const rawSrc = img.getAttribute('src') || img.src || '';
+  if (rawSrc.startsWith('data:image/')) {
+    return rawSrc;
+  }
+  if (cachedCompanyLogoDataUrl && (rawSrc.includes('Gemini_Generated_Image_x7u4nx') || rawSrc === COMPANY_LOGO_URL)) {
+    return cachedCompanyLogoDataUrl;
+  }
+  if (cachedSignatureDataUrl && rawSrc.includes('Md._Sohel_Rana')) {
+    return cachedSignatureDataUrl;
+  }
+  if (img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0);
+        return canvas.toDataURL('image/png');
+      }
+    } catch {
+      // Fall through to absolute URL
+    }
+  }
+  if (typeof window !== 'undefined' && window.location?.origin && rawSrc) {
+    try {
+      return new URL(rawSrc, window.location.origin).href;
+    } catch {
+      return rawSrc;
+    }
+  }
+  return rawSrc || resolveCompanyLogoSrc();
+}
 
 /**
  * Converts any modern CSS color string (oklab, oklch, color-mix, color) into
@@ -47,144 +147,172 @@ async function renderElementToHighResCanvas(
     return null;
   }
 
+  // Pre-capture inline data URLs for all images inside the live element
+  const liveImages = Array.from(element.querySelectorAll('img'));
+  const resolvedImgSrcs = liveImages.map((img) => imageElementToDataUrlOrAbsolute(img));
+
   const elementId = typeof elementOrId === 'string' ? elementOrId : element.id;
+  const tempExportAttr = 'data-active-export-root';
+  element.setAttribute(tempExportAttr, 'true');
 
-  return html2canvas(element, {
-    scale: 2,
-    useCORS: true,
-    logging: false,
-    backgroundColor: '#ffffff',
-    windowWidth: Math.max(targetWidth + 50, 950),
-    width: targetWidth,
-    onclone: (clonedDoc) => {
-      // 1. Replace modern oklch(), oklab(), and color-mix() in all <style> tags
-      const styles = clonedDoc.querySelectorAll('style');
-      styles.forEach((styleTag) => {
-        if (
-          styleTag.textContent &&
-          (styleTag.textContent.includes('oklch') ||
-            styleTag.textContent.includes('oklab') ||
-            styleTag.textContent.includes('color-mix'))
-        ) {
-          styleTag.textContent = styleTag.textContent
-            .replace(/color-mix\([^)]+\)/gi, 'rgba(15, 23, 42, 0.15)')
-            .replace(/oklch\([^)]+\)/gi, '#1e293b')
-            .replace(/oklab\([^)]+\)/gi, '#1e293b');
-        }
-      });
-
-      const clonedTarget = elementId ? clonedDoc.getElementById(elementId) : null;
-      if (clonedTarget) {
-        // 2. Remove interactive controls marked to be ignored in exports
-        clonedTarget.querySelectorAll('[data-export-ignore="true"]').forEach((node) => {
-          node.remove();
-        });
-
-        // 3. Convert <input> and <select> elements inside the cloned slip into clean static text
-        clonedTarget.querySelectorAll('input, select').forEach((ctrl) => {
-          const el = ctrl as HTMLInputElement | HTMLSelectElement;
-          let displayVal = el.value || '';
-          if (el instanceof HTMLInputElement && el.type === 'date' && displayVal) {
-            displayVal = formatDate(displayVal);
-          }
-          const span = clonedDoc.createElement('span');
-          span.textContent = displayVal;
-          span.className = el.className;
-          span.style.display = 'inline-block';
-          span.style.width = '100%';
-          span.style.textAlign = 'center';
-          span.style.verticalAlign = 'middle';
-          span.style.lineHeight = '1.15';
-          span.style.color = '#000000';
-          span.style.border = 'none';
-          span.style.background = 'transparent';
-          el.replaceWith(span);
-        });
-
-        clonedTarget.style.width = `${targetWidth}px`;
-        clonedTarget.style.minWidth = `${targetWidth}px`;
-        clonedTarget.style.maxWidth = `${targetWidth}px`;
-        clonedTarget.style.boxSizing = 'border-box';
-        clonedTarget.style.backgroundColor = '#ffffff';
-        clonedTarget.style.color = '#000000';
-        if (elementId === 'printable-document' || elementId === 'global-printable-document') {
-          clonedTarget.style.padding = '32px';
-        }
-        clonedTarget.style.margin = '0 auto';
-        clonedTarget.style.borderRadius = '0px';
-        clonedTarget.style.boxShadow = 'none';
-      }
-
-      // 4. Normalize any remaining computed oklab/oklch values across all elements in clonedDoc
-      const helperCanvas = clonedDoc.createElement('canvas');
-      helperCanvas.width = 1;
-      helperCanvas.height = 1;
-      const ctx = helperCanvas.getContext('2d', { willReadFrequently: true });
-      const win = clonedDoc.defaultView || window;
-
-      const colorProps = [
-        'color',
-        'backgroundColor',
-        'borderTopColor',
-        'borderRightColor',
-        'borderBottomColor',
-        'borderLeftColor',
-        'outlineColor',
-        'textDecorationColor',
-        'columnRuleColor',
-        'fill',
-        'stroke',
-      ] as const;
-
-      const allElements = [
-        clonedDoc.documentElement,
-        clonedDoc.body,
-        ...Array.from(clonedDoc.querySelectorAll('*')),
-      ];
-
-      allElements.forEach((node) => {
-        if (!(node instanceof HTMLElement || node instanceof SVGElement)) return;
-        const computed = win.getComputedStyle(node);
-        for (const prop of colorProps) {
-          const val = computed[prop];
+  try {
+    return await html2canvas(element, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+      windowWidth: Math.max(targetWidth + 50, 950),
+      width: targetWidth,
+      onclone: (clonedDoc) => {
+        // 1. Replace modern oklch(), oklab(), and color-mix() in all <style> tags
+        const styles = clonedDoc.querySelectorAll('style');
+        styles.forEach((styleTag) => {
           if (
-            val &&
-            (val.includes('oklab') ||
-              val.includes('oklch') ||
-              val.includes('color-mix') ||
-              val.includes('color('))
+            styleTag.textContent &&
+            (styleTag.textContent.includes('oklch') ||
+              styleTag.textContent.includes('oklab') ||
+              styleTag.textContent.includes('color-mix'))
           ) {
-            (node.style as unknown as Record<string, string>)[prop] = toLegacyRgbColor(val, ctx);
+            styleTag.textContent = styleTag.textContent
+              .replace(/color-mix\([^)]+\)/gi, 'rgba(15, 23, 42, 0.15)')
+              .replace(/oklch\([^)]+\)/gi, '#1e293b')
+              .replace(/oklab\([^)]+\)/gi, '#1e293b');
           }
+        });
+
+        const clonedTarget =
+          (elementId ? clonedDoc.getElementById(elementId) : null) ||
+          (clonedDoc.querySelector(`[${tempExportAttr}="true"]`) as HTMLElement | null);
+
+        if (clonedTarget) {
+          // Ensure all cloned images have resolved data/absolute URLs
+          const clonedImages = Array.from(clonedTarget.querySelectorAll('img'));
+          clonedImages.forEach((cImg, idx) => {
+            if (resolvedImgSrcs[idx]) {
+              cImg.src = resolvedImgSrcs[idx];
+            } else {
+              cImg.src = imageElementToDataUrlOrAbsolute(cImg);
+            }
+          });
+
+          // 2. Remove interactive controls marked to be ignored in exports
+          clonedTarget.querySelectorAll('[data-export-ignore="true"]').forEach((node) => {
+            node.remove();
+          });
+
+          // 3. Convert <input> and <select> elements inside the cloned slip into clean static text
+          clonedTarget.querySelectorAll('input, select').forEach((ctrl) => {
+            const el = ctrl as HTMLInputElement | HTMLSelectElement;
+            let displayVal = el.value || '';
+            if (el instanceof HTMLInputElement && el.type === 'date' && displayVal) {
+              displayVal = formatDate(displayVal);
+            }
+            const span = clonedDoc.createElement('span');
+            span.textContent = displayVal;
+            span.className = el.className;
+            span.style.display = 'inline-block';
+            span.style.width = '100%';
+            span.style.textAlign = 'center';
+            span.style.verticalAlign = 'middle';
+            span.style.lineHeight = '1.15';
+            span.style.color = '#000000';
+            span.style.border = 'none';
+            span.style.background = 'transparent';
+            el.replaceWith(span);
+          });
+
+          clonedTarget.style.width = `${targetWidth}px`;
+          clonedTarget.style.minWidth = `${targetWidth}px`;
+          clonedTarget.style.maxWidth = `${targetWidth}px`;
+          clonedTarget.style.boxSizing = 'border-box';
+          clonedTarget.style.backgroundColor = '#ffffff';
+          clonedTarget.style.color = '#000000';
+          if (
+            elementId === 'printable-document' ||
+            elementId === 'global-printable-document' ||
+            elementId === 'awb-printable-sheet'
+          ) {
+            clonedTarget.style.padding = '24px';
+          }
+          clonedTarget.style.margin = '0 auto';
+          clonedTarget.style.borderRadius = '0px';
+          clonedTarget.style.boxShadow = 'none';
         }
-        if (
-          computed.boxShadow &&
-          (computed.boxShadow.includes('oklab') || computed.boxShadow.includes('oklch'))
-        ) {
-          node.style.boxShadow = 'none';
-        }
-        if (
-          computed.backgroundImage &&
-          (computed.backgroundImage.includes('oklab') ||
-            computed.backgroundImage.includes('oklch'))
-        ) {
-          node.style.backgroundImage = 'none';
-        }
-      });
-    },
-  });
+
+        // 4. Normalize any remaining computed oklab/oklch values across all elements in clonedDoc
+        const helperCanvas = clonedDoc.createElement('canvas');
+        helperCanvas.width = 1;
+        helperCanvas.height = 1;
+        const ctx = helperCanvas.getContext('2d', { willReadFrequently: true });
+        const win = clonedDoc.defaultView || window;
+
+        const colorProps = [
+          'color',
+          'backgroundColor',
+          'borderTopColor',
+          'borderRightColor',
+          'borderBottomColor',
+          'borderLeftColor',
+          'outlineColor',
+          'textDecorationColor',
+          'columnRuleColor',
+          'fill',
+          'stroke',
+        ] as const;
+
+        const allElements = [
+          clonedDoc.documentElement,
+          clonedDoc.body,
+          ...Array.from(clonedDoc.querySelectorAll('*')),
+        ];
+
+        allElements.forEach((node) => {
+          if (!(node instanceof HTMLElement || node instanceof SVGElement)) return;
+          const computed = win.getComputedStyle(node);
+          for (const prop of colorProps) {
+            const val = computed[prop];
+            if (
+              val &&
+              (val.includes('oklab') ||
+                val.includes('oklch') ||
+                val.includes('color-mix') ||
+                val.includes('color('))
+            ) {
+              (node.style as unknown as Record<string, string>)[prop] = toLegacyRgbColor(val, ctx);
+            }
+          }
+          if (
+            computed.boxShadow &&
+            (computed.boxShadow.includes('oklab') || computed.boxShadow.includes('oklch'))
+          ) {
+            node.style.boxShadow = 'none';
+          }
+          if (
+            computed.backgroundImage &&
+            (computed.backgroundImage.includes('oklab') ||
+              computed.backgroundImage.includes('oklch'))
+          ) {
+            node.style.backgroundImage = 'none';
+          }
+        });
+      },
+    });
+  } finally {
+    element.removeAttribute(tempExportAttr);
+  }
 }
 
 /**
  * Exports a DOM element as a downloadable high-resolution .PNG image file
  */
 export async function exportElementToPng(
-  elementId: string,
+  elementOrId: string | HTMLElement,
   filename: string,
-  targetWidth: number = 900
+  targetWidth: number = 760
 ): Promise<boolean> {
   try {
-    const canvas = await renderElementToHighResCanvas(elementId, targetWidth);
+    const canvas = await renderElementToHighResCanvas(elementOrId, targetWidth);
     if (!canvas) return false;
 
     const imgDataUrl = canvas.toDataURL('image/png', 1.0);
@@ -209,11 +337,11 @@ export async function exportElementToPng(
  * Handles Tailwind v4 modern oklch color parsing for html2canvas
  */
 export async function exportElementToPdf(
-  elementId: string,
+  elementOrId: string | HTMLElement,
   filename: string
 ): Promise<boolean> {
   try {
-    const canvas = await renderElementToHighResCanvas(elementId, 800);
+    const canvas = await renderElementToHighResCanvas(elementOrId, 760);
     if (!canvas) return false;
 
     const pdf = new jsPDF({
@@ -280,6 +408,7 @@ export async function exportElementToPdf(
 
     const baseName = filename.replace(/\.(pdf|png)$/i, '');
     const cleanFilename = `${baseName}.pdf`;
+    const elementId = typeof elementOrId === 'string' ? elementOrId : elementOrId.id;
     if (typeof window !== 'undefined') {
       (window as unknown as Record<string, unknown>).__LAST_EXPORTED_PDF__ = {
         filename: cleanFilename,
@@ -302,7 +431,7 @@ export async function exportElementToPdf(
 export async function exportElementsToCombinedPdf(
   targets: (string | HTMLElement)[],
   filename: string,
-  targetWidth: number = 800
+  targetWidth: number = 760
 ): Promise<boolean> {
   if (!targets || targets.length === 0) return false;
 
@@ -400,7 +529,8 @@ export async function exportElementsToCombinedPdf(
 
 /**
  * Opens a dedicated, clean printable window that is completely free from iframe restrictions,
- * with cloned document styles, an on-screen print button, and auto-print trigger.
+ * with embedded base64 images (so the company logo and signatures never break inside blob: URLs),
+ * cloned document styles, an on-screen print button, and auto-print trigger.
  */
 export function openPrintableDocumentWindow(
   elementId: string = 'printable-document',
@@ -409,15 +539,70 @@ export function openPrintableDocumentWindow(
   const element = document.getElementById(elementId);
   if (!element) return false;
 
-  // Extract all stylesheets from current document to preserve exact fonts & styles
+  const baseOrigin =
+    typeof window !== 'undefined' && window.location?.origin
+      ? `${window.location.origin}/`
+      : '/';
+
+  // Clone element so we can embed data URLs for all <img> tags and replace <input>/<select> controls
+  const clonedElement = element.cloneNode(true) as HTMLElement;
+  const liveImgs = Array.from(element.querySelectorAll('img'));
+  const clonedImgs = Array.from(clonedElement.querySelectorAll('img'));
+
+  clonedImgs.forEach((cImg, index) => {
+    const liveImg = liveImgs[index] || cImg;
+    cImg.src = imageElementToDataUrlOrAbsolute(liveImg);
+    if (!cImg.style.maxWidth) {
+      cImg.style.maxWidth = '100%';
+    }
+    if (!cImg.style.maxHeight) {
+      cImg.style.maxHeight = '100%';
+    }
+    if (!cImg.style.objectFit) {
+      cImg.style.objectFit = 'contain';
+    }
+  });
+
+  // Remove export-ignored elements and replace inputs/selects with static text
+  clonedElement.querySelectorAll('[data-export-ignore="true"]').forEach((node) => node.remove());
+  clonedElement.querySelectorAll('input, select').forEach((ctrl) => {
+    const el = ctrl as HTMLInputElement | HTMLSelectElement;
+    let displayVal = el.value || '';
+    if (el instanceof HTMLInputElement && el.type === 'date' && displayVal) {
+      displayVal = formatDate(displayVal);
+    }
+    const span = document.createElement('span');
+    span.textContent = displayVal;
+    span.className = el.className;
+    span.style.display = 'inline-block';
+    span.style.width = '100%';
+    span.style.textAlign = 'center';
+    span.style.color = '#000000';
+    el.replaceWith(span);
+  });
+
+  // Extract all stylesheets and convert relative <link> hrefs to absolute URLs
   const stylesHtml = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
-    .map((s) => s.outerHTML)
+    .map((node) => {
+      if (node.tagName.toLowerCase() === 'link') {
+        const linkEl = node as HTMLLinkElement;
+        const cloneLink = linkEl.cloneNode(true) as HTMLLinkElement;
+        if (linkEl.href) {
+          cloneLink.setAttribute('href', linkEl.href);
+        }
+        return cloneLink.outerHTML;
+      }
+      return node.outerHTML;
+    })
     .join('\n');
+
+  const topBarLogoSrc = resolveCompanyLogoSrc();
 
   const htmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <base href="${baseOrigin}">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${docTitle} - ZSB AQUATICS</title>
   ${stylesHtml}
@@ -431,22 +616,53 @@ export function openPrintableDocumentWindow(
       background-color: #ffffff !important;
       color: #000000 !important;
       margin: 0 !important;
-      padding: 20px !important;
+      padding: 16px !important;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
     }
+    #print-root {
+      max-width: 190mm;
+      margin: 0 auto;
+      background: #ffffff;
+    }
     .print-bar {
       background: #0f172a;
       color: #ffffff;
-      padding: 12px 24px;
+      padding: 10px 20px;
       border-radius: 10px;
-      margin-bottom: 24px;
+      margin: 0 auto 20px auto;
+      max-width: 190mm;
       display: flex;
       align-items: center;
       justify-content: space-between;
       box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .print-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .print-brand-logo {
+      width: 38px;
+      height: 38px;
+      border-radius: 9999px;
+      overflow: hidden;
+      border: 2px solid #fbbf24;
+      background: #ffffff;
+      padding: 2px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .print-brand-logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      border-radius: 9999px;
+      display: block;
     }
     .print-actions {
       display: flex;
@@ -478,20 +694,25 @@ export function openPrintableDocumentWindow(
       font-size: 13px;
     }
     .btn-close:hover { background: #475569; }
-    table { width: 100% !important; border-collapse: collapse !important; }
-    th, td { border: 1px solid #cbd5e1 !important; padding: 6px 8px !important; }
+    table { width: 100%; border-collapse: collapse; }
     @media print {
       .print-bar { display: none !important; }
       body { padding: 0 !important; margin: 0 !important; }
+      #print-root { max-width: 100% !important; width: 100% !important; }
     }
   </style>
 </head>
 <body>
   <div class="print-bar">
-    <div>
-      <span style="color:#ffe066;font-weight:900;font-size:18px;letter-spacing:0.08em;font-family:'Cinzel',Georgia,serif;text-shadow:0px 1px 0px #d97706,1px 2px 0px #b45309,2px 3px 0px #92400e,3px 4px 0px #78350f,4px 5px 6px rgba(0,0,0,0.7);">ZSB AQUATICS</span>
-      <span style="color:#94a3b8;margin:0 8px;">|</span>
-      <span style="font-weight:600;font-size:13px;color:#f8fafc;">Official Print Ready Document</span>
+    <div class="print-brand">
+      <div class="print-brand-logo">
+        <img src="${topBarLogoSrc}" alt="ZSB AQUATICS" />
+      </div>
+      <div>
+        <span style="color:#ffe066;font-weight:900;font-size:18px;letter-spacing:0.08em;font-family:'Cinzel',Georgia,serif;text-shadow:0px 1px 0px #d97706,1px 2px 0px #b45309,2px 3px 0px #92400e,3px 4px 0px #78350f,4px 5px 6px rgba(0,0,0,0.7);">ZSB AQUATICS</span>
+        <span style="color:#94a3b8;margin:0 8px;">|</span>
+        <span style="font-weight:600;font-size:13px;color:#f8fafc;">Official A4 Print Ready Document</span>
+      </div>
     </div>
     <div class="print-actions">
       <button class="btn-print" onclick="window.print()">🖨️ Click to Print Now (or Ctrl+P)</button>
@@ -500,19 +721,49 @@ export function openPrintableDocumentWindow(
   </div>
 
   <div id="print-root">
-    ${element.innerHTML}
+    ${clonedElement.innerHTML}
   </div>
 
   <script>
-    window.addEventListener('load', function() {
-      setTimeout(function() {
-        try {
-          window.print();
-        } catch (e) {
-          console.warn('Auto print error:', e);
+    (function() {
+      function triggerPrintWhenReady() {
+        var imgs = Array.prototype.slice.call(document.images || []);
+        var pending = imgs.filter(function(img) { return !img.complete; });
+        if (pending.length === 0) {
+          setTimeout(function() {
+            try { window.print(); } catch (e) {}
+          }, 250);
+          return;
         }
-      }, 400);
-    });
+        var remaining = pending.length;
+        var done = false;
+        function checkDone() {
+          if (done) return;
+          remaining--;
+          if (remaining <= 0) {
+            done = true;
+            setTimeout(function() {
+              try { window.print(); } catch (e) {}
+            }, 200);
+          }
+        }
+        pending.forEach(function(img) {
+          img.addEventListener('load', checkDone);
+          img.addEventListener('error', checkDone);
+        });
+        setTimeout(function() {
+          if (!done) {
+            done = true;
+            try { window.print(); } catch (e) {}
+          }
+        }, 1200);
+      }
+      if (document.readyState === 'complete') {
+        triggerPrintWhenReady();
+      } else {
+        window.addEventListener('load', triggerPrintWhenReady);
+      }
+    })();
   </script>
 </body>
 </html>`;
@@ -535,12 +786,6 @@ export function openPrintableDocumentWindow(
     }, 500);
   }
 
-  // Also trigger in-page window.print in case the current environment allows it directly
-  try {
-    window.print();
-  } catch (e) {
-    // Ignored in sandboxed iframes
-  }
-
   return true;
 }
+

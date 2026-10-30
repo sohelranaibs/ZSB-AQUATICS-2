@@ -97,6 +97,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
     { id: 'dashboard', number: '1', label: 'Dashboard', icon: '📊' },
     { id: 'purchase_form', number: '2', label: 'Purchase Challan / Bill', icon: '🛒' },
     { id: 'packing_form', number: '3', label: 'Packing List Form', icon: '📦' },
+    { id: 'air_way_bill', number: 'AWB', label: 'AIR WAY BILL', icon: '✈️' },
     { id: 'payment_form', number: '4', label: 'Supplier Payment Form', icon: '💳' },
     { id: 'exporter_payment_form', number: '5', label: 'Exporter Payment Form', icon: '💱' },
     { id: 'exporter_payment_slip', number: '6', label: 'Exporter Payment Slip', icon: '🧾' },
@@ -110,7 +111,12 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
   ];
 
   const getDatasetForActiveTab = () => {
-    if (activeTab === 'packing_form' || activeTab === 'packing_db' || activeTab === 'exporter_payment_slip') {
+    if (
+      activeTab === 'packing_form' ||
+      activeTab === 'air_way_bill' ||
+      activeTab === 'packing_db' ||
+      activeTab === 'exporter_payment_slip'
+    ) {
       return 'packing' as const;
     }
     if (activeTab === 'payment_form' || activeTab === 'exporter_payment_form' || activeTab === 'payment_db') {
@@ -130,6 +136,8 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
         return '=SUM(Quantity * Rate) + Previous_Amount - Paid_Amount';
       case 'packing_form':
         return '=Box * Weight (Total Weight KG) * Rate (RMB) = Total Export Value (RMB)';
+      case 'air_way_bill':
+        return '=TOTAL_BOX * RMB/PER_BOX = TOTAL_RMB | TOTAL_RMB * RATE = BDT_AMOUNT';
       case 'payment_form':
         return '=Supplier_Debit_Paid - Supplier_Credit_Rebate | Previous_Balance - Paid_Amount';
       case 'exporter_payment_form':
@@ -364,6 +372,8 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
               ? 'CHALLAN_R1'
               : activeTab === 'packing_form'
               ? 'PACK_R1'
+              : activeTab === 'air_way_bill'
+              ? 'AWB_A1:H10'
               : activeTab === 'payment_form'
               ? 'SUP_PAY_R1'
               : activeTab === 'exporter_payment_form'

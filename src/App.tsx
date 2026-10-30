@@ -9,6 +9,7 @@ import { ExcelHeaderRibbon } from './components/ExcelHeaderRibbon.tsx';
 import { DashboardView } from './components/DashboardView.tsx';
 import { PurchaseFormView } from './components/PurchaseFormView.tsx';
 import { PackingListView } from './components/PackingListView.tsx';
+import { AirWayBillView } from './components/AirWayBillView.tsx';
 import { PaymentFormView } from './components/PaymentFormView.tsx';
 import { ExporterPaymentFormView } from './components/ExporterPaymentFormView.tsx';
 import { ExporterPaymentSlipView } from './components/ExporterPaymentSlipView.tsx';
@@ -58,7 +59,12 @@ const MainContent: React.FC = () => {
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
 
   const getDatasetForTab = useCallback((tab: ActiveTab) => {
-    if (tab === 'packing_form' || tab === 'packing_db' || tab === 'exporter_payment_slip') {
+    if (
+      tab === 'packing_form' ||
+      tab === 'air_way_bill' ||
+      tab === 'packing_db' ||
+      tab === 'exporter_payment_slip'
+    ) {
       return 'packing' as const;
     }
     if (tab === 'payment_form' || tab === 'exporter_payment_form' || tab === 'payment_db') {
@@ -251,6 +257,7 @@ const MainContent: React.FC = () => {
         {activeTab === 'dashboard' && <DashboardView />}
         {activeTab === 'purchase_form' && <PurchaseFormView />}
         {activeTab === 'packing_form' && <PackingListView />}
+        {activeTab === 'air_way_bill' && <AirWayBillView />}
         {activeTab === 'payment_form' && <PaymentFormView />}
         {activeTab === 'exporter_payment_form' && <ExporterPaymentFormView />}
         {activeTab === 'exporter_payment_slip' && <ExporterPaymentSlipView />}

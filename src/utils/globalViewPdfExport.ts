@@ -122,6 +122,13 @@ const TAB_METADATA: Record<
     sheetReference: 'PACK_R1',
     slug: 'PACKING_FORM_TABLE',
   },
+  air_way_bill: {
+    viewLabel: 'AIR WAY BILL',
+    documentTitle: 'AIR WAY BILL — Monthly Statement Report',
+    documentBadge: 'AIR WAY BILL — MONTHLY STATEMENT REPORT',
+    sheetReference: 'AWB_A1:H10',
+    slug: 'AIR_WAY_BILL_TABLE',
+  },
   payment_form: {
     viewLabel: 'Supplier Payment Form',
     documentTitle: 'Supplier Payment Voucher & Credit Ledger — Table Report',

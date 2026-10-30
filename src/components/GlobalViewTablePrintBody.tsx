@@ -2,6 +2,8 @@ import React from 'react';
 import { CompanyProfile } from '../types/index.ts';
 import { GlobalViewTableReport } from '../utils/globalViewPdfExport.ts';
 import { formatDate, formatRMB } from '../utils/calculations.ts';
+import { resolveCompanyLogoSrc } from '../utils/pdfGenerator.ts';
+import { COMPANY_LOGO_URL } from '../context/initialData.ts';
 
 interface GlobalViewTablePrintBodyProps {
   report: GlobalViewTableReport;
@@ -174,6 +176,7 @@ export const GlobalOffscreenPrintHost: React.FC<GlobalOffscreenPrintHostProps> =
   const isExporterSlip =
     report.activeTab === 'exporter_payment_slip' && Boolean(report.exporterSlipPayload);
   const slipData = report.exporterSlipPayload;
+  const resolvedLogoSrc = resolveCompanyLogoSrc(companyProfile.logoUrl);
 
   return (
     <div
@@ -184,14 +187,14 @@ export const GlobalOffscreenPrintHost: React.FC<GlobalOffscreenPrintHostProps> =
         position: 'fixed',
         left: '-10000px',
         top: 0,
-        width: '800px',
+        width: '760px',
         pointerEvents: 'none',
         zIndex: -1,
       }}
     >
       <div
         id="global-printable-document"
-        className="w-[800px] bg-white p-8 space-y-6 text-slate-900"
+        className="w-[760px] bg-white p-6 space-y-5 text-slate-900"
         style={{ backgroundColor: '#ffffff', color: '#000000' }}
       >
         {!isExporterSlip && (
@@ -200,13 +203,38 @@ export const GlobalOffscreenPrintHost: React.FC<GlobalOffscreenPrintHostProps> =
             className="pb-4 text-center space-y-1.5"
           >
             <div className="flex justify-center mb-1">
-              <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shadow-xs">
+              <div
+                style={{
+                  width: '68px',
+                  height: '68px',
+                  borderRadius: '9999px',
+                  overflow: 'hidden',
+                  border: '2px solid #fbbf24',
+                  backgroundColor: '#ffffff',
+                  padding: '2px',
+                  margin: '0 auto',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                className="w-16 h-16 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shadow-xs flex items-center justify-center"
+              >
                 <img
-                  src={
-                    companyProfile.logoUrl ||
-                    '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'
-                  }
+                  src={resolvedLogoSrc}
                   alt={companyProfile.companyName}
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if (!target.src.endsWith(COMPANY_LOGO_URL)) {
+                      target.src = COMPANY_LOGO_URL;
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    borderRadius: '9999px',
+                    display: 'block',
+                  }}
                   className="w-full h-full object-contain rounded-full"
                 />
               </div>
@@ -256,13 +284,38 @@ export const GlobalOffscreenPrintHost: React.FC<GlobalOffscreenPrintHostProps> =
               style={{ backgroundColor: '#98486f', color: '#ffffff' }}
               className="py-3 px-4 flex items-center justify-center gap-3 border-b-2 border-black"
             >
-              <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-300 bg-white p-0.5 shrink-0">
+              <div
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '9999px',
+                  overflow: 'hidden',
+                  border: '2px solid #fcd34d',
+                  backgroundColor: '#ffffff',
+                  padding: '2px',
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-300 bg-white p-0.5 shrink-0 flex items-center justify-center"
+              >
                 <img
-                  src={
-                    companyProfile.logoUrl ||
-                    '/assets/aistudio/Gemini_Generated_Image_x7u4nx7u4nx7u4nx_2672ff47.jpg'
-                  }
+                  src={resolvedLogoSrc}
                   alt={companyProfile.companyName}
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if (!target.src.endsWith(COMPANY_LOGO_URL)) {
+                      target.src = COMPANY_LOGO_URL;
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    borderRadius: '9999px',
+                    display: 'block',
+                  }}
                   className="w-full h-full object-contain rounded-full"
                 />
               </div>

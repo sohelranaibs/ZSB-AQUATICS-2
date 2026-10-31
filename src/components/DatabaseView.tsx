@@ -31,7 +31,18 @@ import {
   FileDown,
   Loader2,
   Layers,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from 'lucide-react';
+import {
+  toggleSort,
+  sortPurchaseRecords,
+  sortPackingRecords,
+  sortPaymentRecords,
+  getColumnHeaderTitle,
+  SortConfig,
+} from '../utils/databaseSorting.ts';
 import { findShipmentByDeepLink } from '../utils/shipmentQrCode.ts';
 import { ShipmentQrBadge } from './ShipmentQrBadge.tsx';
 import {
@@ -125,6 +136,37 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [activePreset, setActivePreset] = useState<DatePresetKey>('all');
+
+  // Sort state per database view: defaults to date descending
+  const [purchaseSort, setPurchaseSort] = useState<SortConfig>({ column: 'date', direction: 'desc' });
+  const [packingSort, setPackingSort] = useState<SortConfig>({ column: 'date', direction: 'desc' });
+  const [paymentSort, setPaymentSort] = useState<SortConfig>({ column: 'date', direction: 'desc' });
+
+  const activeSortConfig = useMemo<SortConfig>(() => {
+    if (activeDbType === 'purchase') return purchaseSort;
+    if (activeDbType === 'packing') return packingSort;
+    return paymentSort;
+  }, [activeDbType, purchaseSort, packingSort, paymentSort]);
+
+  const handleHeaderSortClick = (columnKey: string) => {
+    if (activeDbType === 'purchase') {
+      setPurchaseSort((prev) => toggleSort(prev, columnKey));
+    } else if (activeDbType === 'packing') {
+      setPackingSort((prev) => toggleSort(prev, columnKey));
+    } else {
+      setPaymentSort((prev) => toggleSort(prev, columnKey));
+    }
+  };
+
+  const handleResetSort = () => {
+    if (activeDbType === 'purchase') {
+      setPurchaseSort({ column: null, direction: 'asc' });
+    } else if (activeDbType === 'packing') {
+      setPackingSort({ column: null, direction: 'asc' });
+    } else {
+      setPaymentSort({ column: null, direction: 'asc' });
+    }
+  };
 
   // Field validation summary across the active database table
   const activeRecordsForValidation = useMemo(() => {
@@ -543,13 +585,38 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     endDate,
   ]);
 
-  // Current active filtered records count and total records
+  // Sorted records based on active sort configuration
+  const sortedPurchases = useMemo(() => {
+    return sortPurchaseRecords(
+      filteredPurchases,
+      purchaseSort,
+      smartSyncAnalysis.purchaseReconciliations
+    );
+  }, [filteredPurchases, purchaseSort, smartSyncAnalysis.purchaseReconciliations]);
+
+  const sortedPackings = useMemo(() => {
+    return sortPackingRecords(
+      filteredPackings,
+      packingSort,
+      companyProfile.rmbExchangeRate || 16.5
+    );
+  }, [filteredPackings, packingSort, companyProfile.rmbExchangeRate]);
+
+  const sortedPayments = useMemo(() => {
+    return sortPaymentRecords(
+      filteredPayments,
+      paymentSort,
+      smartSyncAnalysis.paymentReconciliations
+    );
+  }, [filteredPayments, paymentSort, smartSyncAnalysis.paymentReconciliations]);
+
+  // Current active filtered/sorted records count and total records
   const currentFilteredCount =
     activeDbType === 'purchase'
-      ? filteredPurchases.length
+      ? sortedPurchases.length
       : activeDbType === 'packing'
-      ? filteredPackings.length
-      : filteredPayments.length;
+      ? sortedPackings.length
+      : sortedPayments.length;
 
   const totalUnfilteredCount =
     activeDbType === 'purchase'
@@ -567,41 +634,41 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
         : `_${today}`;
 
     if (activeDbType === 'purchase') {
-      if (filteredPurchases.length === 0) {
+      if (sortedPurchases.length === 0) {
         showToast('No purchase records in current filtered view to export.');
         return;
       }
       const filename = exportDatasetFile(
         'purchase',
         'xlsx',
-        filteredPurchases,
+        sortedPurchases,
         `ZSB_Aquatics_Purchases${dateRangeTag}.xlsx`
       );
-      showToast(`Exported ${filteredPurchases.length} purchase records to Excel (${filename})`);
+      showToast(`Exported ${sortedPurchases.length} purchase records to Excel (${filename})`);
     } else if (activeDbType === 'packing') {
-      if (filteredPackings.length === 0) {
+      if (sortedPackings.length === 0) {
         showToast('No packing records in current filtered view to export.');
         return;
       }
       const filename = exportDatasetFile(
         'packing',
         'xlsx',
-        filteredPackings,
+        sortedPackings,
         `ZSB_Aquatics_Packing_Lists${dateRangeTag}.xlsx`
       );
-      showToast(`Exported ${filteredPackings.length} packing records to Excel (${filename})`);
+      showToast(`Exported ${sortedPackings.length} packing records to Excel (${filename})`);
     } else {
-      if (filteredPayments.length === 0) {
+      if (sortedPayments.length === 0) {
         showToast('No payment records in current filtered view to export.');
         return;
       }
       const filename = exportDatasetFile(
         'payment',
         'xlsx',
-        filteredPayments,
+        sortedPayments,
         `ZSB_Aquatics_Payments${dateRangeTag}.xlsx`
       );
-      showToast(`Exported ${filteredPayments.length} payment records to Excel (${filename})`);
+      showToast(`Exported ${sortedPayments.length} payment records to Excel (${filename})`);
     }
   };
 
@@ -614,36 +681,97 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
         : `_${today}`;
 
     if (activeDbType === 'purchase') {
-      if (filteredPurchases.length === 0) {
+      if (sortedPurchases.length === 0) {
         showToast('No purchase records in current filtered view to export.');
         return;
       }
-      const csv = generatePurchasesCSV(filteredPurchases);
+      const csv = generatePurchasesCSV(sortedPurchases);
       const filename = `ZSB_Aquatics_Purchases${dateRangeTag}.csv`;
       downloadCsvFile(csv, filename);
-      showToast(`Exported ${filteredPurchases.length} purchase records to Excel CSV (${filename})`);
+      showToast(`Exported ${sortedPurchases.length} purchase records to Excel CSV (${filename})`);
     } else if (activeDbType === 'packing') {
-      if (filteredPackings.length === 0) {
+      if (sortedPackings.length === 0) {
         showToast('No packing records in current filtered view to export.');
         return;
       }
-      const csv = generatePackingsCSV(filteredPackings);
+      const csv = generatePackingsCSV(sortedPackings);
       const filename = `ZSB_Aquatics_Packing_Lists${dateRangeTag}.csv`;
       downloadCsvFile(csv, filename);
-      showToast(`Exported ${filteredPackings.length} packing records to Excel CSV (${filename})`);
+      showToast(`Exported ${sortedPackings.length} packing records to Excel CSV (${filename})`);
     } else {
-      if (filteredPayments.length === 0) {
+      if (sortedPayments.length === 0) {
         showToast('No payment records in current filtered view to export.');
         return;
       }
-      const csv = generatePaymentsCSV(filteredPayments);
+      const csv = generatePaymentsCSV(sortedPayments);
       const filename = `ZSB_Aquatics_Payments${dateRangeTag}.csv`;
       downloadCsvFile(csv, filename);
-      showToast(`Exported ${filteredPayments.length} payment records to Excel CSV (${filename})`);
+      showToast(`Exported ${sortedPayments.length} payment records to Excel CSV (${filename})`);
     }
   };
 
   const isDateFilterActive = Boolean(startDate || endDate);
+
+  /**
+   * Helper to render sortable table column header with accessible ARIA tags and toggle icon
+   */
+  const renderSortableHeader = (
+    colKey: string,
+    label: string,
+    align: 'left' | 'center' | 'right' = 'left',
+    extraClasses: string = ''
+  ) => {
+    const isSorted = activeSortConfig.column === colKey;
+    const dir = activeSortConfig.direction;
+    const alignClass =
+      align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left';
+
+    return (
+      <th
+        scope="col"
+        aria-sort={isSorted ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+        data-testid={`sort-header-${colKey}`}
+        onClick={() => handleHeaderSortClick(colKey)}
+        title={`Click to sort by ${label} (${
+          isSorted
+            ? `currently ${dir}ending, click to sort ${dir === 'asc' ? 'desc' : 'asc'}ending`
+            : 'click to sort'
+        })`}
+        className={`px-1.5 py-2 select-none cursor-pointer transition-colors hover:bg-black/25 group ${alignClass} ${extraClasses}`}
+      >
+        <div
+          className={`inline-flex items-center gap-1 w-full ${
+            align === 'right'
+              ? 'justify-end'
+              : align === 'center'
+              ? 'justify-center'
+              : 'justify-start'
+          }`}
+        >
+          <span
+            className={`font-bold uppercase tracking-tight whitespace-nowrap transition-colors ${
+              isSorted
+                ? 'text-amber-200 font-black underline underline-offset-2'
+                : 'group-hover:text-amber-100'
+            }`}
+          >
+            {label}
+          </span>
+          <span className="inline-flex items-center shrink-0">
+            {isSorted ? (
+              dir === 'asc' ? (
+                <ArrowUp className="w-3.5 h-3.5 text-amber-300 stroke-[2.8]" />
+              ) : (
+                <ArrowDown className="w-3.5 h-3.5 text-amber-300 stroke-[2.8]" />
+              )
+            ) : (
+              <ArrowUpDown className="w-2.5 h-2.5 opacity-40 group-hover:opacity-90 transition-opacity" />
+            )}
+          </span>
+        </div>
+      </th>
+    );
+  };
 
   return (
     <div className="w-full max-w-full mx-auto px-2 sm:px-3 py-3 space-y-4">
@@ -1362,6 +1490,35 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
       <div className="flex flex-col lg:flex-row items-start gap-5">
       {/* Database Tables */}
       <div className="flex-1 min-w-0 w-full bg-white rounded-xl shadow border border-slate-200 overflow-hidden">
+        {/* Active Sort Banner Indicator */}
+        {activeSortConfig.column && (
+          <div
+            data-testid="database-active-sort-banner"
+            className="px-3.5 py-1.5 bg-slate-900 text-white text-xs flex flex-wrap items-center justify-between gap-2 border-b border-slate-700"
+          >
+            <div className="flex items-center space-x-2">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-amber-400">
+                Sorted View:
+              </span>
+              <span className="text-slate-200 font-medium">
+                <strong className="text-white font-bold">{getColumnHeaderTitle(activeSortConfig.column)}</strong> (
+                <span className="text-amber-300 font-mono font-bold">
+                  {activeSortConfig.direction === 'asc' ? 'Ascending ↑' : 'Descending ↓'}
+                </span>
+                )
+              </span>
+            </div>
+            <button
+              type="button"
+              data-testid="database-reset-sort-btn"
+              onClick={handleResetSort}
+              className="text-[11px] text-amber-400 hover:text-amber-300 underline font-semibold cursor-pointer"
+            >
+              Reset Sort
+            </button>
+          </div>
+        )}
+
         {activeDbType === 'purchase' && (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-[11px]">
@@ -1371,36 +1528,36 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                     <input
                       type="checkbox"
                       checked={
-                        filteredPurchases.length > 0 &&
-                        selectedIds.length === filteredPurchases.length
+                        sortedPurchases.length > 0 &&
+                        selectedIds.length === sortedPurchases.length
                       }
                       onChange={() =>
-                        handleSelectAll(filteredPurchases.map((p) => p.id))
+                        handleSelectAll(sortedPurchases.map((p) => p.id))
                       }
                     />
                   </th>
-                  <th className="px-1.5 py-2 whitespace-nowrap">INVOICE NO</th>
-                  <th className="px-1.5 py-2 whitespace-nowrap">DATE</th>
-                  <th className="px-1.5 py-2">SUPPLIER / DESCRIPTION</th>
-                  <th className="px-1.5 py-2 whitespace-nowrap">CONTACT</th>
-                  <th className="px-1.5 py-2 text-center whitespace-nowrap">ITEMS</th>
-                  <th className="px-1.5 py-2 text-right whitespace-nowrap">TOTAL QTY</th>
-                  <th className="px-1.5 py-2 text-right whitespace-nowrap">TOTAL AMOUNT</th>
-                  <th className="px-1.5 py-2 text-right whitespace-nowrap">PAID AMOUNT</th>
-                  <th className="px-1.5 py-2 text-right whitespace-nowrap">BALANCE</th>
-                  <th className="px-1.5 py-2">RECONCILIATION STATUS</th>
+                  {renderSortableHeader('invoiceNumber', 'INVOICE NO', 'left', 'whitespace-nowrap')}
+                  {renderSortableHeader('date', 'DATE', 'left', 'whitespace-nowrap')}
+                  {renderSortableHeader('description', 'SUPPLIER / DESCRIPTION', 'left')}
+                  {renderSortableHeader('contactNumber', 'CONTACT', 'left', 'whitespace-nowrap')}
+                  {renderSortableHeader('items', 'ITEMS', 'center', 'whitespace-nowrap')}
+                  {renderSortableHeader('totalQty', 'TOTAL QTY', 'right', 'whitespace-nowrap')}
+                  {renderSortableHeader('totalAmount', 'TOTAL AMOUNT', 'right', 'whitespace-nowrap')}
+                  {renderSortableHeader('paidAmount', 'PAID AMOUNT', 'right', 'whitespace-nowrap')}
+                  {renderSortableHeader('balance', 'BALANCE', 'right', 'whitespace-nowrap')}
+                  {renderSortableHeader('reconciliation', 'RECONCILIATION STATUS', 'left')}
                   <th className="px-1.5 py-2 text-center whitespace-nowrap">ACTIONS</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 font-medium">
-                {filteredPurchases.length === 0 ? (
+                {sortedPurchases.length === 0 ? (
                   <tr>
                     <td colSpan={12} className="p-8 text-center text-slate-400">
                       No purchase records found.
                     </td>
                   </tr>
                 ) : (
-                  filteredPurchases.map((p, idx) => {
+                  sortedPurchases.map((p, idx) => {
                     const isSelected = selectedIds.includes(p.id);
                     const rec = smartSyncAnalysis.purchaseReconciliations[p.id];
                     const isEvenRow = idx % 2 === 1;
@@ -1696,38 +1853,38 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                       <input
                         type="checkbox"
                         checked={
-                          filteredPackings.length > 0 &&
-                          selectedIds.length === filteredPackings.length
+                          sortedPackings.length > 0 &&
+                          selectedIds.length === sortedPackings.length
                         }
                         onChange={() =>
-                          handleSelectAll(filteredPackings.map((p) => p.id))
+                          handleSelectAll(sortedPackings.map((p) => p.id))
                         }
                       />
                     </th>
-                    <th className="px-1 py-2 whitespace-nowrap">PACKING NO</th>
-                    <th className="px-1 py-2 whitespace-nowrap">DATE</th>
-                    <th className="px-1 py-2">SHIPPING MARK</th>
-                    <th className="px-1 py-2 whitespace-nowrap">FLIGHT</th>
-                    <th className="px-1 py-2">DESTINATION</th>
-                    <th className="px-1 py-2">SHIPPER</th>
-                    <th className="px-1 py-2">ITEMS</th>
-                    <th className="px-1 py-2 text-right">TOTAL BOX</th>
-                    <th className="px-1 py-2 text-right">TOTAL WEIGHT</th>
-                    <th className="px-1 py-2 text-right">TOTAL VALUE</th>
-                    <th className="px-1 py-2 text-right">RMB RATE</th>
-                    <th className="px-1 py-2 text-right">TOTAL AMOUNT (BDT)</th>
+                    {renderSortableHeader('invoiceNumber', 'PACKING NO', 'left', 'whitespace-nowrap')}
+                    {renderSortableHeader('date', 'DATE', 'left', 'whitespace-nowrap')}
+                    {renderSortableHeader('shippingMark', 'SHIPPING MARK', 'left')}
+                    {renderSortableHeader('flight', 'FLIGHT', 'left', 'whitespace-nowrap')}
+                    {renderSortableHeader('destination', 'DESTINATION', 'left')}
+                    {renderSortableHeader('shipper', 'SHIPPER', 'left')}
+                    {renderSortableHeader('items', 'ITEMS', 'left')}
+                    {renderSortableHeader('totalBox', 'TOTAL BOX', 'right')}
+                    {renderSortableHeader('totalWeight', 'TOTAL WEIGHT', 'right')}
+                    {renderSortableHeader('totalAmount', 'TOTAL VALUE', 'right')}
+                    {renderSortableHeader('rmbRate', 'RMB RATE', 'right')}
+                    {renderSortableHeader('amountBDT', 'TOTAL AMOUNT (BDT)', 'right')}
                     <th className="px-1 py-2 text-center whitespace-nowrap">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 font-medium">
-                  {filteredPackings.length === 0 ? (
+                  {sortedPackings.length === 0 ? (
                     <tr>
                       <td colSpan={14} className="p-8 text-center text-slate-400">
                         No packing list records found.
                       </td>
                     </tr>
                   ) : (
-                    filteredPackings.map((pkg, idx) => {
+                    sortedPackings.map((pkg, idx) => {
                       const isSelected = selectedIds.includes(pkg.id);
                       const isEvenRow = idx % 2 === 1;
                       const computedAmountBDT = calculatePackingTotalAmountBDT(
@@ -2110,35 +2267,35 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                       <input
                         type="checkbox"
                         checked={
-                          filteredPayments.length > 0 &&
-                          selectedIds.length === filteredPayments.length
+                          sortedPayments.length > 0 &&
+                          selectedIds.length === sortedPayments.length
                         }
                         onChange={() =>
-                          handleSelectAll(filteredPayments.map((p) => p.id))
+                          handleSelectAll(sortedPayments.map((p) => p.id))
                         }
                       />
                     </th>
-                    <th className="px-1.5 py-2 whitespace-nowrap">PAYMENT NO</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap">TYPE</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap">DATE</th>
-                    <th className="px-1.5 py-2">PARTY / MARK</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap">STATUS</th>
-                    <th className="px-1.5 py-2 text-right whitespace-nowrap">PAID AMOUNT</th>
-                    <th className="px-1.5 py-2 text-right whitespace-nowrap">BALANCE</th>
-                    <th className="px-1.5 py-2 whitespace-nowrap">EXPORT REF</th>
-                    <th className="px-1.5 py-2">RECONCILIATION STATUS</th>
+                    {renderSortableHeader('invoiceNumber', 'PAYMENT NO', 'left', 'whitespace-nowrap')}
+                    {renderSortableHeader('type', 'TYPE', 'left', 'whitespace-nowrap')}
+                    {renderSortableHeader('date', 'DATE', 'left', 'whitespace-nowrap')}
+                    {renderSortableHeader('description', 'PARTY / MARK', 'left')}
+                    {renderSortableHeader('status', 'STATUS', 'left', 'whitespace-nowrap')}
+                    {renderSortableHeader('paidAmount', 'PAID AMOUNT', 'right', 'whitespace-nowrap')}
+                    {renderSortableHeader('balance', 'BALANCE', 'right', 'whitespace-nowrap')}
+                    {renderSortableHeader('exportRef', 'EXPORT REF', 'left', 'whitespace-nowrap')}
+                    {renderSortableHeader('reconciliation', 'RECONCILIATION STATUS', 'left')}
                     <th className="px-1.5 py-2 text-center whitespace-nowrap">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 font-medium">
-                  {filteredPayments.length === 0 ? (
+                  {sortedPayments.length === 0 ? (
                     <tr>
                       <td colSpan={11} className="p-8 text-center text-slate-400">
                         No payment records found.
                       </td>
                     </tr>
                   ) : (
-                    filteredPayments.map((pm, idx) => {
+                    sortedPayments.map((pm, idx) => {
                       const isSelected = selectedIds.includes(pm.id);
                       const category = classifyPaymentCategory(pm);
                       const rec = smartSyncAnalysis.paymentReconciliations[pm.id];

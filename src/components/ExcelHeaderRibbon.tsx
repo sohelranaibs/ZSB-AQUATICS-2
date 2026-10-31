@@ -556,6 +556,58 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
           <span>1 RMB = {companyProfile.rmbExchangeRate} TK</span>
         </div>
       </div>
+
+      {/* Horizontal Workbook Sheet Tab Strip (All Sheets Displayed in a Dedicated Row) */}
+      <nav
+        aria-label="Workbook Sheet Tabs"
+        data-testid="enterprise-sheet-tab-bar"
+        className="bg-[#0b1322] px-3 py-1 border-t border-slate-800 flex items-center space-x-1 overflow-x-auto scrollbar-thin select-none"
+      >
+        <div className="flex items-center space-x-1.5 pr-2 mr-1 border-r border-slate-800 shrink-0 text-amber-400 font-mono text-[11px] font-bold uppercase tracking-wider">
+          <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" />
+          <span className="hidden sm:inline">Sheets ({workbookSheets.length}):</span>
+        </div>
+
+        {workbookSheets.map((s) => {
+          const isActive = activeTab === s.id;
+          return (
+            <button
+              key={s.id}
+              type="button"
+              data-testid={`sheet-tab-${s.id}`}
+              onClick={() => setActiveTab(s.id)}
+              className={`flex items-center space-x-1.5 px-2.5 py-1.5 text-xs font-bold rounded-t-lg transition-all shrink-0 cursor-pointer ${
+                isActive
+                  ? 'bg-[#1e293b] text-amber-300 border-t-2 border-t-amber-400 border-x border-slate-700/80 shadow-md font-black'
+                  : 'bg-slate-900/90 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-800/80 font-semibold'
+              }`}
+              title={`Switch to Sheet [${s.num}] ${s.label}`}
+            >
+              <span
+                className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${
+                  isActive
+                    ? 'bg-amber-400 text-slate-950 font-black'
+                    : 'bg-slate-950 text-amber-400/90 border border-amber-500/30'
+                }`}
+              >
+                {s.num}
+              </span>
+              <span className="whitespace-nowrap">{s.shortLabel || s.label}</span>
+              {s.badge !== undefined && (
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black ${
+                    isActive
+                      ? 'bg-amber-400 text-slate-950'
+                      : 'bg-slate-800 text-amber-300 border border-amber-500/30'
+                  }`}
+                >
+                  {s.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
     </header>
   );
 };

@@ -486,10 +486,10 @@ export const sampleMortalities: MortalityRecord[] = [
   },
 ];
 
-// Active database records: initialized completely empty (0 records)
-export const initialPurchases: PurchaseRecord[] = [];
-export const initialPackings: PackingRecord[] = [];
-export const initialPayments: PaymentRecord[] = [];
-export const initialOtherCosts: OtherCostRecord[] = [];
-export const initialSupplierCredits: SupplierCreditRecord[] = [];
-export const initialMortalities: MortalityRecord[] = [];
+// Active database records: seeded with deterministic trade ledger records
+export const initialPurchases: PurchaseRecord[] = samplePurchases;
+export const initialPackings: PackingRecord[] = samplePackings;
+export const initialPayments: PaymentRecord[] = samplePayments;
+export const initialOtherCosts: OtherCostRecord[] = sampleOtherCosts;
+export const initialSupplierCredits: SupplierCreditRecord[] = sampleSupplierCredits;
+export const initialMortalities: MortalityRecord[] = sampleMortalities;

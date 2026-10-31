@@ -26,7 +26,11 @@ import {
   COMPANY_LOGO_URL,
 } from './initialData.ts';
 import { generateRecordId, deduplicateRecords } from '../utils/idGenerator.ts';
-import { generateInvoiceNumber } from '../utils/calculations.ts';
+import { generateInvoiceNumber, calculatePackingTotals } from '../utils/calculations.ts';
+import {
+  buildPackingShipmentGroupKey,
+  mergePackingRecordsByShipmentGroup,
+} from '../utils/csvParser.ts';
 import {
   createSupplierCreditRecord,
   applySupplierCreditNote,
@@ -435,11 +439,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('zsb_purchases_v3');
       localStorage.removeItem('zsb_purchases_v4');
       const saved = localStorage.getItem(STORAGE_KEYS.PURCHASES);
-      if (!saved) return [];
+      if (!saved) return initialPurchases;
       const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'pur') : [];
+      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'pur') : initialPurchases;
     } catch {
-      return [];
+      return initialPurchases;
     }
   });
 
@@ -450,11 +454,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('zsb_packings_v3');
       localStorage.removeItem('zsb_packings_v4');
       const saved = localStorage.getItem(STORAGE_KEYS.PACKINGS);
-      if (!saved) return [];
+      if (!saved) return initialPackings;
       const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'pkg') : [];
+      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'pkg') : initialPackings;
     } catch {
-      return [];
+      return initialPackings;
     }
   });
 
@@ -491,11 +495,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('zsb_payments_v3');
       localStorage.removeItem('zsb_payments_v4');
       const saved = localStorage.getItem(STORAGE_KEYS.PAYMENTS);
-      if (!saved) return [];
+      if (!saved) return initialPayments;
       const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'pay') : [];
+      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'pay') : initialPayments;
     } catch {
-      return [];
+      return initialPayments;
     }
   });
 
@@ -506,11 +510,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('zsb_other_costs_v3');
       localStorage.removeItem('zsb_other_costs_v4');
       const saved = localStorage.getItem(STORAGE_KEYS.OTHER_COSTS);
-      if (!saved) return [];
+      if (!saved) return initialOtherCosts;
       const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'cost') : [];
+      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'cost') : initialOtherCosts;
     } catch {
-      return [];
+      return initialOtherCosts;
     }
   });
 
@@ -1030,19 +1034,115 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ): number => {
     if (!records || records.length === 0) return 0;
     const now = new Date().toISOString();
-    const hydrated: PackingRecord[] = records.map((rec) => ({
-      ...rec,
-      id: generateRecordId('pkg'),
-      createdAt: now,
-    }));
-    setPackings((prev) => (mode === 'replace' ? hydrated : [...hydrated, ...prev]));
+    const mergedIncoming = mergePackingRecordsByShipmentGroup(
+      records,
+      mode === 'replace' ? 0 : packings.length
+    );
+
+    if (mode === 'replace') {
+      const hydrated: PackingRecord[] = mergedIncoming.map((rec) => ({
+        ...rec,
+        id: generateRecordId('pkg'),
+        createdAt: now,
+      }));
+      setPackings(hydrated);
+      addAuditLog({
+        action: 'IMPORT',
+        module: 'Packing',
+        entityId: `BULK-PKG-${hydrated.length}`,
+        summary: `Bulk imported ${hydrated.length} merged packing list manifest(s) (replace mode)`,
+      });
+      return hydrated.length;
+    }
+
+    setPackings((prev) => {
+      const updatedExisting = [...prev];
+      const existingIndexByKey = new Map<string, number>();
+      updatedExisting.forEach((p, idx) => {
+        existingIndexByKey.set(
+          buildPackingShipmentGroupKey({
+            shippingMark: p.shippingMark,
+            flight: p.flight,
+            destination: p.destination,
+            shipper: p.shipper,
+            packingDate: p.packingDate,
+          }),
+          idx
+        );
+      });
+
+      const newlyCreated: PackingRecord[] = [];
+      let nextSeqCount = prev.length;
+
+      for (const incoming of mergedIncoming) {
+        const key = buildPackingShipmentGroupKey({
+          shippingMark: incoming.shippingMark,
+          flight: incoming.flight,
+          destination: incoming.destination,
+          shipper: incoming.shipper,
+          packingDate: incoming.packingDate,
+        });
+
+        const matchIdx = existingIndexByKey.get(key);
+        if (matchIdx !== undefined) {
+          const target = updatedExisting[matchIdx];
+          const combinedItems: PackingItemRow[] = [
+            ...(target.items || []),
+            ...(incoming.items || []).map((it, idx) => ({
+              ...it,
+              id: `pki-merged-${Date.now()}-${target.items.length + idx}`,
+            })),
+          ];
+          const totals = calculatePackingTotals(combinedItems);
+          const rmbRate =
+            target.rmbRate && target.rmbRate > 0
+              ? target.rmbRate
+              : incoming.rmbRate && incoming.rmbRate > 0
+              ? incoming.rmbRate
+              : undefined;
+          const totalAmountBDT =
+            rmbRate && rmbRate > 0
+              ? Math.round(totals.totalAmount * rmbRate * 100) / 100
+              : target.totalAmountBDT;
+          const rmbAmount =
+            totals.totalWeight > 0
+              ? Math.round((totals.totalAmount / totals.totalWeight) * 100) / 100
+              : 0;
+
+          updatedExisting[matchIdx] = {
+            ...target,
+            items: combinedItems,
+            totalBox: totals.totalBox,
+            totalWeight: totals.totalWeight,
+            totalAmount: totals.totalAmount,
+            rmbAmount,
+            settledAmount: totals.totalAmount,
+            rmbRate,
+            totalAmountBDT,
+          };
+        } else {
+          const invoiceNumber =
+            incoming.invoiceNumber || generateInvoiceNumber('PKG', nextSeqCount);
+          nextSeqCount++;
+          newlyCreated.push({
+            ...incoming,
+            invoiceNumber,
+            id: generateRecordId('pkg'),
+            createdAt: now,
+          });
+        }
+      }
+
+      return [...newlyCreated, ...updatedExisting];
+    });
+
     addAuditLog({
       action: 'IMPORT',
       module: 'Packing',
-      entityId: `BULK-PKG-${hydrated.length}`,
-      summary: `Bulk imported ${hydrated.length} packing list manifest(s) (${mode} mode)`,
+      entityId: `BULK-PKG-${mergedIncoming.length}`,
+      summary: `Bulk imported ${mergedIncoming.length} merged packing list manifest(s) (append mode)`,
     });
-    return hydrated.length;
+    return mergedIncoming.length;
   };
 
   // Payments CRUD

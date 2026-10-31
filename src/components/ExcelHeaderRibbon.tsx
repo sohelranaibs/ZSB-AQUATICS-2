@@ -245,20 +245,6 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
     },
   ];
 
-  const currentSheetIndex = Math.max(
-    0,
-    workbookSheets.findIndex((s) => s.id === activeTab)
-  );
-  const currentSheet = workbookSheets[currentSheetIndex] || workbookSheets[0];
-
-  const handleStepSheet = (direction: 'prev' | 'next') => {
-    const total = workbookSheets.length;
-    const nextIndex =
-      direction === 'next'
-        ? (currentSheetIndex + 1) % total
-        : (currentSheetIndex - 1 + total) % total;
-    setActiveTab(workbookSheets[nextIndex].id);
-  };
 
   return (
     <header className="bg-slate-900 border-b border-slate-700 shadow-md select-none print:hidden sticky top-0 z-40">
@@ -434,27 +420,6 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
       {/* Excel Formula Bar + Quick Sheet Switcher Controls */}
       <div className="bg-slate-800 px-4 py-1.5 border-b border-slate-700 flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-slate-300">
         <div className="flex items-center space-x-2 min-w-0 flex-1">
-          {/* Prev / Next Sheet Navigation Buttons */}
-          <div className="flex items-center space-x-1 shrink-0">
-            <button
-              type="button"
-              data-testid="ribbon-prev-sheet-btn"
-              onClick={() => handleStepSheet('prev')}
-              title="Go to Previous Sheet (Shortcut: Alt + Left Arrow)"
-              className="px-2 py-0.5 bg-slate-900 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded text-[11px] font-bold transition cursor-pointer"
-            >
-              ◀ Prev
-            </button>
-            <button
-              type="button"
-              data-testid="ribbon-next-sheet-btn"
-              onClick={() => handleStepSheet('next')}
-              title="Go to Next Sheet (Shortcut: Alt + Right Arrow)"
-              className="px-2 py-0.5 bg-slate-900 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded text-[11px] font-bold transition cursor-pointer"
-            >
-              Next ▶
-            </button>
-          </div>
 
           {/* Direct Sheet Dropdown Jumper */}
           <div className="flex items-center space-x-1.5 shrink-0">

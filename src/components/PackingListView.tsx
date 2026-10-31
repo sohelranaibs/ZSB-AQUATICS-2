@@ -37,6 +37,7 @@ import {
   CheckCircle2,
   ImageDown,
   Loader2,
+  UploadCloud,
 } from 'lucide-react';
 import { ShipmentQrBadge } from './ShipmentQrBadge.tsx';
 import {
@@ -56,6 +57,7 @@ export const PackingListView: React.FC = () => {
     editingPackingId,
     setEditingPackingId,
     openPrintModal,
+    openDataCenterModal,
     setActiveTab,
     showToast,
     openShipmentDetails,
@@ -1464,6 +1466,17 @@ export const PackingListView: React.FC = () => {
             >
               <Printer className="w-4 h-4" />
               <span>FLIGHT RETURN BILL STATEMENT</span>
+            </button>
+
+            <button
+              type="button"
+              data-testid="packing-import-excel-csv-btn"
+              onClick={() => openDataCenterModal('import', 'packing')}
+              className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 py-2.5 px-4 rounded-lg font-extrabold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
+              title="Import Packing List rows from Excel (.xlsx) or CSV (.csv) — same Mark, Flight, Destination, Shipper & Date automatically merge into 1 Invoice & Packing No"
+            >
+              <UploadCloud className="w-4 h-4 stroke-[2.2]" />
+              <span>IMPORT EXCEL / CSV</span>
             </button>
 
             <button

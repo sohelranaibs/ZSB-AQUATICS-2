@@ -227,3 +227,58 @@ test('Tab-separated Excel copy-paste lines parse accurately', () => {
   assert.equal(parsed.records[0].totalQty, 80);
   assert.equal(parsed.records[0].totalAmount, 28000);
 });
+
+test('Excel and CSV import merges packing rows with same ShippingMark, Flight, Destination, Shipper, and Date into 1 invoice and packing number', () => {
+  const headerMappedCsv = [
+    'Shipping Mark,Flight,Destination,Shipper,Date,Item,Box,Weight Per Box (KG),Rate (RMB),RMB Rate',
+    'AAD,CAN,GUANGZHOU,ZSB AQUATICS,2026-10-25,2F,10,15,400,16.5',
+    'AAD,CAN,GUANGZHOU,ZSB AQUATICS,2026-10-25,3F,5,14,380,16.5',
+    'AAD,CAN,GUANGZHOU,ZSB AQUATICS,2026-10-25,XXL,4,16,550,16.5',
+    'ROE,MU KMG,XIAMEN,RIK INTERNATIONAL,2026-10-25,4F,8,15,360,16.5',
+  ].join('\n');
+
+  const parsed = parseSmartTextData('packing', headerMappedCsv, 10);
+  assert.equal(parsed.success, true);
+  assert.equal(parsed.totalParsedRows, 4);
+  assert.equal(parsed.records.length, 2);
+
+  const mergedAad = parsed.records[0];
+  assert.equal(mergedAad.invoiceNumber, 'PKG-2026-0011');
+  assert.equal(mergedAad.shippingMark, 'AAD');
+  assert.equal(mergedAad.flight, 'CAN');
+  assert.equal(mergedAad.destination, 'GUANGZHOU');
+  assert.equal(mergedAad.shipper, 'ZSB AQUATICS');
+  assert.equal(mergedAad.packingDate, '2026-10-25');
+  assert.equal(mergedAad.items.length, 3);
+  // Total Box: 10 + 5 + 4 = 19
+  assert.equal(mergedAad.totalBox, 19);
+  // Total Weight: 150 + 70 + 64 = 284 KG
+  assert.equal(mergedAad.totalWeight, 284);
+  // Total Amount (RMB): 60000 + 26600 + 35200 = 121800
+  assert.equal(mergedAad.totalAmount, 121800);
+  // Total Amount (BDT): 121800 * 16.5 = 2009700
+  assert.equal(mergedAad.totalAmountBDT, 2009700);
+
+  const roeRecord = parsed.records[1];
+  assert.equal(roeRecord.invoiceNumber, 'PKG-2026-0012');
+  assert.equal(roeRecord.shippingMark, 'ROE');
+  assert.equal(roeRecord.items.length, 1);
+
+  // Round-trip export and re-import of merged multi-item PackingRecord preserves all merged items
+  const exportedXlsx = generateSingleSheetWorkbookBuffer('packing', [
+    {
+      ...mergedAad,
+      id: 'pkg-merged-1',
+      createdAt: '2026-10-25T10:00:00Z',
+    },
+  ]);
+  const reimported = parseExcelOrCsvBuffer(exportedXlsx, 'packing', 0);
+  assert.equal(reimported.success, true);
+  assert.equal(reimported.records.length, 1);
+  assert.equal(reimported.records[0].invoiceNumber, 'PKG-2026-0011');
+  assert.equal(reimported.records[0].items.length, 3);
+  assert.equal(reimported.records[0].totalBox, 19);
+  assert.equal(reimported.records[0].totalWeight, 284);
+  assert.equal(reimported.records[0].totalAmount, 121800);
+});
+

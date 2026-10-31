@@ -138,7 +138,154 @@ export function parsePurchasesCSV(
 }
 
 /**
- * Parses CSV lines into PackingRecords
+ * Builds a normalized shipment group key for a Packing List record based on
+ * Shipping Mark, Flight, Destination, Shipper, and Packing Date.
+ */
+export function buildPackingShipmentGroupKey(input: {
+  shippingMark: string;
+  flight: string;
+  destination: string;
+  shipper: string;
+  packingDate: string;
+}): string {
+  const norm = (val: string) =>
+    String(val || '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toUpperCase();
+  return [
+    norm(input.shippingMark),
+    norm(input.flight),
+    norm(input.destination),
+    norm(input.shipper),
+    String(input.packingDate || '').trim(),
+  ].join('||');
+}
+
+/**
+ * Merges PackingRecords that share the same Shipping Mark, Flight, Destination,
+ * Shipper, and Packing Date into a single PackingRecord with 1 invoice/packing number
+ * and all item rows combined.
+ */
+export function mergePackingRecordsByShipmentGroup(
+  records: Omit<PackingRecord, 'id' | 'createdAt'>[],
+  startCount: number = 0
+): Omit<PackingRecord, 'id' | 'createdAt'>[] {
+  const groupMap = new Map<string, Omit<PackingRecord, 'id' | 'createdAt'>>();
+  const usedInvoiceNumbers = new Set<string>();
+  let groupCount = startCount;
+
+  for (const rec of records) {
+    const key = buildPackingShipmentGroupKey({
+      shippingMark: rec.shippingMark,
+      flight: rec.flight,
+      destination: rec.destination,
+      shipper: rec.shipper,
+      packingDate: rec.packingDate,
+    });
+
+    const normalizedItems: PackingItemRow[] = (rec.items || []).map((it, idx) => {
+      const box = Number(it.box) || 0;
+      const weight = Number(it.weight) || 0;
+      const rate = Number(it.rate) || 0;
+      const calcs = calculatePackingRow(box, weight, rate);
+      return {
+        ...it,
+        id: it.id || `pki-merged-${Date.now()}-${groupMap.size}-${idx}`,
+        box,
+        weight,
+        totalWeight: calcs.totalWeight,
+        unit: it.unit || 'KG',
+        rate,
+        amount: calcs.amount,
+      };
+    });
+
+    if (!groupMap.has(key)) {
+      const explicitInvoice = String(rec.invoiceNumber || '').trim();
+      const invoiceNumber =
+        explicitInvoice && !usedInvoiceNumbers.has(explicitInvoice.toUpperCase())
+          ? explicitInvoice
+          : generateInvoiceNumber('PKG', groupCount);
+      usedInvoiceNumbers.add(invoiceNumber.toUpperCase());
+      groupCount++;
+
+      const totals = calculatePackingTotals(normalizedItems);
+      const rmbRate = rec.rmbRate && rec.rmbRate > 0 ? rec.rmbRate : undefined;
+      const totalAmountBDT =
+        rmbRate && rmbRate > 0
+          ? Math.round(totals.totalAmount * rmbRate * 100) / 100
+          : rec.totalAmountBDT;
+      const rmbAmount =
+        totals.totalWeight > 0
+          ? Math.round((totals.totalAmount / totals.totalWeight) * 100) / 100
+          : 0;
+
+      groupMap.set(key, {
+        ...rec,
+        invoiceNumber,
+        shippingMark: String(rec.shippingMark || '').trim(),
+        flight: String(rec.flight || '').trim(),
+        destination: String(rec.destination || '').trim(),
+        shipper: String(rec.shipper || '').trim(),
+        packingDate: String(rec.packingDate || '').trim(),
+        fromDate: rec.fromDate || rec.packingDate,
+        toDate: rec.toDate || rec.packingDate,
+        items: normalizedItems,
+        totalBox: totals.totalBox,
+        totalWeight: totals.totalWeight,
+        totalAmount: totals.totalAmount,
+        rmbAmount,
+        settledAmount: totals.totalAmount,
+        rmbRate,
+        totalAmountBDT,
+      });
+    } else {
+      const existing = groupMap.get(key)!;
+      const combinedItems: PackingItemRow[] = [
+        ...existing.items,
+        ...normalizedItems.map((it, idx) => ({
+          ...it,
+          id: `pki-merged-${Date.now()}-${existing.items.length + idx}`,
+        })),
+      ];
+      const totals = calculatePackingTotals(combinedItems);
+      const rmbRate =
+        existing.rmbRate && existing.rmbRate > 0
+          ? existing.rmbRate
+          : rec.rmbRate && rec.rmbRate > 0
+          ? rec.rmbRate
+          : undefined;
+      const totalAmountBDT =
+        rmbRate && rmbRate > 0
+          ? Math.round(totals.totalAmount * rmbRate * 100) / 100
+          : existing.totalAmountBDT;
+      const rmbAmount =
+        totals.totalWeight > 0
+          ? Math.round((totals.totalAmount / totals.totalWeight) * 100) / 100
+          : 0;
+
+      groupMap.set(key, {
+        ...existing,
+        items: combinedItems,
+        totalBox: totals.totalBox,
+        totalWeight: totals.totalWeight,
+        totalAmount: totals.totalAmount,
+        rmbAmount,
+        settledAmount: totals.totalAmount,
+        rmbRate,
+        totalAmountBDT,
+      });
+    }
+  }
+
+  return Array.from(groupMap.values());
+}
+
+/**
+ * Parses CSV lines into PackingRecords.
+ * Rows sharing the same ShippingMark, Flight, Destination, Shipper, and Date
+ * are automatically merged into a single PackingRecord with 1 invoice/packing number.
  * Expected header/format:
  * ShippingMark, Flight, Destination, Shipper, Date, Item, Box, Weight, Rate
  */
@@ -151,10 +298,8 @@ export function parsePackingsCSV(
     .map((l) => l.trim())
     .filter((l) => l.length > 0);
 
-  const records: Omit<PackingRecord, 'id' | 'createdAt'>[] = [];
+  const rawRecords: Omit<PackingRecord, 'id' | 'createdAt'>[] = [];
   const errors: string[] = [];
-
-  let count = startCount;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -173,18 +318,23 @@ export function parsePackingsCSV(
       continue;
     }
 
-    const shippingMark = parts[0] || 'AAD';
-    const flight = parts[1] || 'CAN';
-    const destination = parts[2] || 'GUANGZHOU';
-    const shipper = parts[3] || 'ZSB AQUATICS';
-    const packingDate = parts[4] || new Date().toISOString().slice(0, 10);
-    const item = parts[5] || '2F';
+    const shippingMark = (parts[0] || 'AAD').trim();
+    const flight = (parts[1] || 'CAN').trim();
+    const destination = (parts[2] || 'GUANGZHOU').trim();
+    const shipper = (parts[3] || 'ZSB AQUATICS').trim();
+    const packingDate = (parts[4] || new Date().toISOString().slice(0, 10)).trim();
+    const item = (parts[5] || '2F').trim();
     const box = parseFloat(parts[6]) || 1;
     const weight = parseFloat(parts[7]) || 15;
     const rate = parts[8] ? parseFloat(parts[8]) || 0 : 350;
-    const invoiceNumber = parts[9] || generateInvoiceNumber('PKG', count);
-
-    count++;
+    const col9 = parts[9] ? parts[9].trim() : '';
+    const isCol9NumericRate = col9 !== '' && /^\d+(\.\d+)?$/.test(col9);
+    const rmbRate = isCol9NumericRate ? parseFloat(col9) || 0 : 0;
+    const explicitInvoiceNumber = isCol9NumericRate
+      ? parts[10]
+        ? parts[10].trim()
+        : ''
+      : col9;
 
     const itemCalcs = calculatePackingRow(box, weight, rate);
     const itemRow: PackingItemRow = {
@@ -199,9 +349,11 @@ export function parsePackingsCSV(
     };
 
     const totals = calculatePackingTotals([itemRow]);
+    const totalAmountBDT =
+      rmbRate > 0 ? Math.round(totals.totalAmount * rmbRate * 100) / 100 : undefined;
 
-    records.push({
-      invoiceNumber,
+    rawRecords.push({
+      invoiceNumber: explicitInvoiceNumber,
       shippingMark,
       flight,
       destination,
@@ -213,15 +365,19 @@ export function parsePackingsCSV(
       totalBox: totals.totalBox,
       totalWeight: totals.totalWeight,
       totalAmount: totals.totalAmount,
+      rmbRate: rmbRate > 0 ? rmbRate : undefined,
+      totalAmountBDT,
       remarks: 'Bulk uploaded via Quick Entry',
     });
   }
+
+  const records = mergePackingRecordsByShipmentGroup(rawRecords, startCount);
 
   return {
     success: records.length > 0,
     records,
     errors,
-    totalParsedRows: records.length,
+    totalParsedRows: rawRecords.length,
   };
 }
 

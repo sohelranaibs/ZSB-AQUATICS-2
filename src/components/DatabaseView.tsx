@@ -57,6 +57,12 @@ import {
 } from '../utils/batchPaymentSlipPdf.ts';
 import { PaymentSlipPrintCard } from './PaymentSlipPrintCard.tsx';
 import { BatchUpdateSidebar } from './BatchUpdateSidebar.tsx';
+import {
+  DatabaseTableType,
+  summarizeTableValidation,
+  validateDatabaseCellValue,
+} from '../utils/databaseFieldValidation.ts';
+import { DatabaseValidatedCell } from './DatabaseValidatedCell.tsx';
 
 interface DatabaseViewProps {
   initialType?: 'purchase' | 'packing' | 'payment';
@@ -95,6 +101,14 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   );
   const [paymentCategoryFilter, setPaymentCategoryFilter] = useState<'all' | 'supplier' | 'exporter'>('all');
   const [reconciliationFilter, setReconciliationFilter] = useState<'all' | 'discrepancies' | 'reconciled'>('all');
+  const [validationFilter, setValidationFilter] = useState<'all' | 'invalid_only'>('all');
+  const [cellDraftsByDb, setCellDraftsByDb] = useState<
+    Record<DatabaseTableType, Record<string, Record<string, string>>>
+  >({
+    purchase: {},
+    packing: {},
+    payment: {},
+  });
   const [lastSyncLog, setLastSyncLog] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>(() => focusedShipmentInvoice || '');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -111,6 +125,127 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [activePreset, setActivePreset] = useState<DatePresetKey>('all');
+
+  // Field validation summary across the active database table
+  const activeRecordsForValidation = useMemo(() => {
+    if (activeDbType === 'purchase') return purchases as unknown as Array<{ id: string } & Record<string, unknown>>;
+    if (activeDbType === 'packing') return packings as unknown as Array<{ id: string } & Record<string, unknown>>;
+    return payments as unknown as Array<{ id: string } & Record<string, unknown>>;
+  }, [activeDbType, purchases, packings, payments]);
+
+  const validationSummary = useMemo(
+    () =>
+      summarizeTableValidation(
+        activeDbType,
+        activeRecordsForValidation,
+        cellDraftsByDb[activeDbType]
+      ),
+    [activeDbType, activeRecordsForValidation, cellDraftsByDb]
+  );
+
+  const handleCellDraftChange = (recordId: string, fieldKey: string, nextRawValue: string) => {
+    // For Packing DB rmbRate live input, if valid numeric or empty, also update live BDT conversion
+    if (activeDbType === 'packing' && fieldKey === 'rmbRate') {
+      const check = validateDatabaseCellValue('packing', 'rmbRate', nextRawValue);
+      if (check.isValid) {
+        const targetPkg = packings.find((pk) => pk.id === recordId);
+        if (targetPkg) {
+          const parsedRate = check.parsedValue === undefined ? 0 : Number(check.parsedValue) || 0;
+          const nextTotalAmountBDT = calculatePackingTotalAmountBDT(
+            targetPkg.totalAmount,
+            parsedRate
+          );
+          updatePacking(
+            recordId,
+            {
+              rmbRate: check.parsedValue === undefined ? undefined : Number(check.parsedValue),
+              totalAmountBDT: nextTotalAmountBDT,
+            },
+            true
+          );
+        }
+      }
+    }
+
+    setCellDraftsByDb((prev) => ({
+      ...prev,
+      [activeDbType]: {
+        ...prev[activeDbType],
+        [recordId]: {
+          ...(prev[activeDbType][recordId] || {}),
+          [fieldKey]: nextRawValue,
+        },
+      },
+    }));
+  };
+
+  const handleCellClearDraft = (recordId: string, fieldKey: string) => {
+    setCellDraftsByDb((prev) => {
+      const dbDrafts = { ...prev[activeDbType] };
+      const recDrafts = { ...(dbDrafts[recordId] || {}) };
+      delete recDrafts[fieldKey];
+      if (Object.keys(recDrafts).length === 0) {
+        delete dbDrafts[recordId];
+      } else {
+        dbDrafts[recordId] = recDrafts;
+      }
+      return {
+        ...prev,
+        [activeDbType]: dbDrafts,
+      };
+    });
+  };
+
+  const handleCellCommitValid = (
+    recordId: string,
+    fieldKey: string,
+    parsedValue: string | number | undefined
+  ) => {
+    handleCellClearDraft(recordId, fieldKey);
+
+    if (activeDbType === 'purchase') {
+      const target = purchases.find((p) => p.id === recordId);
+      if (!target) return;
+      const updates: Record<string, unknown> = { [fieldKey]: parsedValue };
+      if (fieldKey === 'totalAmount' || fieldKey === 'paidAmount') {
+        const nextTotal =
+          fieldKey === 'totalAmount' ? Number(parsedValue) || 0 : target.totalAmount;
+        const nextPaid =
+          fieldKey === 'paidAmount' ? Number(parsedValue) || 0 : target.paidAmount;
+        updates.balance = nextTotal + (target.previousAmount || 0) - nextPaid;
+      }
+      updatePurchase(recordId, updates);
+    } else if (activeDbType === 'packing') {
+      const target = packings.find((pk) => pk.id === recordId);
+      if (!target) return;
+      const updates: Record<string, unknown> = { [fieldKey]: parsedValue };
+      if (fieldKey === 'totalAmount' || fieldKey === 'rmbRate') {
+        const nextTotal =
+          fieldKey === 'totalAmount' ? Number(parsedValue) || 0 : target.totalAmount;
+        const nextRate =
+          fieldKey === 'rmbRate'
+            ? parsedValue === undefined
+              ? 0
+              : Number(parsedValue) || 0
+            : target.rmbRate || 0;
+        updates.totalAmountBDT = calculatePackingTotalAmountBDT(nextTotal, nextRate);
+      }
+      updatePacking(recordId, updates, true);
+    } else {
+      const target = payments.find((pm) => pm.id === recordId);
+      if (!target) return;
+      updatePayment(recordId, { [fieldKey]: parsedValue });
+    }
+  };
+
+  const handleResetAllInvalidCells = () => {
+    setCellDraftsByDb((prev) => ({
+      ...prev,
+      [activeDbType]: {},
+    }));
+    setValidationFilter('all');
+    showToast('Reverted all invalid cell inputs to their valid saved formats.');
+  };
 
   // Smart Data Sync live reconciliation analysis across Purchase DB & Payment DB
   const smartSyncAnalysis = useMemo(
@@ -305,9 +440,15 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     }
   };
 
-  // Filtered lists reactive to search term, date range, and reconciliation status filter
+  // Filtered lists reactive to search term, date range, reconciliation status, and field validation filter
   const filteredPurchases = useMemo(() => {
     return purchases.filter((p) => {
+      if (
+        validationFilter === 'invalid_only' &&
+        !validationSummary.invalidRecordIds.includes(p.id)
+      ) {
+        return false;
+      }
       const rec = smartSyncAnalysis.purchaseReconciliations[p.id];
       if (reconciliationFilter === 'discrepancies' && !rec?.hasDiscrepancy) {
         return false;
@@ -323,10 +464,25 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
       const matchesDate = isDateInRange(p.date, startDate, endDate);
       return matchesSearch && matchesDate;
     });
-  }, [purchases, smartSyncAnalysis, reconciliationFilter, searchTerm, startDate, endDate]);
+  }, [
+    purchases,
+    validationFilter,
+    validationSummary.invalidRecordIds,
+    smartSyncAnalysis,
+    reconciliationFilter,
+    searchTerm,
+    startDate,
+    endDate,
+  ]);
 
   const filteredPackings = useMemo(() => {
     return packings.filter((pkg) => {
+      if (
+        validationFilter === 'invalid_only' &&
+        !validationSummary.invalidRecordIds.includes(pkg.id)
+      ) {
+        return false;
+      }
       const matchesSearch =
         !searchTerm.trim() ||
         pkg.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -337,10 +493,23 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
       const matchesDate = isDateInRange(dateToMatch, startDate, endDate);
       return matchesSearch && matchesDate;
     });
-  }, [packings, searchTerm, startDate, endDate]);
+  }, [
+    packings,
+    validationFilter,
+    validationSummary.invalidRecordIds,
+    searchTerm,
+    startDate,
+    endDate,
+  ]);
 
   const filteredPayments = useMemo(() => {
     return payments.filter((pm) => {
+      if (
+        validationFilter === 'invalid_only' &&
+        !validationSummary.invalidRecordIds.includes(pm.id)
+      ) {
+        return false;
+      }
       const cat = classifyPaymentCategory(pm);
       if (paymentCategoryFilter !== 'all' && cat !== paymentCategoryFilter) {
         return false;
@@ -362,7 +531,17 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
       const matchesDate = isDateInRange(pm.date, startDate, endDate);
       return matchesSearch && matchesDate;
     });
-  }, [payments, paymentCategoryFilter, smartSyncAnalysis, reconciliationFilter, searchTerm, startDate, endDate]);
+  }, [
+    payments,
+    validationFilter,
+    validationSummary.invalidRecordIds,
+    paymentCategoryFilter,
+    smartSyncAnalysis,
+    reconciliationFilter,
+    searchTerm,
+    startDate,
+    endDate,
+  ]);
 
   // Current active filtered records count and total records
   const currentFilteredCount =
@@ -467,7 +646,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   const isDateFilterActive = Boolean(startDate || endDate);
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
+    <div className="w-full max-w-[1600px] mx-auto px-3 sm:px-5 py-4 space-y-5">
       {/* Top Banner */}
       <div className="bg-[#1b2b44] text-white px-5 py-3 rounded-lg shadow-md flex flex-wrap items-center justify-between gap-4 border-b-2 border-amber-500">
         <div className="flex items-center gap-3">
@@ -1108,6 +1287,92 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
         </div>
       </div>
 
+      {/* Database Field Validation System Bar */}
+      <div
+        data-testid="database-field-validation-bar"
+        className={`rounded-xl px-4 py-3 border-2 shadow-xs flex flex-wrap items-center justify-between gap-3 transition-colors ${
+          validationSummary.invalidCellCount > 0
+            ? 'bg-rose-50 border-rose-500 text-rose-950'
+            : 'bg-slate-50 border-slate-200 text-slate-800'
+        }`}
+      >
+        <div className="flex flex-wrap items-center gap-2.5">
+          {validationSummary.invalidCellCount > 0 ? (
+            <span
+              data-testid="field-validation-status-badge"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-rose-600 text-white text-xs font-black uppercase tracking-wide shadow-xs"
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>
+                {validationSummary.invalidCellCount} Invalid Cell
+                {validationSummary.invalidCellCount === 1 ? '' : 's'} in Red (
+                {validationSummary.invalidRecordCount} Row
+                {validationSummary.invalidRecordCount === 1 ? '' : 's'})
+              </span>
+            </span>
+          ) : (
+            <span
+              data-testid="field-validation-status-badge"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-700 text-white text-xs font-black uppercase tracking-wide shadow-xs"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Field Validation Active · All Cells Valid</span>
+            </span>
+          )}
+
+          <div className="text-xs text-slate-700">
+            <strong className="font-black text-slate-900 uppercase">
+              Inline Type Validation:
+            </strong>{' '}
+            Click any cell to edit. Mismatched formats (e.g. non-numeric data in a{' '}
+            <span className="font-mono font-bold text-rose-700">Price / Amount / Rate / Qty</span>{' '}
+            column or invalid <span className="font-mono font-bold text-rose-700">YYYY-MM-DD</span>{' '}
+            date) highlight the cell in <strong className="text-rose-700">RED</strong>.
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center bg-white p-1 rounded-lg border border-slate-300 text-xs">
+            <button
+              type="button"
+              data-testid="validation-filter-all-btn"
+              onClick={() => setValidationFilter('all')}
+              className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
+                validationFilter === 'all'
+                  ? 'bg-[#1b2b44] text-white'
+                  : 'text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              All Rows ({totalUnfilteredCount})
+            </button>
+            <button
+              type="button"
+              data-testid="validation-filter-invalid-btn"
+              onClick={() => setValidationFilter('invalid_only')}
+              className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
+                validationFilter === 'invalid_only'
+                  ? 'bg-rose-600 text-white'
+                  : 'text-rose-700 hover:bg-rose-50'
+              }`}
+            >
+              Invalid Cells ({validationSummary.invalidRecordCount})
+            </button>
+          </div>
+
+          {validationSummary.invalidCellCount > 0 && (
+            <button
+              type="button"
+              data-testid="validation-reset-invalid-btn"
+              onClick={handleResetAllInvalidCells}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold transition cursor-pointer shadow-xs"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset Invalid Cells</span>
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Main Database Content + Secondary Batch Update Sidebar */}
       <div className="flex flex-col lg:flex-row items-start gap-5">
       {/* Database Tables */}
@@ -1153,14 +1418,18 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   filteredPurchases.map((p, idx) => {
                     const isSelected = selectedIds.includes(p.id);
                     const rec = smartSyncAnalysis.purchaseReconciliations[p.id];
-                    const hasDiscrepancy = Boolean(rec?.hasDiscrepancy);
                     const isEvenRow = idx % 2 === 1;
+                    const rowValidation = validationSummary.resultsByRecordId[p.id] || {};
+                    const rowDrafts = cellDraftsByDb.purchase[p.id] || {};
+                    const hasRowValidationError = validationSummary.invalidRecordIds.includes(p.id);
                     return (
                       <tr
                         key={p.id}
                         data-testid={`purchase-row-${p.id}`}
                         className={`transition-colors duration-150 ${
-                          isSelected
+                          hasRowValidationError
+                            ? 'bg-rose-50/70 hover:bg-rose-50'
+                            : isSelected
                             ? 'bg-blue-100/85 hover:bg-blue-100'
                             : isEvenRow
                             ? 'bg-slate-50/90 hover:bg-blue-50/85'
@@ -1174,35 +1443,159 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             onChange={() => toggleSelectOne(p.id)}
                           />
                         </td>
-                        <td className="p-3 font-mono font-bold text-blue-900">
-                          {p.invoiceNumber}
-                        </td>
-                        <td className="p-3 font-mono text-slate-600">
-                          {formatDate(p.date)}
-                        </td>
-                        <td className="p-3 font-bold text-slate-800">
-                          {p.description}
-                        </td>
-                        <td className="p-3 font-mono text-slate-600">
-                          {p.contactNumber || '-'}
-                        </td>
+                        <DatabaseValidatedCell
+                          recordId={p.id}
+                          fieldKey="invoiceNumber"
+                          rawValue={p.invoiceNumber}
+                          displayNode={p.invoiceNumber}
+                          validation={
+                            rowValidation.invoiceNumber ||
+                            validateDatabaseCellValue('purchase', 'invoiceNumber', p.invoiceNumber)
+                          }
+                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                            rowDrafts,
+                            'invoiceNumber'
+                          )}
+                          className="font-mono font-bold text-blue-900"
+                          onDraftChange={handleCellDraftChange}
+                          onCommitValid={handleCellCommitValid}
+                          onClearDraft={handleCellClearDraft}
+                        />
+                        <DatabaseValidatedCell
+                          recordId={p.id}
+                          fieldKey="date"
+                          rawValue={p.date}
+                          displayNode={formatDate(p.date)}
+                          validation={
+                            rowValidation.date ||
+                            validateDatabaseCellValue('purchase', 'date', p.date)
+                          }
+                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                            rowDrafts,
+                            'date'
+                          )}
+                          className="font-mono text-slate-600"
+                          onDraftChange={handleCellDraftChange}
+                          onCommitValid={handleCellCommitValid}
+                          onClearDraft={handleCellClearDraft}
+                        />
+                        <DatabaseValidatedCell
+                          recordId={p.id}
+                          fieldKey="description"
+                          rawValue={p.description}
+                          displayNode={p.description}
+                          validation={
+                            rowValidation.description ||
+                            validateDatabaseCellValue('purchase', 'description', p.description)
+                          }
+                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                            rowDrafts,
+                            'description'
+                          )}
+                          className="font-bold text-slate-800"
+                          onDraftChange={handleCellDraftChange}
+                          onCommitValid={handleCellCommitValid}
+                          onClearDraft={handleCellClearDraft}
+                        />
+                        <DatabaseValidatedCell
+                          recordId={p.id}
+                          fieldKey="contactNumber"
+                          rawValue={p.contactNumber}
+                          displayNode={p.contactNumber || '-'}
+                          validation={
+                            rowValidation.contactNumber ||
+                            validateDatabaseCellValue('purchase', 'contactNumber', p.contactNumber)
+                          }
+                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                            rowDrafts,
+                            'contactNumber'
+                          )}
+                          className="font-mono text-slate-600"
+                          onDraftChange={handleCellDraftChange}
+                          onCommitValid={handleCellCommitValid}
+                          onClearDraft={handleCellClearDraft}
+                        />
                         <td className="p-3 text-center">
                           <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold">
                             {p.items?.length || 0} Lines
                           </span>
                         </td>
-                        <td className="p-3 text-right font-mono text-slate-700">
-                          {p.totalQty}
-                        </td>
-                        <td className="p-3 text-right font-mono font-bold text-slate-900">
-                          {formatCurrency(p.totalAmount, companyProfile.currency)}
-                        </td>
-                        <td className="p-3 text-right font-mono font-bold text-emerald-800">
-                          {formatCurrency(p.paidAmount, companyProfile.currency)}
-                        </td>
-                        <td className="p-3 text-right font-mono font-bold text-rose-700">
-                          {formatCurrency(p.balance, companyProfile.currency)}
-                        </td>
+                        <DatabaseValidatedCell
+                          recordId={p.id}
+                          fieldKey="totalQty"
+                          rawValue={p.totalQty}
+                          displayNode={p.totalQty}
+                          align="right"
+                          validation={
+                            rowValidation.totalQty ||
+                            validateDatabaseCellValue('purchase', 'totalQty', p.totalQty)
+                          }
+                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                            rowDrafts,
+                            'totalQty'
+                          )}
+                          className="font-mono text-slate-700"
+                          onDraftChange={handleCellDraftChange}
+                          onCommitValid={handleCellCommitValid}
+                          onClearDraft={handleCellClearDraft}
+                        />
+                        <DatabaseValidatedCell
+                          recordId={p.id}
+                          fieldKey="totalAmount"
+                          rawValue={p.totalAmount}
+                          displayNode={formatCurrency(p.totalAmount, companyProfile.currency)}
+                          align="right"
+                          validation={
+                            rowValidation.totalAmount ||
+                            validateDatabaseCellValue('purchase', 'totalAmount', p.totalAmount)
+                          }
+                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                            rowDrafts,
+                            'totalAmount'
+                          )}
+                          className="font-mono font-bold text-slate-900"
+                          onDraftChange={handleCellDraftChange}
+                          onCommitValid={handleCellCommitValid}
+                          onClearDraft={handleCellClearDraft}
+                        />
+                        <DatabaseValidatedCell
+                          recordId={p.id}
+                          fieldKey="paidAmount"
+                          rawValue={p.paidAmount}
+                          displayNode={formatCurrency(p.paidAmount, companyProfile.currency)}
+                          align="right"
+                          validation={
+                            rowValidation.paidAmount ||
+                            validateDatabaseCellValue('purchase', 'paidAmount', p.paidAmount)
+                          }
+                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                            rowDrafts,
+                            'paidAmount'
+                          )}
+                          className="font-mono font-bold text-emerald-800"
+                          onDraftChange={handleCellDraftChange}
+                          onCommitValid={handleCellCommitValid}
+                          onClearDraft={handleCellClearDraft}
+                        />
+                        <DatabaseValidatedCell
+                          recordId={p.id}
+                          fieldKey="balance"
+                          rawValue={p.balance}
+                          displayNode={formatCurrency(p.balance, companyProfile.currency)}
+                          align="right"
+                          validation={
+                            rowValidation.balance ||
+                            validateDatabaseCellValue('purchase', 'balance', p.balance)
+                          }
+                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                            rowDrafts,
+                            'balance'
+                          )}
+                          className="font-mono font-bold text-rose-700"
+                          onDraftChange={handleCellDraftChange}
+                          onCommitValid={handleCellCommitValid}
+                          onClearDraft={handleCellClearDraft}
+                        />
                         <td
                           className="p-3 min-w-[230px]"
                           data-testid={`reconciliation-status-cell-${p.id}`}
@@ -1311,10 +1704,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#12776c] text-white font-bold uppercase text-[11px] border-b border-teal-900">
+              <table className="w-full text-left text-[11px]">
+                <thead className="bg-[#12776c] text-white font-bold uppercase text-[10px] tracking-tight border-b border-teal-900">
                   <tr>
-                    <th className="p-3 w-10 text-center">
+                    <th className="px-2 py-2.5 w-8 text-center">
                       <input
                         type="checkbox"
                         checked={
@@ -1326,24 +1719,25 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         }
                       />
                     </th>
-                    <th className="p-3">PACKING NO</th>
-                    <th className="p-3">DATE</th>
-                    <th className="p-3">SHIPPING MARK</th>
-                    <th className="p-3">FLIGHT</th>
-                    <th className="p-3">DESTINATION</th>
-                    <th className="p-3">SHIPPER</th>
-                    <th className="p-3 text-right">TOTAL BOX</th>
-                    <th className="p-3 text-right">TOTAL WEIGHT</th>
-                    <th className="p-3 text-right">TOTAL VALUE</th>
-                    <th className="p-3 text-right">RMB RATE (EDITABLE)</th>
-                    <th className="p-3 text-right">TOTAL AMOUNT (BDT)</th>
-                    <th className="p-3 text-center">ACTIONS</th>
+                    <th className="px-2 py-2.5 whitespace-nowrap">PACKING NO</th>
+                    <th className="px-2 py-2.5 whitespace-nowrap">DATE</th>
+                    <th className="px-2 py-2.5 whitespace-nowrap">SHIPPING MARK</th>
+                    <th className="px-2 py-2.5 whitespace-nowrap">FLIGHT</th>
+                    <th className="px-2 py-2.5 whitespace-nowrap">DESTINATION</th>
+                    <th className="px-2 py-2.5 whitespace-nowrap">SHIPPER</th>
+                    <th className="px-2 py-2.5 whitespace-nowrap">ITEMS</th>
+                    <th className="px-2 py-2.5 text-right whitespace-nowrap">TOTAL BOX</th>
+                    <th className="px-2 py-2.5 text-right whitespace-nowrap">TOTAL WEIGHT</th>
+                    <th className="px-2 py-2.5 text-right whitespace-nowrap">TOTAL VALUE</th>
+                    <th className="px-2 py-2.5 text-right whitespace-nowrap">RMB RATE</th>
+                    <th className="px-2 py-2.5 text-right whitespace-nowrap">TOTAL AMOUNT (BDT)</th>
+                    <th className="px-2 py-2.5 text-center whitespace-nowrap">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 font-medium">
                   {filteredPackings.length === 0 ? (
                     <tr>
-                      <td colSpan={13} className="p-8 text-center text-slate-400">
+                      <td colSpan={14} className="p-8 text-center text-slate-400">
                         No packing list records found.
                       </td>
                     </tr>
@@ -1355,89 +1749,240 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         pkg.totalAmount,
                         pkg.rmbRate
                       );
+                      const rowValidation = validationSummary.resultsByRecordId[pkg.id] || {};
+                      const rowDrafts = cellDraftsByDb.packing[pkg.id] || {};
+                      const hasRowValidationError = validationSummary.invalidRecordIds.includes(pkg.id);
                       return (
                       <tr
                         key={pkg.id}
                         data-testid={`packing-row-${pkg.id}`}
                         className={`transition-colors duration-150 ${
-                          isSelected
+                          hasRowValidationError
+                            ? 'bg-rose-50/70 hover:bg-rose-50'
+                            : isSelected
                             ? 'bg-teal-100/85 hover:bg-teal-100'
                             : isEvenRow
                             ? 'bg-slate-50/90 hover:bg-teal-50/85'
                             : 'bg-white hover:bg-teal-50/85'
                         }`}
                       >
-                        <td className="p-3 text-center">
+                        <td className="px-2 py-2 text-center">
                           <input
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => toggleSelectOne(pkg.id)}
                           />
                         </td>
-                        <td className="p-3 font-mono font-bold text-teal-900">
-                          {pkg.invoiceNumber}
+                        <DatabaseValidatedCell
+                          recordId={pkg.id}
+                          fieldKey="invoiceNumber"
+                          rawValue={pkg.invoiceNumber}
+                          displayNode={pkg.invoiceNumber}
+                          validation={
+                            rowValidation.invoiceNumber ||
+                            validateDatabaseCellValue('packing', 'invoiceNumber', pkg.invoiceNumber)
+                          }
+                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                            rowDrafts,
+                            'invoiceNumber'
+                          )}
+                          className="font-mono font-bold text-teal-900"
+                          onDraftChange={handleCellDraftChange}
+                          onCommitValid={handleCellCommitValid}
+                          onClearDraft={handleCellClearDraft}
+                        />
+                        <DatabaseValidatedCell
+                          recordId={pkg.id}
+                          fieldKey="packingDate"
+                          rawValue={pkg.packingDate}
+                          displayNode={formatDate(pkg.packingDate)}
+                          validation={
+                            rowValidation.packingDate ||
+                            validateDatabaseCellValue('packing', 'packingDate', pkg.packingDate)
+                          }
+                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                            rowDrafts,
+                            'packingDate'
+                          )}
+                          className="font-mono text-slate-600"
+                          onDraftChange={handleCellDraftChange}
+                          onCommitValid={handleCellCommitValid}
+                          onClearDraft={handleCellClearDraft}
+                        />
+                        <DatabaseValidatedCell
+                          recordId={pkg.id}
+                          fieldKey="shippingMark"
+                          rawValue={pkg.shippingMark}
+                          displayNode={pkg.shippingMark}
+                          validation={
+                            rowValidation.shippingMark ||
+                            validateDatabaseCellValue('packing', 'shippingMark', pkg.shippingMark)
+                          }
+                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                            rowDrafts,
+                            'shippingMark'
+                          )}
+                          className="font-black text-blue-900"
+                          onDraftChange={handleCellDraftChange}
+                          onCommitValid={handleCellCommitValid}
+                          onClearDraft={handleCellClearDraft}
+                        />
+                        <DatabaseValidatedCell
+                          recordId={pkg.id}
+                          fieldKey="flight"
+                          rawValue={pkg.flight}
+                          displayNode={pkg.flight}
+                          validation={
+                            rowValidation.flight ||
+                            validateDatabaseCellValue('packing', 'flight', pkg.flight)
+                          }
+                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                            rowDrafts,
+                            'flight'
+                          )}
+                          className="font-mono text-slate-700"
+                          onDraftChange={handleCellDraftChange}
+                          onCommitValid={handleCellCommitValid}
+                          onClearDraft={handleCellClearDraft}
+                        />
+                        <DatabaseValidatedCell
+                          recordId={pkg.id}
+                          fieldKey="destination"
+                          rawValue={pkg.destination}
+                          displayNode={pkg.destination}
+                          validation={
+                            rowValidation.destination ||
+                            validateDatabaseCellValue('packing', 'destination', pkg.destination)
+                          }
+                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                            rowDrafts,
+                            'destination'
+                          )}
+                          className="font-bold text-slate-800"
+                          onDraftChange={handleCellDraftChange}
+                          onCommitValid={handleCellCommitValid}
+                          onClearDraft={handleCellClearDraft}
+                        />
+                        <DatabaseValidatedCell
+                          recordId={pkg.id}
+                          fieldKey="shipper"
+                          rawValue={pkg.shipper}
+                          displayNode={pkg.shipper}
+                          validation={
+                            rowValidation.shipper ||
+                            validateDatabaseCellValue('packing', 'shipper', pkg.shipper)
+                          }
+                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                            rowDrafts,
+                            'shipper'
+                          )}
+                          className="text-slate-700"
+                          onDraftChange={handleCellDraftChange}
+                          onCommitValid={handleCellCommitValid}
+                          onClearDraft={handleCellClearDraft}
+                        />
+                        <td
+                          className="px-2 py-2 font-mono text-[11px] text-slate-700"
+                          data-testid={`packing-items-cell-${pkg.id}`}
+                        >
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span className="px-1.5 py-0.5 rounded bg-teal-100 text-teal-900 font-bold text-[10px] whitespace-nowrap">
+                              {pkg.items?.length || 0} {(pkg.items?.length || 0) === 1 ? 'Item' : 'Items'}
+                            </span>
+                            <span className="font-bold text-slate-800 whitespace-nowrap">
+                              {(pkg.items || []).map((it) => it.item).join(', ')}
+                            </span>
+                          </div>
                         </td>
-                        <td className="p-3 font-mono text-slate-600">
-                          {formatDate(pkg.packingDate)}
-                        </td>
-                        <td className="p-3 font-black text-blue-900">
-                          {pkg.shippingMark}
-                        </td>
-                        <td className="p-3 font-mono text-slate-700">
-                          {pkg.flight}
-                        </td>
-                        <td className="p-3 font-bold text-slate-800">
-                          {pkg.destination}
-                        </td>
-                        <td className="p-3 text-slate-700">{pkg.shipper}</td>
-                        <td className="p-3 text-right font-mono text-slate-700">
-                          {pkg.totalBox}
-                        </td>
-                        <td className="p-3 text-right font-mono font-bold text-teal-800">
-                          {pkg.totalWeight} KG
-                        </td>
-                        <td className="p-3 text-right font-mono font-bold text-slate-900">
-                          {formatCurrency(pkg.totalAmount, 'RMB')}
-                        </td>
-                        <td className="p-2 text-right">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            aria-label={`RMB Rate for ${pkg.invoiceNumber}`}
-                            placeholder="0.00"
-                            value={pkg.rmbRate ?? ''}
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              const parsedRate = raw === '' ? 0 : parseFloat(raw) || 0;
-                              const nextTotalAmountBDT = calculatePackingTotalAmountBDT(
-                                pkg.totalAmount,
-                                parsedRate
-                              );
-                              updatePacking(
-                                pkg.id,
-                                {
-                                  rmbRate: raw === '' ? undefined : parsedRate,
-                                  totalAmountBDT: nextTotalAmountBDT,
-                                },
-                                true
-                              );
-                            }}
-                            className="w-24 px-2 py-1 text-right font-mono font-bold text-amber-950 bg-amber-50 border border-amber-300 rounded focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white"
-                          />
-                        </td>
-                        <td className="p-3 text-right font-mono font-black text-emerald-800 bg-emerald-50/40">
+                        <DatabaseValidatedCell
+                          recordId={pkg.id}
+                          fieldKey="totalBox"
+                          rawValue={pkg.totalBox}
+                          displayNode={pkg.totalBox}
+                          align="right"
+                          validation={
+                            rowValidation.totalBox ||
+                            validateDatabaseCellValue('packing', 'totalBox', pkg.totalBox)
+                          }
+                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                            rowDrafts,
+                            'totalBox'
+                          )}
+                          className="font-mono text-slate-700"
+                          onDraftChange={handleCellDraftChange}
+                          onCommitValid={handleCellCommitValid}
+                          onClearDraft={handleCellClearDraft}
+                        />
+                        <DatabaseValidatedCell
+                          recordId={pkg.id}
+                          fieldKey="totalWeight"
+                          rawValue={pkg.totalWeight}
+                          displayNode={`${pkg.totalWeight} KG`}
+                          align="right"
+                          validation={
+                            rowValidation.totalWeight ||
+                            validateDatabaseCellValue('packing', 'totalWeight', pkg.totalWeight)
+                          }
+                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                            rowDrafts,
+                            'totalWeight'
+                          )}
+                          className="font-mono font-bold text-teal-800"
+                          onDraftChange={handleCellDraftChange}
+                          onCommitValid={handleCellCommitValid}
+                          onClearDraft={handleCellClearDraft}
+                        />
+                        <DatabaseValidatedCell
+                          recordId={pkg.id}
+                          fieldKey="totalAmount"
+                          rawValue={pkg.totalAmount}
+                          displayNode={formatCurrency(pkg.totalAmount, 'RMB')}
+                          align="right"
+                          validation={
+                            rowValidation.totalAmount ||
+                            validateDatabaseCellValue('packing', 'totalAmount', pkg.totalAmount)
+                          }
+                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                            rowDrafts,
+                            'totalAmount'
+                          )}
+                          className="font-mono font-bold text-slate-900"
+                          onDraftChange={handleCellDraftChange}
+                          onCommitValid={handleCellCommitValid}
+                          onClearDraft={handleCellClearDraft}
+                        />
+                        <DatabaseValidatedCell
+                          recordId={pkg.id}
+                          fieldKey="rmbRate"
+                          rawValue={pkg.rmbRate}
+                          displayNode={pkg.rmbRate ?? ''}
+                          align="right"
+                          alwaysShowInput={true}
+                          inputPlaceholder="0.00"
+                          validation={
+                            rowValidation.rmbRate ||
+                            validateDatabaseCellValue('packing', 'rmbRate', pkg.rmbRate)
+                          }
+                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                            rowDrafts,
+                            'rmbRate'
+                          )}
+                          onDraftChange={handleCellDraftChange}
+                          onCommitValid={handleCellCommitValid}
+                          onClearDraft={handleCellClearDraft}
+                        />
+                        <td className="px-2 py-2 text-right font-mono font-black text-emerald-800 bg-emerald-50/40 whitespace-nowrap">
                           {formatCurrency(computedAmountBDT, 'BDT')}
                         </td>
-                        <td className="p-3 text-center">
-                          <div className="flex items-center justify-center space-x-1.5">
+                        <td className="px-2 py-2 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center space-x-1">
                             <button
                               onClick={() => {
                                 setEditingPackingId(pkg.id);
                                 setActiveTab('packing_form');
                                 showToast(`Loaded manifest ${pkg.invoiceNumber} for editing.`);
                               }}
-                              className="px-2 py-1 text-[11px] font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 rounded transition flex items-center space-x-1 cursor-pointer"
+                              className="px-1.5 py-1 text-[10px] font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 rounded transition flex items-center space-x-1 cursor-pointer"
                               title={`Edit Packing List ${pkg.invoiceNumber}`}
                             >
                               <Edit2 className="w-3 h-3 text-amber-700" />
@@ -1452,7 +1997,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                                   items: pkg.items,
                                 })
                               }
-                              className="px-2 py-1 text-[11px] font-bold bg-teal-100 hover:bg-teal-200 text-teal-800 rounded transition flex items-center space-x-1 cursor-pointer"
+                              className="px-1.5 py-1 text-[10px] font-bold bg-teal-100 hover:bg-teal-200 text-teal-800 rounded transition flex items-center space-x-1 cursor-pointer"
                               title="Print or Save PDF"
                             >
                               <Printer className="w-3 h-3" />
@@ -1475,30 +2020,30 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               </tbody>
               {filteredPackings.length > 0 && (
                 <tfoot>
-                  <tr className="bg-teal-50 font-black border-t-2 border-teal-200 text-xs">
-                    <td colSpan={7} className="p-3 text-right uppercase text-teal-950">
+                  <tr className="bg-teal-50 font-black border-t-2 border-teal-200 text-[11px]">
+                    <td colSpan={8} className="px-2 py-2.5 text-right uppercase text-teal-950">
                       PACKING DB TOTALS:
                     </td>
-                    <td className="p-3 text-right font-mono text-slate-900">
+                    <td className="px-2 py-2.5 text-right font-mono text-slate-900 whitespace-nowrap">
                       {filteredPackings.reduce((acc, p) => acc + (Number(p.totalBox) || 0), 0)}
                     </td>
-                    <td className="p-3 text-right font-mono text-teal-800">
+                    <td className="px-2 py-2.5 text-right font-mono text-teal-800 whitespace-nowrap">
                       {Math.round(
                         filteredPackings.reduce((acc, p) => acc + (Number(p.totalWeight) || 0), 0) *
                           100
                       ) / 100}{' '}
                       KG
                     </td>
-                    <td className="p-3 text-right font-mono text-slate-900">
+                    <td className="px-2 py-2.5 text-right font-mono text-slate-900 whitespace-nowrap">
                       {formatCurrency(
                         filteredPackings.reduce((acc, p) => acc + (Number(p.totalAmount) || 0), 0),
                         'RMB'
                       )}
                     </td>
-                    <td className="p-3 text-right font-mono text-slate-500 text-[10px]">
-                      × RMB RATE =
+                    <td className="px-2 py-2.5 text-right font-mono text-slate-500 text-[10px] whitespace-nowrap">
+                      × RATE =
                     </td>
-                    <td className="p-3 text-right font-mono text-emerald-800 bg-emerald-100/60">
+                    <td className="px-2 py-2.5 text-right font-mono text-emerald-800 bg-emerald-100/60 whitespace-nowrap">
                       {formatCurrency(
                         filteredPackings.reduce(
                           (acc, p) =>
@@ -1613,12 +2158,17 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                       const category = classifyPaymentCategory(pm);
                       const rec = smartSyncAnalysis.paymentReconciliations[pm.id];
                       const isEvenRow = idx % 2 === 1;
+                      const rowValidation = validationSummary.resultsByRecordId[pm.id] || {};
+                      const rowDrafts = cellDraftsByDb.payment[pm.id] || {};
+                      const hasRowValidationError = validationSummary.invalidRecordIds.includes(pm.id);
                       return (
                         <tr
                           key={pm.id}
                           data-testid={`payment-row-${pm.id}`}
                           className={`transition-colors duration-150 ${
-                            isSelected
+                            hasRowValidationError
+                              ? 'bg-rose-50/70 hover:bg-rose-50'
+                              : isSelected
                               ? 'bg-purple-100/85 hover:bg-purple-100'
                               : isEvenRow
                               ? 'bg-slate-50/90 hover:bg-purple-50/85'
@@ -1632,9 +2182,24 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                               onChange={() => toggleSelectOne(pm.id)}
                             />
                           </td>
-                          <td className="p-3 font-mono font-bold text-purple-900">
-                            {pm.invoiceNumber}
-                          </td>
+                          <DatabaseValidatedCell
+                            recordId={pm.id}
+                            fieldKey="invoiceNumber"
+                            rawValue={pm.invoiceNumber}
+                            displayNode={pm.invoiceNumber}
+                            validation={
+                              rowValidation.invoiceNumber ||
+                              validateDatabaseCellValue('payment', 'invoiceNumber', pm.invoiceNumber)
+                            }
+                            hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                              rowDrafts,
+                              'invoiceNumber'
+                            )}
+                            className="font-mono font-bold text-purple-900"
+                            onDraftChange={handleCellDraftChange}
+                            onCommitValid={handleCellCommitValid}
+                            onClearDraft={handleCellClearDraft}
+                          />
                           <td className="p-3">
                             <span
                               className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
@@ -1646,12 +2211,42 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                               {category === 'exporter' ? 'EXPORTER' : 'SUPPLIER'}
                             </span>
                           </td>
-                          <td className="p-3 font-mono text-slate-600">
-                            {formatDate(pm.date)}
-                          </td>
-                          <td className="p-3 font-bold text-slate-800">
-                            {pm.description}
-                          </td>
+                          <DatabaseValidatedCell
+                            recordId={pm.id}
+                            fieldKey="date"
+                            rawValue={pm.date}
+                            displayNode={formatDate(pm.date)}
+                            validation={
+                              rowValidation.date ||
+                              validateDatabaseCellValue('payment', 'date', pm.date)
+                            }
+                            hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                              rowDrafts,
+                              'date'
+                            )}
+                            className="font-mono text-slate-600"
+                            onDraftChange={handleCellDraftChange}
+                            onCommitValid={handleCellCommitValid}
+                            onClearDraft={handleCellClearDraft}
+                          />
+                          <DatabaseValidatedCell
+                            recordId={pm.id}
+                            fieldKey="description"
+                            rawValue={pm.description}
+                            displayNode={pm.description}
+                            validation={
+                              rowValidation.description ||
+                              validateDatabaseCellValue('payment', 'description', pm.description)
+                            }
+                            hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                              rowDrafts,
+                              'description'
+                            )}
+                            className="font-bold text-slate-800"
+                            onDraftChange={handleCellDraftChange}
+                            onCommitValid={handleCellCommitValid}
+                            onClearDraft={handleCellClearDraft}
+                          />
                           <td className="p-3">
                             <span
                               className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
@@ -1665,15 +2260,66 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                               {pm.status}
                             </span>
                           </td>
-                          <td className="p-3 text-right font-mono font-bold text-slate-900">
-                            {formatCurrency(pm.paidAmount, companyProfile.currency)}
-                          </td>
-                          <td className="p-3 text-right font-mono font-bold text-rose-700">
-                            {formatCurrency(pm.balance, companyProfile.currency)}
-                          </td>
-                          <td className="p-3 font-mono text-slate-600">
-                            {pm.exportGoodsRef || '-'}
-                          </td>
+                          <DatabaseValidatedCell
+                            recordId={pm.id}
+                            fieldKey="paidAmount"
+                            rawValue={pm.paidAmount}
+                            displayNode={formatCurrency(pm.paidAmount, companyProfile.currency)}
+                            align="right"
+                            validation={
+                              rowValidation.paidAmount ||
+                              validateDatabaseCellValue('payment', 'paidAmount', pm.paidAmount)
+                            }
+                            hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                              rowDrafts,
+                              'paidAmount'
+                            )}
+                            className="font-mono font-bold text-slate-900"
+                            onDraftChange={handleCellDraftChange}
+                            onCommitValid={handleCellCommitValid}
+                            onClearDraft={handleCellClearDraft}
+                          />
+                          <DatabaseValidatedCell
+                            recordId={pm.id}
+                            fieldKey="balance"
+                            rawValue={pm.balance}
+                            displayNode={formatCurrency(pm.balance, companyProfile.currency)}
+                            align="right"
+                            validation={
+                              rowValidation.balance ||
+                              validateDatabaseCellValue('payment', 'balance', pm.balance)
+                            }
+                            hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                              rowDrafts,
+                              'balance'
+                            )}
+                            className="font-mono font-bold text-rose-700"
+                            onDraftChange={handleCellDraftChange}
+                            onCommitValid={handleCellCommitValid}
+                            onClearDraft={handleCellClearDraft}
+                          />
+                          <DatabaseValidatedCell
+                            recordId={pm.id}
+                            fieldKey="exportGoodsRef"
+                            rawValue={pm.exportGoodsRef}
+                            displayNode={pm.exportGoodsRef || '-'}
+                            validation={
+                              rowValidation.exportGoodsRef ||
+                              validateDatabaseCellValue(
+                                'payment',
+                                'exportGoodsRef',
+                                pm.exportGoodsRef
+                              )
+                            }
+                            hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                              rowDrafts,
+                              'exportGoodsRef'
+                            )}
+                            className="font-mono text-slate-600"
+                            onDraftChange={handleCellDraftChange}
+                            onCommitValid={handleCellCommitValid}
+                            onClearDraft={handleCellClearDraft}
+                          />
                           <td
                             className="p-3 min-w-[220px]"
                             data-testid={`reconciliation-status-cell-${pm.id}`}

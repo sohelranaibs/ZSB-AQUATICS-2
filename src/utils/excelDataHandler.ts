@@ -29,8 +29,12 @@ import {
   parsePurchasesCSV,
   parsePackingsCSV,
   parsePaymentsCSV,
+  buildPackingShipmentGroupKey,
+  mergePackingRecordsByShipmentGroup,
   ParseResult,
 } from './csvParser.ts';
+
+export { buildPackingShipmentGroupKey, mergePackingRecordsByShipmentGroup };
 
 export type DatasetKey = 'purchase' | 'packing' | 'payment' | 'other_cost';
 
@@ -353,8 +357,22 @@ export function getSampleTemplateRows(type: DatasetKey): Record<string, any>[] {
         Weight: 15,
         Rate: 420,
         RmbRate: 16.5,
-        PackingListNo: 'PKG-2026-0101',
-        Remarks: 'Air Freight Export Manifest',
+        PackingListNo: '',
+        Remarks: 'Air Freight Export Manifest (Same Mark/Flight/Dest/Shipper/Date auto-merges)',
+      },
+      {
+        ShippingMark: 'AAD',
+        Flight: 'CAN',
+        Destination: 'GUANGZHOU',
+        Shipper: 'ZSB AQUATICS',
+        Date: '2026-10-21',
+        Item: '3F',
+        Box: 6,
+        Weight: 14,
+        Rate: 400,
+        RmbRate: 16.5,
+        PackingListNo: '',
+        Remarks: 'Air Freight Export Manifest (Auto-merged into 1 Invoice & Packing No)',
       },
       {
         ShippingMark: 'CHJ-22',
@@ -362,12 +380,12 @@ export function getSampleTemplateRows(type: DatasetKey): Record<string, any>[] {
         Destination: 'KUNMING',
         Shipper: 'SAJID INT.',
         Date: '2026-10-22',
-        Item: '3F',
-        Box: 6,
-        Weight: 14,
-        Rate: 400,
+        Item: '4F',
+        Box: 7,
+        Weight: 15,
+        Rate: 390,
         RmbRate: 16.5,
-        PackingListNo: 'PKG-2026-0102',
+        PackingListNo: '',
         Remarks: 'Air Freight Export Manifest',
       },
     ];
@@ -571,15 +589,57 @@ export function parsePurchasesFromRowObjects(
 }
 
 /**
+ * Parses an exported "Items Breakdown" string (e.g. "2F: 8 box, 15 kg, Tot 120 kg @ 420 = 50400; 3F: 6 box...")
+ * into PackingItemRow[] if present and valid.
+ */
+function parsePackingItemsBreakdown(
+  breakdownStr: string,
+  rowIndex: number
+): PackingItemRow[] {
+  if (!breakdownStr || !breakdownStr.includes(';')) return [];
+  const segments = breakdownStr
+    .split(';')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (segments.length < 2) return [];
+
+  const parsedItems: PackingItemRow[] = [];
+  for (let sIdx = 0; sIdx < segments.length; sIdx++) {
+    const seg = segments[sIdx];
+    const match = seg.match(
+      /^([^:]+):\s*([\d.]+)\s*box,\s*([\d.]+)\s*kg,\s*Tot\s*([\d.]+)\s*kg\s*@\s*([\d.]+)/i
+    );
+    if (!match) return [];
+    const item = match[1].trim() || '2F';
+    const box = parseFloat(match[2]) || 1;
+    const weight = parseFloat(match[3]) || 15;
+    const rate = parseFloat(match[5]) || 350;
+    const calcs = calculatePackingRow(box, weight, rate);
+    parsedItems.push({
+      id: `pki-imp-${Date.now()}-${rowIndex}-${sIdx}`,
+      item,
+      box,
+      weight,
+      totalWeight: calcs.totalWeight,
+      unit: 'KG',
+      rate,
+      amount: calcs.amount,
+    });
+  }
+  return parsedItems;
+}
+
+/**
  * Parses an array of row objects (from Excel sheet or header-mapped CSV) into PackingRecords.
+ * Rows sharing the same ShippingMark, Flight, Destination, Shipper, and Date
+ * are automatically merged into 1 PackingRecord with a single invoice & packing number.
  */
 export function parsePackingsFromRowObjects(
   rows: Record<string, any>[],
   startCount: number = 0
 ): ParseResult<Omit<PackingRecord, 'id' | 'createdAt'>> {
-  const records: Omit<PackingRecord, 'id' | 'createdAt'>[] = [];
+  const rawRecords: Omit<PackingRecord, 'id' | 'createdAt'>[] = [];
   const errors: string[] = [];
-  let count = startCount;
 
   rows.forEach((row, idx) => {
     const shippingMark = String(
@@ -632,34 +692,42 @@ export function parsePackingsFromRowObjects(
     if (rate <= 0) rate = 350;
 
     const rmbRate = parseNumberSafe(getFieldByAliases(row, ['RMB Rate', 'RmbRate', 'Exchange Rate']), 0);
-    const invoiceNumber = String(
-      getFieldByAliases(row, ['Packing List No', 'PackingListNo', 'Invoice No', 'InvoiceNo', 'Packing No']) ||
-        generateInvoiceNumber('PKG', count)
+    const explicitInvoiceNumber = String(
+      getFieldByAliases(row, ['Packing List No', 'PackingListNo', 'Invoice No', 'InvoiceNo', 'Packing No']) || ''
     ).trim();
     const status = String(
       getFieldByAliases(row, ['Status', 'Payment Status', 'Exporter Status']) || 'NO REPORT'
     ).trim();
     const remarks = String(getFieldByAliases(row, ['Remarks', 'Notes']) || 'Imported from Excel/CSV').trim();
+    const itemsBreakdownStr = String(
+      getFieldByAliases(row, ['Items Breakdown', 'ItemsBreakdown']) || ''
+    ).trim();
 
-    count++;
+    const breakdownItems = parsePackingItemsBreakdown(itemsBreakdownStr, idx);
+    let rowItems: PackingItemRow[];
+    if (breakdownItems.length > 0) {
+      rowItems = breakdownItems;
+    } else {
+      const itemCalcs = calculatePackingRow(box, weight, rate);
+      rowItems = [
+        {
+          id: `pki-imp-${Date.now()}-${idx}`,
+          item,
+          box,
+          weight,
+          totalWeight: itemCalcs.totalWeight,
+          unit: 'KG',
+          rate,
+          amount: itemCalcs.amount,
+        },
+      ];
+    }
 
-    const itemCalcs = calculatePackingRow(box, weight, rate);
-    const itemRow: PackingItemRow = {
-      id: `pki-imp-${Date.now()}-${idx}`,
-      item,
-      box,
-      weight,
-      totalWeight: itemCalcs.totalWeight,
-      unit: 'KG',
-      rate,
-      amount: itemCalcs.amount,
-    };
-
-    const totals = calculatePackingTotals([itemRow]);
+    const totals = calculatePackingTotals(rowItems);
     const totalAmountBDT = rmbRate > 0 ? Math.round(totals.totalAmount * rmbRate * 100) / 100 : undefined;
 
-    records.push({
-      invoiceNumber,
+    rawRecords.push({
+      invoiceNumber: explicitInvoiceNumber,
       shippingMark: mark,
       flight,
       destination,
@@ -667,7 +735,7 @@ export function parsePackingsFromRowObjects(
       packingDate,
       fromDate: packingDate,
       toDate: packingDate,
-      items: [itemRow],
+      items: rowItems,
       totalBox: totals.totalBox,
       totalWeight: totals.totalWeight,
       totalAmount: totals.totalAmount,
@@ -679,11 +747,13 @@ export function parsePackingsFromRowObjects(
     });
   });
 
+  const records = mergePackingRecordsByShipmentGroup(rawRecords, startCount);
+
   return {
     success: records.length > 0,
     records,
     errors,
-    totalParsedRows: records.length,
+    totalParsedRows: rawRecords.length,
   };
 }
 
@@ -876,6 +946,10 @@ export function parseSmartTextData(
     'partysupplier',
     'amountbdt',
     'referenceinvoice',
+    'rmbrate',
+    'weightperboxkg',
+    'ratermb',
+    'itemsbreakdown',
   ];
   const hasExportedHeaders = firstRowNormalized.some((h) => exportedHeaderMarkers.includes(h));
 

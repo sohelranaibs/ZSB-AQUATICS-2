@@ -66,4 +66,8 @@ test('describeClearScope accurately calculates targeted records for all and indi
   const payDesc = describeClearScope('payment', counts);
   assert.equal(payDesc.totalRecords, 4);
   assert.equal(payDesc.title, 'Payment DB Only');
+
+  const costDesc = describeClearScope('other_cost', counts);
+  assert.equal(costDesc.totalRecords, 2);
+  assert.equal(costDesc.title, 'Other Costs / Expenses DB Only');
 });

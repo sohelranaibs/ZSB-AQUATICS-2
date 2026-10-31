@@ -5,7 +5,7 @@
 
 export const DEFAULT_SUPER_ADMIN_PASSWORD = 'admin123';
 
-export type ClearRecordsScope = 'all' | 'purchase' | 'packing' | 'payment';
+export type ClearRecordsScope = 'all' | 'purchase' | 'packing' | 'payment' | 'other_cost';
 
 export interface SuperAdminVerifyResult {
   valid: boolean;
@@ -128,6 +128,12 @@ export function describeClearScope(
         title: 'Payment DB Only',
         totalRecords: payments,
         breakdown: `${payments} Supplier & Exporter Payment voucher(s)`,
+      };
+    case 'other_cost':
+      return {
+        title: 'Other Costs / Expenses DB Only',
+        totalRecords: otherCosts,
+        breakdown: `${otherCosts} Operating Expense & Costing record(s)`,
       };
     case 'all':
     default: {

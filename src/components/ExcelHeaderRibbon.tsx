@@ -248,8 +248,8 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
     {
       id: 'administration',
       num: 'ADM',
-      label: 'Administration',
-      shortLabel: 'Administration',
+      label: 'Administration (Super Admin 🔒)',
+      shortLabel: 'Admin 🔒',
     },
   ];
 

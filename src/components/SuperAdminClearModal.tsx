@@ -102,6 +102,11 @@ export const SuperAdminClearModal: React.FC = () => {
       label: 'Payment DB Only',
       count: counts.payments,
     },
+    {
+      id: 'other_cost',
+      label: 'Other Costs DB Only',
+      count: counts.otherCosts,
+    },
   ];
 
   return (

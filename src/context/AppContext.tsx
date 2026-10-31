@@ -2037,6 +2037,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         console.error(e);
       }
       showToast('Super Admin verified: Payment DB cleared (Safety Snapshot saved).');
+    } else if (scope === 'other_cost') {
+      setOtherCosts([]);
+      try {
+        localStorage.setItem(STORAGE_KEYS.OTHER_COSTS, JSON.stringify([]));
+      } catch (e) {
+        console.error(e);
+      }
+      showToast('Super Admin verified: Costing DB cleared (Safety Snapshot saved).');
     } else {
       executeUnconditionalClearAll();
       showToast(

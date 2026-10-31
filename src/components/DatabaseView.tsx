@@ -1266,21 +1266,6 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
             <span>SNAPSHOTS ({snapshots.length})</span>
           </button>
 
-          {/* Clear All Database Records Button (Protected by Super Admin Password) */}
-          <button
-            type="button"
-            data-testid="database-clear-all-records-btn"
-            onClick={() => {
-              clearAllDatabaseRecords('all');
-            }}
-            className="flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-sm transition bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 cursor-pointer"
-            title="Clear all database records permanently (Requires Super Admin Password)"
-          >
-            <Lock className="w-3.5 h-3.5 text-rose-600" />
-            <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-            <span>CLEAR ALL RECORDS</span>
-          </button>
-
           <span className="text-xs text-slate-500 pl-1">
             Selected: <strong className="text-slate-900">{selectedIds.length}</strong>
           </span>

@@ -67,9 +67,14 @@ import {
   CheckSquare,
   Square,
   Key,
+  Database,
+  ShoppingCart,
+  Package,
+  CreditCard,
+  Receipt,
 } from 'lucide-react';
 
-type AdminTab = 'account' | 'team' | 'audit' | 'backups';
+type AdminTab = 'account' | 'team' | 'audit' | 'backups' | 'database_clear';
 
 export const AdministrationView: React.FC = () => {
   const {
@@ -91,6 +96,7 @@ export const AdministrationView: React.FC = () => {
     otherCosts,
     showToast,
     addAuditLog,
+    setActiveTab,
   } = useApp();
 
   // Super Admin session gate state
@@ -206,17 +212,6 @@ export const AdministrationView: React.FC = () => {
       // Ignore
     }
     showToast('Administration session locked.');
-  };
-
-  // Quick Unlock for authenticated admin testing
-  const handleQuickUnlock = () => {
-    setIsSuperAdminVerified(true);
-    try {
-      sessionStorage.setItem(SUPER_ADMIN_SESSION_STORAGE_KEY, 'verified');
-    } catch {
-      // Ignore
-    }
-    showToast('Super Admin session unlocked.');
   };
 
   // Profile save handler
@@ -502,8 +497,52 @@ export const AdministrationView: React.FC = () => {
   const resolvedLogoSrc = resolveCompanyLogoSrc(companyProfile.logoUrl);
 
   // --------------------------------------------------------------------------
-  // LOCKED SCREEN: Super Admin Verification Barrier
+  // ROLE ENFORCEMENT & LOCKED SCREEN: Super Admin Verification Barrier
   // --------------------------------------------------------------------------
+  const isSuperAdminAccount =
+    !currentUser ||
+    currentUser.role === 'Super Admin' ||
+    currentUser.role === 'Managing Partner' ||
+    currentUser.username === 'sohel' ||
+    currentUser.email === 'zsbaquatics@gmail.com' ||
+    currentUser.username === 'zsbaquatics@gmail.com';
+
+  if (!isSuperAdminAccount) {
+    return (
+      <div
+        className="min-h-[80vh] flex items-center justify-center p-4 sm:p-6"
+        data-testid="admin-access-denied-barrier"
+      >
+        <div className="w-full max-w-lg bg-slate-900 border-2 border-rose-500/80 rounded-2xl shadow-2xl p-6 sm:p-8 text-center space-y-5">
+          <div className="w-16 h-16 rounded-full bg-rose-500/20 border-2 border-rose-500 mx-auto flex items-center justify-center">
+            <Lock className="w-8 h-8 text-rose-400" />
+          </div>
+          <div>
+            <h2 className="text-xl font-black text-rose-300 uppercase tracking-wide">
+              Access Restricted · Super Admin Only
+            </h2>
+            <p className="text-xs text-slate-300 mt-2 leading-relaxed">
+              You are currently signed in as{' '}
+              <strong className="text-white">{currentUser?.displayName || 'User'}</strong>{' '}
+              with the role <span className="px-2 py-0.5 rounded bg-slate-800 text-amber-300 font-mono text-[11px]">{currentUser?.role || 'Staff'}</span>.
+            </p>
+            <p className="text-xs text-rose-300 mt-2 font-medium">
+              Only verified Super Administrators have authorization to enter the Administration sheet and control database records.
+            </p>
+          </div>
+          <button
+            type="button"
+            data-testid="admin-return-dashboard-btn"
+            onClick={() => setActiveTab('dashboard')}
+            className="w-full bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 font-bold py-2.5 px-4 rounded-xl text-xs transition cursor-pointer"
+          >
+            Return to Executive Overview (Sheet 01)
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!isSuperAdminVerified) {
     return (
       <div
@@ -551,7 +590,7 @@ export const AdministrationView: React.FC = () => {
                   Super Admin Authorization Required
                 </div>
                 <p className="text-amber-100 font-medium leading-relaxed">
-                  Only Super Admin can manage your account, team access, audit history and data backups.
+                  Only Super Admin can manage your account, team access, audit history and database records clearance.
                 </p>
               </div>
             </div>
@@ -603,27 +642,15 @@ export const AdministrationView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-3">
+              <div>
                 <button
                   type="submit"
                   data-testid="admin-unlock-btn"
-                  className="flex-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black py-3 px-5 rounded-xl shadow-lg transition flex items-center justify-center space-x-2 cursor-pointer"
+                  className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black py-3 px-5 rounded-xl shadow-lg transition flex items-center justify-center space-x-2 cursor-pointer"
                 >
                   <Unlock className="w-4 h-4 stroke-[2.5]" />
                   <span>Verify &amp; Unlock Console</span>
                 </button>
-
-                {superAdminPassword === DEFAULT_SUPER_ADMIN_PASSWORD && (
-                  <button
-                    type="button"
-                    data-testid="admin-quick-unlock-btn"
-                    onClick={handleQuickUnlock}
-                    className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold rounded-xl border border-slate-700 transition cursor-pointer"
-                    title="Quick unlock with default Super Admin credentials (admin123)"
-                  >
-                    Quick Unlock (admin123)
-                  </button>
-                )}
               </div>
             </form>
 
@@ -717,8 +744,8 @@ export const AdministrationView: React.FC = () => {
           </div>
         </div>
 
-        {/* 4 Core Pillars KPI Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-slate-700/80">
+        {/* 5 Core Pillars KPI Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-6 pt-5 border-t border-slate-700/80">
           {/* Pillar 1: Account */}
           <div
             onClick={() => setActiveAdminTab('account')}
@@ -788,6 +815,25 @@ export const AdministrationView: React.FC = () => {
             <div className="text-base font-black">{snapshots.length} Snapshots</div>
             <div className="text-[10px] text-slate-400 truncate">Instant JSON Vault Recovery</div>
           </div>
+
+          {/* Pillar 5: Database Clearance */}
+          <div
+            onClick={() => setActiveAdminTab('database_clear')}
+            className={`p-3 rounded-xl border transition cursor-pointer ${
+              activeAdminTab === 'database_clear'
+                ? 'bg-rose-950/80 border-rose-400 text-white shadow-sm'
+                : 'bg-slate-900/60 border-slate-700/80 hover:border-slate-600 text-slate-300'
+            }`}
+          >
+            <div className="flex items-center justify-between text-xs font-bold text-rose-400 mb-1">
+              <span>05. DB CLEARANCE</span>
+              <Database className="w-3.5 h-3.5" />
+            </div>
+            <div className="text-base font-black text-rose-300">
+              {purchases.length + packings.length + payments.length + otherCosts.length} Records
+            </div>
+            <div className="text-[10px] text-slate-400 truncate">Single DB / Master Wipe</div>
+          </div>
         </div>
       </div>
 
@@ -847,6 +893,20 @@ export const AdministrationView: React.FC = () => {
         >
           <Archive className="w-4 h-4" />
           <span>Data Backups &amp; Snapshots ({snapshots.length})</span>
+        </button>
+
+        <button
+          type="button"
+          data-testid="admin-subtab-database-clear"
+          onClick={() => setActiveAdminTab('database_clear')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+            activeAdminTab === 'database_clear'
+              ? 'bg-rose-950 text-rose-300 shadow-md border border-rose-500/60'
+              : 'bg-white text-rose-700 hover:bg-rose-50 border border-rose-200'
+          }`}
+        >
+          <Database className="w-4 h-4 text-rose-600" />
+          <span>Database Clearance &amp; Deletion</span>
         </button>
       </div>
 
@@ -1628,23 +1688,344 @@ export const AdministrationView: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <AlertTriangle className="w-5 h-5 text-rose-700" />
                 <h4 className="font-bold text-rose-900 text-sm">
-                  Emergency Database Clear &amp; Reset
+                  Super Admin Database Clearance &amp; Deletion Console
                 </h4>
               </div>
               <p className="text-xs text-rose-800 max-w-xl">
-                Permanently purge all active transaction records across purchases, packing manifests, and payment ledgers. A safety snapshot is automatically created prior to clearance.
+                Permanently purge records from single databases independently (Purchase DB, Packing List DB, Payment DB, or Costs DB) or perform a complete Master Reset. Automatic safety snapshots are preserved before deletion.
               </p>
             </div>
 
-            <button
-              type="button"
-              data-testid="admin-emergency-clear-btn"
-              onClick={() => clearAllDatabaseRecords('all')}
-              className="px-4 py-2 bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs rounded-xl shadow transition shrink-0 cursor-pointer flex items-center space-x-1.5"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Clear Database Records</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                data-testid="admin-open-db-clear-tab-btn"
+                onClick={() => setActiveAdminTab('database_clear')}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-amber-300 font-bold text-xs rounded-xl shadow transition shrink-0 cursor-pointer flex items-center space-x-1.5 border border-slate-700"
+              >
+                <Database className="w-4 h-4 text-amber-400" />
+                <span>Open Granular Clearance Tab</span>
+              </button>
+              <button
+                type="button"
+                data-testid="admin-emergency-clear-btn"
+                onClick={() => clearAllDatabaseRecords('all')}
+                className="px-4 py-2 bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs rounded-xl shadow transition shrink-0 cursor-pointer flex items-center space-x-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Master Clear All</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------------------------------------------------------- */}
+      {/* TAB 5: GRANULAR DATABASE RECORDS DELETION & MANAGEMENT CONSOLE       */}
+      {/* -------------------------------------------------------------------- */}
+      {activeAdminTab === 'database_clear' && (
+        <div className="space-y-6" data-testid="admin-database-clear-panel">
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-rose-950 border-2 border-rose-500/60 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden">
+            <div className="absolute right-0 top-0 bottom-0 w-80 bg-gradient-to-l from-rose-500/10 to-transparent pointer-events-none" />
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 relative z-10">
+              <div className="flex items-center space-x-3.5">
+                <div className="p-3 bg-rose-500/20 border-2 border-rose-500 rounded-xl text-rose-400 shrink-0">
+                  <Database className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h2 className="text-lg sm:text-xl font-black text-rose-300 uppercase tracking-wide">
+                      Granular Database Records Deletion &amp; Control
+                    </h2>
+                    <span className="bg-rose-500/20 text-rose-300 border border-rose-400/40 text-[10px] font-black px-2 py-0.5 rounded uppercase">
+                      Super Admin Exclusive
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1 max-w-2xl">
+                    Per executive security requirements, delete buttons have been removed from standard operational sheets (Purchase DB, Packing List DB, and Payment DB). Only verified Super Admins can delete records from individual databases or initiate a Master Reset.
+                  </p>
+                </div>
+              </div>
+
+              {/* Safety Badges */}
+              <div className="flex flex-wrap lg:flex-col gap-2 shrink-0 text-[11px] font-mono">
+                <div className="bg-slate-900/80 border border-emerald-500/40 text-emerald-300 px-3 py-1.5 rounded-lg flex items-center space-x-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Auto Pre-Clear Backup: ENABLED</span>
+                </div>
+                <div className="bg-slate-900/80 border border-amber-500/40 text-amber-300 px-3 py-1.5 rounded-lg flex items-center space-x-1.5">
+                  <Clock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Audit Trail Logging: IMMUTABLE</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Live Database Ledger Counters */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-5 pt-4 border-t border-slate-800">
+              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                <div className="text-[10px] font-bold text-amber-400 uppercase">Purchase DB</div>
+                <div className="text-lg font-black text-white">{purchases.length} Records</div>
+              </div>
+              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                <div className="text-[10px] font-bold text-blue-400 uppercase">Packing List DB</div>
+                <div className="text-lg font-black text-white">{packings.length} Records</div>
+              </div>
+              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                <div className="text-[10px] font-bold text-emerald-400 uppercase">Payment Vouchers</div>
+                <div className="text-lg font-black text-white">{payments.length} Records</div>
+              </div>
+              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                <div className="text-[10px] font-bold text-purple-400 uppercase">Operating Costs</div>
+                <div className="text-lg font-black text-white">{otherCosts.length} Records</div>
+              </div>
+              <div className="bg-rose-950/80 p-2.5 rounded-lg border border-rose-700/60 col-span-2 sm:col-span-1">
+                <div className="text-[10px] font-bold text-rose-300 uppercase">Total Active</div>
+                <div className="text-lg font-black text-rose-200">
+                  {purchases.length + packings.length + payments.length + otherCosts.length} Records
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Granular Single Database Controls */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">
+                  Single Database Deletion Controls (Selective Purge)
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Delete records from only one database at a time without disturbing any other operational tables.
+                </p>
+              </div>
+              <span className="text-xs font-mono text-slate-500 font-bold">
+                4 Independent Database Tables
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Card 1: Purchase Database Only */}
+              <div
+                className="bg-white rounded-2xl border-2 border-amber-200 hover:border-amber-400 transition p-5 shadow-sm space-y-4 flex flex-col justify-between"
+                data-testid="admin-scope-card-purchase"
+              >
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="p-2.5 bg-amber-100 text-amber-800 rounded-xl">
+                        <ShoppingCart className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-black text-slate-900">
+                          Purchase Database (PUR)
+                        </h4>
+                        <span className="text-[10px] font-mono font-bold text-amber-700">
+                          Workbook Sheet 08 · Supplier Invoices
+                        </span>
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-black bg-amber-50 text-amber-900 border border-amber-300">
+                      {purchases.length} Records
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Purges only Chinese supplier fish orders, individual species line items, box counts, packing charges, and total invoice RMB balances.
+                  </p>
+
+                  <div className="text-[11px] bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-slate-600 space-y-0.5">
+                    <div><strong>Affects:</strong> Sheet 08 (Purchase DB) &amp; Purchase invoice numbers</div>
+                    <div><strong>Preserves:</strong> Packing lists, payment vouchers, costs, and dropdowns</div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  data-testid="admin-clear-single-purchase-btn"
+                  onClick={() => clearAllDatabaseRecords('purchase')}
+                  className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow transition flex items-center justify-center space-x-2 cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Delete Purchase DB Records Only</span>
+                </button>
+              </div>
+
+              {/* Card 2: Packing List Database Only */}
+              <div
+                className="bg-white rounded-2xl border-2 border-blue-200 hover:border-blue-400 transition p-5 shadow-sm space-y-4 flex flex-col justify-between"
+                data-testid="admin-scope-card-packing"
+              >
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="p-2.5 bg-blue-100 text-blue-800 rounded-xl">
+                        <Package className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-black text-slate-900">
+                          Packing List Database (PCK)
+                        </h4>
+                        <span className="text-[10px] font-mono font-bold text-blue-700">
+                          Workbook Sheet 09 · Export Manifests
+                        </span>
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-black bg-blue-50 text-blue-900 border border-blue-300">
+                      {packings.length} Records
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Purges only exported packing manifests, flight marks, box weight records, bag quantities, water ratio specs, and exporter billing rows.
+                  </p>
+
+                  <div className="text-[11px] bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-slate-600 space-y-0.5">
+                    <div><strong>Affects:</strong> Sheet 09 (Packing DB) &amp; Exporter payment references</div>
+                    <div><strong>Preserves:</strong> Purchase orders, bank payments, costs, and dropdowns</div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  data-testid="admin-clear-single-packing-btn"
+                  onClick={() => clearAllDatabaseRecords('packing')}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow transition flex items-center justify-center space-x-2 cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Delete Packing List DB Records Only</span>
+                </button>
+              </div>
+
+              {/* Card 3: Payment Vouchers Database Only */}
+              <div
+                className="bg-white rounded-2xl border-2 border-emerald-200 hover:border-emerald-400 transition p-5 shadow-sm space-y-4 flex flex-col justify-between"
+                data-testid="admin-scope-card-payment"
+              >
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="p-2.5 bg-emerald-100 text-emerald-800 rounded-xl">
+                        <CreditCard className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-black text-slate-900">
+                          Payment Vouchers DB (PAY)
+                        </h4>
+                        <span className="text-[10px] font-mono font-bold text-emerald-700">
+                          Workbook Sheet 10 · TT Banking Records
+                        </span>
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-black bg-emerald-50 text-emerald-900 border border-emerald-300">
+                      {payments.length} Records
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Purges only bank TT payment slips, exchange transactions, remittance receipts, supplier credits/debits, and voucher histories.
+                  </p>
+
+                  <div className="text-[11px] bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-slate-600 space-y-0.5">
+                    <div><strong>Affects:</strong> Sheet 10 (Payment DB) &amp; Supplier settlement balances</div>
+                    <div><strong>Preserves:</strong> Purchases, packing manifests, operating costs, dropdowns</div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  data-testid="admin-clear-single-payment-btn"
+                  onClick={() => clearAllDatabaseRecords('payment')}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow transition flex items-center justify-center space-x-2 cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Delete Payment Vouchers DB Records Only</span>
+                </button>
+              </div>
+
+              {/* Card 4: Operating / Other Costs Database Only */}
+              <div
+                className="bg-white rounded-2xl border-2 border-purple-200 hover:border-purple-400 transition p-5 shadow-sm space-y-4 flex flex-col justify-between"
+                data-testid="admin-scope-card-costs"
+              >
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="p-2.5 bg-purple-100 text-purple-800 rounded-xl">
+                        <Receipt className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-black text-slate-900">
+                          Operating &amp; Other Costs DB (CST)
+                        </h4>
+                        <span className="text-[10px] font-mono font-bold text-purple-700">
+                          Workbook Sheet 07 · Logistics &amp; Overhead
+                        </span>
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-black bg-purple-50 text-purple-900 border border-purple-300">
+                      {otherCosts.length} Records
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Purges only freight forwarding, customs clearance, quarantine testing charges, domestic transport, and other operational costing line items.
+                  </p>
+
+                  <div className="text-[11px] bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-slate-600 space-y-0.5">
+                    <div><strong>Affects:</strong> Sheet 07 (Loss &amp; Profit Analysis other cost entries)</div>
+                    <div><strong>Preserves:</strong> Purchases, packing manifests, bank payments, dropdowns</div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  data-testid="admin-clear-single-costs-btn"
+                  onClick={() => clearAllDatabaseRecords('other_cost')}
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow transition flex items-center justify-center space-x-2 cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Delete Operating Costs DB Records Only</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Master Reset: All Databases Simultaneously */}
+          <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-5 sm:p-6 shadow space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start space-x-3.5">
+                <div className="p-3 bg-rose-600 text-white rounded-xl shadow shrink-0">
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h4 className="text-base font-black text-rose-950 uppercase tracking-wide">
+                      Master Reset: Clear All Database Records Simultaneously
+                    </h4>
+                    <span className="bg-rose-200 text-rose-950 font-black text-[10px] px-2 py-0.5 rounded">
+                      Total Reset
+                    </span>
+                  </div>
+                  <p className="text-xs text-rose-800 mt-1 max-w-2xl leading-relaxed">
+                    Atomically clear all transaction records across all 4 databases (Purchases + Packing Lists + Payment Vouchers + Operating Costs) in a single master operation. A pre-clear safety backup is recorded so you can restore from Data Backups if needed.
+                  </p>
+                  <div className="text-[11px] text-rose-700 font-semibold mt-2">
+                    ✓ Preserves company partner profile, team accounts, exchange rates, and master dropdowns.
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                data-testid="admin-clear-all-db-btn"
+                onClick={() => clearAllDatabaseRecords('all')}
+                className="px-6 py-3.5 bg-rose-700 hover:bg-rose-800 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg transition shrink-0 cursor-pointer flex items-center justify-center space-x-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Master Reset All Databases</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

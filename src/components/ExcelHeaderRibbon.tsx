@@ -142,24 +142,152 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
     }
   };
 
+  const workbookSheets: {
+    id: ActiveTab;
+    num: string;
+    label: string;
+    shortLabel: string;
+    badge?: string | number;
+  }[] = [
+    {
+      id: 'dashboard',
+      num: '01',
+      label: 'Executive Overview',
+      shortLabel: 'Overview',
+    },
+    {
+      id: 'purchase_form',
+      num: '02',
+      label: 'Purchase Challan / Bill',
+      shortLabel: 'Purchase Form',
+    },
+    {
+      id: 'packing_form',
+      num: '03',
+      label: 'Export Packing List',
+      shortLabel: 'Packing List',
+    },
+    {
+      id: 'air_way_bill',
+      num: 'FRB',
+      label: 'FLIGHT RETURN BILL',
+      shortLabel: 'Flight Return Bill',
+    },
+    {
+      id: 'payment_form',
+      num: '04',
+      label: 'Supplier Payment Form',
+      shortLabel: 'Supplier Payment',
+    },
+    {
+      id: 'exporter_payment_form',
+      num: '05',
+      label: 'Exporter Payment Form',
+      shortLabel: 'Exporter Payment',
+    },
+    {
+      id: 'exporter_payment_slip',
+      num: '06',
+      label: 'Exporter Payment Slip 付款单',
+      shortLabel: 'Payment Slip 付款单',
+    },
+    {
+      id: 'profit_loss',
+      num: '07',
+      label: 'Loss & Profit Analysis',
+      shortLabel: 'Loss & Profit',
+    },
+    {
+      id: 'purchase_db',
+      num: '08',
+      label: 'Purchase Database',
+      shortLabel: 'Purchase DB',
+      badge: purchases.length,
+    },
+    {
+      id: 'packing_db',
+      num: '09',
+      label: 'Packing List Database',
+      shortLabel: 'Packing DB',
+      badge: packings.length,
+    },
+    {
+      id: 'payment_db',
+      num: '10',
+      label: 'Payment Vouchers DB',
+      shortLabel: 'Payment DB',
+      badge: payments.length,
+    },
+    {
+      id: 'search_reports',
+      num: '11',
+      label: 'Search & Audit Reports',
+      shortLabel: 'Search & Reports',
+    },
+    {
+      id: 'settings',
+      num: '12',
+      label: 'Settings & Config',
+      shortLabel: 'Settings',
+    },
+    {
+      id: 'audit_logs',
+      num: '13',
+      label: 'System Audit Logs',
+      shortLabel: 'Audit Logs',
+      badge: auditLogs.length,
+    },
+    {
+      id: 'administration',
+      num: 'ADM',
+      label: 'Administration',
+      shortLabel: 'Administration',
+    },
+  ];
+
+  const currentSheetIndex = Math.max(
+    0,
+    workbookSheets.findIndex((s) => s.id === activeTab)
+  );
+  const currentSheet = workbookSheets[currentSheetIndex] || workbookSheets[0];
+
+  const handleStepSheet = (direction: 'prev' | 'next') => {
+    const total = workbookSheets.length;
+    const nextIndex =
+      direction === 'next'
+        ? (currentSheetIndex + 1) % total
+        : (currentSheetIndex - 1 + total) % total;
+    setActiveTab(workbookSheets[nextIndex].id);
+  };
+
   return (
-    <header className="bg-slate-900 border-b border-slate-700 shadow-md select-none print:hidden">
+    <header className="bg-slate-900 border-b border-slate-700 shadow-md select-none print:hidden sticky top-0 z-40">
       {/* Top Company & Excel Title Bar */}
       <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 px-4 py-2 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
         {/* Left: Golden Company Branding */}
         <div className="flex items-center space-x-3">
-          <div className="w-11 h-11 rounded-full bg-white p-0.5 border-2 border-amber-400 shadow-md flex items-center justify-center overflow-hidden shrink-0">
+          <button
+            type="button"
+            onClick={() => setActiveTab('dashboard')}
+            title="Return to Sheet 01 · Executive Overview"
+            className="w-11 h-11 rounded-full bg-white p-0.5 border-2 border-amber-400 shadow-md flex items-center justify-center overflow-hidden shrink-0 cursor-pointer hover:scale-105 transition-transform"
+          >
             <img
               src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
               alt={companyProfile.companyName}
               className="w-full h-full object-contain rounded-full"
             />
-          </div>
+          </button>
           <div>
             <div className="flex items-center space-x-2.5">
-              <span className="zsb-3d-text text-lg sm:text-xl font-black tracking-wider">
+              <button
+                type="button"
+                onClick={() => setActiveTab('dashboard')}
+                className="zsb-3d-text text-lg sm:text-xl font-black tracking-wider cursor-pointer text-left"
+                title="Go to Executive Overview (Sheet 01)"
+              >
                 {companyProfile.companyName}
-              </span>
+              </button>
               <span className="hidden sm:inline-block text-[10px] font-mono uppercase tracking-widest text-slate-400 border-l border-slate-700 pl-2.5">
                 Enterprise Trade Ledger
               </span>
@@ -351,34 +479,61 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
         </div>
       </div>
 
-      {/* Excel Formula Bar */}
-      <div className="bg-slate-800 px-4 py-1.5 border-b border-slate-700 flex items-center space-x-3 text-xs font-mono text-slate-300">
-        <div className="flex items-center space-x-1 px-2 py-0.5 bg-slate-900 border border-slate-700 rounded font-semibold text-amber-400 min-w-16 justify-center">
-          <span>
-            {activeTab === 'dashboard'
-              ? 'A1:D10'
-              : activeTab === 'purchase_form'
-              ? 'CHALLAN_R1'
-              : activeTab === 'packing_form'
-              ? 'PACK_R1'
-              : activeTab === 'air_way_bill'
-              ? 'AWB_A1:H10'
-              : activeTab === 'payment_form'
-              ? 'SUP_PAY_R1'
-              : activeTab === 'exporter_payment_form'
-              ? 'EXP_PAY_R1'
-              : activeTab === 'exporter_payment_slip'
-              ? 'SLIP_A1:H10'
-              : 'SUMMARY'}
-          </span>
+      {/* Excel Formula Bar + Quick Sheet Switcher Controls */}
+      <div className="bg-slate-800 px-4 py-1.5 border-b border-slate-700 flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-slate-300">
+        <div className="flex items-center space-x-2 min-w-0 flex-1">
+          {/* Prev / Next Sheet Navigation Buttons */}
+          <div className="flex items-center space-x-1 shrink-0">
+            <button
+              type="button"
+              data-testid="ribbon-prev-sheet-btn"
+              onClick={() => handleStepSheet('prev')}
+              title="Go to Previous Sheet (Shortcut: Alt + Left Arrow)"
+              className="px-2 py-0.5 bg-slate-900 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded text-[11px] font-bold transition cursor-pointer"
+            >
+              ◀ Prev
+            </button>
+            <button
+              type="button"
+              data-testid="ribbon-next-sheet-btn"
+              onClick={() => handleStepSheet('next')}
+              title="Go to Next Sheet (Shortcut: Alt + Right Arrow)"
+              className="px-2 py-0.5 bg-slate-900 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded text-[11px] font-bold transition cursor-pointer"
+            >
+              Next ▶
+            </button>
+          </div>
+
+          {/* Direct Sheet Dropdown Jumper */}
+          <div className="flex items-center space-x-1.5 shrink-0">
+            <label htmlFor="global-sheet-select" className="text-[10px] uppercase tracking-wider text-amber-400 font-bold hidden sm:inline">
+              Sheet:
+            </label>
+            <select
+              id="global-sheet-select"
+              data-testid="ribbon-sheet-select"
+              aria-label="Jump to Workbook Sheet"
+              value={activeTab}
+              onChange={(e) => setActiveTab(e.target.value as ActiveTab)}
+              className="bg-slate-950 text-amber-300 border border-amber-500/50 rounded px-2 py-0.5 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-amber-400 cursor-pointer"
+            >
+              {workbookSheets.map((s) => (
+                <option key={s.id} value={s.id} className="bg-slate-900 text-white">
+                  [{s.num}] {s.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="text-slate-400 font-bold select-none text-emerald-400 italic hidden md:inline">
+            fx
+          </div>
+          <div className="h-4 w-px bg-slate-700 hidden md:block" />
+          <div className="flex-1 overflow-x-auto whitespace-nowrap text-slate-200 hidden lg:block">
+            <span className="text-amber-300/90 font-medium">{getFormulaForTab()}</span>
+          </div>
         </div>
-        <div className="text-slate-400 font-bold select-none text-emerald-400 italic">
-          fx
-        </div>
-        <div className="h-4 w-px bg-slate-700" />
-        <div className="flex-1 overflow-x-auto whitespace-nowrap text-slate-200">
-          <span className="text-amber-300/90 font-medium">{getFormulaForTab()}</span>
-        </div>
+
         <div
           role="status"
           aria-live="polite"
@@ -407,6 +562,56 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
         </div>
       </div>
 
+      {/* Persistent Global Workbook Sheet Tabs Bar (Always visible on every sheet) */}
+      <nav
+        aria-label="Workbook Sheets Navigation"
+        data-testid="global-workbook-sheets-nav"
+        className="bg-slate-950/95 px-3 py-1.5 border-b border-slate-800 flex flex-wrap items-center gap-1.5"
+      >
+        <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-400/90 px-1.5 shrink-0 flex items-center gap-1">
+          <Layers className="w-3 h-3 text-amber-400" />
+          <span>Sheets:</span>
+        </span>
+        {workbookSheets.map((sheet) => {
+          const isActive = activeTab === sheet.id;
+          return (
+            <button
+              key={sheet.id}
+              type="button"
+              data-testid={`ribbon-sheet-tab-${sheet.id}`}
+              onClick={() => setActiveTab(sheet.id)}
+              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all whitespace-nowrap shrink-0 border cursor-pointer ${
+                isActive
+                  ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-sm ring-1 ring-amber-300/60'
+                  : 'bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white border-slate-800 hover:border-slate-600'
+              }`}
+              title={`Switch to Sheet [${sheet.num}] ${sheet.label}`}
+            >
+              <span
+                className={`px-1 py-0.2 rounded text-[9px] font-mono font-black ${
+                  isActive
+                    ? 'bg-slate-950 text-amber-300'
+                    : 'bg-slate-800 text-amber-400 border border-slate-700'
+                }`}
+              >
+                {sheet.num}
+              </span>
+              <span>{sheet.shortLabel}</span>
+              {sheet.badge !== undefined && (
+                <span
+                  className={`px-1 rounded-full text-[9px] font-mono font-extrabold ${
+                    isActive
+                      ? 'bg-slate-950/20 text-slate-950'
+                      : 'bg-slate-800 text-emerald-400'
+                  }`}
+                >
+                  {sheet.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
     </header>
   );
 };

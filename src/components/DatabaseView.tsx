@@ -30,6 +30,7 @@ import {
   Zap,
   FileDown,
   Loader2,
+  Layers,
 } from 'lucide-react';
 import { findShipmentByDeepLink } from '../utils/shipmentQrCode.ts';
 import { ShipmentQrBadge } from './ShipmentQrBadge.tsx';
@@ -55,6 +56,7 @@ import {
   preparePaymentRecordsForBatchExport,
 } from '../utils/batchPaymentSlipPdf.ts';
 import { PaymentSlipPrintCard } from './PaymentSlipPrintCard.tsx';
+import { BatchUpdateSidebar } from './BatchUpdateSidebar.tsx';
 
 interface DatabaseViewProps {
   initialType?: 'purchase' | 'packing' | 'payment';
@@ -74,6 +76,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     updatePayment,
     deletePayment,
     companyProfile,
+    dropdownOptions,
     openPrintModal,
     openDataCenterModal,
     openSnapshotModal,
@@ -96,6 +99,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   const [searchTerm, setSearchTerm] = useState<string>(() => focusedShipmentInvoice || '');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isExportingBatchSlips, setIsExportingBatchSlips] = useState<boolean>(false);
+  const [isBatchSidebarOpen, setIsBatchSidebarOpen] = useState<boolean>(false);
 
   // Selected payment records for batch export
   const selectedPaymentsForBatch = useMemo(
@@ -1007,6 +1011,24 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
             <span>EXPORT CSV ({currentFilteredCount})</span>
           </button>
 
+          {/* Batch Update Sidebar Toggle Button */}
+          <button
+            type="button"
+            data-testid="database-batch-update-btn"
+            onClick={() => setIsBatchSidebarOpen((prev) => !prev)}
+            className={`flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-sm transition cursor-pointer ${
+              isBatchSidebarOpen
+                ? 'bg-amber-500 text-slate-950 ring-2 ring-amber-400'
+                : selectedIds.length > 0
+                ? 'bg-amber-400 hover:bg-amber-300 text-slate-950'
+                : 'bg-slate-800 hover:bg-slate-700 text-amber-300'
+            }`}
+            title="Open Batch Update secondary sidebar to bulk edit multiple selected rows at once"
+          >
+            <Layers className="w-4 h-4" />
+            <span>BATCH UPDATE ({selectedIds.length})</span>
+          </button>
+
           {/* Batch Print Button */}
           <button
             type="button"
@@ -1086,8 +1108,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
         </div>
       </div>
 
+      {/* Main Database Content + Secondary Batch Update Sidebar */}
+      <div className="flex flex-col lg:flex-row items-start gap-5">
       {/* Database Tables */}
-      <div className="bg-white rounded-xl shadow border border-slate-200 overflow-hidden">
+      <div className="flex-1 min-w-0 w-full bg-white rounded-xl shadow border border-slate-200 overflow-hidden">
         {activeDbType === 'purchase' && (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
@@ -1126,20 +1150,21 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                     </td>
                   </tr>
                 ) : (
-                  filteredPurchases.map((p) => {
+                  filteredPurchases.map((p, idx) => {
                     const isSelected = selectedIds.includes(p.id);
                     const rec = smartSyncAnalysis.purchaseReconciliations[p.id];
                     const hasDiscrepancy = Boolean(rec?.hasDiscrepancy);
+                    const isEvenRow = idx % 2 === 1;
                     return (
                       <tr
                         key={p.id}
                         data-testid={`purchase-row-${p.id}`}
-                        className={`transition ${
-                          hasDiscrepancy
-                            ? 'bg-amber-50/70 hover:bg-amber-100/60'
-                            : isSelected
-                            ? 'bg-blue-50/80'
-                            : 'hover:bg-blue-50/40'
+                        className={`transition-colors duration-150 ${
+                          isSelected
+                            ? 'bg-blue-100/85 hover:bg-blue-100'
+                            : isEvenRow
+                            ? 'bg-slate-50/90 hover:bg-blue-50/85'
+                            : 'bg-white hover:bg-blue-50/85'
                         }`}
                       >
                         <td className="p-3 text-center">
@@ -1323,8 +1348,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                       </td>
                     </tr>
                   ) : (
-                    filteredPackings.map((pkg) => {
+                    filteredPackings.map((pkg, idx) => {
                       const isSelected = selectedIds.includes(pkg.id);
+                      const isEvenRow = idx % 2 === 1;
                       const computedAmountBDT = calculatePackingTotalAmountBDT(
                         pkg.totalAmount,
                         pkg.rmbRate
@@ -1332,8 +1358,13 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                       return (
                       <tr
                         key={pkg.id}
-                        className={`hover:bg-teal-50/40 transition ${
-                          isSelected ? 'bg-teal-50/80' : ''
+                        data-testid={`packing-row-${pkg.id}`}
+                        className={`transition-colors duration-150 ${
+                          isSelected
+                            ? 'bg-teal-100/85 hover:bg-teal-100'
+                            : isEvenRow
+                            ? 'bg-slate-50/90 hover:bg-teal-50/85'
+                            : 'bg-white hover:bg-teal-50/85'
                         }`}
                       >
                         <td className="p-3 text-center">
@@ -1577,21 +1608,21 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                       </td>
                     </tr>
                   ) : (
-                    filteredPayments.map((pm) => {
+                    filteredPayments.map((pm, idx) => {
                       const isSelected = selectedIds.includes(pm.id);
                       const category = classifyPaymentCategory(pm);
                       const rec = smartSyncAnalysis.paymentReconciliations[pm.id];
-                      const hasDiscrepancy = Boolean(rec?.hasDiscrepancy);
+                      const isEvenRow = idx % 2 === 1;
                       return (
                         <tr
                           key={pm.id}
                           data-testid={`payment-row-${pm.id}`}
-                          className={`transition ${
-                            hasDiscrepancy
-                              ? 'bg-amber-50/70 hover:bg-amber-100/60'
-                              : isSelected
-                              ? 'bg-purple-50/80'
-                              : 'hover:bg-purple-50/40'
+                          className={`transition-colors duration-150 ${
+                            isSelected
+                              ? 'bg-purple-100/85 hover:bg-purple-100'
+                              : isEvenRow
+                              ? 'bg-slate-50/90 hover:bg-purple-50/85'
+                              : 'bg-white hover:bg-purple-50/85'
                           }`}
                         >
                           <td className="p-3 text-center">
@@ -1732,6 +1763,24 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
             </div>
           </div>
         )}
+      </div>
+
+      {/* Secondary Sidebar for Batch Updating Selected Rows */}
+      <BatchUpdateSidebar
+        isOpen={isBatchSidebarOpen}
+        onClose={() => setIsBatchSidebarOpen(false)}
+        activeDbType={activeDbType}
+        selectedIds={selectedIds}
+        purchases={purchases}
+        packings={packings}
+        payments={payments}
+        dropdownOptions={dropdownOptions}
+        defaultRmbRate={companyProfile.rmbExchangeRate}
+        onUpdatePurchase={updatePurchase}
+        onUpdatePacking={updatePacking}
+        onUpdatePayment={updatePayment}
+        onSuccess={(msg) => showToast(msg)}
+      />
       </div>
 
       {/* Offscreen Host for Direct Batch Payment Slips Combined PDF Export */}

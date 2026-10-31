@@ -263,200 +263,138 @@ export const DashboardView: React.FC = () => {
         aria-label="Executive Command Header"
         className="bg-slate-900 rounded-xl p-5 sm:p-6 border border-slate-800 text-white shadow-sm space-y-4"
       >
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-          {/* Left Column (7 Cols): Logo, Title & Action Buttons */}
-          <div className="lg:col-span-7 space-y-4">
-            <div className="flex items-start sm:items-center gap-3.5">
-              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white p-0.5 border-2 border-amber-400 shadow-md flex items-center justify-center overflow-hidden shrink-0">
-                <img
-                  src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
-                  alt={companyProfile.companyName}
-                  className="w-full h-full object-contain rounded-full"
-                />
-              </div>
-              <div className="space-y-1">
-                <div className="text-xs text-amber-400/90 font-semibold tracking-wide leading-snug">
-                  <span className="whitespace-nowrap font-bold">Sheet 01 · Executive Overview</span>
-                  <span className="block text-slate-300 font-normal mt-0.5">
-                    Live Seafood Procurement, Air-Freight Export &amp; RMB Settlement Ledger
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
-                  <span className="inline-flex items-baseline gap-2.5 whitespace-nowrap">
-                    <h1 className="zsb-3d-text-lg text-2xl sm:text-3xl font-black tracking-tight text-white whitespace-nowrap leading-tight">
-                      {companyProfile.companyName}
-                    </h1>
-                    <span className="text-slate-500 hidden sm:inline" aria-hidden="true">/</span>
-                  </span>
-                  <span className="text-base sm:text-lg font-semibold text-amber-400 whitespace-nowrap leading-tight">
-                    Business Control Center
-                  </span>
-                </div>
-                <div className="text-xs text-slate-300 pt-0.5 font-mono tabular-nums space-y-0.5 leading-snug">
-                  <div>{companyProfile.address}</div>
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <span className="text-amber-300 font-semibold whitespace-nowrap">
-                      EMAIL: {companyProfile.email || 'www.zsbaquatics.com'}
-                    </span>
-                    <span className="whitespace-nowrap">
-                      · Rate: 1 RMB = {companyProfile.rmbExchangeRate} {companyProfile.currency} · Synced {new Date().toLocaleDateString('en-GB')}
-                    </span>
-                  </div>
-                </div>
-              </div>
+        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white p-0.5 border-2 border-amber-400 shadow-md flex items-center justify-center overflow-hidden shrink-0">
+              <img
+                src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
+                alt={companyProfile.companyName}
+                className="w-full h-full object-contain rounded-full"
+              />
             </div>
-
-            {/* Quick Actions Row */}
-            <div className="flex flex-wrap items-center gap-1.5 pt-1">
-              {/* Low-Stock Notification Badge */}
-              <button
-                type="button"
-                data-testid="dashboard-low-stock-badge"
-                onClick={() => {
-                  const el = document.getElementById('dashboard-low-stock-monitor');
-                  if (el) {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  }
-                }}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border shadow-xs transition cursor-pointer whitespace-nowrap shrink-0 ${
-                  lowStockSummary.totalStockStatus === 'critical_low'
-                    ? 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border-rose-400/50'
-                    : lowStockSummary.totalStockStatus === 'approaching_low'
-                    ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border-amber-400/50'
-                    : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border-emerald-400/50'
-                }`}
-                title={`Total Available Stock: ${lowStockSummary.totalAvailableStockKg.toLocaleString()} KG (Minimum Threshold: ${lowStockSummary.minThresholdKg} KG)`}
-              >
-                <AlertTriangle
-                  className={`w-3.5 h-3.5 shrink-0 ${
-                    lowStockSummary.totalStockStatus === 'critical_low'
-                      ? 'text-rose-400'
-                      : lowStockSummary.totalStockStatus === 'approaching_low'
-                      ? 'text-amber-400'
-                      : 'text-emerald-400'
-                  }`}
-                />
-                <span>Available Stock</span>
-                <span
-                  data-testid="dashboard-low-stock-badge-count"
-                  className={`px-1.5 py-0.5 rounded font-mono text-[11px] font-black ${
-                    lowStockSummary.totalStockStatus === 'critical_low'
-                      ? 'bg-rose-500 text-white'
-                      : lowStockSummary.totalStockStatus === 'approaching_low'
-                      ? 'bg-amber-400 text-slate-950'
-                      : 'bg-emerald-500 text-slate-950'
-                  }`}
-                >
-                  {lowStockSummary.totalAvailableStockKg.toLocaleString()} KG
+            <div className="space-y-1">
+              <div className="text-xs text-amber-400/90 font-semibold tracking-wide leading-snug">
+                <span className="whitespace-nowrap font-bold">Sheet 01 · Executive Overview</span>
+                <span className="block text-slate-300 font-normal mt-0.5">
+                  Live Seafood Procurement, Air-Freight Export &amp; RMB Settlement Ledger
                 </span>
-              </button>
-
-              {/* View Switcher: Overview vs Monthly Reports */}
-              <div className="flex items-center bg-slate-800/90 p-1 rounded-lg border border-slate-700">
-                <button
-                  type="button"
-                  onClick={() => setDashboardSubView('overview')}
-                  className="px-2.5 py-1.5 rounded-md text-xs font-bold transition cursor-pointer flex items-center space-x-1 bg-amber-500 text-slate-950 shadow-xs whitespace-nowrap"
-                >
-                  <BarChart3 className="w-3.5 h-3.5 shrink-0" />
-                  <span>Overview</span>
-                </button>
-                <button
-                  type="button"
-                  data-testid="dashboard-subview-monthly-reports-btn"
-                  onClick={() => setDashboardSubView('monthly_reports')}
-                  className="px-2.5 py-1.5 rounded-md text-xs font-bold transition cursor-pointer flex items-center space-x-1 text-slate-300 hover:text-white whitespace-nowrap"
-                  title="Open Monthly Summary Reports of All Exports and Purchases in CSV"
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <span>Monthly CSV</span>
-                </button>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('purchase_form')}
-                className="px-2.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0"
-              >
-                + Purchase
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('packing_form')}
-                className="px-2.5 py-2 rounded-lg bg-teal-700 hover:bg-teal-600 text-white text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0"
-              >
-                + Packing
-              </button>
-              <button
-                type="button"
-                data-testid="dashboard-open-excel-csv-btn"
-                onClick={() => openDataCenterModal('import', 'purchase')}
-                className="inline-flex items-center space-x-1.5 px-2.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg text-xs font-bold shadow-xs transition cursor-pointer whitespace-nowrap shrink-0"
-                title="Open Excel (.xlsx) & CSV Import / Export Center"
-              >
-                <Upload className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
-                <span>Import / Export</span>
-              </button>
+              <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+                <span className="inline-flex items-baseline gap-2.5 whitespace-nowrap">
+                  <h1 className="zsb-3d-text-lg text-2xl sm:text-3xl font-black tracking-tight text-white whitespace-nowrap leading-tight">
+                    {companyProfile.companyName}
+                  </h1>
+                  <span className="text-slate-500 hidden sm:inline" aria-hidden="true">/</span>
+                </span>
+                <span className="text-base sm:text-lg font-semibold text-amber-400 whitespace-nowrap leading-tight">
+                  Business Control Center
+                </span>
+              </div>
+              <div className="text-xs text-slate-300 pt-0.5 font-mono tabular-nums space-y-0.5 leading-snug">
+                <div>{companyProfile.address}</div>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <span className="text-amber-300 font-semibold whitespace-nowrap">
+                    EMAIL: {companyProfile.email || 'www.zsbaquatics.com'}
+                  </span>
+                  <span className="whitespace-nowrap">
+                    · Rate: 1 RMB = {companyProfile.rmbExchangeRate} {companyProfile.currency} · Synced {new Date().toLocaleDateString('en-GB')}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Right Column (5 Cols): Dedicated All Sheets Directory Panel */}
-          <div className="lg:col-span-5 bg-slate-950/90 rounded-xl p-3.5 border border-slate-800 space-y-2.5 shadow-inner">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-              <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                <FileSpreadsheet className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>ALL WORKBOOK SHEETS DIRECTORY</span>
+          {/* Quick Actions Row */}
+          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+            {/* Low-Stock Notification Badge */}
+            <button
+              type="button"
+              data-testid="dashboard-low-stock-badge"
+              onClick={() => {
+                const el = document.getElementById('dashboard-low-stock-monitor');
+                if (el) {
+                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+              }}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border shadow-xs transition cursor-pointer whitespace-nowrap shrink-0 ${
+                lowStockSummary.totalStockStatus === 'critical_low'
+                  ? 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border-rose-400/50'
+                  : lowStockSummary.totalStockStatus === 'approaching_low'
+                  ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border-amber-400/50'
+                  : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border-emerald-400/50'
+              }`}
+              title={`Total Available Stock: ${lowStockSummary.totalAvailableStockKg.toLocaleString()} KG (Minimum Threshold: ${lowStockSummary.minThresholdKg} KG)`}
+            >
+              <AlertTriangle
+                className={`w-3.5 h-3.5 shrink-0 ${
+                  lowStockSummary.totalStockStatus === 'critical_low'
+                    ? 'text-rose-400'
+                    : lowStockSummary.totalStockStatus === 'approaching_low'
+                    ? 'text-amber-400'
+                    : 'text-emerald-400'
+                }`}
+              />
+              <span>Available Stock</span>
+              <span
+                data-testid="dashboard-low-stock-badge-count"
+                className={`px-1.5 py-0.5 rounded font-mono text-[11px] font-black ${
+                  lowStockSummary.totalStockStatus === 'critical_low'
+                    ? 'bg-rose-500 text-white'
+                    : lowStockSummary.totalStockStatus === 'approaching_low'
+                    ? 'bg-amber-400 text-slate-950'
+                    : 'bg-emerald-500 text-slate-950'
+                }`}
+              >
+                {lowStockSummary.totalAvailableStockKg.toLocaleString()} KG
               </span>
-              <span className="text-[10px] font-mono text-slate-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                15 Active Sheets
-              </span>
+            </button>
+
+            {/* View Switcher: Overview vs Monthly Reports */}
+            <div className="flex items-center bg-slate-800/90 p-1 rounded-lg border border-slate-700">
+              <button
+                type="button"
+                onClick={() => setDashboardSubView('overview')}
+                className="px-2.5 py-1.5 rounded-md text-xs font-bold transition cursor-pointer flex items-center space-x-1 bg-amber-500 text-slate-950 shadow-xs whitespace-nowrap"
+              >
+                <BarChart3 className="w-3.5 h-3.5 shrink-0" />
+                <span>Overview</span>
+              </button>
+              <button
+                type="button"
+                data-testid="dashboard-subview-monthly-reports-btn"
+                onClick={() => setDashboardSubView('monthly_reports')}
+                className="px-2.5 py-1.5 rounded-md text-xs font-bold transition cursor-pointer flex items-center space-x-1 text-slate-300 hover:text-white whitespace-nowrap"
+                title="Open Monthly Summary Reports of All Exports and Purchases in CSV"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>Monthly CSV</span>
+              </button>
             </div>
 
-            {/* 2-Column Grid of All Sheets inside the Right Column Panel */}
-            <div className="grid grid-cols-2 gap-1.5 max-h-56 overflow-y-auto pr-0.5 scrollbar-thin">
-              {[
-                { id: 'dashboard' as const, num: '01', label: 'Executive Overview' },
-                { id: 'purchase_form' as const, num: '02', label: 'Purchase Challan / Bill' },
-                { id: 'packing_form' as const, num: '03', label: 'Export Packing List' },
-                { id: 'air_way_bill' as const, num: 'FRB', label: 'FLIGHT RETURN BILL' },
-                { id: 'payment_form' as const, num: '04', label: 'Supplier Payment Form' },
-                { id: 'exporter_payment_form' as const, num: '05', label: 'Exporter Payment Form' },
-                { id: 'exporter_payment_slip' as const, num: '06', label: 'Exporter Payment Slip 付款单' },
-                { id: 'profit_loss' as const, num: '07', label: 'Loss & Profit Analysis' },
-                { id: 'purchase_db' as const, num: '08', label: 'Purchase Database' },
-                { id: 'packing_db' as const, num: '09', label: 'Packing List Database' },
-                { id: 'payment_db' as const, num: '10', label: 'Payment Vouchers DB' },
-                { id: 'search_reports' as const, num: '11', label: 'Search & Audit Reports' },
-                { id: 'settings' as const, num: '12', label: 'Settings & Config' },
-                { id: 'audit_logs' as const, num: '13', label: 'System Audit Logs' },
-                { id: 'administration' as const, num: 'ADM', label: 'Administration' },
-              ].map((sheet) => {
-                const isActive = activeTab === sheet.id;
-                return (
-                  <button
-                    key={sheet.id}
-                    type="button"
-                    onClick={() => setActiveTab(sheet.id)}
-                    className={`flex items-center space-x-1.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-all text-left border cursor-pointer ${
-                      isActive
-                        ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow-xs'
-                        : 'bg-slate-900/90 hover:bg-slate-800 text-slate-200 hover:text-white border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    <span
-                      className={`w-4 h-4 rounded text-[10px] font-mono flex items-center justify-center font-bold shrink-0 ${
-                        isActive
-                          ? 'bg-slate-950 text-amber-300'
-                          : 'bg-slate-800 text-amber-400 border border-slate-700'
-                      }`}
-                    >
-                      {sheet.num}
-                    </span>
-                    <span className="truncate text-[11px]">{sheet.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab('purchase_form')}
+              className="px-2.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0"
+            >
+              + Purchase
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('packing_form')}
+              className="px-2.5 py-2 rounded-lg bg-teal-700 hover:bg-teal-600 text-white text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0"
+            >
+              + Packing
+            </button>
+            <button
+              type="button"
+              data-testid="dashboard-open-excel-csv-btn"
+              onClick={() => openDataCenterModal('import', 'purchase')}
+              className="inline-flex items-center space-x-1.5 px-2.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg text-xs font-bold shadow-xs transition cursor-pointer whitespace-nowrap shrink-0"
+              title="Open Excel (.xlsx) & CSV Import / Export Center"
+            >
+              <Upload className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
+              <span>Import / Export</span>
+            </button>
           </div>
         </div>
 

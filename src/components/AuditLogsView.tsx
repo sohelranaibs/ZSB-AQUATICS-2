@@ -23,6 +23,9 @@ import {
   RotateCcw,
 } from 'lucide-react';
 
+import { DateRangePicker } from './DateRangePicker.tsx';
+import { DatePresetKey } from '../utils/dateFilters.ts';
+
 const MODULE_OPTIONS: ('ALL' | AuditLogModule)[] = [
   'ALL',
   'Purchase',
@@ -52,6 +55,9 @@ export const AuditLogsView: React.FC = () => {
   >('ALL');
   const [moduleFilter, setModuleFilter] = useState<'ALL' | AuditLogModule>('ALL');
   const [dateFilter, setDateFilter] = useState<string>('');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [activePreset, setActivePreset] = useState<DatePresetKey>('all');
 
   // Manual Admin Audit Entry Form state
   const [manualAction, setManualAction] = useState<AuditLogAction>('CREATE');
@@ -69,8 +75,10 @@ export const AuditLogsView: React.FC = () => {
         actionFilter,
         moduleFilter,
         dateFilter,
+        startDate,
+        endDate,
       }),
-    [auditLogs, searchQuery, actionFilter, moduleFilter, dateFilter]
+    [auditLogs, searchQuery, actionFilter, moduleFilter, dateFilter, startDate, endDate]
   );
 
   const handleExportCSV = () => {
@@ -458,7 +466,7 @@ export const AuditLogsView: React.FC = () => {
                 ))}
               </div>
 
-              {(searchQuery || actionFilter !== 'ALL' || moduleFilter !== 'ALL' || dateFilter) && (
+              {(searchQuery || actionFilter !== 'ALL' || moduleFilter !== 'ALL' || dateFilter || startDate || endDate) && (
                 <button
                   type="button"
                   data-testid="audit-reset-filters-btn"
@@ -467,6 +475,9 @@ export const AuditLogsView: React.FC = () => {
                     setActionFilter('ALL');
                     setModuleFilter('ALL');
                     setDateFilter('');
+                    setStartDate('');
+                    setEndDate('');
+                    setActivePreset('all');
                   }}
                   className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
                 >
@@ -476,9 +487,23 @@ export const AuditLogsView: React.FC = () => {
               )}
             </div>
 
-            {/* Search, Module & Date Filter Row */}
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
-              <div className="sm:col-span-6 relative">
+            {/* Date Range Picker Filter */}
+            <DateRangePicker
+              startDate={startDate}
+              endDate={endDate}
+              activePreset={activePreset}
+              onPresetChange={(p) => setActivePreset(p)}
+              onDateRangeChange={(start, end, preset) => {
+                setStartDate(start);
+                setEndDate(end);
+                if (preset) setActivePreset(preset);
+              }}
+              label="Audit Log Time Range"
+            />
+
+            {/* Search & Module Filter Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 pt-1">
+              <div className="sm:col-span-8 relative">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
@@ -490,7 +515,7 @@ export const AuditLogsView: React.FC = () => {
                 />
               </div>
 
-              <div className="sm:col-span-3 flex items-center gap-1.5">
+              <div className="sm:col-span-4 flex items-center gap-1.5">
                 <Filter className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                 <select
                   aria-label="Filter by Module"
@@ -507,17 +532,6 @@ export const AuditLogsView: React.FC = () => {
                     </option>
                   ))}
                 </select>
-              </div>
-
-              <div className="sm:col-span-3">
-                <input
-                  type="date"
-                  aria-label="Filter by Date"
-                  data-testid="audit-date-filter"
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
-                  className="w-full px-2.5 py-1.5 text-xs font-mono bg-white border border-slate-300 rounded-lg text-slate-800"
-                />
               </div>
             </div>
           </div>

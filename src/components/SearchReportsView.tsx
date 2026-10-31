@@ -100,6 +100,37 @@ export const SearchReportsView: React.FC = () => {
   };
 
   // Perform reactive multi-ledger filtering
+  const allKindsFiltered = useMemo(() => {
+    return filterFinancialTransactions(
+      purchases,
+      packings,
+      payments,
+      otherCosts,
+      {
+        startDate,
+        endDate,
+        searchQuery,
+        shipper: shipperFilter,
+        supplier: supplierFilter,
+        shippingMark: shippingMarkFilter,
+        kind: 'all',
+      },
+      companyProfile.rmbExchangeRate || 18.0
+    );
+  }, [
+    purchases,
+    packings,
+    payments,
+    otherCosts,
+    startDate,
+    endDate,
+    searchQuery,
+    shipperFilter,
+    supplierFilter,
+    shippingMarkFilter,
+    companyProfile.rmbExchangeRate,
+  ]);
+
   const {
     filteredPurchases,
     filteredPackings,
@@ -107,6 +138,9 @@ export const SearchReportsView: React.FC = () => {
     filteredOtherCosts,
     unifiedTransactions,
   } = useMemo(() => {
+    if (activeKindTab === 'all') {
+      return allKindsFiltered;
+    }
     return filterFinancialTransactions(
       purchases,
       packings,
@@ -124,6 +158,7 @@ export const SearchReportsView: React.FC = () => {
       companyProfile.rmbExchangeRate || 18.0
     );
   }, [
+    allKindsFiltered,
     purchases,
     packings,
     payments,
@@ -140,25 +175,6 @@ export const SearchReportsView: React.FC = () => {
 
   // Compute consolidated financial metrics based on the active date range
   const financialSummary = useMemo(() => {
-    // Note: compute summary metrics from all 4 datasets matching the date range & secondary filters,
-    // ignoring the UI tab filter so the financial summary cards always show the full picture.
-    const allKindsFiltered = filterFinancialTransactions(
-      purchases,
-      packings,
-      payments,
-      otherCosts,
-      {
-        startDate,
-        endDate,
-        searchQuery,
-        shipper: shipperFilter,
-        supplier: supplierFilter,
-        shippingMark: shippingMarkFilter,
-        kind: 'all',
-      },
-      companyProfile.rmbExchangeRate || 18.0
-    );
-
     return calculateConsolidatedFinancials(
       allKindsFiltered.filteredPurchases,
       allKindsFiltered.filteredPackings,
@@ -166,19 +182,7 @@ export const SearchReportsView: React.FC = () => {
       allKindsFiltered.filteredOtherCosts,
       companyProfile.rmbExchangeRate || 18.0
     );
-  }, [
-    purchases,
-    packings,
-    payments,
-    otherCosts,
-    startDate,
-    endDate,
-    searchQuery,
-    shipperFilter,
-    supplierFilter,
-    shippingMarkFilter,
-    companyProfile.rmbExchangeRate,
-  ]);
+  }, [allKindsFiltered, companyProfile.rmbExchangeRate]);
 
   // Handle Export Filtered Transactions to CSV
   const handleExportFilteredCSV = () => {

@@ -161,6 +161,32 @@ function buildPurchasePaymentLinks(
     purchaseToPayments.set(p.id, []);
   }
 
+  // Pre-build index maps for O(1) lookups
+  const purchaseByInvoiceRef = new Map<string, PurchaseRecord>();
+  const purchasesBySuffix = new Map<string, PurchaseRecord[]>();
+  const purchasesBySupplier = new Map<string, PurchaseRecord[]>();
+
+  for (const p of purchases) {
+    const pInv = normalizeInvoiceRef(p.invoiceNumber);
+    if (pInv) {
+      purchaseByInvoiceRef.set(pInv, p);
+    }
+
+    const pInvSuffix = pInv.replace(/^INV-/i, '');
+    if (pInvSuffix) {
+      const existingSuffix = purchasesBySuffix.get(pInvSuffix) || [];
+      existingSuffix.push(p);
+      purchasesBySuffix.set(pInvSuffix, existingSuffix);
+    }
+
+    const party = normalizePartyName(p.description);
+    if (party) {
+      const existingParty = purchasesBySupplier.get(party) || [];
+      existingParty.push(p);
+      purchasesBySupplier.set(party, existingParty);
+    }
+  }
+
   // Pass 1: Explicit invoice reference or direct INV- <-> PAY- code match
   for (const pm of supplierPayments) {
     const pmInv = normalizeInvoiceRef(pm.invoiceNumber);
@@ -168,35 +194,40 @@ function buildPurchasePaymentLinks(
     const pmRemarks = String(pm.remarks || '').toUpperCase();
     const pmExportRef = normalizeInvoiceRef(pm.exportGoodsRef);
 
-    const explicitMatch = purchases.find((p) => {
-      const pInv = normalizeInvoiceRef(p.invoiceNumber);
-      const pInvSuffix = pInv.replace(/^INV-/i, '');
+    let explicitMatch: PurchaseRecord | undefined = undefined;
 
-      if (pInv && (pmRemarks.includes(pInv) || pmExportRef === pInv)) {
-        return true;
+    // 1. Direct exportGoodsRef match
+    if (pmExportRef && purchaseByInvoiceRef.has(pmExportRef)) {
+      explicitMatch = purchaseByInvoiceRef.get(pmExportRef);
+    }
+
+    // 2. Item invoiceNumber match
+    if (!explicitMatch && Array.isArray(pm.items)) {
+      for (const item of pm.items) {
+        const itemInv = normalizeInvoiceRef(item.invoiceNumber);
+        if (itemInv && purchaseByInvoiceRef.has(itemInv)) {
+          explicitMatch = purchaseByInvoiceRef.get(itemInv);
+          break;
+        }
       }
-      if (
-        Array.isArray(pm.items) &&
-        pm.items.some(
-          (item) =>
-            normalizeInvoiceRef(item.invoiceNumber) === pInv ||
-            String(item.description || '')
-              .toUpperCase()
-              .includes(pInv)
-        )
-      ) {
-        return true;
-      }
-      if (
-        pInvSuffix &&
-        pmInvSuffix &&
-        pInvSuffix === pmInvSuffix &&
-        normalizePartyName(p.description) === normalizePartyName(pm.description)
-      ) {
-        return true;
-      }
-      return false;
-    });
+    }
+
+    // 3. Suffix + Supplier Match
+    if (!explicitMatch && pmInvSuffix && purchasesBySuffix.has(pmInvSuffix)) {
+      const pmParty = normalizePartyName(pm.description);
+      const candidates = purchasesBySuffix.get(pmInvSuffix)!;
+      explicitMatch = candidates.find(
+        (p) => normalizePartyName(p.description) === pmParty
+      );
+    }
+
+    // 4. Remarks search fallback (if still no match)
+    if (!explicitMatch && pmRemarks) {
+      explicitMatch = purchases.find((p) => {
+        const pInv = normalizeInvoiceRef(p.invoiceNumber);
+        return pInv ? pmRemarks.includes(pInv) : false;
+      });
+    }
 
     if (explicitMatch) {
       purchaseToPayments.get(explicitMatch.id)?.push(pm);
@@ -211,11 +242,8 @@ function buildPurchasePaymentLinks(
     const pmSupplier = normalizePartyName(pm.description);
     if (!pmSupplier) continue;
 
-    // Prefer purchases of the same supplier that don't yet have a payment linked
-    const candidates = purchases.filter(
-      (p) => normalizePartyName(p.description) === pmSupplier
-    );
-    if (candidates.length === 0) continue;
+    const candidates = purchasesBySupplier.get(pmSupplier);
+    if (!candidates || candidates.length === 0) continue;
 
     const unlinkedCandidates = candidates.filter(
       (p) => (purchaseToPayments.get(p.id)?.length || 0) === 0

@@ -76,6 +76,7 @@ import {
   CreateAuditLogInput,
   DEFAULT_ADMIN_ACCOUNTS,
 } from '../utils/auditLogger.ts';
+import { indexedStorageDriver, DB_STORE_NAMES } from '../utils/indexedStorage.ts';
 
 const createEmptyPackingDraftRows = (): PackingItemRow[] =>
   ['1', '2', '3', '4', '5'].map((id) => ({
@@ -743,6 +744,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const debouncedSaveTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
   const persistWithSyncIndicator = (entityLabel: string, writeFn: () => void) => {
     try {
       if (!isLiveSyncEnabledRef.current) {
@@ -754,19 +757,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
-      writeFn();
-      if (!isInitialMountRef.current) {
-        setHasUnsyncedChanges(false);
-        setSyncStatus('saving');
-        setLastSyncedEntity(entityLabel);
-        if (syncTimerRef.current) {
-          clearTimeout(syncTimerRef.current);
-        }
-        syncTimerRef.current = setTimeout(() => {
-          setSyncStatus('synced');
-          setLastSyncedAt(new Date().toISOString());
-        }, 550);
+      if (isInitialMountRef.current) {
+        return;
       }
+
+      setHasUnsyncedChanges(false);
+      setSyncStatus('saving');
+      setLastSyncedEntity(entityLabel);
+
+      const existingTimer = debouncedSaveTimersRef.current.get(entityLabel);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+      }
+
+      const timer = setTimeout(() => {
+        try {
+          writeFn();
+          if (syncTimerRef.current) {
+            clearTimeout(syncTimerRef.current);
+          }
+          syncTimerRef.current = setTimeout(() => {
+            setSyncStatus('synced');
+            setLastSyncedAt(new Date().toISOString());
+          }, 300);
+        } catch (e) {
+          console.error(e);
+          setSyncStatus('error');
+        }
+      }, 250);
+
+      debouncedSaveTimersRef.current.set(entityLabel, timer);
     } catch (e) {
       console.error(e);
       setSyncStatus('error');
@@ -789,12 +809,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     persistWithSyncIndicator('Purchase DB', () => {
       localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify(purchases));
+      indexedStorageDriver.saveCollection(DB_STORE_NAMES.PURCHASES, purchases);
     });
   }, [purchases]);
 
   useEffect(() => {
     persistWithSyncIndicator('Packing DB', () => {
       localStorage.setItem(STORAGE_KEYS.PACKINGS, JSON.stringify(packings));
+      indexedStorageDriver.saveCollection(DB_STORE_NAMES.PACKINGS, packings);
     });
   }, [packings]);
 
@@ -807,12 +829,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     persistWithSyncIndicator('Payment DB', () => {
       localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
+      indexedStorageDriver.saveCollection(DB_STORE_NAMES.PAYMENTS, payments);
     });
   }, [payments]);
 
   useEffect(() => {
     persistWithSyncIndicator('Costing DB', () => {
       localStorage.setItem(STORAGE_KEYS.OTHER_COSTS, JSON.stringify(otherCosts));
+      indexedStorageDriver.saveCollection(DB_STORE_NAMES.OTHER_COSTS, otherCosts);
     });
   }, [otherCosts]);
 
@@ -857,6 +881,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (syncTimerRef.current) {
         clearTimeout(syncTimerRef.current);
       }
+      debouncedSaveTimersRef.current.forEach((t) => clearTimeout(t));
     };
   }, []);
 

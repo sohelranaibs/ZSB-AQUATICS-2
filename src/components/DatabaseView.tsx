@@ -74,6 +74,11 @@ import {
   validateDatabaseCellValue,
 } from '../utils/databaseFieldValidation.ts';
 import { DatabaseValidatedCell } from './DatabaseValidatedCell.tsx';
+import {
+  buildDatasetIndices,
+  queryIndexedRecords,
+} from '../utils/indexedStorage.ts';
+import { DateRangePicker } from './DateRangePicker.tsx';
 
 interface DatabaseViewProps {
   initialType?: 'purchase' | 'packing' | 'payment';
@@ -482,9 +487,52 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     }
   };
 
-  // Filtered lists reactive to search term, date range, reconciliation status, and field validation filter
+  // In-memory dataset indices for fast indexed search & filtering
+  const purchaseIndices = useMemo(
+    () =>
+      buildDatasetIndices(purchases, {
+        getInvoice: (p) => p.invoiceNumber,
+        getDate: (p) => p.date,
+        getParty: (p) => p.description,
+        getSearchableText: (p) =>
+          `${p.invoiceNumber} ${p.description} ${p.contactNumber || ''} ${p.remarks || ''}`,
+      }),
+    [purchases]
+  );
+
+  const packingIndices = useMemo(
+    () =>
+      buildDatasetIndices(packings, {
+        getInvoice: (p) => p.invoiceNumber,
+        getDate: (p) => p.packingDate || p.fromDate || p.toDate,
+        getParty: (p) => p.shippingMark,
+        getSearchableText: (p) =>
+          `${p.invoiceNumber} ${p.shippingMark} ${p.destination} ${p.shipper} ${p.flight} ${p.remarks || ''}`,
+      }),
+    [packings]
+  );
+
+  const paymentIndices = useMemo(
+    () =>
+      buildDatasetIndices(payments, {
+        getInvoice: (p) => p.invoiceNumber,
+        getDate: (p) => p.date,
+        getParty: (p) => p.description,
+        getSearchableText: (p) =>
+          `${p.invoiceNumber} ${p.description} ${p.shippingMark || ''} ${p.status} ${p.remarks || ''}`,
+      }),
+    [payments]
+  );
+
+  // Filtered lists reactive to search term, date range, reconciliation status, and field validation filter using index queries
   const filteredPurchases = useMemo(() => {
-    return purchases.filter((p) => {
+    const candidateRecords = queryIndexedRecords(purchases, purchaseIndices, {
+      searchTerm,
+      startDate,
+      endDate,
+    });
+
+    return candidateRecords.filter((p) => {
       if (
         validationFilter === 'invalid_only' &&
         !validationSummary.invalidRecordIds.includes(p.id)
@@ -498,16 +546,11 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
       if (reconciliationFilter === 'reconciled' && rec?.status !== 'RECONCILED') {
         return false;
       }
-      const matchesSearch =
-        !searchTerm.trim() ||
-        p.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (rec?.label || '').toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesDate = isDateInRange(p.date, startDate, endDate);
-      return matchesSearch && matchesDate;
+      return true;
     });
   }, [
     purchases,
+    purchaseIndices,
     validationFilter,
     validationSummary.invalidRecordIds,
     smartSyncAnalysis,
@@ -518,25 +561,24 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   ]);
 
   const filteredPackings = useMemo(() => {
-    return packings.filter((pkg) => {
+    const candidateRecords = queryIndexedRecords(packings, packingIndices, {
+      searchTerm,
+      startDate,
+      endDate,
+    });
+
+    return candidateRecords.filter((pkg) => {
       if (
         validationFilter === 'invalid_only' &&
         !validationSummary.invalidRecordIds.includes(pkg.id)
       ) {
         return false;
       }
-      const matchesSearch =
-        !searchTerm.trim() ||
-        pkg.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        pkg.shippingMark.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        pkg.destination.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        pkg.shipper.toLowerCase().includes(searchTerm.toLowerCase());
-      const dateToMatch = pkg.packingDate || pkg.fromDate || pkg.toDate;
-      const matchesDate = isDateInRange(dateToMatch, startDate, endDate);
-      return matchesSearch && matchesDate;
+      return true;
     });
   }, [
     packings,
+    packingIndices,
     validationFilter,
     validationSummary.invalidRecordIds,
     searchTerm,
@@ -545,7 +587,13 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   ]);
 
   const filteredPayments = useMemo(() => {
-    return payments.filter((pm) => {
+    const candidateRecords = queryIndexedRecords(payments, paymentIndices, {
+      searchTerm,
+      startDate,
+      endDate,
+    });
+
+    return candidateRecords.filter((pm) => {
       if (
         validationFilter === 'invalid_only' &&
         !validationSummary.invalidRecordIds.includes(pm.id)
@@ -563,18 +611,11 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
       if (reconciliationFilter === 'reconciled' && rec?.status !== 'RECONCILED') {
         return false;
       }
-      const matchesSearch =
-        !searchTerm.trim() ||
-        pm.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        pm.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (pm.shippingMark || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        pm.status.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (rec?.label || '').toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesDate = isDateInRange(pm.date, startDate, endDate);
-      return matchesSearch && matchesDate;
+      return true;
     });
   }, [
     payments,
+    paymentIndices,
     validationFilter,
     validationSummary.invalidRecordIds,
     paymentCategoryFilter,
@@ -1153,116 +1194,30 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
       )}
 
       {/* Date-Range Filter & Preset Controls */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
-          <div className="flex items-center space-x-2">
-            <div className="p-1.5 bg-blue-50 text-blue-700 rounded-lg">
-              <Calendar className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">
-                Date Range Filter
-              </span>
-              <p className="text-[11px] text-slate-500">
-                Narrow down records by invoice, packing, or voucher transaction dates
-              </p>
-            </div>
-          </div>
-
-          {/* Quick Presets */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] text-slate-400 font-semibold mr-1">Presets:</span>
-            {(
-              [
-                { key: 'all', label: 'All Time' },
-                { key: 'today', label: 'Today' },
-                { key: 'this_week', label: 'This Week' },
-                { key: 'this_month', label: 'This Month' },
-                { key: 'last_30_days', label: 'Last 30 Days' },
-                { key: 'this_year', label: 'This Year' },
-              ] as const
-            ).map((p) => {
-              return (
-                <button
-                  key={p.key}
-                  type="button"
-                  onClick={() => applyPreset(p.key)}
-                  className={`px-2.5 py-1 rounded text-[11px] font-semibold transition ${
-                    activePreset === p.key
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Date Inputs & Status */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center space-x-2">
-              <label htmlFor="filter-from-date" className="text-xs font-semibold text-slate-600">
-                From Date:
-              </label>
-              <input
-                id="filter-from-date"
-                type="date"
-                value={startDate}
-                onChange={(e) => {
-                  setStartDate(e.target.value);
-                  setActivePreset('all');
-                  setSelectedIds([]);
-                }}
-                className="px-2.5 py-1 text-xs border border-slate-300 rounded-md focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-800 font-mono"
-              />
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <label htmlFor="filter-to-date" className="text-xs font-semibold text-slate-600">
-                To Date:
-              </label>
-              <input
-                id="filter-to-date"
-                type="date"
-                value={endDate}
-                onChange={(e) => {
-                  setEndDate(e.target.value);
-                  setActivePreset('all');
-                  setSelectedIds([]);
-                }}
-                className="px-2.5 py-1 text-xs border border-slate-300 rounded-md focus:ring-1 focus:ring-blue-500 bg-slate-50 focus:bg-white text-slate-800 font-mono"
-              />
-            </div>
-
-            {isDateFilterActive && (
-              <button
-                type="button"
-                onClick={clearDateFilter}
-                className="flex items-center space-x-1 px-2.5 py-1 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-md transition"
-                title="Clear date filter"
-              >
-                <RotateCcw className="w-3 h-3 text-slate-500" />
-                <span>Reset Dates</span>
-              </button>
-            )}
-          </div>
-
-          {/* Filter Status Badge */}
-          <div className="flex items-center space-x-2 text-xs">
-            <span className="text-slate-500">
-              Showing{' '}
-              <strong className="text-blue-900 font-bold">{currentFilteredCount}</strong> of{' '}
-              <strong className="text-slate-700">{totalUnfilteredCount}</strong> records
+      <div className="space-y-2">
+        <DateRangePicker
+          startDate={startDate}
+          endDate={endDate}
+          activePreset={activePreset}
+          onPresetChange={(p) => setActivePreset(p)}
+          onDateRangeChange={(start, end, preset) => {
+            setStartDate(start);
+            setEndDate(end);
+            if (preset) setActivePreset(preset);
+            setSelectedIds([]);
+          }}
+          label="Filter Database Records by Date Range"
+        />
+        <div className="flex items-center justify-between text-xs px-1 text-slate-500">
+          <span>
+            Showing <strong className="text-blue-900 font-bold">{currentFilteredCount}</strong> of{' '}
+            <strong className="text-slate-700">{totalUnfilteredCount}</strong> records
+          </span>
+          {isDateFilterActive && (
+            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">
+              Date Filter Active
             </span>
-            {isDateFilterActive && (
-              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">
-                Date Filter Active
-              </span>
-            )}
-          </div>
+          )}
         </div>
       </div>
 

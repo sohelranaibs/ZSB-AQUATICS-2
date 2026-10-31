@@ -5,6 +5,7 @@ import {
   AuthUser,
 } from '../types/index.ts';
 import { DEFAULT_SUPER_ADMIN_PASSWORD } from './superAdminAuth.ts';
+import { isDateInRange } from './dateFilters.ts';
 
 export const ZSB_BANNER_IMAGE_URL =
   '/assets/aistudio/WhatsApp_Image_2026-10-30_at_12.38.58_70038e4b.jpeg';
@@ -219,10 +220,12 @@ export interface AuditLogFilterOptions {
   actionFilter?: 'ALL' | 'ENTRY' | 'EDIT' | 'DELETE' | 'AUTH';
   moduleFilter?: 'ALL' | AuditLogModule;
   dateFilter?: string; // YYYY-MM-DD or YYYY-MM
+  startDate?: string;
+  endDate?: string;
 }
 
 /**
- * Filters audit logs by search query, action category, module, and date prefix.
+ * Filters audit logs by search query, action category, module, and date range.
  */
 export function filterAuditLogs(
   logs: AuditLogRecord[],
@@ -233,6 +236,8 @@ export function filterAuditLogs(
     actionFilter = 'ALL',
     moduleFilter = 'ALL',
     dateFilter = '',
+    startDate = '',
+    endDate = '',
   } = options;
 
   const q = searchQuery.trim().toLowerCase();
@@ -257,6 +262,10 @@ export function filterAuditLogs(
     }
 
     if (cleanDate && !(log.timestamp || '').startsWith(cleanDate)) {
+      return false;
+    }
+
+    if ((startDate || endDate) && !isDateInRange(log.timestamp, startDate, endDate)) {
       return false;
     }
 

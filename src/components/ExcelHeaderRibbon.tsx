@@ -349,54 +349,6 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
 
           <button
             type="button"
-            data-testid="ribbon-excel-csv-btn"
-            onClick={() => openDataCenterModal('import', getDatasetForActiveTab())}
-            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded shadow-sm transition cursor-pointer"
-            title="Import & Export Data from Excel (.xlsx) and CSV (.csv) (Shortcut: Ctrl+E)"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 stroke-[2.2]" />
-            <span>Excel / CSV</span>
-          </button>
-
-          <button
-            type="button"
-            data-testid="global-export-pdf-btn"
-            data-last-exported-pdf={lastExportedPdfFilename || ''}
-            disabled={isExportingGlobalPdf}
-            onClick={() => {
-              void exportCurrentViewToPdf();
-            }}
-            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold bg-rose-600 hover:bg-rose-500 disabled:opacity-60 text-white rounded shadow-sm transition cursor-pointer"
-            title="Download the current view's table data as a professionally formatted PDF using official print styles"
-          >
-            {isExportingGlobalPdf ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Exporting PDF...</span>
-              </>
-            ) : (
-              <>
-                <FileDown className="w-3.5 h-3.5" />
-                <span>Export View PDF</span>
-              </>
-            )}
-          </button>
-
-          <button
-            type="button"
-            data-testid="ribbon-print-preview-btn"
-            onClick={() => {
-              void exportCurrentViewToPdf({ openPreviewOnly: true });
-            }}
-            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded shadow-sm transition cursor-pointer"
-            title="Open Document Print & PDF Download Preview for Current View (Shortcut: Ctrl+P)"
-          >
-            <Printer className="w-3.5 h-3.5" />
-            <span>Print / PDF</span>
-          </button>
-
-          <button
-            type="button"
             data-testid="ribbon-snapshots-btn"
             onClick={openSnapshotModal}
             className="flex items-center space-x-1.5 px-2.5 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded shadow-sm transition whitespace-nowrap shrink-0 cursor-pointer"
@@ -561,57 +513,6 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
           <span>1 RMB = {companyProfile.rmbExchangeRate} TK</span>
         </div>
       </div>
-
-      {/* Persistent Global Workbook Sheet Tabs Bar (Always visible on every sheet) */}
-      <nav
-        aria-label="Workbook Sheets Navigation"
-        data-testid="global-workbook-sheets-nav"
-        className="bg-slate-950/95 px-3 py-1.5 border-b border-slate-800 flex flex-wrap items-center gap-1.5"
-      >
-        <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-400/90 px-1.5 shrink-0 flex items-center gap-1">
-          <Layers className="w-3 h-3 text-amber-400" />
-          <span>Sheets:</span>
-        </span>
-        {workbookSheets.map((sheet) => {
-          const isActive = activeTab === sheet.id;
-          return (
-            <button
-              key={sheet.id}
-              type="button"
-              data-testid={`ribbon-sheet-tab-${sheet.id}`}
-              onClick={() => setActiveTab(sheet.id)}
-              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all whitespace-nowrap shrink-0 border cursor-pointer ${
-                isActive
-                  ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-sm ring-1 ring-amber-300/60'
-                  : 'bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white border-slate-800 hover:border-slate-600'
-              }`}
-              title={`Switch to Sheet [${sheet.num}] ${sheet.label}`}
-            >
-              <span
-                className={`px-1 py-0.2 rounded text-[9px] font-mono font-black ${
-                  isActive
-                    ? 'bg-slate-950 text-amber-300'
-                    : 'bg-slate-800 text-amber-400 border border-slate-700'
-                }`}
-              >
-                {sheet.num}
-              </span>
-              <span>{sheet.shortLabel}</span>
-              {sheet.badge !== undefined && (
-                <span
-                  className={`px-1 rounded-full text-[9px] font-mono font-extrabold ${
-                    isActive
-                      ? 'bg-slate-950/20 text-slate-950'
-                      : 'bg-slate-800 text-emerald-400'
-                  }`}
-                >
-                  {sheet.badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
     </header>
   );
 };

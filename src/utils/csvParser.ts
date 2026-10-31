@@ -47,7 +47,124 @@ export function splitCsvLine(line: string): string[] {
 }
 
 /**
- * Parses CSV lines into PurchaseRecords
+ * Builds a normalized group key for a Purchase record based on
+ * Purchasing Supplier Name (description) and Date.
+ */
+export function buildPurchaseSupplierGroupKey(input: {
+  description: string;
+  date: string;
+}): string {
+  const normSupplier = String(input.description || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toUpperCase();
+  const normDate = String(input.date || '').trim();
+  return `${normSupplier}||${normDate}`;
+}
+
+/**
+ * Merges PurchaseRecords that share the same Purchasing Supplier Name (description)
+ * and Date into a single PurchaseRecord with 1 invoice/purchasing invoice number
+ * and all item rows combined.
+ */
+export function mergePurchaseRecordsBySupplierAndDate(
+  records: Omit<PurchaseRecord, 'id' | 'createdAt'>[],
+  startCount: number = 0
+): Omit<PurchaseRecord, 'id' | 'createdAt'>[] {
+  const groupMap = new Map<string, Omit<PurchaseRecord, 'id' | 'createdAt'>>();
+  const usedInvoiceNumbers = new Set<string>();
+  let groupCount = startCount;
+
+  for (const rec of records) {
+    const key = buildPurchaseSupplierGroupKey({
+      description: rec.description,
+      date: rec.date,
+    });
+
+    const normalizedItems: PurchaseItemRow[] = (rec.items || []).map((it, idx) => {
+      const quantity = Number(it.quantity) || 0;
+      const rate = Number(it.rate) || 0;
+      const totalAmount = calculatePurchaseRowTotal(quantity, rate);
+      return {
+        ...it,
+        id: it.id || `pi-merged-${Date.now()}-${groupMap.size}-${idx}`,
+        item: String(it.item || 'F1').trim(),
+        quantity,
+        rate,
+        totalAmount,
+        previousAmount: 0,
+        paidAmount: 0,
+        balance: 0,
+      };
+    });
+
+    if (!groupMap.has(key)) {
+      const explicitInvoice = String(rec.invoiceNumber || '').trim();
+      const invoiceNumber =
+        explicitInvoice && !usedInvoiceNumbers.has(explicitInvoice.toUpperCase())
+          ? explicitInvoice
+          : generateInvoiceNumber('PUR', groupCount);
+      usedInvoiceNumbers.add(invoiceNumber.toUpperCase());
+      groupCount++;
+
+      const previousAmount = Number(rec.previousAmount) || 0;
+      const paidAmount = Number(rec.paidAmount) || 0;
+      const totals = calculatePurchaseTotals(normalizedItems, previousAmount, paidAmount);
+
+      groupMap.set(key, {
+        ...rec,
+        invoiceNumber,
+        date: String(rec.date || '').trim(),
+        description: String(rec.description || '')
+          .trim()
+          .replace(/\s+/g, ' '),
+        contactNumber: String(rec.contactNumber || '').trim(),
+        items: normalizedItems,
+        totalQty: totals.totalQty,
+        totalAmount: totals.totalAmount,
+        previousAmount: totals.previousAmount,
+        paidAmount: totals.paidAmount,
+        balance: totals.balance,
+      });
+    } else {
+      const existing = groupMap.get(key)!;
+      const combinedItems: PurchaseItemRow[] = [
+        ...existing.items,
+        ...normalizedItems.map((it, idx) => ({
+          ...it,
+          id: `pi-merged-${Date.now()}-${existing.items.length + idx}`,
+        })),
+      ];
+      const combinedPrevious =
+        (Number(existing.previousAmount) || 0) + (Number(rec.previousAmount) || 0);
+      const combinedPaid =
+        (Number(existing.paidAmount) || 0) + (Number(rec.paidAmount) || 0);
+      const totals = calculatePurchaseTotals(
+        combinedItems,
+        combinedPrevious,
+        combinedPaid
+      );
+
+      groupMap.set(key, {
+        ...existing,
+        contactNumber: existing.contactNumber || String(rec.contactNumber || '').trim(),
+        items: combinedItems,
+        totalQty: totals.totalQty,
+        totalAmount: totals.totalAmount,
+        previousAmount: totals.previousAmount,
+        paidAmount: totals.paidAmount,
+        balance: totals.balance,
+      });
+    }
+  }
+
+  return Array.from(groupMap.values());
+}
+
+/**
+ * Parses CSV lines into PurchaseRecords.
+ * Rows sharing the same Purchasing Supplier Name and Date are automatically
+ * merged into a single PurchaseRecord with 1 purchasing invoice number.
  * Expected header or line format:
  * Supplier, Date, Item, Quantity, Rate, [PreviousAmount], [PaidAmount], [ContactNumber], [InvoiceNumber]
  */
@@ -60,11 +177,8 @@ export function parsePurchasesCSV(
     .map((l) => l.trim())
     .filter((l) => l.length > 0);
 
-  const records: Omit<PurchaseRecord, 'id' | 'createdAt'>[] = [];
+  const rawRecords: Omit<PurchaseRecord, 'id' | 'createdAt'>[] = [];
   const errors: string[] = [];
-
-  // Group items by invoice or create one record per row or group by (Supplier + Date)
-  let count = startCount;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -84,22 +198,20 @@ export function parsePurchasesCSV(
       continue;
     }
 
-    const supplier = parts[0] || 'ABDULLAH VAI';
-    const date = parts[1] || new Date().toISOString().slice(0, 10);
-    const item = parts[2] || 'F1';
+    const supplier = (parts[0] || 'ABDULLAH VAI').trim();
+    const date = (parts[1] || new Date().toISOString().slice(0, 10)).trim();
+    const item = (parts[2] || 'F1').trim();
     const quantity = parseFloat(parts[3]) || 0;
     const rate = parseFloat(parts[4]) || 0;
     const previousAmount = parts[5] ? parseFloat(parts[5]) || 0 : 0;
     const paidAmount = parts[6] ? parseFloat(parts[6]) || 0 : 0;
-    const contact = parts[7] || '';
-    const invoiceNumber = parts[8] || generateInvoiceNumber('PUR', count);
+    const contact = (parts[7] || '').trim();
+    const explicitInvoiceNumber = parts[8] ? parts[8].trim() : '';
 
     if (quantity <= 0) {
       errors.push(`Row ${i + 1}: Quantity must be greater than 0.`);
       continue;
     }
-
-    count++;
 
     const itemRow: PurchaseItemRow = {
       id: `pi-bulk-${Date.now()}-${i}`,
@@ -114,8 +226,8 @@ export function parsePurchasesCSV(
 
     const totals = calculatePurchaseTotals([itemRow], previousAmount, paidAmount);
 
-    records.push({
-      invoiceNumber,
+    rawRecords.push({
+      invoiceNumber: explicitInvoiceNumber,
       date,
       description: supplier,
       contactNumber: contact,
@@ -129,11 +241,13 @@ export function parsePurchasesCSV(
     });
   }
 
+  const records = mergePurchaseRecordsBySupplierAndDate(rawRecords, startCount);
+
   return {
     success: records.length > 0,
     records,
     errors,
-    totalParsedRows: records.length,
+    totalParsedRows: rawRecords.length,
   };
 }
 

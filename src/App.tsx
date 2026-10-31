@@ -103,6 +103,14 @@ const MainContent: React.FC = () => {
           }
           return;
         }
+        case 'FOCUS_GLOBAL_SEARCH': {
+          const input = document.getElementById('header-global-search-input') as HTMLInputElement | null;
+          if (input) {
+            input.focus();
+            input.select();
+          }
+          return;
+        }
         case 'OPEN_SHORTCUTS_MODAL': {
           setShortcutsModalOpen((prev) => !prev);
           return;

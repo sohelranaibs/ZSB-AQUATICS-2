@@ -37,7 +37,7 @@ test('computeTotalPersistedRecords sums all four financial record collections sa
   );
 });
 
-test('getSyncStatusDisplay returns accurate labels for saving, synced, and error states', () => {
+test('getSyncStatusDisplay returns accurate labels for saving, synced, error, and paused states', () => {
   const iso = new Date(2026, 9, 28, 9, 30, 45).toISOString();
 
   // 1. Saving state
@@ -50,6 +50,7 @@ test('getSyncStatusDisplay returns accurate labels for saving, synced, and error
   assert.equal(savingInfo.status, 'saving');
   assert.equal(savingInfo.badgeText, 'Auto-saving...');
   assert.equal(savingInfo.detailText, 'Updating Purchase Ledger');
+  assert.equal(savingInfo.isLiveSyncActive, true);
   assert.ok(savingInfo.ariaLabel.includes('Auto-saving Purchase Ledger'));
 
   // 2. Synced state
@@ -63,6 +64,7 @@ test('getSyncStatusDisplay returns accurate labels for saving, synced, and error
   assert.equal(syncedInfo.badgeText, 'Synced');
   assert.equal(syncedInfo.formattedTime, '09:30:45');
   assert.equal(syncedInfo.detailText, '16 records · 09:30:45');
+  assert.equal(syncedInfo.isLiveSyncActive, true);
   assert.ok(syncedInfo.ariaLabel.includes('Synced (16 records saved at 09:30:45)'));
 
   // 3. Error state
@@ -76,4 +78,31 @@ test('getSyncStatusDisplay returns accurate labels for saving, synced, and error
   assert.equal(errorInfo.badgeText, 'Sync Error');
   assert.equal(errorInfo.detailText, 'QuotaExceededError');
   assert.ok(errorInfo.ariaLabel.includes('Sync Error - QuotaExceededError'));
+
+  // 4. Paused state (Live Sync disabled)
+  const pausedInfo = getSyncStatusDisplay({
+    status: 'paused',
+    lastSyncedAt: iso,
+    totalRecordsCount: 16,
+    isLiveSyncEnabled: false,
+    hasUnsyncedChanges: false,
+  });
+  assert.equal(pausedInfo.status, 'paused');
+  assert.equal(pausedInfo.badgeText, 'Live Sync Paused');
+  assert.equal(pausedInfo.detailText, 'Auto-save paused');
+  assert.equal(pausedInfo.isLiveSyncActive, false);
+  assert.ok(pausedInfo.ariaLabel.includes('Live Sync paused'));
+
+  // 5. Paused state with unsaved pending changes
+  const pausedPendingInfo = getSyncStatusDisplay({
+    status: 'paused',
+    lastSyncedAt: iso,
+    totalRecordsCount: 16,
+    isLiveSyncEnabled: false,
+    hasUnsyncedChanges: true,
+  });
+  assert.equal(pausedPendingInfo.status, 'paused');
+  assert.equal(pausedPendingInfo.badgeText, 'Live Sync Paused');
+  assert.equal(pausedPendingInfo.detailText, 'Unsaved changes pending (Click to sync)');
+  assert.ok(pausedPendingInfo.ariaLabel.includes('Unsaved changes pending in memory'));
 });

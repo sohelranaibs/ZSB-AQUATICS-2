@@ -646,7 +646,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   const isDateFilterActive = Boolean(startDate || endDate);
 
   return (
-    <div className="w-full max-w-[1600px] mx-auto px-3 sm:px-5 py-4 space-y-5">
+    <div className="w-full max-w-full mx-auto px-2 sm:px-3 py-3 space-y-4">
       {/* Top Banner */}
       <div className="bg-[#1b2b44] text-white px-5 py-3 rounded-lg shadow-md flex flex-wrap items-center justify-between gap-4 border-b-2 border-amber-500">
         <div className="flex items-center gap-3">
@@ -1379,10 +1379,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
       <div className="flex-1 min-w-0 w-full bg-white rounded-xl shadow border border-slate-200 overflow-hidden">
         {activeDbType === 'purchase' && (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-[#1b73b4] text-white font-bold uppercase text-[11px] border-b border-blue-900">
+            <table className="w-full text-left text-[11px]">
+              <thead className="bg-[#1b73b4] text-white font-bold uppercase text-[10px] tracking-tight border-b border-blue-900">
                 <tr>
-                  <th className="p-3 w-10 text-center">
+                  <th className="px-1.5 py-2 w-7 text-center">
                     <input
                       type="checkbox"
                       checked={
@@ -1394,17 +1394,17 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                       }
                     />
                   </th>
-                  <th className="p-3">INVOICE NO</th>
-                  <th className="p-3">DATE</th>
-                  <th className="p-3">SUPPLIER / DESCRIPTION</th>
-                  <th className="p-3">CONTACT</th>
-                  <th className="p-3 text-center">ITEMS</th>
-                  <th className="p-3 text-right">TOTAL QTY</th>
-                  <th className="p-3 text-right">TOTAL AMOUNT</th>
-                  <th className="p-3 text-right">PAID AMOUNT</th>
-                  <th className="p-3 text-right">BALANCE</th>
-                  <th className="p-3">RECONCILIATION STATUS</th>
-                  <th className="p-3 text-center">ACTIONS</th>
+                  <th className="px-1.5 py-2 whitespace-nowrap">INVOICE NO</th>
+                  <th className="px-1.5 py-2 whitespace-nowrap">DATE</th>
+                  <th className="px-1.5 py-2">SUPPLIER / DESCRIPTION</th>
+                  <th className="px-1.5 py-2 whitespace-nowrap">CONTACT</th>
+                  <th className="px-1.5 py-2 text-center whitespace-nowrap">ITEMS</th>
+                  <th className="px-1.5 py-2 text-right whitespace-nowrap">TOTAL QTY</th>
+                  <th className="px-1.5 py-2 text-right whitespace-nowrap">TOTAL AMOUNT</th>
+                  <th className="px-1.5 py-2 text-right whitespace-nowrap">PAID AMOUNT</th>
+                  <th className="px-1.5 py-2 text-right whitespace-nowrap">BALANCE</th>
+                  <th className="px-1.5 py-2">RECONCILIATION STATUS</th>
+                  <th className="px-1.5 py-2 text-center whitespace-nowrap">ACTIONS</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 font-medium">
@@ -1436,7 +1436,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             : 'bg-white hover:bg-blue-50/85'
                         }`}
                       >
-                        <td className="p-3 text-center">
+                        <td className="px-1.5 py-1.5 text-center">
                           <input
                             type="checkbox"
                             checked={isSelected}
@@ -1456,7 +1456,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             rowDrafts,
                             'invoiceNumber'
                           )}
-                          className="font-mono font-bold text-blue-900"
+                          className="font-mono font-bold text-blue-900 whitespace-nowrap"
                           onDraftChange={handleCellDraftChange}
                           onCommitValid={handleCellCommitValid}
                           onClearDraft={handleCellClearDraft}
@@ -1474,7 +1474,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             rowDrafts,
                             'date'
                           )}
-                          className="font-mono text-slate-600"
+                          className="font-mono text-slate-600 whitespace-nowrap"
                           onDraftChange={handleCellDraftChange}
                           onCommitValid={handleCellCommitValid}
                           onClearDraft={handleCellClearDraft}
@@ -1510,13 +1510,13 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             rowDrafts,
                             'contactNumber'
                           )}
-                          className="font-mono text-slate-600"
+                          className="font-mono text-slate-600 whitespace-nowrap"
                           onDraftChange={handleCellDraftChange}
                           onCommitValid={handleCellCommitValid}
                           onClearDraft={handleCellClearDraft}
                         />
-                        <td className="p-3 text-center">
-                          <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold">
+                        <td className="px-1.5 py-1.5 text-center whitespace-nowrap">
+                          <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold">
                             {p.items?.length || 0} Lines
                           </span>
                         </td>
@@ -1597,15 +1597,15 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                           onClearDraft={handleCellClearDraft}
                         />
                         <td
-                          className="p-3 min-w-[230px]"
+                          className="px-1.5 py-1.5 max-w-[175px]"
                           data-testid={`reconciliation-status-cell-${p.id}`}
                         >
                           {rec && (
-                            <div className="space-y-1">
-                              <div className="flex flex-wrap items-center gap-1.5">
+                            <div className="space-y-0.5">
+                              <div className="flex flex-wrap items-center gap-1">
                                 <span
                                   data-testid={`reconciliation-badge-${p.id}`}
-                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
                                     rec.status === 'RECONCILED'
                                       ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
                                       : rec.status === 'UNPAID_PENDING'
@@ -1614,20 +1614,20 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                                   }`}
                                 >
                                   {rec.hasDiscrepancy ? (
-                                    <AlertTriangle className="w-3 h-3" />
+                                    <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
                                   ) : (
-                                    <CheckCircle2 className="w-3 h-3" />
+                                    <CheckCircle2 className="w-2.5 h-2.5 shrink-0" />
                                   )}
                                   <span>{rec.label}</span>
                                 </span>
 
                                 {rec.hasDiscrepancy && (
-                                  <span className="font-mono text-[10px] font-black text-rose-800 bg-rose-100 px-1.5 py-0.5 rounded">
+                                  <span className="font-mono text-[9px] font-black text-rose-800 bg-rose-100 px-1 py-0.5 rounded">
                                     Δ {formatCurrency(rec.discrepancyAmount, companyProfile.currency)}
                                   </span>
                                 )}
                               </div>
-                              <div className="text-[11px] text-slate-600 leading-snug">
+                              <div className="text-[10px] text-slate-600 leading-tight">
                                 {rec.summaryText}
                               </div>
                               {rec.hasDiscrepancy && (
@@ -1636,9 +1636,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                                     type="button"
                                     data-testid={`reconcile-record-btn-${p.id}`}
                                     onClick={() => handleSmartSyncReconcile(p.id)}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#1b2b44] hover:bg-blue-800 text-amber-300 text-[10px] font-black uppercase tracking-wide transition cursor-pointer shadow-xs"
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#1b2b44] hover:bg-blue-800 text-amber-300 text-[9px] font-black uppercase tracking-wide transition cursor-pointer shadow-xs"
                                   >
-                                    <RefreshCw className="w-3 h-3" />
+                                    <RefreshCw className="w-2.5 h-2.5" />
                                     <span>Auto-Sync: {rec.resolutionLabel}</span>
                                   </button>
                                 </div>
@@ -1646,17 +1646,17 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             </div>
                           )}
                         </td>
-                        <td className="p-3 text-center">
-                          <div className="flex items-center justify-center space-x-1.5">
+                        <td className="px-1.5 py-1.5 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center space-x-1">
                             <button
                               onClick={() => {
                                 setEditingPurchaseId(p.id);
                                 setActiveTab('purchase_form');
                               }}
-                              className="px-2 py-1 text-[11px] font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 rounded transition flex items-center space-x-1"
+                              className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 rounded transition flex items-center space-x-0.5"
                               title="Edit Purchase Bill"
                             >
-                              <Edit2 className="w-3 h-3" />
+                              <Edit2 className="w-2.5 h-2.5" />
                               <span>EDIT</span>
                             </button>
                             <button
@@ -1668,16 +1668,16 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                                   items: p.items,
                                 })
                               }
-                              className="px-2 py-1 text-[11px] font-bold bg-blue-100 hover:bg-blue-200 text-blue-800 rounded transition flex items-center space-x-1"
+                              className="px-1.5 py-0.5 text-[10px] font-bold bg-blue-100 hover:bg-blue-200 text-blue-800 rounded transition flex items-center space-x-0.5"
                               title="Print or Save PDF"
                             >
-                              <Printer className="w-3 h-3" />
+                              <Printer className="w-2.5 h-2.5" />
                               <span>PDF</span>
                             </button>
                             <button
                               type="button"
                               onClick={() => deletePurchase(p.id)}
-                              className="p-1 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
+                              className="p-0.5 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
                               title={`Delete purchase invoice ${p.invoiceNumber}`}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -1695,7 +1695,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
 
         {activeDbType === 'packing' && (
           <div>
-            <div className="px-4 py-2 bg-teal-50/70 border-b border-teal-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="px-3 py-2 bg-teal-50/70 border-b border-teal-200 flex flex-wrap items-center justify-between gap-2 text-xs">
               <div className="font-bold text-teal-950">
                 Packing List Ledger — Live BDT Conversion
               </div>
@@ -1707,7 +1707,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               <table className="w-full text-left text-[11px]">
                 <thead className="bg-[#12776c] text-white font-bold uppercase text-[10px] tracking-tight border-b border-teal-900">
                   <tr>
-                    <th className="px-2 py-2.5 w-8 text-center">
+                    <th className="px-1 py-2 w-6 text-center">
                       <input
                         type="checkbox"
                         checked={
@@ -1719,19 +1719,19 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         }
                       />
                     </th>
-                    <th className="px-2 py-2.5 whitespace-nowrap">PACKING NO</th>
-                    <th className="px-2 py-2.5 whitespace-nowrap">DATE</th>
-                    <th className="px-2 py-2.5 whitespace-nowrap">SHIPPING MARK</th>
-                    <th className="px-2 py-2.5 whitespace-nowrap">FLIGHT</th>
-                    <th className="px-2 py-2.5 whitespace-nowrap">DESTINATION</th>
-                    <th className="px-2 py-2.5 whitespace-nowrap">SHIPPER</th>
-                    <th className="px-2 py-2.5 whitespace-nowrap">ITEMS</th>
-                    <th className="px-2 py-2.5 text-right whitespace-nowrap">TOTAL BOX</th>
-                    <th className="px-2 py-2.5 text-right whitespace-nowrap">TOTAL WEIGHT</th>
-                    <th className="px-2 py-2.5 text-right whitespace-nowrap">TOTAL VALUE</th>
-                    <th className="px-2 py-2.5 text-right whitespace-nowrap">RMB RATE</th>
-                    <th className="px-2 py-2.5 text-right whitespace-nowrap">TOTAL AMOUNT (BDT)</th>
-                    <th className="px-2 py-2.5 text-center whitespace-nowrap">ACTIONS</th>
+                    <th className="px-1 py-2 whitespace-nowrap">PACKING NO</th>
+                    <th className="px-1 py-2 whitespace-nowrap">DATE</th>
+                    <th className="px-1 py-2">SHIPPING MARK</th>
+                    <th className="px-1 py-2 whitespace-nowrap">FLIGHT</th>
+                    <th className="px-1 py-2">DESTINATION</th>
+                    <th className="px-1 py-2">SHIPPER</th>
+                    <th className="px-1 py-2">ITEMS</th>
+                    <th className="px-1 py-2 text-right">TOTAL BOX</th>
+                    <th className="px-1 py-2 text-right">TOTAL WEIGHT</th>
+                    <th className="px-1 py-2 text-right">TOTAL VALUE</th>
+                    <th className="px-1 py-2 text-right">RMB RATE</th>
+                    <th className="px-1 py-2 text-right">TOTAL AMOUNT (BDT)</th>
+                    <th className="px-1 py-2 text-center whitespace-nowrap">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 font-medium">
@@ -1766,7 +1766,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             : 'bg-white hover:bg-teal-50/85'
                         }`}
                       >
-                        <td className="px-2 py-2 text-center">
+                        <td className="px-1.5 py-1.5 text-center">
                           <input
                             type="checkbox"
                             checked={isSelected}
@@ -1786,7 +1786,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             rowDrafts,
                             'invoiceNumber'
                           )}
-                          className="font-mono font-bold text-teal-900"
+                          className="font-mono font-bold text-teal-900 whitespace-nowrap"
                           onDraftChange={handleCellDraftChange}
                           onCommitValid={handleCellCommitValid}
                           onClearDraft={handleCellClearDraft}
@@ -1804,7 +1804,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             rowDrafts,
                             'packingDate'
                           )}
-                          className="font-mono text-slate-600"
+                          className="font-mono text-slate-600 whitespace-nowrap"
                           onDraftChange={handleCellDraftChange}
                           onCommitValid={handleCellCommitValid}
                           onClearDraft={handleCellClearDraft}
@@ -1840,7 +1840,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             rowDrafts,
                             'flight'
                           )}
-                          className="font-mono text-slate-700"
+                          className="font-mono text-slate-700 whitespace-nowrap"
                           onDraftChange={handleCellDraftChange}
                           onCommitValid={handleCellCommitValid}
                           onClearDraft={handleCellClearDraft}
@@ -1882,14 +1882,14 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                           onClearDraft={handleCellClearDraft}
                         />
                         <td
-                          className="px-2 py-2 font-mono text-[11px] text-slate-700"
+                          className="px-1.5 py-1.5 font-mono text-[11px] text-slate-700"
                           data-testid={`packing-items-cell-${pkg.id}`}
                         >
-                          <div className="flex flex-wrap items-center gap-1">
-                            <span className="px-1.5 py-0.5 rounded bg-teal-100 text-teal-900 font-bold text-[10px] whitespace-nowrap">
+                          <div className="flex flex-wrap items-center gap-1 leading-tight">
+                            <span className="px-1 py-0.5 rounded bg-teal-100 text-teal-900 font-bold text-[10px] whitespace-nowrap">
                               {pkg.items?.length || 0} {(pkg.items?.length || 0) === 1 ? 'Item' : 'Items'}
                             </span>
-                            <span className="font-bold text-slate-800 whitespace-nowrap">
+                            <span className="font-bold text-slate-800">
                               {(pkg.items || []).map((it) => it.item).join(', ')}
                             </span>
                           </div>
@@ -1971,10 +1971,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                           onCommitValid={handleCellCommitValid}
                           onClearDraft={handleCellClearDraft}
                         />
-                        <td className="px-2 py-2 text-right font-mono font-black text-emerald-800 bg-emerald-50/40 whitespace-nowrap">
+                        <td className="px-1.5 py-1.5 text-right font-mono font-black text-emerald-800 bg-emerald-50/40 whitespace-nowrap">
                           {formatCurrency(computedAmountBDT, 'BDT')}
                         </td>
-                        <td className="px-2 py-2 text-center whitespace-nowrap">
+                        <td className="px-1.5 py-1.5 text-center whitespace-nowrap">
                           <div className="flex items-center justify-center space-x-1">
                             <button
                               onClick={() => {
@@ -1982,10 +1982,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                                 setActiveTab('packing_form');
                                 showToast(`Loaded manifest ${pkg.invoiceNumber} for editing.`);
                               }}
-                              className="px-1.5 py-1 text-[10px] font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 rounded transition flex items-center space-x-1 cursor-pointer"
+                              className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 rounded transition flex items-center space-x-0.5 cursor-pointer"
                               title={`Edit Packing List ${pkg.invoiceNumber}`}
                             >
-                              <Edit2 className="w-3 h-3 text-amber-700" />
+                              <Edit2 className="w-2.5 h-2.5 text-amber-700" />
                               <span>EDIT</span>
                             </button>
                             <button
@@ -1997,16 +1997,16 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                                   items: pkg.items,
                                 })
                               }
-                              className="px-1.5 py-1 text-[10px] font-bold bg-teal-100 hover:bg-teal-200 text-teal-800 rounded transition flex items-center space-x-1 cursor-pointer"
+                              className="px-1.5 py-0.5 text-[10px] font-bold bg-teal-100 hover:bg-teal-200 text-teal-800 rounded transition flex items-center space-x-0.5 cursor-pointer"
                               title="Print or Save PDF"
                             >
-                              <Printer className="w-3 h-3" />
+                              <Printer className="w-2.5 h-2.5" />
                               <span>PDF</span>
                             </button>
                             <button
                               type="button"
                               onClick={() => deletePacking(pkg.id)}
-                              className="p-1 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
+                              className="p-0.5 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
                               title={`Delete packing list ${pkg.invoiceNumber}`}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -2021,29 +2021,29 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               {filteredPackings.length > 0 && (
                 <tfoot>
                   <tr className="bg-teal-50 font-black border-t-2 border-teal-200 text-[11px]">
-                    <td colSpan={8} className="px-2 py-2.5 text-right uppercase text-teal-950">
+                    <td colSpan={8} className="px-1.5 py-2 text-right uppercase text-teal-950">
                       PACKING DB TOTALS:
                     </td>
-                    <td className="px-2 py-2.5 text-right font-mono text-slate-900 whitespace-nowrap">
+                    <td className="px-1.5 py-2 text-right font-mono text-slate-900 whitespace-nowrap">
                       {filteredPackings.reduce((acc, p) => acc + (Number(p.totalBox) || 0), 0)}
                     </td>
-                    <td className="px-2 py-2.5 text-right font-mono text-teal-800 whitespace-nowrap">
+                    <td className="px-1.5 py-2 text-right font-mono text-teal-800 whitespace-nowrap">
                       {Math.round(
                         filteredPackings.reduce((acc, p) => acc + (Number(p.totalWeight) || 0), 0) *
                           100
                       ) / 100}{' '}
                       KG
                     </td>
-                    <td className="px-2 py-2.5 text-right font-mono text-slate-900 whitespace-nowrap">
+                    <td className="px-1.5 py-2 text-right font-mono text-slate-900 whitespace-nowrap">
                       {formatCurrency(
                         filteredPackings.reduce((acc, p) => acc + (Number(p.totalAmount) || 0), 0),
                         'RMB'
                       )}
                     </td>
-                    <td className="px-2 py-2.5 text-right font-mono text-slate-500 text-[10px] whitespace-nowrap">
+                    <td className="px-1.5 py-2 text-right font-mono text-slate-500 text-[10px] whitespace-nowrap">
                       × RATE =
                     </td>
-                    <td className="px-2 py-2.5 text-right font-mono text-emerald-800 bg-emerald-100/60 whitespace-nowrap">
+                    <td className="px-1.5 py-2 text-right font-mono text-emerald-800 bg-emerald-100/60 whitespace-nowrap">
                       {formatCurrency(
                         filteredPackings.reduce(
                           (acc, p) =>
@@ -2118,10 +2118,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-[#793282] text-white font-bold uppercase text-[11px] border-b border-purple-900">
+              <table className="w-full text-left text-[11px]">
+                <thead className="bg-[#793282] text-white font-bold uppercase text-[10px] tracking-tight border-b border-purple-900">
                   <tr>
-                    <th className="p-3 w-10 text-center">
+                    <th className="px-1.5 py-2 w-7 text-center">
                       <input
                         type="checkbox"
                         checked={
@@ -2133,16 +2133,16 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         }
                       />
                     </th>
-                    <th className="p-3">PAYMENT NO</th>
-                    <th className="p-3">TYPE</th>
-                    <th className="p-3">DATE</th>
-                    <th className="p-3">PARTY / MARK</th>
-                    <th className="p-3">STATUS</th>
-                    <th className="p-3 text-right">PAID AMOUNT</th>
-                    <th className="p-3 text-right">BALANCE</th>
-                    <th className="p-3">EXPORT REF</th>
-                    <th className="p-3">RECONCILIATION STATUS</th>
-                    <th className="p-3 text-center">ACTIONS</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap">PAYMENT NO</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap">TYPE</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap">DATE</th>
+                    <th className="px-1.5 py-2">PARTY / MARK</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap">STATUS</th>
+                    <th className="px-1.5 py-2 text-right whitespace-nowrap">PAID AMOUNT</th>
+                    <th className="px-1.5 py-2 text-right whitespace-nowrap">BALANCE</th>
+                    <th className="px-1.5 py-2 whitespace-nowrap">EXPORT REF</th>
+                    <th className="px-1.5 py-2">RECONCILIATION STATUS</th>
+                    <th className="px-1.5 py-2 text-center whitespace-nowrap">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 font-medium">
@@ -2175,7 +2175,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                               : 'bg-white hover:bg-purple-50/85'
                           }`}
                         >
-                          <td className="p-3 text-center">
+                          <td className="px-1.5 py-1.5 text-center">
                             <input
                               type="checkbox"
                               checked={isSelected}
@@ -2195,14 +2195,14 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                               rowDrafts,
                               'invoiceNumber'
                             )}
-                            className="font-mono font-bold text-purple-900"
+                            className="font-mono font-bold text-purple-900 whitespace-nowrap"
                             onDraftChange={handleCellDraftChange}
                             onCommitValid={handleCellCommitValid}
                             onClearDraft={handleCellClearDraft}
                           />
-                          <td className="p-3">
+                          <td className="px-1.5 py-1.5 whitespace-nowrap">
                             <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
                                 category === 'exporter'
                                   ? 'bg-teal-100 text-teal-900'
                                   : 'bg-pink-100 text-pink-900'
@@ -2224,7 +2224,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                               rowDrafts,
                               'date'
                             )}
-                            className="font-mono text-slate-600"
+                            className="font-mono text-slate-600 whitespace-nowrap"
                             onDraftChange={handleCellDraftChange}
                             onCommitValid={handleCellCommitValid}
                             onClearDraft={handleCellClearDraft}
@@ -2247,9 +2247,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             onCommitValid={handleCellCommitValid}
                             onClearDraft={handleCellClearDraft}
                           />
-                          <td className="p-3">
+                          <td className="px-1.5 py-1.5 whitespace-nowrap">
                             <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
                                 pm.status === 'PAID'
                                   ? 'bg-emerald-100 text-emerald-800'
                                   : pm.status === 'REPORT'
@@ -2315,21 +2315,21 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                               rowDrafts,
                               'exportGoodsRef'
                             )}
-                            className="font-mono text-slate-600"
+                            className="font-mono text-slate-600 whitespace-nowrap"
                             onDraftChange={handleCellDraftChange}
                             onCommitValid={handleCellCommitValid}
                             onClearDraft={handleCellClearDraft}
                           />
                           <td
-                            className="p-3 min-w-[220px]"
+                            className="px-1.5 py-1.5 max-w-[175px]"
                             data-testid={`reconciliation-status-cell-${pm.id}`}
                           >
                             {rec && (
-                              <div className="space-y-1">
-                                <div className="flex flex-wrap items-center gap-1.5">
+                              <div className="space-y-0.5">
+                                <div className="flex flex-wrap items-center gap-1">
                                   <span
                                     data-testid={`reconciliation-badge-${pm.id}`}
-                                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
                                       rec.status === 'RECONCILED'
                                         ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
                                         : rec.status === 'EXPORTER_LEDGER'
@@ -2338,19 +2338,19 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                                     }`}
                                   >
                                     {rec.hasDiscrepancy ? (
-                                      <AlertTriangle className="w-3 h-3" />
+                                      <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
                                     ) : (
-                                      <CheckCircle2 className="w-3 h-3" />
+                                      <CheckCircle2 className="w-2.5 h-2.5 shrink-0" />
                                     )}
                                     <span>{rec.label}</span>
                                   </span>
                                   {rec.hasDiscrepancy && (
-                                    <span className="font-mono text-[10px] font-black text-rose-800 bg-rose-100 px-1.5 py-0.5 rounded">
+                                    <span className="font-mono text-[9px] font-black text-rose-800 bg-rose-100 px-1 py-0.5 rounded">
                                       Δ {formatCurrency(rec.discrepancyAmount, companyProfile.currency)}
                                     </span>
                                   )}
                                 </div>
-                                <div className="text-[11px] text-slate-600 leading-snug">
+                                <div className="text-[10px] text-slate-600 leading-tight">
                                   {rec.summaryText}
                                 </div>
                                 {rec.hasDiscrepancy && (
@@ -2359,9 +2359,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                                       type="button"
                                       data-testid={`reconcile-record-btn-${pm.id}`}
                                       onClick={() => handleSmartSyncReconcile(pm.id)}
-                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#1b2b44] hover:bg-purple-800 text-amber-300 text-[10px] font-black uppercase tracking-wide transition cursor-pointer shadow-xs"
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#1b2b44] hover:bg-purple-800 text-amber-300 text-[9px] font-black uppercase tracking-wide transition cursor-pointer shadow-xs"
                                     >
-                                      <RefreshCw className="w-3 h-3" />
+                                      <RefreshCw className="w-2.5 h-2.5" />
                                       <span>Auto-Sync: {rec.resolutionLabel}</span>
                                     </button>
                                   </div>
@@ -2369,8 +2369,8 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                               </div>
                             )}
                           </td>
-                          <td className="p-3 text-center">
-                            <div className="flex items-center justify-center space-x-1.5">
+                          <td className="px-1.5 py-1.5 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center space-x-1">
                               <button
                                 onClick={() =>
                                   openPrintModal({
@@ -2384,16 +2384,16 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                                     items: pm.items,
                                   })
                                 }
-                                className="px-2 py-1 text-[11px] font-bold bg-purple-100 hover:bg-purple-200 text-purple-800 rounded transition flex items-center space-x-1"
+                                className="px-1.5 py-0.5 text-[10px] font-bold bg-purple-100 hover:bg-purple-200 text-purple-800 rounded transition flex items-center space-x-0.5"
                                 title="Print or Save PDF"
                               >
-                                <Printer className="w-3 h-3" />
+                                <Printer className="w-2.5 h-2.5" />
                                 <span>PDF</span>
                               </button>
                               <button
                                 type="button"
                                 onClick={() => deletePayment(pm.id)}
-                                className="p-1 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
+                                className="p-0.5 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
                                 title={`Delete payment voucher ${pm.invoiceNumber}`}
                               >
                                 <Trash2 className="w-3.5 h-3.5" />

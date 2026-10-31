@@ -96,7 +96,7 @@ export const DatabaseValidatedCell: React.FC<DatabaseValidatedCellProps> = ({
     <td
       data-testid={`db-cell-${recordId}-${fieldKey}`}
       data-validation-status={isInvalid ? 'invalid' : 'valid'}
-      className={`px-2 py-2 align-middle transition-colors ${alignClass} ${
+      className={`px-1 py-1.5 align-middle transition-colors ${alignClass} ${
         isInvalid
           ? 'bg-rose-100/95 border-2 border-rose-600 text-rose-950 ring-2 ring-rose-500/30'
           : className
@@ -120,12 +120,12 @@ export const DatabaseValidatedCell: React.FC<DatabaseValidatedCellProps> = ({
               onChange={handleInputChange}
               onBlur={handleCommitOrBlur}
               onKeyDown={handleKeyDown}
-              className={`px-1.5 py-1 text-[11px] font-mono font-bold rounded transition focus:outline-none ${
+              className={`px-1 py-0.5 text-[11px] font-mono font-bold rounded transition focus:outline-none ${
                 alwaysShowInput
-                  ? 'text-right w-16 sm:w-20'
+                  ? 'text-right w-14'
                   : align === 'right'
-                  ? 'text-right w-24'
-                  : 'text-left w-full min-w-[90px]'
+                  ? 'text-right w-20'
+                  : 'text-left w-full min-w-[65px]'
               } ${
                 isInvalid
                   ? 'bg-rose-50 border-2 border-rose-600 text-rose-950 placeholder-rose-400 focus:ring-2 focus:ring-rose-600'
@@ -156,7 +156,7 @@ export const DatabaseValidatedCell: React.FC<DatabaseValidatedCellProps> = ({
             <div
               data-testid={`db-cell-error-${recordId}-${fieldKey}`}
               role="alert"
-              className={`flex items-start gap-1 text-[10px] font-bold text-rose-900 bg-rose-200/90 border border-rose-400 px-1.5 py-0.5 rounded leading-tight ${
+              className={`flex items-start gap-1 text-[10px] font-bold text-rose-900 bg-rose-200/90 border border-rose-400 px-1 py-0.5 rounded leading-tight ${
                 align === 'right' ? 'justify-end text-right' : 'justify-start text-left'
               }`}
             >
@@ -178,16 +178,18 @@ export const DatabaseValidatedCell: React.FC<DatabaseValidatedCellProps> = ({
             setIsEditing(true);
           }}
           title={`Click to edit ${validation.label} (${validation.expectedFormatLabel})`}
-          className={`group/cell relative w-full inline-flex items-center rounded px-1 py-0.5 hover:bg-blue-100/70 hover:ring-1 hover:ring-blue-300 transition cursor-text whitespace-nowrap ${
+          className={`group/cell relative w-full inline-flex items-center rounded px-0.5 py-0.5 hover:bg-blue-100/70 hover:ring-1 hover:ring-blue-300 transition cursor-text leading-tight ${
             align === 'right'
-              ? 'justify-end text-right'
+              ? 'justify-end text-right whitespace-nowrap'
               : align === 'center'
               ? 'justify-center text-center'
               : 'justify-start text-left'
           }`}
         >
-          <span className="whitespace-nowrap">{displayNode}</span>
-          <Edit3 className="w-2.5 h-2.5 text-blue-600 hidden group-hover/cell:inline-block ml-1 shrink-0" />
+          <span className={align === 'right' ? 'whitespace-nowrap' : 'break-words'}>
+            {displayNode}
+          </span>
+          <Edit3 className="w-2.5 h-2.5 text-blue-600 hidden group-hover/cell:inline-block ml-0.5 shrink-0" />
         </button>
       )}
     </td>

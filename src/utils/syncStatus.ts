@@ -2,7 +2,7 @@
  * Pure utilities for managing and formatting local database persistence sync status
  */
 
-export type SyncStatusState = 'saving' | 'synced' | 'error';
+export type SyncStatusState = 'saving' | 'synced' | 'error' | 'paused';
 
 export interface SyncMetadata {
   status: SyncStatusState;
@@ -10,14 +10,17 @@ export interface SyncMetadata {
   lastSyncedEntity?: string;
   totalRecordsCount: number;
   errorMessage?: string;
+  isLiveSyncEnabled?: boolean;
+  hasUnsyncedChanges?: boolean;
 }
 
 export interface SyncDisplayInfo {
   status: SyncStatusState;
-  badgeText: 'Auto-saving...' | 'Synced' | 'Sync Error';
+  badgeText: 'Auto-saving...' | 'Synced' | 'Sync Error' | 'Live Sync Paused';
   detailText: string;
   formattedTime: string;
   ariaLabel: string;
+  isLiveSyncActive: boolean;
 }
 
 /**
@@ -57,6 +60,25 @@ export function computeTotalPersistedRecords(counts: {
 export function getSyncStatusDisplay(meta: SyncMetadata): SyncDisplayInfo {
   const formattedTime = formatSyncTimestamp(meta.lastSyncedAt);
   const entityLabel = meta.lastSyncedEntity ? `${meta.lastSyncedEntity}` : 'Local DB';
+  const isLiveSyncActive = meta.isLiveSyncEnabled !== false && meta.status !== 'paused';
+
+  if (!isLiveSyncActive || meta.status === 'paused') {
+    const detail = meta.hasUnsyncedChanges
+      ? 'Unsaved changes pending (Click to sync)'
+      : 'Auto-save paused';
+    return {
+      status: 'paused',
+      badgeText: 'Live Sync Paused',
+      detailText: detail,
+      formattedTime,
+      ariaLabel: `Database persistence status: Live Sync paused. ${
+        meta.hasUnsyncedChanges
+          ? 'Unsaved changes pending in memory. Click to sync now.'
+          : 'Background auto-saving disabled.'
+      }`,
+      isLiveSyncActive: false,
+    };
+  }
 
   if (meta.status === 'saving') {
     return {
@@ -65,6 +87,7 @@ export function getSyncStatusDisplay(meta: SyncMetadata): SyncDisplayInfo {
       detailText: `Updating ${entityLabel}`,
       formattedTime,
       ariaLabel: `Database persistence status: Auto-saving ${entityLabel} to local storage`,
+      isLiveSyncActive: true,
     };
   }
 
@@ -75,6 +98,7 @@ export function getSyncStatusDisplay(meta: SyncMetadata): SyncDisplayInfo {
       detailText: meta.errorMessage || 'Local storage write failed',
       formattedTime,
       ariaLabel: `Database persistence status: Sync Error - ${meta.errorMessage || 'Local storage write failed'}`,
+      isLiveSyncActive: true,
     };
   }
 
@@ -84,5 +108,6 @@ export function getSyncStatusDisplay(meta: SyncMetadata): SyncDisplayInfo {
     detailText: `${meta.totalRecordsCount} records · ${formattedTime}`,
     formattedTime,
     ariaLabel: `Database persistence status: Synced (${meta.totalRecordsCount} records saved at ${formattedTime})`,
+    isLiveSyncActive: true,
   };
 }

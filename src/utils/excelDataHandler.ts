@@ -29,12 +29,19 @@ import {
   parsePurchasesCSV,
   parsePackingsCSV,
   parsePaymentsCSV,
+  buildPurchaseSupplierGroupKey,
+  mergePurchaseRecordsBySupplierAndDate,
   buildPackingShipmentGroupKey,
   mergePackingRecordsByShipmentGroup,
   ParseResult,
 } from './csvParser.ts';
 
-export { buildPackingShipmentGroupKey, mergePackingRecordsByShipmentGroup };
+export {
+  buildPurchaseSupplierGroupKey,
+  mergePurchaseRecordsBySupplierAndDate,
+  buildPackingShipmentGroupKey,
+  mergePackingRecordsByShipmentGroup,
+};
 
 export type DatasetKey = 'purchase' | 'packing' | 'payment' | 'other_cost';
 
@@ -327,8 +334,20 @@ export function getSampleTemplateRows(type: DatasetKey): Record<string, any>[] {
         PreviousAmount: 10000,
         PaidAmount: 45000,
         ContactNumber: '+8801711223344',
-        InvoiceNo: 'PUR-2026-0101',
-        Remarks: 'Sample Purchase Challan',
+        InvoiceNo: '',
+        Remarks: 'Sample Purchase Challan (Merges with same Supplier + Date)',
+      },
+      {
+        Supplier: 'ABDULLAH VAI',
+        Date: '2026-10-21',
+        Item: 'F1',
+        Quantity: 80,
+        Rate: 340,
+        PreviousAmount: 0,
+        PaidAmount: 20000,
+        ContactNumber: '+8801711223344',
+        InvoiceNo: '',
+        Remarks: 'Sample Purchase Challan (Merges with same Supplier + Date)',
       },
       {
         Supplier: 'UZZAL VAI',
@@ -339,7 +358,7 @@ export function getSampleTemplateRows(type: DatasetKey): Record<string, any>[] {
         PreviousAmount: 0,
         PaidAmount: 49500,
         ContactNumber: '+8801822334455',
-        InvoiceNo: 'PUR-2026-0102',
+        InvoiceNo: '',
         Remarks: 'Sample Purchase Challan',
       },
     ];
@@ -497,15 +516,57 @@ function normalizeDateString(val: any): string {
 }
 
 /**
+/**
+ * Parses an exported Purchase "Items Breakdown" string
+ * (e.g. "FF1: Qty 120 @ 460 = 55200; F1: Qty 80 @ 340 = 27200")
+ * into PurchaseItemRow[] if present and valid.
+ */
+function parsePurchaseItemsBreakdown(
+  breakdownStr: string,
+  rowIndex: number
+): PurchaseItemRow[] {
+  if (!breakdownStr || !breakdownStr.includes(';')) return [];
+  const segments = breakdownStr
+    .split(';')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (segments.length < 2) return [];
+
+  const parsedItems: PurchaseItemRow[] = [];
+  for (let sIdx = 0; sIdx < segments.length; sIdx++) {
+    const seg = segments[sIdx];
+    const match = seg.match(
+      /^([^:]+):\s*(?:Qty\s*)?([\d.]+)\s*(?:KG\s*)?@\s*([\d.]+)/i
+    );
+    if (!match) return [];
+    const item = match[1].trim() || 'F1';
+    const quantity = parseFloat(match[2]) || 1;
+    const rate = parseFloat(match[3]) || 0;
+    parsedItems.push({
+      id: `pi-imp-${Date.now()}-${rowIndex}-${sIdx}`,
+      item,
+      quantity,
+      rate,
+      totalAmount: calculatePurchaseRowTotal(quantity, rate),
+      previousAmount: 0,
+      paidAmount: 0,
+      balance: 0,
+    });
+  }
+  return parsedItems;
+}
+
+/**
  * Parses an array of row objects (from Excel sheet or header-mapped CSV) into PurchaseRecords.
+ * Rows sharing the same Purchasing Supplier Name and Date are automatically
+ * merged into 1 PurchaseRecord with a single invoice & purchasing invoice number.
  */
 export function parsePurchasesFromRowObjects(
   rows: Record<string, any>[],
   startCount: number = 0
 ): ParseResult<Omit<PurchaseRecord, 'id' | 'createdAt'>> {
-  const records: Omit<PurchaseRecord, 'id' | 'createdAt'>[] = [];
+  const rawRecords: Omit<PurchaseRecord, 'id' | 'createdAt'>[] = [];
   const errors: string[] = [];
-  let count = startCount;
 
   rows.forEach((row, idx) => {
     const supplier =
@@ -544,33 +605,41 @@ export function parsePurchasesFromRowObjects(
     const contactNumber = String(
       getFieldByAliases(row, ['Contact Number', 'ContactNumber', 'Contact', 'Phone', 'Mobile']) || ''
     ).trim();
-    const invoiceNumber = String(
-      getFieldByAliases(row, ['Invoice No', 'InvoiceNo', 'Invoice Number', 'InvoiceNumber', 'Doc No']) ||
-        generateInvoiceNumber('PUR', count)
+    const explicitInvoiceNumber = String(
+      getFieldByAliases(row, ['Invoice No', 'InvoiceNo', 'Invoice Number', 'InvoiceNumber', 'Doc No']) || ''
     ).trim();
     const remarks = String(getFieldByAliases(row, ['Remarks', 'Notes', 'Comment']) || 'Imported from Excel/CSV').trim();
+    const itemsBreakdownStr = String(
+      getFieldByAliases(row, ['Items Breakdown', 'ItemsBreakdown']) || ''
+    ).trim();
 
-    count++;
+    const breakdownItems = parsePurchaseItemsBreakdown(itemsBreakdownStr, idx);
+    let rowItems: PurchaseItemRow[];
+    if (breakdownItems.length > 0) {
+      rowItems = breakdownItems;
+    } else {
+      rowItems = [
+        {
+          id: `pi-imp-${Date.now()}-${idx}`,
+          item,
+          quantity: effectiveQty,
+          rate: effectiveRate,
+          totalAmount: calculatePurchaseRowTotal(effectiveQty, effectiveRate),
+          previousAmount: 0,
+          paidAmount: 0,
+          balance: 0,
+        },
+      ];
+    }
 
-    const itemRow: PurchaseItemRow = {
-      id: `pi-imp-${Date.now()}-${idx}`,
-      item,
-      quantity: effectiveQty,
-      rate: effectiveRate,
-      totalAmount: calculatePurchaseRowTotal(effectiveQty, effectiveRate),
-      previousAmount: 0,
-      paidAmount: 0,
-      balance: 0,
-    };
+    const totals = calculatePurchaseTotals(rowItems, previousAmount, paidAmount);
 
-    const totals = calculatePurchaseTotals([itemRow], previousAmount, paidAmount);
-
-    records.push({
-      invoiceNumber,
+    rawRecords.push({
+      invoiceNumber: explicitInvoiceNumber,
       date,
       description: String(supplier).trim(),
       contactNumber,
-      items: [itemRow],
+      items: rowItems,
       totalQty: totals.totalQty,
       totalAmount: totals.totalAmount,
       previousAmount: totals.previousAmount,
@@ -580,11 +649,13 @@ export function parsePurchasesFromRowObjects(
     });
   });
 
+  const records = mergePurchaseRecordsBySupplierAndDate(rawRecords, startCount);
+
   return {
     success: records.length > 0,
     records,
     errors,
-    totalParsedRows: records.length,
+    totalParsedRows: rawRecords.length,
   };
 }
 

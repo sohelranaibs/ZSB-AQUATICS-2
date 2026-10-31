@@ -28,7 +28,10 @@ import {
   LogOut,
   ShieldCheck,
   Keyboard,
+  Zap,
+  Pause,
 } from 'lucide-react';
+import { GlobalSearchBar } from './GlobalSearchBar.tsx';
 
 interface ExcelHeaderRibbonProps {
   onOpenShortcutsModal?: () => void;
@@ -55,6 +58,9 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
     lastSyncedAt,
     lastSyncedEntity,
     triggerManualSync,
+    isLiveSyncEnabled,
+    toggleLiveSync,
+    hasUnsyncedChanges,
     exportCurrentViewToPdf,
     isExportingGlobalPdf,
     lastExportedPdfFilename,
@@ -75,6 +81,8 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
     lastSyncedAt,
     lastSyncedEntity,
     totalRecordsCount,
+    isLiveSyncEnabled,
+    hasUnsyncedChanges,
   });
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -301,8 +309,60 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
           </div>
         </div>
 
+        {/* Center: Global Cross-Database Search Bar */}
+        <div className="flex-1 max-w-xl mx-1 min-w-[260px] order-3 xl:order-2 w-full xl:w-auto">
+          <GlobalSearchBar />
+        </div>
+
         {/* Right: Quick Macro Actions & Sync Status */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 order-2 xl:order-3 flex-wrap gap-y-1.5">
+          {/* Live Sync Background Auto-save Toggle */}
+          <div
+            className="flex items-center space-x-1.5 px-2 py-1 text-xs rounded border border-slate-700 bg-slate-950/80 whitespace-nowrap shrink-0"
+            title={
+              isLiveSyncEnabled
+                ? 'Live Sync is ON: Background database auto-save is active. Click to pause for high-frequency data entry.'
+                : 'Live Sync is PAUSED: Background auto-save disabled for faster data entry. Click to resume or use "Sync Now" (Ctrl+S) to save.'
+            }
+          >
+            <div className="flex items-center space-x-1 text-slate-300">
+              <Zap
+                className={`w-3.5 h-3.5 transition-colors ${
+                  isLiveSyncEnabled ? 'text-amber-400 drop-shadow-[0_0_4px_rgba(251,191,36,0.5)]' : 'text-slate-500'
+                }`}
+              />
+              <span className="text-[11px] font-bold hidden sm:inline">Live Sync</span>
+            </div>
+
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isLiveSyncEnabled}
+              data-testid="ribbon-live-sync-toggle"
+              onClick={() => toggleLiveSync()}
+              aria-label={`Live Sync background auto-save toggle. Currently ${
+                isLiveSyncEnabled ? 'Enabled' : 'Paused'
+              }. Click to toggle.`}
+              className={`relative inline-flex h-4.5 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-1 focus:ring-amber-400 ${
+                isLiveSyncEnabled ? 'bg-emerald-600' : 'bg-slate-700'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                  isLiveSyncEnabled ? 'translate-x-3.5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+
+            <span
+              className={`text-[10px] font-mono font-bold ${
+                isLiveSyncEnabled ? 'text-emerald-400' : 'text-amber-400'
+              }`}
+            >
+              {isLiveSyncEnabled ? 'ON' : 'OFF'}
+            </span>
+          </div>
+
           <button
             type="button"
             data-testid="ribbon-sync-status"
@@ -314,6 +374,10 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
                 ? 'bg-amber-500/20 border-amber-400/60 text-amber-300 shadow-xs'
                 : syncStatus === 'error'
                 ? 'bg-rose-950/90 border-rose-500/60 text-rose-300'
+                : syncStatus === 'paused'
+                ? hasUnsyncedChanges
+                  ? 'bg-amber-950/90 hover:bg-amber-900/90 border-amber-400 text-amber-200 ring-1 ring-amber-400/60'
+                  : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-300'
                 : 'bg-emerald-950/80 hover:bg-emerald-900/80 border-emerald-500/40 text-emerald-300'
             }`}
           >
@@ -321,13 +385,21 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
               <RefreshCw className="w-3.5 h-3.5 text-amber-400 animate-spin shrink-0" />
             ) : syncStatus === 'error' ? (
               <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+            ) : syncStatus === 'paused' ? (
+              <Pause className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             ) : (
               <span className="relative flex h-2 w-2 shrink-0">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
               </span>
             )}
-            <span>{syncDisplay.badgeText}</span>
+            <span>
+              {syncStatus === 'paused'
+                ? hasUnsyncedChanges
+                  ? 'Sync Now (Unsaved)'
+                  : 'Sync Paused'
+                : syncDisplay.badgeText}
+            </span>
             <span className="hidden xl:inline text-[10px] font-mono font-normal opacity-85 border-l border-current/25 pl-1.5">
               {syncStatus === 'saving' ? lastSyncedEntity : syncDisplay.formattedTime}
             </span>
@@ -462,6 +534,8 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
                 ? 'text-amber-300 font-semibold'
                 : syncStatus === 'error'
                 ? 'text-rose-400 font-semibold'
+                : syncStatus === 'paused'
+                ? 'text-amber-400 font-semibold'
                 : 'text-emerald-400/90'
             }`}
           >
@@ -471,6 +545,10 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
                 ? `Auto-saving (${lastSyncedEntity})...`
                 : syncStatus === 'error'
                 ? 'Sync Error'
+                : syncStatus === 'paused'
+                ? hasUnsyncedChanges
+                  ? 'Live Sync Paused (Unsaved Edits)'
+                  : 'Live Sync Paused (Idle)'
                 : `Synced (${totalRecordsCount} records)`}
             </span>
           </span>

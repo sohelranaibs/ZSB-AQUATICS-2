@@ -282,3 +282,70 @@ test('Excel and CSV import merges packing rows with same ShippingMark, Flight, D
   assert.equal(reimported.records[0].totalAmount, 121800);
 });
 
+test('Excel and CSV import merges purchase rows with same Purchasing Supplier Name and Date into 1 invoice and purchasing invoice number', () => {
+  // 1. Standard Quick-Entry CSV with same supplier + same date across multiple rows
+  const quickEntryCsv = [
+    'Supplier, Date, Item, Quantity, Rate, PreviousAmount, PaidAmount, ContactNumber',
+    'ABDULLAH VAI, 2026-10-21, FF1, 120, 460, 10000, 45000, +8801711223344',
+    'abdullah  vai , 2026-10-21, F1, 80, 340, 0, 20000, +8801711223344',
+    'ABDULLAH VAI, 2026-10-21, 2F, 50, 380, 0, 15000, +8801711223344',
+    'UZZAL VAI, 2026-10-21, F1, 150, 330, 0, 49500, +8801822334455',
+    'ABDULLAH VAI, 2026-10-22, FF1, 100, 450, 0, 30000, +8801711223344',
+  ].join('\n');
+
+  const parsedQuick = parseSmartTextData('purchase', quickEntryCsv, 5);
+  assert.equal(parsedQuick.success, true);
+  assert.equal(parsedQuick.totalParsedRows, 5);
+  // 3 distinct (Supplier + Date) groups:
+  // Group 1: ABDULLAH VAI on 2026-10-21 (3 items merged)
+  // Group 2: UZZAL VAI on 2026-10-21 (1 item)
+  // Group 3: ABDULLAH VAI on 2026-10-22 (1 item, different date)
+  assert.equal(parsedQuick.records.length, 3);
+
+  const mergedAbdullahOct21 = parsedQuick.records[0];
+  assert.equal(mergedAbdullahOct21.invoiceNumber, 'PUR-2026-0006');
+  assert.equal(mergedAbdullahOct21.description, 'ABDULLAH VAI');
+  assert.equal(mergedAbdullahOct21.date, '2026-10-21');
+  assert.equal(mergedAbdullahOct21.items.length, 3);
+  // Total Qty: 120 + 80 + 50 = 250
+  assert.equal(mergedAbdullahOct21.totalQty, 250);
+  // Total Amount: (120*460=55200) + (80*340=27200) + (50*380=19000) = 101400
+  assert.equal(mergedAbdullahOct21.totalAmount, 101400);
+  // Previous Amount: 10000 + 0 + 0 = 10000
+  assert.equal(mergedAbdullahOct21.previousAmount, 10000);
+  // Paid Amount: 45000 + 20000 + 15000 = 80000
+  assert.equal(mergedAbdullahOct21.paidAmount, 80000);
+  // Balance: 101400 + 10000 - 80000 = 31400
+  assert.equal(mergedAbdullahOct21.balance, 31400);
+
+  const uzzalOct21 = parsedQuick.records[1];
+  assert.equal(uzzalOct21.invoiceNumber, 'PUR-2026-0007');
+  assert.equal(uzzalOct21.description, 'UZZAL VAI');
+  assert.equal(uzzalOct21.items.length, 1);
+
+  const abdullahOct22 = parsedQuick.records[2];
+  assert.equal(abdullahOct22.invoiceNumber, 'PUR-2026-0008');
+  assert.equal(abdullahOct22.description, 'ABDULLAH VAI');
+  assert.equal(abdullahOct22.date, '2026-10-22');
+  assert.equal(abdullahOct22.items.length, 1);
+
+  // 2. Round-trip export and re-import of merged multi-item PurchaseRecord via .xlsx preserves all merged items
+  const exportedPurXlsx = generateSingleSheetWorkbookBuffer('purchase', [
+    {
+      ...mergedAbdullahOct21,
+      id: 'pur-merged-1',
+      createdAt: '2026-10-21T10:00:00Z',
+    },
+  ]);
+  const reimportedPur = parseExcelOrCsvBuffer(exportedPurXlsx, 'purchase', 0);
+  assert.equal(reimportedPur.success, true);
+  assert.equal(reimportedPur.records.length, 1);
+  assert.equal(reimportedPur.records[0].invoiceNumber, 'PUR-2026-0006');
+  assert.equal(reimportedPur.records[0].description, 'ABDULLAH VAI');
+  assert.equal(reimportedPur.records[0].items.length, 3);
+  assert.equal(reimportedPur.records[0].totalQty, 250);
+  assert.equal(reimportedPur.records[0].totalAmount, 101400);
+  assert.equal(reimportedPur.records[0].balance, 31400);
+});
+
+

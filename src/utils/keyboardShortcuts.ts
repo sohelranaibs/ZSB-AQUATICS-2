@@ -9,6 +9,7 @@ export type ShortcutActionId =
   | 'OPEN_SNAPSHOT_MODAL'
   | 'OPEN_SHORTCUTS_MODAL'
   | 'CLOSE_ACTIVE_MODAL'
+  | 'FOCUS_GLOBAL_SEARCH'
   | 'NEXT_TAB'
   | 'PREV_TAB'
   | 'JUMP_TO_TAB';
@@ -233,6 +234,14 @@ export const GLOBAL_SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     description: 'Opens or toggles this global keyboard shortcuts command palette.',
   },
   {
+    id: 'focus-global-search',
+    action: 'FOCUS_GLOBAL_SEARCH',
+    category: 'System Modals & Tools',
+    keys: ['Ctrl', 'K'],
+    label: 'Global Database Search',
+    description: 'Quickly search invoices, supplier names, or tracking IDs across all database sheets.',
+  },
+  {
     id: 'close-active-modal',
     action: 'CLOSE_ACTIVE_MODAL',
     category: 'System Modals & Tools',
@@ -352,21 +361,41 @@ export function resolveGlobalKeyboardShortcut(
     };
   }
 
-  // 6. Ctrl/Cmd + / or Ctrl/Cmd + K -> Toggle Keyboard Shortcuts Reference Modal
+  // 6. Ctrl/Cmd + K -> Focus Global Search Bar
+  if (hasPrimaryMod && !hasShift && !hasAlt && (lowerKey === 'k' || code === 'KeyK')) {
+    return {
+      action: 'FOCUS_GLOBAL_SEARCH',
+      preventDefault: true,
+      description: 'Focus Global Search Bar',
+      shortcutLabel: 'Ctrl+K',
+    };
+  }
+
+  // 7. Non-editable '/' -> Focus Global Search Bar
+  if (!hasPrimaryMod && !hasAlt && !hasShift && !isEditable && key === '/') {
+    return {
+      action: 'FOCUS_GLOBAL_SEARCH',
+      preventDefault: true,
+      description: 'Focus Global Search Bar',
+      shortcutLabel: '/',
+    };
+  }
+
+  // 8. Ctrl/Cmd + / -> Toggle Keyboard Shortcuts Reference Modal
   if (
     hasPrimaryMod &&
     !hasAlt &&
-    (key === '/' || key === '?' || code === 'Slash' || (!hasShift && (lowerKey === 'k' || code === 'KeyK')))
+    (key === '/' || key === '?' || code === 'Slash')
   ) {
     return {
       action: 'OPEN_SHORTCUTS_MODAL',
       preventDefault: true,
       description: 'Open Keyboard Shortcuts Reference',
-      shortcutLabel: lowerKey === 'k' ? 'Ctrl+K' : 'Ctrl+/',
+      shortcutLabel: 'Ctrl+/',
     };
   }
 
-  // 7. Plain '?' when NOT focused inside an input/textarea/select
+  // 9. Plain '?' when NOT focused inside an input/textarea/select
   if (!hasPrimaryMod && !hasAlt && key === '?' && !isEditable) {
     return {
       action: 'OPEN_SHORTCUTS_MODAL',

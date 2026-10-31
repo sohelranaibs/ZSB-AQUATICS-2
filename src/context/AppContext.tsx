@@ -3,6 +3,7 @@ import {
   CompanyProfile,
   DropdownOptions,
   PurchaseRecord,
+  PurchaseItemRow,
   PackingRecord,
   PackingFormDraft,
   PackingItemRow,
@@ -26,8 +27,14 @@ import {
   COMPANY_LOGO_URL,
 } from './initialData.ts';
 import { generateRecordId, deduplicateRecords } from '../utils/idGenerator.ts';
-import { generateInvoiceNumber, calculatePackingTotals } from '../utils/calculations.ts';
 import {
+  generateInvoiceNumber,
+  calculatePurchaseTotals,
+  calculatePackingTotals,
+} from '../utils/calculations.ts';
+import {
+  buildPurchaseSupplierGroupKey,
+  mergePurchaseRecordsBySupplierAndDate,
   buildPackingShipmentGroupKey,
   mergePackingRecordsByShipmentGroup,
 } from '../utils/csvParser.ts';
@@ -284,11 +291,14 @@ interface AppContextType {
     autoRestore?: boolean
   ) => SnapshotValidationResult;
 
-  // Local Database Persistence Sync Status
+  // Local Database Persistence Sync Status & Live Sync
   syncStatus: SyncStatusState;
   lastSyncedAt: string;
   lastSyncedEntity: string;
   triggerManualSync: (entityLabel?: string) => void;
+  isLiveSyncEnabled: boolean;
+  toggleLiveSync: (enabled?: boolean) => void;
+  hasUnsyncedChanges: boolean;
 
   // Notification toast
   toastMessage: string | null;
@@ -305,17 +315,18 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const STORAGE_KEYS = {
   PROFILE: 'zsb_company_profile_v1',
   DROPDOWNS: 'zsb_dropdown_options_v1',
-  PURCHASES: 'zsb_purchases_v5',
-  PACKINGS: 'zsb_packings_v5',
-  PACKING_DRAFT: 'zsb_packing_draft_v5',
-  PAYMENTS: 'zsb_payments_v5',
-  OTHER_COSTS: 'zsb_other_costs_v5',
-  SUPPLIER_CREDITS: 'zsb_supplier_credits_v3',
-  MORTALITIES: 'zsb_mortalities_v3',
+  PURCHASES: 'zsb_purchases_v6',
+  PACKINGS: 'zsb_packings_v6',
+  PACKING_DRAFT: 'zsb_packing_draft_v6',
+  PAYMENTS: 'zsb_payments_v6',
+  OTHER_COSTS: 'zsb_other_costs_v6',
+  SUPPLIER_CREDITS: 'zsb_supplier_credits_v4',
+  MORTALITIES: 'zsb_mortalities_v4',
   SUPER_ADMIN_PASSWORD: 'zsb_super_admin_password_v1',
   SNAPSHOTS: 'zsb_database_snapshots_v1',
   AUTH_USER: 'zsb_auth_user_v1',
   AUDIT_LOGS: 'zsb_audit_logs_v1',
+  LIVE_SYNC: 'zsb_live_sync_enabled_v1',
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -438,6 +449,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('zsb_purchases_v2');
       localStorage.removeItem('zsb_purchases_v3');
       localStorage.removeItem('zsb_purchases_v4');
+      localStorage.removeItem('zsb_purchases_v5');
       const saved = localStorage.getItem(STORAGE_KEYS.PURCHASES);
       if (!saved) return initialPurchases;
       const parsed = JSON.parse(saved);
@@ -453,6 +465,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('zsb_packings_v2');
       localStorage.removeItem('zsb_packings_v3');
       localStorage.removeItem('zsb_packings_v4');
+      localStorage.removeItem('zsb_packings_v5');
       const saved = localStorage.getItem(STORAGE_KEYS.PACKINGS);
       if (!saved) return initialPackings;
       const parsed = JSON.parse(saved);
@@ -468,6 +481,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('zsb_packing_draft_v2');
       localStorage.removeItem('zsb_packing_draft_v3');
       localStorage.removeItem('zsb_packing_draft_v4');
+      localStorage.removeItem('zsb_packing_draft_v5');
       const saved = localStorage.getItem(STORAGE_KEYS.PACKING_DRAFT);
       if (!saved) return createInitialPackingDraft(0);
       const parsed = JSON.parse(saved);
@@ -494,6 +508,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('zsb_payments_v2');
       localStorage.removeItem('zsb_payments_v3');
       localStorage.removeItem('zsb_payments_v4');
+      localStorage.removeItem('zsb_payments_v5');
       const saved = localStorage.getItem(STORAGE_KEYS.PAYMENTS);
       if (!saved) return initialPayments;
       const parsed = JSON.parse(saved);
@@ -509,6 +524,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('zsb_other_costs_v2');
       localStorage.removeItem('zsb_other_costs_v3');
       localStorage.removeItem('zsb_other_costs_v4');
+      localStorage.removeItem('zsb_other_costs_v5');
       const saved = localStorage.getItem(STORAGE_KEYS.OTHER_COSTS);
       if (!saved) return initialOtherCosts;
       const parsed = JSON.parse(saved);
@@ -522,6 +538,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       localStorage.removeItem('zsb_supplier_credits_v1');
       localStorage.removeItem('zsb_supplier_credits_v2');
+      localStorage.removeItem('zsb_supplier_credits_v3');
       const saved = localStorage.getItem(STORAGE_KEYS.SUPPLIER_CREDITS);
       if (!saved) return [];
       const parsed = JSON.parse(saved);
@@ -535,6 +552,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       localStorage.removeItem('zsb_mortalities_v1');
       localStorage.removeItem('zsb_mortalities_v2');
+      localStorage.removeItem('zsb_mortalities_v3');
       const saved = localStorage.getItem(STORAGE_KEYS.MORTALITIES);
       if (!saved) return [];
       const parsed = JSON.parse(saved);
@@ -628,33 +646,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   // Local Database Persistence Sync Status state
-  const [syncStatus, setSyncStatus] = useState<SyncStatusState>('synced');
+  const [isLiveSyncEnabled, setIsLiveSyncEnabled] = useState<boolean>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem(STORAGE_KEYS.LIVE_SYNC);
+        if (saved !== null) {
+          return saved === 'true';
+        }
+      }
+      return true;
+    } catch {
+      return true;
+    }
+  });
+
+  const [hasUnsyncedChanges, setHasUnsyncedChanges] = useState<boolean>(false);
+  const isLiveSyncEnabledRef = useRef<boolean>(isLiveSyncEnabled);
+  isLiveSyncEnabledRef.current = isLiveSyncEnabled;
+
+  const [syncStatus, setSyncStatus] = useState<SyncStatusState>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem(STORAGE_KEYS.LIVE_SYNC);
+        if (saved === 'false') return 'paused';
+      }
+      return 'synced';
+    } catch {
+      return 'synced';
+    }
+  });
   const [lastSyncedAt, setLastSyncedAt] = useState<string>(() => new Date().toISOString());
   const [lastSyncedEntity, setLastSyncedEntity] = useState<string>('All Ledgers');
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialMountRef = useRef<boolean>(true);
 
-  const persistWithSyncIndicator = (entityLabel: string, writeFn: () => void) => {
-    try {
-      writeFn();
-      if (!isInitialMountRef.current) {
-        setSyncStatus('saving');
-        setLastSyncedEntity(entityLabel);
-        if (syncTimerRef.current) {
-          clearTimeout(syncTimerRef.current);
-        }
-        syncTimerRef.current = setTimeout(() => {
-          setSyncStatus('synced');
-          setLastSyncedAt(new Date().toISOString());
-        }, 550);
-      }
-    } catch (e) {
-      console.error(e);
-      setSyncStatus('error');
-    }
-  };
-
-  const triggerManualSync = (entityLabel: string = 'All Ledgers') => {
+  const triggerManualSync = (
+    entityLabel: string = 'All Ledgers',
+    targetStatus?: SyncStatusState
+  ) => {
     try {
       setSyncStatus('saving');
       setLastSyncedEntity(entityLabel);
@@ -668,13 +697,76 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem(STORAGE_KEYS.SUPPLIER_CREDITS, JSON.stringify(supplierCredits));
       localStorage.setItem(STORAGE_KEYS.MORTALITIES, JSON.stringify(mortalities));
       localStorage.setItem(STORAGE_KEYS.SNAPSHOTS, JSON.stringify(snapshots));
+      setHasUnsyncedChanges(false);
       if (syncTimerRef.current) {
         clearTimeout(syncTimerRef.current);
       }
+      const finalStatus =
+        targetStatus !== undefined
+          ? targetStatus
+          : isLiveSyncEnabledRef.current
+          ? 'synced'
+          : 'paused';
       syncTimerRef.current = setTimeout(() => {
-        setSyncStatus('synced');
+        setSyncStatus(finalStatus);
         setLastSyncedAt(new Date().toISOString());
       }, 550);
+    } catch (e) {
+      console.error(e);
+      setSyncStatus('error');
+    }
+  };
+
+  const toggleLiveSync = (forcedValue?: boolean) => {
+    const nextValue =
+      forcedValue !== undefined ? forcedValue : !isLiveSyncEnabledRef.current;
+    isLiveSyncEnabledRef.current = nextValue;
+    setIsLiveSyncEnabled(nextValue);
+    try {
+      localStorage.setItem(STORAGE_KEYS.LIVE_SYNC, String(nextValue));
+    } catch (e) {
+      console.error(e);
+    }
+    if (nextValue) {
+      // When turning Live Sync on, immediately flush all state to storage and show Synced
+      triggerManualSync('All Ledgers (Live Sync Restored)', 'synced');
+      setHasUnsyncedChanges(false);
+      showToast('Live Sync enabled: Auto-saving database changes in the background.');
+    } else {
+      if (syncTimerRef.current) {
+        clearTimeout(syncTimerRef.current);
+      }
+      setSyncStatus('paused');
+      showToast(
+        'Live Sync paused: Background auto-saving disabled. Use "Sync Now" (Ctrl+S) to save.'
+      );
+    }
+  };
+
+  const persistWithSyncIndicator = (entityLabel: string, writeFn: () => void) => {
+    try {
+      if (!isLiveSyncEnabledRef.current) {
+        if (!isInitialMountRef.current) {
+          setHasUnsyncedChanges(true);
+          setSyncStatus('paused');
+          setLastSyncedEntity(entityLabel);
+        }
+        return;
+      }
+
+      writeFn();
+      if (!isInitialMountRef.current) {
+        setHasUnsyncedChanges(false);
+        setSyncStatus('saving');
+        setLastSyncedEntity(entityLabel);
+        if (syncTimerRef.current) {
+          clearTimeout(syncTimerRef.current);
+        }
+        syncTimerRef.current = setTimeout(() => {
+          setSyncStatus('synced');
+          setLastSyncedAt(new Date().toISOString());
+        }, 550);
+      }
     } catch (e) {
       console.error(e);
       setSyncStatus('error');
@@ -965,19 +1057,102 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ): number => {
     if (!records || records.length === 0) return 0;
     const now = new Date().toISOString();
-    const hydrated: PurchaseRecord[] = records.map((rec) => ({
-      ...rec,
-      id: generateRecordId('pur'),
-      createdAt: now,
-    }));
-    setPurchases((prev) => (mode === 'replace' ? hydrated : [...hydrated, ...prev]));
+    const mergedIncoming = mergePurchaseRecordsBySupplierAndDate(
+      records,
+      mode === 'replace' ? 0 : purchases.length
+    );
+
+    if (mode === 'replace') {
+      const hydrated: PurchaseRecord[] = mergedIncoming.map((rec) => ({
+        ...rec,
+        id: generateRecordId('pur'),
+        createdAt: now,
+      }));
+      setPurchases(hydrated);
+      addAuditLog({
+        action: 'IMPORT',
+        module: 'Purchase',
+        entityId: `BULK-PUR-${hydrated.length}`,
+        summary: `Bulk imported ${hydrated.length} merged purchase challan record(s) (replace mode)`,
+      });
+      return hydrated.length;
+    }
+
+    setPurchases((prev) => {
+      const updatedExisting = [...prev];
+      const existingIndexByKey = new Map<string, number>();
+      updatedExisting.forEach((p, idx) => {
+        existingIndexByKey.set(
+          buildPurchaseSupplierGroupKey({
+            description: p.description,
+            date: p.date,
+          }),
+          idx
+        );
+      });
+
+      const newlyCreated: PurchaseRecord[] = [];
+      let nextSeqCount = prev.length;
+
+      for (const incoming of mergedIncoming) {
+        const key = buildPurchaseSupplierGroupKey({
+          description: incoming.description,
+          date: incoming.date,
+        });
+
+        const matchIdx = existingIndexByKey.get(key);
+        if (matchIdx !== undefined) {
+          const target = updatedExisting[matchIdx];
+          const combinedItems: PurchaseItemRow[] = [
+            ...(target.items || []),
+            ...(incoming.items || []).map((it, idx) => ({
+              ...it,
+              id: `pi-merged-${Date.now()}-${target.items.length + idx}`,
+            })),
+          ];
+          const combinedPrevious =
+            (Number(target.previousAmount) || 0) + (Number(incoming.previousAmount) || 0);
+          const combinedPaid =
+            (Number(target.paidAmount) || 0) + (Number(incoming.paidAmount) || 0);
+          const totals = calculatePurchaseTotals(
+            combinedItems,
+            combinedPrevious,
+            combinedPaid
+          );
+
+          updatedExisting[matchIdx] = {
+            ...target,
+            contactNumber: target.contactNumber || incoming.contactNumber,
+            items: combinedItems,
+            totalQty: totals.totalQty,
+            totalAmount: totals.totalAmount,
+            previousAmount: totals.previousAmount,
+            paidAmount: totals.paidAmount,
+            balance: totals.balance,
+          };
+        } else {
+          const invoiceNumber =
+            incoming.invoiceNumber || generateInvoiceNumber('PUR', nextSeqCount);
+          nextSeqCount++;
+          newlyCreated.push({
+            ...incoming,
+            invoiceNumber,
+            id: generateRecordId('pur'),
+            createdAt: now,
+          });
+        }
+      }
+
+      return [...newlyCreated, ...updatedExisting];
+    });
+
     addAuditLog({
       action: 'IMPORT',
       module: 'Purchase',
-      entityId: `BULK-PUR-${hydrated.length}`,
-      summary: `Bulk imported ${hydrated.length} purchase challan record(s) (${mode} mode)`,
+      entityId: `BULK-PUR-${mergedIncoming.length}`,
+      summary: `Bulk imported ${mergedIncoming.length} merged purchase challan record(s) (append mode)`,
     });
-    return hydrated.length;
+    return mergedIncoming.length;
   };
 
   // Packings CRUD
@@ -1582,32 +1757,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         'zsb_purchases_v3',
         'zsb_purchases_v4',
         'zsb_purchases_v5',
+        'zsb_purchases_v6',
         'zsb_packings_v1',
         'zsb_packings_v2',
         'zsb_packings_v3',
         'zsb_packings_v4',
         'zsb_packings_v5',
+        'zsb_packings_v6',
         'zsb_packing_draft_v1',
         'zsb_packing_draft_v2',
         'zsb_packing_draft_v3',
         'zsb_packing_draft_v4',
         'zsb_packing_draft_v5',
+        'zsb_packing_draft_v6',
         'zsb_payments_v1',
         'zsb_payments_v2',
         'zsb_payments_v3',
         'zsb_payments_v4',
         'zsb_payments_v5',
+        'zsb_payments_v6',
         'zsb_other_costs_v1',
         'zsb_other_costs_v2',
         'zsb_other_costs_v3',
         'zsb_other_costs_v4',
         'zsb_other_costs_v5',
+        'zsb_other_costs_v6',
         'zsb_supplier_credits_v1',
         'zsb_supplier_credits_v2',
         'zsb_supplier_credits_v3',
+        'zsb_supplier_credits_v4',
         'zsb_mortalities_v1',
         'zsb_mortalities_v2',
         'zsb_mortalities_v3',
+        'zsb_mortalities_v4',
         'zsb_awb_row_overrides_v1',
         'zsb_awb_custom_rows_v1',
         'zsb_frb_row_overrides_v1',
@@ -2022,6 +2204,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         lastSyncedAt,
         lastSyncedEntity,
         triggerManualSync,
+        isLiveSyncEnabled,
+        toggleLiveSync,
+        hasUnsyncedChanges,
         toastMessage,
         showToast,
         focusedShipmentInvoice,

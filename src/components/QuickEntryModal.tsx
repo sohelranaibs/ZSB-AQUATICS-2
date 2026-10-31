@@ -47,9 +47,10 @@ type TargetSelection = DatasetKey | 'all';
 const SAMPLE_TEMPLATES: Record<DatasetKey, string> = {
   purchase: `Supplier, Date, Item, Quantity, Rate, PreviousAmount, PaidAmount, ContactNumber
 ABDULLAH VAI, 2026-10-21, FF1, 120, 460, 10000, 45000, +8801711223344
+ABDULLAH VAI, 2026-10-21, F1, 80, 340, 0, 20000, +8801711223344
 UZZAL VAI, 2026-10-21, F1, 150, 330, 0, 49500, +8801822334455
-NAPAL VAI, 2026-10-21, 2F, 80, 380, 15000, 30000, +8801933445566
-FAISAL VAI, 2026-10-21, XXL, 90, 520, 5000, 40000, +8801671036114`,
+UZZAL VAI, 2026-10-21, 2F, 60, 380, 0, 22800, +8801822334455
+NAPAL VAI, 2026-10-21, 2F, 80, 380, 15000, 30000, +8801933445566`,
 
   packing: `ShippingMark, Flight, Destination, Shipper, Date, Item, Box, Weight, Rate
 AAD, CAN, GUANGZHOU, ZSB AQUATICS, 2026-10-21, 2F, 8, 15, 420
@@ -616,7 +617,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                           : 'bg-slate-100 text-slate-600'
                       }`}
                     >
-                      {singleDatasetKey === 'packing' &&
+                      {(singleDatasetKey === 'packing' || singleDatasetKey === 'purchase') &&
                       currentParseResult.totalParsedRows > currentParseResult.records.length
                         ? `${currentParseResult.totalParsedRows} Item Rows → ${currentParseResult.records.length} Invoice(s)`
                         : `${currentParseResult.records.length} Valid Row(s)`}
@@ -697,6 +698,28 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
             {/* Live Parsed Preview Table */}
             {activeType !== 'all' && currentParseResult.records.length > 0 && (
               <div className="space-y-2">
+                {singleDatasetKey === 'purchase' && (
+                  <div
+                    data-testid="purchase-merge-rule-banner"
+                    className="bg-blue-50 border border-blue-300 text-blue-950 rounded-lg px-3 py-2 text-xs flex flex-wrap items-center justify-between gap-2"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <Layers className="w-4 h-4 text-blue-700 shrink-0" />
+                      <span>
+                        <strong>Auto-Merge Active:</strong> Rows with the same{' '}
+                        <span className="font-mono font-bold">
+                          Purchasing Supplier Name + Date
+                        </span>{' '}
+                        merge all items into <strong>1 Invoice &amp; Purchasing Invoice Number</strong>.
+                      </span>
+                    </div>
+                    <span className="font-mono font-bold text-[11px] bg-blue-100 text-blue-900 px-2 py-0.5 rounded border border-blue-300">
+                      {currentParseResult.totalParsedRows} Item Row(s) →{' '}
+                      {currentParseResult.records.length} Purchase Invoice(s)
+                    </span>
+                  </div>
+                )}
+
                 {singleDatasetKey === 'packing' && (
                   <div
                     data-testid="packing-merge-rule-banner"
@@ -724,7 +747,12 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                     <Table className="w-4 h-4 text-blue-600" />
                     <span>
                       Live Parsed Preview ({currentParseResult.records.length}{' '}
-                      {singleDatasetKey === 'packing' ? 'Merged Packing Invoice(s)' : 'Records'}):
+                      {singleDatasetKey === 'packing'
+                        ? 'Merged Packing Invoice(s)'
+                        : singleDatasetKey === 'purchase'
+                        ? 'Merged Purchase Invoice(s)'
+                        : 'Records'}
+                      ):
                     </span>
                   </span>
                   <span className="text-[11px] font-mono text-slate-500">
@@ -771,10 +799,25 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                             )}
                           </td>
                           <td className="p-2 text-slate-600">
-                            {singleDatasetKey === 'purchase' && rec.items?.[0] && (
-                              <span>
-                                {rec.items[0].item}: {rec.items[0].quantity} KG @ {rec.items[0].rate}
-                              </span>
+                            {singleDatasetKey === 'purchase' && rec.items?.length > 0 && (
+                              <div className="space-y-0.5">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black bg-blue-100 text-blue-900 border border-blue-300">
+                                    {rec.items.length} {rec.items.length === 1 ? 'Item' : 'Items Merged'}
+                                  </span>
+                                  <span className="font-mono font-bold text-slate-800">
+                                    Total: {rec.totalQty} KG
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-slate-600 font-mono">
+                                  {rec.items
+                                    .map(
+                                      (it: any) =>
+                                        `${it.item} (${it.quantity} KG @ ${it.rate})`
+                                    )
+                                    .join(' + ')}
+                                </div>
+                              </div>
                             )}
                             {singleDatasetKey === 'packing' && rec.items?.length > 0 && (
                               <div className="space-y-0.5">

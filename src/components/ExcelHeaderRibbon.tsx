@@ -30,15 +30,43 @@ import {
   Keyboard,
   Zap,
   Pause,
+  Smartphone,
+  Monitor,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { GlobalSearchBar } from './GlobalSearchBar.tsx';
+import { DisplayMode, ZOOM_PRESETS } from '../utils/displayViewport.ts';
 
 interface ExcelHeaderRibbonProps {
   onOpenShortcutsModal?: () => void;
+  displayMode?: DisplayMode;
+  onChangeDisplayMode?: (mode: DisplayMode) => void;
+  zoomPercent?: number;
+  effectivePercentLabel?: string;
+  onZoomIn?: () => void;
+  onZoomOut?: () => void;
+  onZoomReset?: () => void;
+  onSelectZoomPreset?: (zoom: number) => void;
+  isFullScreen?: boolean;
+  onToggleFullScreen?: () => void;
 }
 
 export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
   onOpenShortcutsModal,
+  displayMode = 'smart_mobile',
+  onChangeDisplayMode,
+  zoomPercent = 100,
+  effectivePercentLabel = '100%',
+  onZoomIn,
+  onZoomOut,
+  onZoomReset,
+  onSelectZoomPreset,
+  isFullScreen = false,
+  onToggleFullScreen,
 }) => {
   const {
     activeTab,
@@ -256,8 +284,9 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
 
   return (
     <header className="bg-slate-900 border-b border-slate-700 shadow-md select-none print:hidden sticky top-0 z-40">
-      {/* Top Company & Excel Title Bar */}
-      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 px-4 py-2 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
+      {/* Top Company & Excel Title Bar (Auto-compacted in Full Screen mode for maximum sheet space) */}
+      {!isFullScreen && (
+      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 px-3 sm:px-4 py-1.5 sm:py-2 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 sm:gap-3">
         {/* Left: Golden Company Branding */}
         <div className="flex items-center space-x-3">
           <button
@@ -286,7 +315,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
                 Enterprise Trade Ledger
               </span>
             </div>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-0.5 text-[11px] text-slate-300">
+            <div className="hidden md:flex flex-wrap items-center gap-x-4 gap-y-1 mt-0.5 text-[11px] text-slate-300">
               <div className="flex items-center space-x-1.5">
                 <span className="text-slate-400 font-medium">Address:</span>
                 <span className="font-semibold text-slate-100">{companyProfile.address}</span>
@@ -488,10 +517,21 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
           />
         </div>
       </div>
+      )}
 
-      {/* Excel Formula Bar + Quick Sheet Switcher Controls */}
-      <div className="bg-slate-800 px-4 py-1.5 border-b border-slate-700 flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-slate-300">
+      {/* Excel Formula Bar + Smart Display, Zoom In/Out, Desktop View & Full Screen Controls */}
+      <div className="bg-slate-800 px-2.5 sm:px-4 py-1.5 border-b border-slate-700 flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-slate-300">
         <div className="flex items-center space-x-2 min-w-0 flex-1">
+          {isFullScreen && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('dashboard')}
+              className="zsb-3d-text text-xs font-black tracking-wider shrink-0 mr-1 cursor-pointer"
+              title="ZSB AQUATICS — Return to Dashboard"
+            >
+              {companyProfile.companyName}
+            </button>
+          )}
 
           {/* Direct Sheet Dropdown Jumper */}
           <div className="flex items-center space-x-1.5 shrink-0">
@@ -504,7 +544,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
               aria-label="Jump to Workbook Sheet"
               value={activeTab}
               onChange={(e) => setActiveTab(e.target.value as ActiveTab)}
-              className="bg-slate-950 text-amber-300 border border-amber-500/50 rounded px-2 py-0.5 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-amber-400 cursor-pointer"
+              className="bg-slate-950 text-amber-300 border border-amber-500/50 rounded px-2 py-0.5 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-amber-400 cursor-pointer max-w-[190px] sm:max-w-none"
             >
               {workbookSheets.map((s) => (
                 <option key={s.id} value={s.id} className="bg-slate-900 text-white">
@@ -514,19 +554,159 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
             </select>
           </div>
 
-          <div className="text-slate-400 font-bold select-none text-emerald-400 italic hidden md:inline">
+          <div className="text-slate-400 font-bold select-none text-emerald-400 italic hidden xl:inline">
             fx
           </div>
-          <div className="h-4 w-px bg-slate-700 hidden md:block" />
-          <div className="flex-1 overflow-x-auto whitespace-nowrap text-slate-200 hidden lg:block">
+          <div className="h-4 w-px bg-slate-700 hidden xl:block" />
+          <div className="flex-1 overflow-x-auto whitespace-nowrap text-slate-200 hidden xl:block">
             <span className="text-amber-300/90 font-medium">{getFormulaForTab()}</span>
           </div>
+        </div>
+
+        {/* Smart Mobile Display Adjust / Desktop View / Zoom In / Zoom Out / Full Screen Toolbar */}
+        <div
+          data-testid="display-viewport-toolbar"
+          className="flex items-center flex-wrap gap-1 sm:gap-1.5 shrink-0 w-full sm:w-auto justify-between sm:justify-end"
+        >
+          {/* Smart Mobile Adjust vs Desktop View Mode Switcher */}
+          <div
+            role="group"
+            aria-label="Display Viewport Mode"
+            className="inline-flex items-center rounded border border-slate-600 bg-slate-950/90 p-0.5"
+          >
+            <button
+              type="button"
+              data-testid="display-mode-smart-mobile-btn"
+              onClick={() => onChangeDisplayMode?.('smart_mobile')}
+              aria-pressed={displayMode === 'smart_mobile'}
+              title="Smart Mobile Display Adjust: Automatically optimizes layout, table scrolling, and responsive touch controls for mobile & tablet screens"
+              className={`flex items-center space-x-1 px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold transition cursor-pointer ${
+                displayMode === 'smart_mobile'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Smartphone className="w-3 h-3 shrink-0" />
+              <span>Smart Mobile</span>
+            </button>
+
+            <button
+              type="button"
+              data-testid="display-mode-desktop-btn"
+              onClick={() => onChangeDisplayMode?.('desktop_full')}
+              aria-pressed={displayMode === 'desktop_full'}
+              title="Show Desktop View (1440px Full Workbook Sheet): Renders the complete desktop spreadsheet layout scaled to fit any screen"
+              className={`flex items-center space-x-1 px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold transition cursor-pointer ${
+                displayMode === 'desktop_full'
+                  ? 'bg-amber-500 text-slate-950 shadow-xs font-black'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Monitor className="w-3 h-3 shrink-0" />
+              <span>Desktop View</span>
+            </button>
+          </div>
+
+          {/* Zoom Out / Zoom Percentage / Zoom In Controls */}
+          <div
+            role="group"
+            aria-label="Zoom Controls"
+            className="inline-flex items-center rounded border border-slate-600 bg-slate-950/90 p-0.5 space-x-0.5"
+          >
+            <button
+              type="button"
+              data-testid="zoom-out-btn"
+              onClick={onZoomOut}
+              disabled={zoomPercent <= 40}
+              aria-label="Zoom Out"
+              title="Zoom Out (-10%)"
+              className="flex items-center justify-center w-5 sm:w-6 h-5 rounded text-slate-200 hover:bg-slate-800 hover:text-amber-300 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+            >
+              <ZoomOut className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+            </button>
+
+            <select
+              data-testid="zoom-preset-select"
+              aria-label="Select Zoom Percentage"
+              value={zoomPercent}
+              onChange={(e) => onSelectZoomPreset?.(Number(e.target.value))}
+              title={`Current Display Scale: ${effectivePercentLabel}. Select a preset zoom level (50% - 200%).`}
+              className="bg-slate-900 text-amber-300 border border-slate-700 rounded px-1 sm:px-1.5 py-0.5 text-[10px] sm:text-[11px] font-mono font-bold focus:outline-none focus:ring-1 focus:ring-amber-400 cursor-pointer"
+            >
+              {!ZOOM_PRESETS.includes(zoomPercent) && (
+                <option value={zoomPercent}>{effectivePercentLabel}</option>
+              )}
+              {ZOOM_PRESETS.map((preset) => (
+                <option key={preset} value={preset} className="bg-slate-900 text-white">
+                  {preset === 100 && effectivePercentLabel.startsWith('Fit')
+                    ? effectivePercentLabel
+                    : `${preset}%`}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              data-testid="zoom-in-btn"
+              onClick={onZoomIn}
+              disabled={zoomPercent >= 200}
+              aria-label="Zoom In"
+              title="Zoom In (+10%)"
+              className="flex items-center justify-center w-5 sm:w-6 h-5 rounded text-slate-200 hover:bg-slate-800 hover:text-amber-300 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+            >
+              <ZoomIn className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+            </button>
+
+            {zoomPercent !== 100 && (
+              <button
+                type="button"
+                data-testid="zoom-reset-btn"
+                onClick={onZoomReset}
+                aria-label="Reset Zoom to 100%"
+                title="Reset Zoom to 100%"
+                className="flex items-center justify-center px-1 sm:px-1.5 h-5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 text-[10px] font-bold transition cursor-pointer"
+              >
+                <RotateCcw className="w-2.5 h-2.5 mr-0.5" />
+                <span>100%</span>
+              </button>
+            )}
+          </div>
+
+          {/* Full Screen Toggle Button */}
+          <button
+            type="button"
+            data-testid="fullscreen-toggle-btn"
+            onClick={onToggleFullScreen}
+            aria-pressed={isFullScreen}
+            title={
+              isFullScreen
+                ? 'Exit Full Screen Workspace (Esc)'
+                : 'Show Full Screen Workspace (Maximizes active sheet & hides top banner)'
+            }
+            className={`flex items-center space-x-1 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded border text-[10px] sm:text-[11px] font-bold transition cursor-pointer ${
+              isFullScreen
+                ? 'bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-400 shadow-xs'
+                : 'bg-slate-900 hover:bg-slate-700 text-amber-300 border-amber-500/40'
+            }`}
+          >
+            {isFullScreen ? (
+              <>
+                <Minimize2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                <span>Exit Full</span>
+              </>
+            ) : (
+              <>
+                <Maximize2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                <span>Full Screen</span>
+              </>
+            )}
+          </button>
         </div>
 
         <div
           role="status"
           aria-live="polite"
-          className="text-[11px] font-mono text-slate-400 hidden md:flex items-center space-x-2.5 shrink-0"
+          className="text-[11px] font-mono text-slate-400 hidden 2xl:flex items-center space-x-2.5 shrink-0"
         >
           <span
             className={`flex items-center space-x-1 ${

@@ -45,7 +45,7 @@ import {
   WeChatIcon,
 } from './PngShareModal.tsx';
 
-const AWB_OVERRIDES_STORAGE_KEY = 'zsb_awb_row_overrides_v1';
+const AWB_OVERRIDES_STORAGE_KEY = 'zsb_awb_row_overrides_v2';
 
 export const AirWayBillView: React.FC = () => {
   const {
@@ -680,6 +680,10 @@ export const AirWayBillView: React.FC = () => {
           </div>
         </div>
 
+        <div
+          data-testid="awb-statement-scroll-box"
+          className="max-h-[420px] overflow-y-auto overflow-x-auto border-2 border-slate-800 rounded-lg bg-white shadow-inner my-1"
+        >
         <table
           data-testid="awb-statement-table"
           style={{
@@ -699,7 +703,7 @@ export const AirWayBillView: React.FC = () => {
             <col style={{ width: '9%' }} />
             <col style={{ width: '16%' }} />
           </colgroup>
-          <thead>
+          <thead className="sticky top-0 z-10">
             {/* Row 1: Deep Blue "AIR WAY BILL" Title Banner */}
             <tr>
               <th
@@ -962,6 +966,7 @@ export const AirWayBillView: React.FC = () => {
             </tr>
           </tfoot>
         </table>
+        </div>
       </div>
 
       {/* Bottom Summary Strip & Quick Link to Packing List Form */}

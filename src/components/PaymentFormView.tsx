@@ -109,11 +109,8 @@ export const PaymentFormView: React.FC = () => {
     status: 'PAID',
   });
 
-  const [rows, setRows] = useState<PaymentItemRow[]>([
-    createEmptyRow('1'),
-    createEmptyRow('2'),
-    createEmptyRow('3'),
-  ]);
+  const [customRows, setCustomRows] = useState<PaymentItemRow[]>([]);
+  const [rowEdits, setRowEdits] = useState<Record<string, Partial<PaymentItemRow>>>({});
 
   // Overall footer summary inputs (empty / 0 by default)
   const [overallPreviousAmount, setOverallPreviousAmount] = useState<number>(0);
@@ -142,20 +139,32 @@ export const PaymentFormView: React.FC = () => {
     string[]
   >([]);
 
-  const validation = validateSupplierPaymentForm({
-    invoiceNumber,
-    date,
-    supplierName,
-    overallPreviousAmount,
-    overallPaidAmount,
-    rows,
-  });
-
-  // Live Supplier Ledger Stats from Purchases + Supplier Payments
-  const supplierStats = useMemo(
-    () => getSupplierPaymentStats(purchases, payments, supplierName),
-    [purchases, payments, supplierName]
-  );
+  // All distinct supplier names from Dropdown Options + Purchase DB + Payment DB + Credit Notes
+  const availableSuppliers = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of dropdownOptions.suppliers) {
+      if (s && s.trim()) map.set(s.trim().toLowerCase(), s.trim());
+    }
+    for (const p of purchases) {
+      if (p.description && p.description.trim()) {
+        const key = p.description.trim().toLowerCase();
+        if (!map.has(key)) map.set(key, p.description.trim());
+      }
+    }
+    for (const pm of supplierPayments) {
+      if (pm.description && pm.description.trim()) {
+        const key = pm.description.trim().toLowerCase();
+        if (!map.has(key)) map.set(key, pm.description.trim());
+      }
+    }
+    for (const cn of supplierCredits) {
+      if (cn.supplierName && cn.supplierName.trim()) {
+        const key = cn.supplierName.trim().toLowerCase();
+        if (!map.has(key)) map.set(key, cn.supplierName.trim());
+      }
+    }
+    return Array.from(map.values());
+  }, [dropdownOptions.suppliers, purchases, supplierPayments, supplierCredits]);
 
   // Comprehensive Supplier Payment Details & Transaction History (Debit, Credit, Balance & Status)
   const supplierRecordHistory = useMemo(
@@ -180,6 +189,137 @@ export const PaymentFormView: React.FC = () => {
   const supplierHistoryTotals = useMemo(
     () => calculateSupplierHistoryTotals(supplierRecordHistory),
     [supplierRecordHistory]
+  );
+
+  // Date-by-date supplier purchase & payment details rows from Purchase Database + Supplier Payment Vouchers + Credit Notes
+  const dbSupplierRows: PaymentItemRow[] = useMemo(() => {
+    const target = (supplierName || '').trim().toLowerCase();
+    const isMatch = (name?: string) => {
+      if (!target || target === 'all') return true;
+      const n = (name || '').trim().toLowerCase();
+      return n === target || n.includes(target) || target.includes(n);
+    };
+
+    const collected: PaymentItemRow[] = [];
+
+    // 1. Purchase Consignment Bills (with item details, weight, invoice, date)
+    for (const pur of purchases) {
+      if (!isMatch(pur.description)) continue;
+      const rowId = `pur-${pur.id}`;
+      const edit = rowEdits[rowId];
+      const baseDebit = Math.round((Number(pur.totalAmount) || 0) * 100) / 100;
+      const baseCredit = Math.round((Number(pur.paidAmount) || 0) * 100) / 100;
+      const debitAmount = edit?.debitAmount !== undefined ? edit.debitAmount : baseDebit;
+      const creditAmount = edit?.creditAmount !== undefined ? edit.creditAmount : baseCredit;
+      const dueBal = debitAmount - creditAmount;
+      const itemSummary =
+        Array.isArray(pur.items) && pur.items.length > 0
+          ? pur.items
+              .filter((it) => it.item || it.quantity > 0)
+              .map((it) => `${it.item || 'Fish'}: ${it.quantity}KG @${it.rate}`)
+              .join(', ')
+          : `${pur.totalQty || 0} KG`;
+      const baseDesc = `${pur.description} — ${pur.invoiceNumber} (${pur.totalQty || 0} KG${itemSummary ? ` · ${itemSummary}` : ''}${pur.remarks ? ` · ${pur.remarks}` : ''})`;
+
+      collected.push({
+        id: rowId,
+        date: edit?.date !== undefined ? edit.date : pur.date,
+        description: edit?.description !== undefined ? edit.description : baseDesc,
+        debitAmount,
+        creditAmount,
+        balance: dueBal,
+        status: edit?.status !== undefined ? edit.status : dueBal <= 0 && debitAmount > 0 ? 'PAID' : 'UNPAID',
+      });
+    }
+
+    // 2. Supplier Payment Vouchers
+    for (const pm of supplierPayments) {
+      if (!isMatch(pm.description)) continue;
+      const rowId = `pay-${pm.id}`;
+      const edit = rowEdits[rowId];
+      const baseDebit = Math.round((Number(pm.totalAmount) || 0) * 100) / 100;
+      const baseCredit = Math.round((Number(pm.paidAmount) || 0) * 100) / 100;
+      const debitAmount = edit?.debitAmount !== undefined ? edit.debitAmount : baseDebit;
+      const creditAmount = edit?.creditAmount !== undefined ? edit.creditAmount : baseCredit;
+      const dueBal = debitAmount - creditAmount;
+      const baseDesc = `${pm.description} — Voucher ${pm.invoiceNumber}${pm.remarks ? ` (${pm.remarks})` : ''}`;
+
+      collected.push({
+        id: rowId,
+        paymentId: pm.id,
+        date: edit?.date !== undefined ? edit.date : pm.date,
+        description: edit?.description !== undefined ? edit.description : baseDesc,
+        debitAmount,
+        creditAmount,
+        balance: dueBal,
+        status: edit?.status !== undefined ? edit.status : dueBal <= 0 && creditAmount > 0 ? 'PAID' : 'UNPAID',
+      });
+    }
+
+    // 3. Supplier Credit Notes / Rebates
+    for (const cn of supplierCredits) {
+      if (!isMatch(cn.supplierName)) continue;
+      const rowId = `cn-${cn.id}`;
+      const edit = rowEdits[rowId];
+      const baseDebit = 0;
+      const baseCredit = Math.round((Number(cn.amount) || 0) * 100) / 100;
+      const debitAmount = edit?.debitAmount !== undefined ? edit.debitAmount : baseDebit;
+      const creditAmount = edit?.creditAmount !== undefined ? edit.creditAmount : baseCredit;
+      const dueBal = debitAmount - creditAmount;
+      const baseDesc = `${cn.supplierName} — Credit Note ${cn.creditNoteNumber} (${cn.reason}${cn.refPurchaseInvoice ? ` · Ref: ${cn.refPurchaseInvoice}` : ''})`;
+
+      collected.push({
+        id: rowId,
+        date: edit?.date !== undefined ? edit.date : cn.date,
+        description: edit?.description !== undefined ? edit.description : baseDesc,
+        debitAmount,
+        creditAmount,
+        balance: dueBal,
+        status: edit?.status !== undefined ? edit.status : 'PAID',
+      });
+    }
+
+    collected.sort((a, b) => {
+      const dDiff = (b.date || '').localeCompare(a.date || '');
+      if (dDiff !== 0) return dDiff;
+      return (b.description || '').localeCompare(a.description || '');
+    });
+
+    return collected;
+  }, [purchases, supplierPayments, supplierCredits, supplierName, rowEdits]);
+
+  const rows: PaymentItemRow[] = useMemo(() => {
+    const merged = [...customRows, ...dbSupplierRows];
+    if (merged.length > 0) return merged;
+    if (supplierName && supplierName.trim()) {
+      return [
+        {
+          ...createEmptyRow('1'),
+          date,
+          description: `${supplierName} — Opening / New Entry`,
+        },
+      ];
+    }
+    return [
+      { ...createEmptyRow('1'), date },
+      { ...createEmptyRow('2'), date },
+      { ...createEmptyRow('3'), date },
+    ];
+  }, [dbSupplierRows, customRows, supplierName, date]);
+
+  const validation = validateSupplierPaymentForm({
+    invoiceNumber,
+    date,
+    supplierName,
+    overallPreviousAmount,
+    overallPaidAmount,
+    rows,
+  });
+
+  // Live Supplier Ledger Stats from Purchases + Supplier Payments
+  const supplierStats = useMemo(
+    () => getSupplierPaymentStats(purchases, payments, supplierName),
+    [purchases, payments, supplierName]
   );
 
   // Supplier Credit Summary & Selected Supplier Profile
@@ -207,10 +347,15 @@ export const PaymentFormView: React.FC = () => {
   const handleSupplierChange = (selectedSupplier: string) => {
     setSupplierName(selectedSupplier);
     setNewCreditSupplier(selectedSupplier);
+    setCustomRows([]);
+    setRowEdits({});
     const stats = getSupplierPaymentStats(purchases, payments, selectedSupplier);
     if (stats.latestContactNumber) {
       setContactNumber(stats.latestContactNumber);
+    } else {
+      setContactNumber('');
     }
+    setOverallPreviousAmount(stats.latestBalance);
   };
 
   const handleCreateSupplierCredit = (e: React.FormEvent) => {
@@ -263,27 +408,18 @@ export const PaymentFormView: React.FC = () => {
 
     const creditDescription = `SUPPLIER CREDIT NOTE (${cn.creditNoteNumber} - ${cn.reason})`;
 
-    setRows((prev) => {
-      const emptyIdx = prev.findIndex(
-        (r) =>
-          r.description.trim() === '' &&
-          r.debitAmount === 0 &&
-          r.creditAmount === 0
-      );
-      const newRow: PaymentItemRow = {
-        id: emptyIdx >= 0 ? prev[emptyIdx].id : generateRecordId('payrow'),
+    setCustomRows((prev) => [
+      ...prev,
+      {
+        id: generateRecordId('payrow'),
+        date,
         description: creditDescription,
         debitAmount: 0,
         creditAmount: applyAmt,
         balance: calculatePaymentRow(0, applyAmt),
-      };
-      if (emptyIdx >= 0) {
-        const copy = [...prev];
-        copy[emptyIdx] = newRow;
-        return copy;
-      }
-      return [...prev, newRow];
-    });
+        status: 'PAID',
+      },
+    ]);
 
     applySupplierCredit(cn.id, {
       amount: applyAmt,
@@ -311,30 +447,71 @@ export const PaymentFormView: React.FC = () => {
     field: keyof PaymentItemRow,
     value: string | number
   ) => {
-    setRows((prev) =>
-      prev.map((row) => {
-        if (row.id !== id) return row;
-        const updated = { ...row, [field]: value };
+    if (id.startsWith('pur-') || id.startsWith('pay-') || id.startsWith('cn-')) {
+      setRowEdits((prev) => ({
+        ...prev,
+        [id]: {
+          ...prev[id],
+          [field]: value,
+        },
+      }));
+    } else {
+      setCustomRows((prev) => {
+        const baseList =
+          prev.length === 0 && dbSupplierRows.length === 0
+            ? supplierName && supplierName.trim()
+              ? [
+                  {
+                    ...createEmptyRow('1'),
+                    date,
+                    description: `${supplierName} — Opening / New Entry`,
+                  },
+                ]
+              : [
+                  { ...createEmptyRow('1'), date },
+                  { ...createEmptyRow('2'), date },
+                  { ...createEmptyRow('3'), date },
+                ]
+            : prev;
+        return baseList.map((row) => {
+          if (row.id !== id) return row;
+          const updated = { ...row, [field]: value };
 
-        const d = field === 'debitAmount' ? Number(value) : row.debitAmount;
-        const c = field === 'creditAmount' ? Number(value) : row.creditAmount;
-        updated.balance = calculatePaymentRow(d, c);
+          const d = field === 'debitAmount' ? Number(value) : row.debitAmount;
+          const c = field === 'creditAmount' ? Number(value) : row.creditAmount;
+          if ((d > 0 || c > 0) && !updated.description.trim()) {
+            updated.description = supplierName || 'Supplier Purchase Goods';
+          }
+          updated.balance = d - c;
 
-        return updated;
-      })
-    );
+          return updated;
+        });
+      });
+    }
   };
 
   const handleClearRow = (id: string) => {
-    setRows((prev) =>
-      prev.map((row) => (row.id === id ? createEmptyRow(id) : row))
-    );
+    if (id.startsWith('pur-') || id.startsWith('pay-') || id.startsWith('cn-')) {
+      setRowEdits((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    } else {
+      setCustomRows((prev) =>
+        prev.map((row) => (row.id === id ? createEmptyRow(id) : row))
+      );
+    }
   };
 
   const handleAddRow = () => {
-    setRows((prev) => [
+    setCustomRows((prev) => [
       ...prev,
-      createEmptyRow(generateRecordId('payrow')),
+      {
+        ...createEmptyRow(generateRecordId('payrow')),
+        date,
+        description: supplierName || 'Supplier Purchase / Payment',
+      },
     ]);
   };
 
@@ -350,11 +527,8 @@ export const PaymentFormView: React.FC = () => {
     setIsRecurring(false);
     setRecurrenceFrequency('monthly');
     setVoucherStatus('PAID');
-    setRows([
-      createEmptyRow('1'),
-      createEmptyRow('2'),
-      createEmptyRow('3'),
-    ]);
+    setCustomRows([]);
+    setRowEdits({});
     setAppliedCreditIdsInVoucher([]);
     setValidationAttempted(false);
   };
@@ -551,14 +725,13 @@ export const PaymentFormView: React.FC = () => {
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => setActiveTab('exporter_payment_form')}
             className="text-xs bg-teal-500/20 hover:bg-teal-500/30 text-teal-200 px-3 py-1 rounded border border-teal-400/40 font-bold flex items-center space-x-1.5 transition cursor-pointer"
           >
-            <span>Open Exporter Payment Sheet (#5)</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            <span>Exporter Payment Sheet (#5)</span>
           </button>
           <span className="text-xs bg-amber-400/20 text-amber-300 px-2.5 py-1 rounded border border-amber-400/40 font-mono">
             Sheet #4
@@ -566,343 +739,61 @@ export const PaymentFormView: React.FC = () => {
         </div>
       </div>
 
-      {/* Automatic Supplier Database Lookup & Payment Details (DEBIT, CREDIT, BALANCE & STATUS) */}
+      {/* Automatic Supplier Database Lookup (Select Supplier Name) */}
       <div
-        data-testid="supplier-payment-details-card"
-        className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3.5"
+        data-testid="supplier-form-auto-lookup-card"
+        className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3"
       >
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
           <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-purple-700" />
+            <Filter className="w-4 h-4 text-[#8b3858]" />
             <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-800">
-              Supplier Payment Details &amp; Record History (DEBIT, CREDIT, BALANCE &amp; STATUS)
+              Automatic Supplier Database Lookup (Select Supplier Name)
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="font-mono bg-purple-50 text-purple-900 border border-purple-200 px-2.5 py-0.5 rounded font-bold">
-              Showing {supplierRecordHistory.length} Record{supplierRecordHistory.length === 1 ? '' : 's'} (
-              <span className="text-emerald-700 font-extrabold">{supplierHistoryTotals.paidCount} PAID</span> ·{' '}
-              <span className="text-rose-700 font-extrabold">{supplierHistoryTotals.reportCount + supplierHistoryTotals.noReportCount} UNPAID</span>)
+              Showing {rows.length} Record{rows.length === 1 ? '' : 's'} ({supplierHistoryTotals.paidCount} PAID · {supplierHistoryTotals.reportCount + supplierHistoryTotals.noReportCount} UNPAID)
             </span>
             <button
               type="button"
-              onClick={() => setIsHistoryExpanded((prev) => !prev)}
-              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-bold cursor-pointer"
+              onClick={handleClear}
+              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold cursor-pointer"
             >
-              {isHistoryExpanded ? (
-                <>
-                  <ChevronUp className="w-3.5 h-3.5" />
-                  <span>Collapse</span>
-                </>
-              ) : (
-                <>
-                  <ChevronDown className="w-3.5 h-3.5" />
-                  <span>Expand ({supplierRecordHistory.length})</span>
-                </>
-              )}
+              <RotateCcw className="w-3 h-3" />
+              <span>Show All History ({purchases.length})</span>
             </button>
           </div>
         </div>
 
-        {/* 4 Summary KPI Metric Cards (DEBIT, CREDIT, BALANCE & STATUS) */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
-            <div className="text-[10px] font-bold text-slate-500 uppercase">
-              TOTAL DEBIT (BILLS / DUE)
-            </div>
-            <div className="text-base sm:text-lg font-black font-mono text-purple-950 mt-0.5">
-              {formatCurrency(supplierHistoryTotals.totalDebit, companyProfile.currency)}
-            </div>
-            <div className="text-[10px] text-slate-500 font-medium mt-0.5">
-              {supplierHistoryTotals.purchaseCount} Purchase Bills
-            </div>
-          </div>
-
-          <div className="bg-emerald-50/60 border border-emerald-200 rounded-lg p-2.5">
-            <div className="text-[10px] font-bold text-emerald-800 uppercase">
-              TOTAL CREDIT (PAID / REBATE)
-            </div>
-            <div className="text-base sm:text-lg font-black font-mono text-emerald-700 mt-0.5">
-              {formatCurrency(supplierHistoryTotals.totalCredit, companyProfile.currency)}
-            </div>
-            <div className="text-[10px] text-emerald-700 font-medium mt-0.5">
-              {supplierHistoryTotals.voucherCount} Vouchers · {supplierHistoryTotals.creditNoteCount} Rebates
-            </div>
-          </div>
-
-          <div className="bg-rose-50/60 border border-rose-200 rounded-lg p-2.5">
-            <div className="text-[10px] font-bold text-rose-800 uppercase">
-              OUTSTANDING BALANCE
-            </div>
-            <div className="text-base sm:text-lg font-black font-mono text-rose-700 mt-0.5">
-              {formatCurrency(supplierHistoryTotals.totalBalance, companyProfile.currency)}
-            </div>
-            <div className="text-[10px] text-slate-500 font-medium mt-0.5">
-              Net Supplier Balance
-            </div>
-          </div>
-
-          <div className="bg-indigo-50/60 border border-indigo-200 rounded-lg p-2.5 flex flex-col justify-between">
-            <div className="text-[10px] font-bold text-indigo-900 uppercase">
-              OVERALL STATUS
-            </div>
-            <div className="mt-1">
-              <span
-                className={`inline-block px-2.5 py-1 text-xs font-black uppercase rounded border ${
-                  supplierHistoryTotals.computedOverallStatus === 'PAID'
-                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                    : 'bg-rose-100 text-rose-900 border-rose-300'
-                }`}
-              >
-                {supplierHistoryTotals.computedOverallStatus === 'PAID' ? 'PAID' : 'UNPAID'}
-              </span>
-            </div>
-            <div className="text-[10px] text-slate-500 font-medium mt-0.5 truncate">
-              {supplierName ? supplierName : 'All Suppliers Combined'}
-            </div>
-          </div>
-        </div>
-
-        {/* Filter Bar: Supplier Select, Status Filter, Record Type, Search */}
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs pt-1">
+        <div className="grid grid-cols-1 gap-3 text-xs">
+          {/* 1. Select Supplier Name */}
           <div>
-            <label className="font-bold text-slate-700 uppercase block mb-1">
-              Supplier Filter
+            <label
+              htmlFor="supplier-lookup-name-select"
+              className="flex items-center justify-between font-black uppercase text-slate-700 mb-1"
+            >
+              <span className="flex items-center gap-1">
+                <Tag className="w-3.5 h-3.5 text-[#8b3858]" />
+                <span>Select Supplier Name</span>
+              </span>
+              <span className="text-[10px] text-purple-700 font-bold">Auto-Lookup</span>
             </label>
             <select
+              id="supplier-lookup-name-select"
               value={supplierName}
               onChange={(e) => handleSupplierChange(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+              className="w-full bg-purple-50/50 border-2 border-purple-600/40 rounded-lg px-2.5 py-1.5 font-black text-sm text-slate-950 focus:bg-white focus:border-purple-700 focus:outline-none"
             >
-              <option value="">-- ALL LOCAL FISH SUPPLIERS --</option>
-              {dropdownOptions.suppliers.map((s) => (
-                <option key={s} value={s}>
-                  {s}
+              <option value="">ALL LOCAL FISH SUPPLIERS ({purchases.length})</option>
+              {availableSuppliers.map((sup) => (
+                <option key={sup} value={sup}>
+                  {sup}
                 </option>
               ))}
             </select>
           </div>
-
-          <div>
-            <label className="font-bold text-slate-700 uppercase block mb-1">
-              Status (PAID / UNPAID)
-            </label>
-            <select
-              value={historyStatusFilter}
-              onChange={(e) => setHistoryStatusFilter(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-purple-500"
-            >
-              <option value="ALL">-- ALL STATUSES (PAID, UNPAID) --</option>
-              <option value="PAID">PAID</option>
-              <option value="UNPAID">UNPAID</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="font-bold text-slate-700 uppercase block mb-1">
-              Record Type
-            </label>
-            <select
-              value={historyRecordType}
-              onChange={(e) => setHistoryRecordType(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-purple-500"
-            >
-              <option value="ALL">All Documents (Vouchers, Purchases, Rebates)</option>
-              <option value="PAYMENT_VOUCHER">Payment Vouchers Only</option>
-              <option value="PURCHASE_BILL">Purchase Bills Only</option>
-              <option value="CREDIT_NOTE">Credit Notes &amp; Rebates</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="font-bold text-slate-700 uppercase block mb-1">
-              Search Invoice / Particulars
-            </label>
-            <input
-              type="text"
-              placeholder="Search PAY, INV, CN, notes..."
-              value={historySearch}
-              onChange={(e) => setHistorySearch(e.target.value)}
-              className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-purple-500"
-            />
-          </div>
         </div>
-
-        {/* Collapsible Table of Supplier Payment Details */}
-        {isHistoryExpanded && (
-          <div className="overflow-x-auto border border-slate-200 rounded-lg">
-            <table className="w-full border-collapse text-xs">
-              <thead>
-                <tr className="bg-[#242b58] text-white uppercase text-[11px] font-bold tracking-wider text-center border-b border-indigo-900">
-                  <th className="px-2 py-2 border-r border-indigo-800/60 w-10">SL</th>
-                  <th className="px-2.5 py-2 border-r border-indigo-800/60 w-24">DATE</th>
-                  <th className="px-2.5 py-2 border-r border-indigo-800/60 w-32">DOC NO</th>
-                  <th className="px-3 py-2 border-r border-indigo-800/60 text-left min-w-[200px]">
-                    SUPPLIER &amp; PARTICULARS
-                  </th>
-                  <th className="px-2.5 py-2 border-r border-indigo-800/60 w-28 text-right">
-                    DEBIT (TK)
-                  </th>
-                  <th className="px-2.5 py-2 border-r border-indigo-800/60 w-28 text-right">
-                    CREDIT (TK)
-                  </th>
-                  <th className="px-2.5 py-2 border-r border-indigo-800/60 w-28 text-right">
-                    BALANCE (TK)
-                  </th>
-                  <th className="px-2.5 py-2 border-r border-indigo-800/60 w-28 text-center">
-                    STATUS
-                  </th>
-                  <th className="px-2 py-2 w-28 text-center">ACTION</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {supplierRecordHistory.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={9}
-                      className="px-4 py-6 text-center text-slate-400 italic bg-slate-50/50"
-                    >
-                      No payment or purchase records found matching the current filters.
-                    </td>
-                  </tr>
-                ) : (
-                  supplierRecordHistory.map((row, idx) => (
-                    <tr
-                      key={row.id}
-                      className={
-                        idx % 2 === 0
-                          ? 'bg-white hover:bg-purple-50/40'
-                          : 'bg-slate-50/60 hover:bg-purple-50/40'
-                      }
-                    >
-                      <td className="p-1.5 border-r border-slate-200 text-center font-mono font-bold text-slate-500">
-                        {idx + 1}
-                      </td>
-                      <td className="p-1.5 border-r border-slate-200 font-mono text-center text-slate-700 whitespace-nowrap">
-                        {formatDate(row.date)}
-                      </td>
-                      <td className="p-1.5 border-r border-slate-200 font-mono font-bold text-purple-950 whitespace-nowrap">
-                        {row.invoiceNumber}
-                      </td>
-                      <td className="p-1.5 border-r border-slate-200">
-                        <div className="font-bold text-slate-800">{row.supplierName}</div>
-                        <div className="text-[11px] text-slate-500 truncate">{row.description}</div>
-                      </td>
-                      <td className="p-1.5 border-r border-slate-200 text-right font-mono font-bold text-slate-900">
-                        {row.debitAmount > 0 ? formatCurrency(row.debitAmount, '') : '-'}
-                      </td>
-                      <td className="p-1.5 border-r border-slate-200 text-right font-mono font-bold text-emerald-800">
-                        {row.creditAmount > 0 ? formatCurrency(row.creditAmount, '') : '-'}
-                      </td>
-                      <td
-                        className={`p-1.5 border-r border-slate-200 text-right font-mono font-bold ${
-                          row.balance > 0 ? 'text-rose-700' : 'text-slate-700'
-                        }`}
-                      >
-                        {formatCurrency(row.balance, '')}
-                      </td>
-                      <td className="p-1.5 border-r border-slate-200 text-center whitespace-nowrap">
-                        <span
-                          className={`inline-block px-2 py-0.5 text-[10px] font-black uppercase rounded border ${
-                            row.status === 'PAID'
-                              ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                              : row.status === 'REPORT'
-                              ? 'bg-blue-100 text-blue-900 border-blue-300'
-                              : 'bg-rose-100 text-rose-900 border-rose-300'
-                          }`}
-                        >
-                          {row.status}
-                        </span>
-                      </td>
-                      <td className="p-1.5 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1">
-                          {row.recordType === 'PAYMENT_VOUCHER' && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const found = payments.find((p) => p.invoiceNumber === row.invoiceNumber);
-                                if (found) {
-                                  openPrintModal({
-                                    type: 'payment',
-                                    title: `Supplier Payment Voucher - ${found.invoiceNumber}`,
-                                    data: found,
-                                    items: found.items,
-                                  });
-                                }
-                              }}
-                              className="px-2 py-0.5 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 rounded text-[10px] font-bold cursor-pointer"
-                              title="Preview PDF"
-                            >
-                              PDF
-                            </button>
-                          )}
-                          {row.recordType === 'PURCHASE_BILL' && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const found = purchases.find((p) => p.invoiceNumber === row.invoiceNumber);
-                                if (found) {
-                                  openPrintModal({
-                                    type: 'purchase',
-                                    title: `Purchase Consignment Bill - ${found.invoiceNumber}`,
-                                    data: found,
-                                    items: found.items,
-                                  });
-                                }
-                              }}
-                              className="px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 rounded text-[10px] font-bold cursor-pointer"
-                              title="Preview Purchase PDF"
-                            >
-                              PDF
-                            </button>
-                          )}
-                          {row.balance > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSupplierName(row.supplierName);
-                                setOverallPreviousAmount(row.balance);
-                                showToast(
-                                  `Applied ${row.supplierName}'s balance (${formatCurrency(
-                                    row.balance,
-                                    companyProfile.currency
-                                  )}) to Previous Amount.`
-                                );
-                              }}
-                              className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded text-[10px] font-bold cursor-pointer"
-                              title="Apply balance to payment form"
-                            >
-                              Apply
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-              <tfoot>
-                <tr className="bg-[#242b58] text-white font-bold border-t-2 border-indigo-900">
-                  <td colSpan={4} className="px-3 py-2 text-right uppercase tracking-wider text-[11px]">
-                    SUPPLIER DETAILS GRAND TOTAL ({supplierRecordHistory.length} RECORDS):
-                  </td>
-                  <td className="px-2.5 py-2 text-right font-mono text-amber-300 font-black text-xs">
-                    {supplierHistoryTotals.totalDebit.toFixed(2)}
-                  </td>
-                  <td className="px-2.5 py-2 text-right font-mono text-emerald-300 font-bold text-xs">
-                    {supplierHistoryTotals.totalCredit.toFixed(2)}
-                  </td>
-                  <td className="px-2.5 py-2 text-right font-mono text-rose-300 font-black text-xs">
-                    {supplierHistoryTotals.totalBalance.toFixed(2)}
-                  </td>
-                  <td colSpan={2} className="px-2.5 py-2 text-center text-[10px] font-mono text-amber-200 font-bold">
-                    {supplierHistoryTotals.paidCount} PAID · {supplierHistoryTotals.reportCount} REPORT · {supplierHistoryTotals.noReportCount} NO REPORT
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
       </div>
 
       {/* Main Grid: Form Left (8 Cols), Action Buttons & Supplier Search Right (4 Cols) */}
@@ -972,8 +863,8 @@ export const PaymentFormView: React.FC = () => {
               </div>
             )}
 
-            {/* Top Supplier Metadata Fields Row (4 Columns) */}
-            <div className="p-3.5 bg-amber-50/60 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+            {/* Top Supplier Metadata Fields Row (3 Columns) */}
+            <div className="p-3.5 bg-amber-50/60 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
               <div>
                 <label
                   htmlFor="supplier-payment-invoice"
@@ -991,29 +882,6 @@ export const PaymentFormView: React.FC = () => {
                   onChange={(e) => setInvoiceNumber(e.target.value)}
                   className={`w-full bg-white border rounded-lg px-2.5 py-1.5 font-mono font-bold text-purple-900 focus:outline-none focus:ring-2 ${
                     validationAttempted && validation.fieldErrors.invoiceNumber
-                      ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
-                      : 'border-slate-300 focus:ring-purple-500'
-                  }`}
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="supplier-payment-date"
-                  className="font-bold text-slate-800 uppercase block mb-1"
-                >
-                  DATE: <span className="text-rose-600">*</span>
-                </label>
-                <input
-                  id="supplier-payment-date"
-                  type="date"
-                  aria-invalid={
-                    validationAttempted && Boolean(validation.fieldErrors.date)
-                  }
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className={`w-full bg-white border rounded-lg px-2.5 py-1.5 text-slate-800 font-medium focus:outline-none focus:ring-2 ${
-                    validationAttempted && validation.fieldErrors.date
                       ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
                       : 'border-slate-300 focus:ring-purple-500'
                   }`}
@@ -1050,7 +918,7 @@ export const PaymentFormView: React.FC = () => {
                   }`}
                 >
                   <option value="">-- Select Supplier Name --</option>
-                  {dropdownOptions.suppliers.map((sup) => (
+                  {availableSuppliers.map((sup) => (
                     <option key={sup} value={sup}>
                       {sup}
                     </option>
@@ -1076,63 +944,7 @@ export const PaymentFormView: React.FC = () => {
               </div>
             </div>
 
-            {/* Recurring Supplier Payment & Future Due Date Bar */}
-            <div className="px-3.5 py-2.5 bg-indigo-50/70 border-b border-indigo-200/80 grid grid-cols-1 sm:grid-cols-3 gap-3 items-center text-xs">
-              <div className="flex items-center space-x-2">
-                <input
-                  id="supplier-payment-recurring"
-                  type="checkbox"
-                  checked={isRecurring}
-                  onChange={(e) => setIsRecurring(e.target.checked)}
-                  className="w-4 h-4 rounded border-indigo-300 text-indigo-700 focus:ring-indigo-500 cursor-pointer"
-                />
-                <label
-                  htmlFor="supplier-payment-recurring"
-                  className="font-bold text-indigo-950 cursor-pointer select-none"
-                >
-                  Recurring Supplier Payment Schedule
-                </label>
-              </div>
 
-              <div className="flex items-center space-x-2">
-                <label
-                  htmlFor="supplier-payment-duedate"
-                  className="font-bold text-slate-700 uppercase whitespace-nowrap text-[11px]"
-                >
-                  Next Due Date:
-                </label>
-                <input
-                  id="supplier-payment-duedate"
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => {
-                    setDueDate(e.target.value);
-                    if (e.target.value) setIsRecurring(true);
-                  }}
-                  className="w-full bg-white border border-indigo-300 rounded-lg px-2.5 py-1 text-slate-800 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <label
-                  htmlFor="supplier-payment-frequency"
-                  className="font-bold text-slate-700 uppercase whitespace-nowrap text-[11px]"
-                >
-                  Cycle:
-                </label>
-                <select
-                  id="supplier-payment-frequency"
-                  value={recurrenceFrequency}
-                  onChange={(e) => setRecurrenceFrequency(e.target.value as RecurrenceFrequency)}
-                  className="w-full bg-white border border-indigo-300 rounded-lg px-2 py-1 text-slate-800 font-semibold text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="weekly">Weekly (7 Days)</option>
-                  <option value="biweekly">Bi-Weekly (14 Days)</option>
-                  <option value="monthly">Monthly</option>
-                  <option value="quarterly">Quarterly</option>
-                </select>
-              </div>
-            </div>
 
             {/* Quick Add Supplier Inline Bar */}
             {isAddingNewSupplier && (
@@ -1170,331 +982,12 @@ export const PaymentFormView: React.FC = () => {
               </div>
             )}
 
-            {/* Live Supplier Account Ledger Strip */}
-            <div className="px-3.5 py-2.5 bg-purple-50/80 border-b border-purple-200 flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-700">
-                <span className="inline-flex items-center space-x-1 font-bold text-purple-950">
-                  <UserCheck className="w-3.5 h-3.5 text-purple-700" />
-                  <span>{supplierName} Ledger:</span>
-                </span>
-                <span className="font-mono">
-                  Purchases: <strong>{supplierStats.purchaseInvoiceCount} Bills</strong> (
-                  {formatCurrency(supplierStats.totalPurchasedValue, companyProfile.currency)})
-                </span>
-                <span>·</span>
-                <span className="font-mono">
-                  Vouchers Paid:{' '}
-                  <strong className="text-emerald-800">
-                    {formatCurrency(supplierStats.totalPaidInVouchers, companyProfile.currency)}
-                  </strong>
-                </span>
-                <span>·</span>
-                <span className="font-mono">
-                  Last Balance:{' '}
-                  <strong className="text-rose-700">
-                    {formatCurrency(supplierStats.latestBalance, companyProfile.currency)}
-                  </strong>
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOverallPreviousAmount(supplierStats.latestBalance);
-                    showToast(
-                      `Applied ${supplierName}'s last closing balance (${formatCurrency(
-                        supplierStats.latestBalance,
-                        companyProfile.currency
-                      )}) to Previous Amount.`
-                    );
-                  }}
-                  className="px-2.5 py-1 bg-white hover:bg-purple-100 text-purple-900 border border-purple-300 rounded font-bold text-[11px] shadow-2xs transition cursor-pointer"
-                >
-                  Apply Last Balance
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOverallPaidAmount(totalDebit);
-                    showToast(
-                      `Synced Paid Amount with Total Debit (${formatCurrency(
-                        totalDebit,
-                        companyProfile.currency
-                      )}).`
-                    );
-                  }}
-                  className="px-2.5 py-1 bg-purple-700 hover:bg-purple-800 text-white rounded font-bold text-[11px] shadow-2xs transition cursor-pointer"
-                >
-                  Sync Paid = Total Debit
-                </button>
-              </div>
-            </div>
-
-            {/* Supplier Credit Notes & Rebate Application Panel */}
-            <div
-              data-testid="payment-supplier-credit-panel"
-              className="px-3.5 py-3 bg-teal-50/70 border-b border-teal-200 space-y-2.5 text-xs"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 font-extrabold text-teal-950 uppercase tracking-wide">
-                    <BadgePercent className="w-4 h-4 text-teal-700 shrink-0" />
-                    <span>
-                      Supplier Credit Notes &amp; Rebates{' '}
-                      {supplierName ? `(${supplierName})` : '(All Suppliers)'}
-                    </span>
-                  </span>
-                  <span className="text-slate-400">·</span>
-                  <span
-                    data-testid="payment-credit-available-summary"
-                    className="font-mono tabular-nums text-teal-900"
-                  >
-                    Available Credit:{' '}
-                    <strong className="text-teal-800">
-                      {formatCurrency(
-                        supplierName
-                          ? selectedSupplierCreditProfile.availableBalance
-                          : creditSummary.totalAvailableAmount,
-                        companyProfile.currency
-                      )}
-                    </strong>
-                  </span>
-                  <span className="text-slate-400">·</span>
-                  <span className="font-mono tabular-nums text-slate-600">
-                    Applied:{' '}
-                    <strong>
-                      {formatCurrency(
-                        supplierName
-                          ? selectedSupplierCreditProfile.totalApplied
-                          : creditSummary.totalAppliedAmount,
-                        companyProfile.currency
-                      )}
-                    </strong>
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    data-testid="payment-toggle-add-credit-btn"
-                    onClick={() => {
-                      if (!newCreditSupplier && supplierName) {
-                        setNewCreditSupplier(supplierName);
-                      } else if (!newCreditSupplier && dropdownOptions.suppliers[0]) {
-                        setNewCreditSupplier(dropdownOptions.suppliers[0]);
-                      }
-                      setIsAddingCreditNote((prev) => !prev);
-                    }}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-teal-700 hover:bg-teal-800 text-white rounded font-bold text-[11px] shadow-2xs transition cursor-pointer whitespace-nowrap shrink-0"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>{isAddingCreditNote ? 'Close Form' : 'Record Credit Note'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('profit_loss')}
-                    className="px-2.5 py-1 bg-white hover:bg-teal-100 text-teal-900 border border-teal-300 rounded font-bold text-[11px] transition cursor-pointer whitespace-nowrap shrink-0"
-                  >
-                    P&amp;L Credit Ledger
-                  </button>
-                </div>
-              </div>
-
-              {/* Inline Record New Supplier Credit Note Form */}
-              {isAddingCreditNote && (
-                <form
-                  onSubmit={handleCreateSupplierCredit}
-                  data-testid="payment-add-credit-form"
-                  className="p-3 bg-white rounded-lg border border-teal-300 shadow-2xs grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-2.5 items-end"
-                >
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
-                      Supplier
-                    </label>
-                    <select
-                      aria-label="Credit Note Supplier"
-                      data-testid="payment-credit-supplier-select"
-                      value={newCreditSupplier || supplierName}
-                      onChange={(e) => setNewCreditSupplier(e.target.value)}
-                      className="w-full border border-slate-300 rounded px-2 py-1 text-xs font-bold text-slate-800 bg-white"
-                    >
-                      <option value="">-- Select --</option>
-                      {dropdownOptions.suppliers.map((sup) => (
-                        <option key={sup} value={sup}>
-                          {sup}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
-                      Credit Amount ({companyProfile.currency})
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      step="0.01"
-                      required
-                      aria-label="Credit Note Amount"
-                      data-testid="payment-credit-amount-input"
-                      placeholder="e.g. 5000"
-                      value={newCreditAmount}
-                      onChange={(e) => setNewCreditAmount(e.target.value)}
-                      className="w-full border border-slate-300 rounded px-2 py-1 text-xs font-mono font-bold text-slate-900 bg-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
-                      Credit Reason
-                    </label>
-                    <select
-                      aria-label="Credit Note Reason"
-                      data-testid="payment-credit-reason-select"
-                      value={newCreditReason}
-                      onChange={(e) => setNewCreditReason(e.target.value)}
-                      className="w-full border border-slate-300 rounded px-2 py-1 text-xs font-medium text-slate-800 bg-white"
-                    >
-                      {SUPPLIER_CREDIT_REASONS.map((r) => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
-                      Ref Purchase Bill
-                    </label>
-                    <input
-                      type="text"
-                      aria-label="Credit Note Reference Purchase Bill"
-                      data-testid="payment-credit-ref-input"
-                      placeholder="e.g. PUR-2026-0001"
-                      value={newCreditRefInvoice}
-                      onChange={(e) => setNewCreditRefInvoice(e.target.value)}
-                      className="w-full border border-slate-300 rounded px-2 py-1 text-xs font-mono text-slate-800 bg-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
-                      Remarks
-                    </label>
-                    <input
-                      type="text"
-                      aria-label="Credit Note Remarks"
-                      data-testid="payment-credit-remarks-input"
-                      placeholder="Shortage / discount details..."
-                      value={newCreditRemarks}
-                      onChange={(e) => setNewCreditRemarks(e.target.value)}
-                      className="w-full border border-slate-300 rounded px-2 py-1 text-xs text-slate-800 bg-white"
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="submit"
-                      data-testid="payment-save-credit-btn"
-                      className="w-full px-3 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded font-bold text-xs shadow-2xs transition cursor-pointer whitespace-nowrap"
-                    >
-                      Save Credit
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {/* Credit Notes List & 1-Click Apply to Payment Voucher */}
-              {visibleCreditNotes.length === 0 ? (
-                <div className="text-[11px] text-slate-600 bg-white/80 rounded border border-teal-200/80 px-3 py-2 flex items-center justify-between">
-                  <span>
-                    No credit notes recorded for{' '}
-                    <strong>{supplierName || 'any supplier'}</strong> yet. Record a credit note to deduct against future purchase payments.
-                  </span>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {visibleCreditNotes.slice(0, 4).map((cn) => {
-                    const isAvailable = cn.remainingAmount > 0;
-                    return (
-                      <div
-                        key={cn.id}
-                        data-testid={`payment-credit-card-${cn.creditNoteNumber}`}
-                        className={`p-2.5 rounded-lg border flex items-center justify-between gap-2 transition ${
-                          isAvailable
-                            ? 'bg-white border-teal-300 shadow-2xs'
-                            : 'bg-slate-50/90 border-slate-200 opacity-80'
-                        }`}
-                      >
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-mono font-extrabold text-teal-950 text-xs">
-                              {cn.creditNoteNumber}
-                            </span>
-                            <span className="font-bold text-slate-800 text-xs truncate">
-                              · {cn.supplierName}
-                            </span>
-                            <span
-                              className={`text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded ${
-                                cn.status === 'AVAILABLE'
-                                  ? 'bg-teal-100 text-teal-900'
-                                  : cn.status === 'PARTIAL'
-                                  ? 'bg-amber-100 text-amber-900'
-                                  : 'bg-slate-200 text-slate-700'
-                              }`}
-                            >
-                              {cn.status}
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-slate-600 truncate mt-0.5">
-                            {cn.reason}
-                            {cn.refPurchaseInvoice ? ` · Ref: ${cn.refPurchaseInvoice}` : ''}
-                          </div>
-                          <div className="text-[11px] font-mono tabular-nums text-slate-700 mt-0.5">
-                            Issued: {formatCurrency(cn.amount, companyProfile.currency)} ·{' '}
-                            <strong
-                              className={
-                                isAvailable ? 'text-teal-800' : 'text-slate-500'
-                              }
-                            >
-                              Rem: {formatCurrency(cn.remainingAmount, companyProfile.currency)}
-                            </strong>
-                          </div>
-                        </div>
-
-                        <div className="shrink-0 flex items-center gap-1.5">
-                          {isAvailable ? (
-                            <button
-                              type="button"
-                              data-testid={`payment-apply-credit-btn-${cn.creditNoteNumber}`}
-                              onClick={() => handleApplyCreditNoteToVoucher(cn)}
-                              className="px-2.5 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded font-bold text-[11px] shadow-2xs transition cursor-pointer whitespace-nowrap"
-                            >
-                              Apply Credit
-                            </button>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 px-2 py-1">
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Applied</span>
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
             {/* Table Action Bar */}
             <div className="px-3.5 py-2 bg-slate-100 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
               <div className="flex items-center space-x-2">
                 <Wallet className="w-3.5 h-3.5 text-[#8b3858]" />
                 <span className="font-bold text-slate-700 uppercase">
-                  Supplier Ledger Entries ({activeRowCount} Active / {rows.length} Rows)
+                  All Supplier Record History — Debit, Credit, Balance &amp; Status ({activeRowCount} Active / {rows.length} Rows)
                 </span>
               </div>
               <div className="flex items-center space-x-2">
@@ -1548,357 +1041,169 @@ export const PaymentFormView: React.FC = () => {
               </div>
             )}
 
-            {/* Data Entry Table Grid */}
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-xs">
-                <thead>
-                  <tr className="bg-[#8b3858] text-white uppercase text-[11px] font-bold tracking-wider text-center border-b border-pink-900">
-                    <th className="px-2 py-2.5 border-r border-pink-800/60 w-10">SL</th>
-                    <th className="px-3 py-2.5 border-r border-pink-800/60 text-left min-w-[260px]">
-                      <div className="flex items-center justify-between gap-1.5">
-                        <span>SUPPLIER PAYMENT PARTICULARS / BILL DESCRIPTION</span>
-                        <button
-                          type="button"
-                          onClick={() => setIsAddingPaymentMode(true)}
-                          className="text-[10px] bg-pink-950/90 hover:bg-pink-900 px-2 py-0.5 rounded text-amber-300 font-bold cursor-pointer whitespace-nowrap shrink-0"
-                          title="Add new payment mode or particulars to dropdown"
+            {/* Data Entry & Record History Table Grid (10-Row Scrollable Box) */}
+            <div className="p-2.5 bg-slate-50 border-b border-slate-200">
+              <div
+                data-testid="supplier-payment-history-scroll-box"
+                className="max-h-[400px] overflow-y-auto overflow-x-auto border-2 border-purple-200 rounded-lg bg-white shadow-inner"
+              >
+                <table
+                  data-testid="supplier-payment-history-table"
+                  className="w-full border-collapse text-xs table-fixed"
+                >
+                  <thead className="sticky top-0 z-10 shadow-xs">
+                    <tr className="bg-[#8b3858] text-white uppercase text-[11px] font-bold tracking-wider text-center border-b border-pink-900">
+                      <th className="px-2 py-2.5 border-r border-pink-800/60 w-12">SL</th>
+                      <th className="px-3 py-2.5 border-r border-pink-800/60 text-left">
+                        <span>SUPPLIER PURCHASE GOODS (DATE BY DATE)</span>
+                      </th>
+                      <th className="px-2.5 py-2.5 border-r border-pink-800/60 w-32">
+                        PURCHASE GOODS (TK)
+                      </th>
+                      <th className="px-2.5 py-2.5 border-r border-pink-800/60 w-32">
+                        PAID AMOUNT (TK)
+                      </th>
+                      <th className="px-2.5 py-2.5 w-32">
+                        BALANCE (TK)
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {rows.map((row, idx) => {
+                      const rowErr = validationAttempted
+                        ? validation.rowErrors[row.id]
+                        : undefined;
+                      const highlightFirstEmptyRow =
+                        validationAttempted &&
+                        Boolean(validation.fieldErrors.rows) &&
+                        idx === 0;
+                      const dueBalance = row.debitAmount - row.creditAmount;
+                      return (
+                        <tr
+                          key={row.id}
+                          className={
+                            rowErr || highlightFirstEmptyRow
+                              ? 'bg-rose-50/60 hover:bg-rose-50 h-10'
+                              : idx % 2 === 0
+                              ? 'bg-white hover:bg-purple-50/30 h-10'
+                              : 'bg-slate-50/70 hover:bg-purple-50/30 h-10'
+                          }
                         >
-                          + Add Mode
-                        </button>
-                      </div>
-                    </th>
-                    <th className="px-3 py-2.5 border-r border-pink-800/60 w-32">
-                      DEBIT (PAID TK)
-                    </th>
-                    <th className="px-3 py-2.5 border-r border-pink-800/60 w-32">
-                      CREDIT (REBATE)
-                    </th>
-                    <th className="px-3 py-2.5 border-r border-pink-800/60 w-32">
-                      ROW BALANCE
-                    </th>
-                    <th className="px-2 py-2.5 border-r border-pink-800/60 w-28">
-                      STATUS
-                    </th>
-                    <th className="px-2 py-2.5 w-12">CLR</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {rows.map((row, idx) => {
-                    const rowErr = validationAttempted
-                      ? validation.rowErrors[row.id]
-                      : undefined;
-                    const highlightFirstEmptyRow =
-                      validationAttempted &&
-                      Boolean(validation.fieldErrors.rows) &&
-                      idx === 0;
-                    const rowStatus = row.status || 'PAID';
-                    return (
-                      <tr
-                        key={row.id}
-                        className={
-                          rowErr || highlightFirstEmptyRow
-                            ? 'bg-rose-50/60 hover:bg-rose-50'
-                            : idx % 2 === 0
-                            ? 'bg-white hover:bg-purple-50/30'
-                            : 'bg-slate-50/70 hover:bg-purple-50/30'
-                        }
-                      >
-                        <td className="p-1.5 border-r border-slate-200 text-center font-mono font-bold text-slate-500">
-                          {idx + 1}
-                        </td>
+                          <td className="p-1.5 border-r border-slate-200 text-center font-mono font-bold text-slate-500 w-12">
+                            {idx + 1}
+                          </td>
 
-                        {/* Description Dropdown Box (Cash, Bank Transfer / Online Payment, etc.) */}
-                        <td className="p-1 border-r border-slate-200 min-w-[240px]">
-                          <select
-                            aria-label={`Supplier payment row ${idx + 1} particulars`}
-                            aria-invalid={Boolean(
-                              rowErr?.description || highlightFirstEmptyRow
-                            )}
-                            value={row.description}
-                            onChange={(e) =>
-                              handleRowChange(row.id, 'description', e.target.value)
-                            }
-                            className={`w-full border rounded px-2.5 py-1.5 font-bold text-xs focus:bg-white focus:outline-none focus:ring-2 ${
-                              rowErr?.description || highlightFirstEmptyRow
-                                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 text-rose-900 focus:ring-rose-500'
-                                : row.description
-                                ? 'bg-white border-slate-300 text-slate-900 focus:ring-purple-500'
-                                : 'bg-slate-50 border-slate-200 text-slate-500 focus:ring-purple-500'
-                            }`}
-                          >
-                            <option value="">-- Select Payment Mode / Particulars --</option>
-                            {dropdownOptions.paymentDescriptions.map((mode) => (
-                              <option key={mode} value={mode}>
-                                {mode}
-                              </option>
-                            ))}
-                            {row.description &&
-                              !dropdownOptions.paymentDescriptions.includes(row.description) && (
-                                <option value={row.description}>{row.description}</option>
+                          {/* Supplier Purchase Goods Date by Date (Editable Date) */}
+                          <td className="p-1.5 border-r border-slate-200">
+                            <div className="flex items-center justify-between gap-2 px-1">
+                              <span className="truncate text-xs font-bold text-purple-900">
+                                {row.description || supplierName || 'Supplier Purchase Goods'}
+                              </span>
+                              <input
+                                type="date"
+                                aria-label={`Supplier payment row ${idx + 1} date`}
+                                value={row.date || date}
+                                onChange={(e) =>
+                                  handleRowChange(row.id, 'date', e.target.value)
+                                }
+                                className="font-mono text-[11px] bg-purple-50 hover:bg-white focus:bg-white text-purple-900 px-1.5 py-0.5 rounded border border-purple-300 focus:outline-none focus:ring-1 focus:ring-purple-500 shrink-0"
+                              />
+                            </div>
+                          </td>
+
+                          {/* Purchase Goods Amount (Collected from Purchase Database or Entered) */}
+                          <td className="p-1 border-r border-slate-200 w-32">
+                            <input
+                              type="number"
+                              aria-label={`Supplier payment row ${idx + 1} purchase goods amount`}
+                              aria-invalid={Boolean(
+                                rowErr?.debitAmount || highlightFirstEmptyRow
                               )}
-                          </select>
-                        </td>
+                              min="0"
+                              step="0.01"
+                              value={row.debitAmount || ''}
+                              onChange={(e) =>
+                                handleRowChange(
+                                  row.id,
+                                  'debitAmount',
+                                  parseFloat(e.target.value) || 0
+                                )
+                              }
+                              className={`w-full bg-white border rounded px-2 py-1.5 text-right font-mono text-slate-900 font-semibold focus:outline-none focus:ring-1 ${
+                                rowErr?.debitAmount || highlightFirstEmptyRow
+                                  ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
+                                  : 'border-slate-200 focus:ring-purple-500'
+                              }`}
+                              placeholder="0.00"
+                            />
+                          </td>
 
-                        {/* Debit Amount */}
-                        <td className="p-1 border-r border-slate-200">
-                          <input
-                            type="number"
-                            aria-label={`Supplier payment row ${idx + 1} debit amount`}
-                            aria-invalid={Boolean(
-                              rowErr?.debitAmount || highlightFirstEmptyRow
-                            )}
-                            min="0"
-                            step="0.01"
-                            value={row.debitAmount || ''}
-                            onChange={(e) =>
-                              handleRowChange(
-                                row.id,
-                                'debitAmount',
-                                parseFloat(e.target.value) || 0
-                              )
-                            }
-                            className={`w-full bg-white border rounded px-2 py-1.5 text-right font-mono text-slate-900 font-semibold focus:outline-none focus:ring-1 ${
-                              rowErr?.debitAmount || highlightFirstEmptyRow
-                                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
-                                : 'border-slate-200 focus:ring-purple-500'
-                            }`}
-                            placeholder="0.00"
-                          />
-                        </td>
+                          {/* Paid Amount */}
+                          <td className="p-1 border-r border-slate-200 w-32">
+                            <input
+                              type="number"
+                              aria-label={`Supplier payment row ${idx + 1} paid amount`}
+                              aria-invalid={Boolean(
+                                rowErr?.creditAmount || highlightFirstEmptyRow
+                              )}
+                              min="0"
+                              step="0.01"
+                              value={row.creditAmount || ''}
+                              onChange={(e) =>
+                                handleRowChange(
+                                  row.id,
+                                  'creditAmount',
+                                  parseFloat(e.target.value) || 0
+                                )
+                              }
+                              className={`w-full bg-white border rounded px-2 py-1.5 text-right font-mono text-emerald-800 font-semibold focus:outline-none focus:ring-1 ${
+                                rowErr?.creditAmount || highlightFirstEmptyRow
+                                  ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
+                                  : 'border-slate-200 focus:ring-purple-500'
+                              }`}
+                              placeholder="0.00"
+                            />
+                          </td>
 
-                        {/* Credit Amount */}
-                        <td className="p-1 border-r border-slate-200">
-                          <input
-                            type="number"
-                            aria-label={`Supplier payment row ${idx + 1} credit amount`}
-                            aria-invalid={Boolean(
-                              rowErr?.creditAmount || highlightFirstEmptyRow
-                            )}
-                            min="0"
-                            step="0.01"
-                            value={row.creditAmount || ''}
-                            onChange={(e) =>
-                              handleRowChange(
-                                row.id,
-                                'creditAmount',
-                                parseFloat(e.target.value) || 0
-                              )
-                            }
-                            className={`w-full bg-white border rounded px-2 py-1.5 text-right font-mono text-slate-800 focus:outline-none focus:ring-1 ${
-                              rowErr?.creditAmount || highlightFirstEmptyRow
-                                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
-                                : 'border-slate-200 focus:ring-purple-500'
-                            }`}
-                            placeholder="0.00"
-                          />
-                        </td>
-
-                        {/* Row Balance (Debit - Credit) */}
-                        <td className="p-1 border-r border-slate-200 text-right font-mono font-bold text-slate-900 pr-3 bg-slate-50">
-                          {row.balance.toFixed(2)}
-                        </td>
-
-                        {/* Row Status Column (PAID, UNPAID) */}
-                        <td className="p-1 border-r border-slate-200 text-center">
-                          <select
-                            aria-label={`Supplier payment row ${idx + 1} status`}
-                            value={rowStatus === 'PAID' ? 'PAID' : 'UNPAID'}
-                            onChange={(e) =>
-                              handleRowChange(row.id, 'status', e.target.value)
-                            }
-                            className={`w-full text-center text-[10px] font-black uppercase rounded px-1 py-1.5 border cursor-pointer focus:outline-none ${
-                              rowStatus === 'PAID'
-                                ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                                : 'bg-rose-100 text-rose-900 border-rose-300'
+                          {/* Due Balance (Purchase Goods - Paid Amount) */}
+                          <td
+                            className={`p-1 text-right font-mono font-bold pr-2.5 bg-slate-50 w-32 ${
+                              dueBalance < 0 ? 'text-rose-600' : 'text-slate-900'
                             }`}
                           >
-                            <option value="PAID">PAID</option>
-                            <option value="UNPAID">UNPAID</option>
-                          </select>
-                        </td>
+                            {dueBalance.toFixed(2)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-                        {/* Clear Single Row */}
-                        <td className="p-1 text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleClearRow(row.id)}
-                            title={`Clear row ${idx + 1}`}
-                            aria-label={`Clear supplier payment row ${idx + 1}`}
-                            className="p-1 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
-                          >
-                            <RotateCcw className="w-3.5 h-3.5 mx-auto" />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-
-                {/* Subtotals & Review Totals Footer */}
+            {/* Subtotals Footer */}
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-xs table-fixed">
                 <tfoot>
                   <tr className="bg-[#8b3858] text-white font-bold border-t-2 border-pink-900">
                     <td
                       colSpan={2}
                       className="px-3 py-2 text-right uppercase tracking-wider text-[11px]"
                     >
-                      TOTAL SUPPLIER VOUCHER ({companyProfile.currency}):
+                      TOTAL SUPPLIER RECORD HISTORY ({companyProfile.currency}):
                     </td>
-                    <td className="px-3 py-2 text-right font-mono text-amber-300 font-black text-sm">
+                    <td className="px-2.5 py-2 text-right font-mono text-amber-300 font-black text-sm w-32">
                       {totalDebit.toFixed(2)}
                     </td>
-                    <td className="px-3 py-2 text-right font-mono text-amber-200 font-bold text-xs">
+                    <td className="px-2.5 py-2 text-right font-mono text-amber-200 font-bold text-xs w-32">
                       {totalCredit.toFixed(2)}
                     </td>
-                    <td className="px-3 py-2 text-right font-mono text-amber-300 font-black text-sm pr-3">
+                    <td className="px-2.5 py-2 text-right font-mono text-amber-300 font-black text-sm w-32">
                       {(totalDebit - totalCredit).toFixed(2)}
-                    </td>
-                    <td colSpan={2} className="px-2 py-2 text-center text-[11px] font-mono font-bold text-amber-200">
-                      {voucherStatus}
-                    </td>
-                  </tr>
-
-                  {/* Review Section */}
-                  <tr className="bg-amber-100/70 text-slate-800 font-bold border-t border-amber-300">
-                    <td
-                      colSpan={2}
-                      rowSpan={totalCredit > 0 ? 5 : 4}
-                      className="px-3 py-2 text-center uppercase font-black tracking-widest text-[#8b3858] border-r border-amber-300"
-                    >
-                      SUPPLIER BALANCE REVIEW
-                    </td>
-                    <td
-                      colSpan={2}
-                      className="px-2 py-1.5 text-right font-bold text-slate-700"
-                    >
-                      PREVIOUS AMOUNT ({companyProfile.currency}):
-                    </td>
-                    <td colSpan={3} className="px-2 py-1.5">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        aria-label="Supplier Previous Amount"
-                        aria-invalid={
-                          validationAttempted &&
-                          Boolean(validation.fieldErrors.overallPreviousAmount)
-                        }
-                        value={overallPreviousAmount || ''}
-                        onChange={(e) =>
-                          setOverallPreviousAmount(parseFloat(e.target.value) || 0)
-                        }
-                        placeholder="0.00"
-                        className={`w-full bg-white border rounded px-2 py-1 text-right font-mono font-bold text-slate-800 ${
-                          validationAttempted &&
-                          validation.fieldErrors.overallPreviousAmount
-                            ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40'
-                            : 'border-amber-400'
-                        }`}
-                      />
-                    </td>
-                  </tr>
-                  <tr className="bg-amber-100/70 text-slate-800 font-bold">
-                    <td
-                      colSpan={2}
-                      className="px-2 py-1.5 text-right font-bold text-slate-700"
-                    >
-                      PAID AMOUNT ({companyProfile.currency}):
-                    </td>
-                    <td colSpan={3} className="px-2 py-1.5">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        aria-label="Supplier Paid Amount"
-                        aria-invalid={
-                          validationAttempted &&
-                          Boolean(validation.fieldErrors.overallPaidAmount)
-                        }
-                        value={overallPaidAmount || ''}
-                        onChange={(e) =>
-                          setOverallPaidAmount(parseFloat(e.target.value) || 0)
-                        }
-                        placeholder="0.00"
-                        className={`w-full bg-white border rounded px-2 py-1 text-right font-mono font-bold text-emerald-800 ${
-                          validationAttempted &&
-                          validation.fieldErrors.overallPaidAmount
-                            ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40'
-                            : 'border-amber-400'
-                        }`}
-                      />
-                    </td>
-                  </tr>
-                  {totalCredit > 0 && (
-                    <tr
-                      data-testid="payment-applied-credit-review-row"
-                      className="bg-teal-100/80 text-teal-950 font-bold border-t border-amber-300"
-                    >
-                      <td
-                        colSpan={2}
-                        className="px-2 py-1.5 text-right font-bold text-teal-900 uppercase"
-                      >
-                        APPLIED CREDIT NOTE REBATE ({companyProfile.currency}):
-                      </td>
-                      <td
-                        colSpan={3}
-                        className="px-2 py-1.5 text-right font-mono font-extrabold text-teal-800 pr-3"
-                      >
-                        - {totalCredit.toFixed(2)}
-                      </td>
-                    </tr>
-                  )}
-                  {/* Voucher Status in Review */}
-                  <tr className="bg-amber-100/70 text-slate-800 font-bold border-t border-amber-300">
-                    <td
-                      colSpan={2}
-                      className="px-2 py-1.5 text-right font-bold text-slate-700 uppercase"
-                    >
-                      VOUCHER STATUS:
-                    </td>
-                    <td colSpan={3} className="px-2 py-1.5">
-                      <select
-                        value={voucherStatus === 'PAID' ? 'PAID' : 'UNPAID'}
-                        onChange={(e) => setVoucherStatus(e.target.value as ExporterStatus)}
-                        aria-label="Supplier Voucher Status"
-                        className={`w-full border rounded px-2.5 py-1 text-xs font-black uppercase cursor-pointer ${
-                          voucherStatus === 'PAID'
-                            ? 'bg-emerald-50 border-emerald-400 text-emerald-900'
-                            : 'bg-rose-50 border-rose-400 text-rose-900'
-                        }`}
-                      >
-                        <option value="PAID">PAID</option>
-                        <option value="UNPAID">UNPAID</option>
-                      </select>
-                    </td>
-                  </tr>
-                  <tr className="bg-amber-200 text-slate-900 font-black border-t border-amber-300">
-                    <td
-                      colSpan={2}
-                      className="px-2 py-1.5 text-right font-extrabold uppercase text-[#8b3858]"
-                    >
-                      NET CLOSING BALANCE ({companyProfile.currency}):
-                    </td>
-                    <td
-                      colSpan={3}
-                      data-testid="payment-net-closing-balance"
-                      className="px-2 py-1.5 text-right font-mono text-base text-rose-800 pr-3"
-                    >
-                      {(totalCredit > 0 ? netBalanceAfterCredit : balance).toFixed(2)}
                     </td>
                   </tr>
                 </tfoot>
               </table>
-            </div>
-
-            {/* Remarks */}
-            <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center space-x-2 text-xs">
-              <span className="font-bold text-slate-700 uppercase">Supplier Remarks:</span>
-              <input
-                type="text"
-                placeholder="e.g. Cash paid at Turag depot, Bank cheque ref, or mobile banking number..."
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                className="flex-1 bg-white border border-slate-300 rounded px-2.5 py-1.5 text-slate-800"
-              />
             </div>
           </div>
         </div>
@@ -2128,6 +1433,339 @@ export const PaymentFormView: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Automatic Supplier Database Lookup & Payment Details Records Table (DEBIT, CREDIT, BALANCE & STATUS) */}
+      <div
+        data-testid="supplier-payment-details-card"
+        className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3.5"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-mono bg-purple-50 text-purple-900 border border-purple-200 px-2.5 py-0.5 rounded font-bold">
+              Showing {supplierRecordHistory.length} Record{supplierRecordHistory.length === 1 ? '' : 's'} (
+              <span className="text-emerald-700 font-extrabold">{supplierHistoryTotals.paidCount} PAID</span> ·{' '}
+              <span className="text-rose-700 font-extrabold">{supplierHistoryTotals.reportCount + supplierHistoryTotals.noReportCount} UNPAID</span>)
+            </span>
+            <button
+              type="button"
+              onClick={() => setIsHistoryExpanded((prev) => !prev)}
+              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-bold cursor-pointer"
+            >
+              {isHistoryExpanded ? (
+                <>
+                  <ChevronUp className="w-3.5 h-3.5" />
+                  <span>Collapse</span>
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="w-3.5 h-3.5" />
+                  <span>Expand ({supplierRecordHistory.length})</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* 4 Summary KPI Metric Cards (DEBIT, CREDIT, BALANCE & STATUS) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+            <div className="text-[10px] font-bold text-slate-500 uppercase">
+              TOTAL DEBIT (BILLS / DUE)
+            </div>
+            <div className="text-base sm:text-lg font-black font-mono text-purple-950 mt-0.5">
+              {formatCurrency(supplierHistoryTotals.totalDebit, companyProfile.currency)}
+            </div>
+            <div className="text-[10px] text-slate-500 font-medium mt-0.5">
+              {supplierHistoryTotals.purchaseCount} Purchase Bills
+            </div>
+          </div>
+
+          <div className="bg-emerald-50/60 border border-emerald-200 rounded-lg p-2.5">
+            <div className="text-[10px] font-bold text-emerald-800 uppercase">
+              TOTAL CREDIT (PAID / REBATE)
+            </div>
+            <div className="text-base sm:text-lg font-black font-mono text-emerald-700 mt-0.5">
+              {formatCurrency(supplierHistoryTotals.totalCredit, companyProfile.currency)}
+            </div>
+            <div className="text-[10px] text-emerald-700 font-medium mt-0.5">
+              {supplierHistoryTotals.voucherCount} Vouchers · {supplierHistoryTotals.creditNoteCount} Rebates
+            </div>
+          </div>
+
+          <div className="bg-rose-50/60 border border-rose-200 rounded-lg p-2.5">
+            <div className="text-[10px] font-bold text-rose-800 uppercase">
+              OUTSTANDING BALANCE
+            </div>
+            <div className="text-base sm:text-lg font-black font-mono text-rose-700 mt-0.5">
+              {formatCurrency(supplierHistoryTotals.totalBalance, companyProfile.currency)}
+            </div>
+            <div className="text-[10px] text-slate-500 font-medium mt-0.5">
+              Net Supplier Balance
+            </div>
+          </div>
+
+          <div className="bg-indigo-50/60 border border-indigo-200 rounded-lg p-2.5 flex flex-col justify-between">
+            <div className="text-[10px] font-bold text-indigo-900 uppercase">
+              OVERALL STATUS
+            </div>
+            <div className="mt-1">
+              <span
+                className={`inline-block px-2.5 py-1 text-xs font-black uppercase rounded border ${
+                  supplierHistoryTotals.computedOverallStatus === 'PAID'
+                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                    : 'bg-rose-100 text-rose-900 border-rose-300'
+                }`}
+              >
+                {supplierHistoryTotals.computedOverallStatus === 'PAID' ? 'PAID' : 'UNPAID'}
+              </span>
+            </div>
+            <div className="text-[10px] text-slate-500 font-medium mt-0.5 truncate">
+              {supplierName ? supplierName : 'All Suppliers Combined'}
+            </div>
+          </div>
+        </div>
+
+        {/* Filter Bar: Supplier Select, Status Filter, Record Type, Search */}
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs pt-1">
+          <div>
+            <label className="font-bold text-slate-700 uppercase block mb-1">
+              Supplier Filter
+            </label>
+            <select
+              value={supplierName}
+              onChange={(e) => handleSupplierChange(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+            >
+              <option value="">-- ALL LOCAL FISH SUPPLIERS --</option>
+              {availableSuppliers.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="font-bold text-slate-700 uppercase block mb-1">
+              Status (PAID / UNPAID)
+            </label>
+            <select
+              value={historyStatusFilter}
+              onChange={(e) => setHistoryStatusFilter(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+            >
+              <option value="ALL">-- ALL STATUSES (PAID, UNPAID) --</option>
+              <option value="PAID">PAID</option>
+              <option value="UNPAID">UNPAID</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="font-bold text-slate-700 uppercase block mb-1">
+              Record Type
+            </label>
+            <select
+              value={historyRecordType}
+              onChange={(e) => setHistoryRecordType(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+            >
+              <option value="ALL">All Documents (Vouchers, Purchases, Rebates)</option>
+              <option value="PAYMENT_VOUCHER">Payment Vouchers Only</option>
+              <option value="PURCHASE_BILL">Purchase Bills Only</option>
+              <option value="CREDIT_NOTE">Credit Notes &amp; Rebates</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="font-bold text-slate-700 uppercase block mb-1">
+              Search Invoice / Particulars
+            </label>
+            <input
+              type="text"
+              placeholder="Search PAY, INV, CN, notes..."
+              value={historySearch}
+              onChange={(e) => setHistorySearch(e.target.value)}
+              className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 font-medium focus:outline-none focus:ring-1 focus:ring-purple-500"
+            />
+          </div>
+        </div>
+
+        {/* Collapsible Table of Supplier Payment Details */}
+        {isHistoryExpanded && (
+          <div className="overflow-x-auto border border-slate-200 rounded-lg">
+            <table className="w-full border-collapse text-xs">
+              <thead>
+                <tr className="bg-[#242b58] text-white uppercase text-[11px] font-bold tracking-wider text-center border-b border-indigo-900">
+                  <th className="px-2 py-2 border-r border-indigo-800/60 w-10">SL</th>
+                  <th className="px-2.5 py-2 border-r border-indigo-800/60 w-24">DATE</th>
+                  <th className="px-2.5 py-2 border-r border-indigo-800/60 w-32">DOC NO</th>
+                  <th className="px-3 py-2 border-r border-indigo-800/60 text-left min-w-[200px]">
+                    SUPPLIER &amp; PARTICULARS
+                  </th>
+                  <th className="px-2.5 py-2 border-r border-indigo-800/60 w-28 text-right">
+                    DEBIT (TK)
+                  </th>
+                  <th className="px-2.5 py-2 border-r border-indigo-800/60 w-28 text-right">
+                    CREDIT (TK)
+                  </th>
+                  <th className="px-2.5 py-2 border-r border-indigo-800/60 w-28 text-right">
+                    BALANCE (TK)
+                  </th>
+                  <th className="px-2.5 py-2 border-r border-indigo-800/60 w-28 text-center">
+                    STATUS
+                  </th>
+                  <th className="px-2 py-2 w-28 text-center">ACTION</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {supplierRecordHistory.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={9}
+                      className="px-4 py-6 text-center text-slate-400 italic bg-slate-50/50"
+                    >
+                      No payment or purchase records found matching the current filters.
+                    </td>
+                  </tr>
+                ) : (
+                  supplierRecordHistory.map((row, idx) => (
+                    <tr
+                      key={row.id}
+                      className={
+                        idx % 2 === 0
+                          ? 'bg-white hover:bg-purple-50/40'
+                          : 'bg-slate-50/60 hover:bg-purple-50/40'
+                      }
+                    >
+                      <td className="p-1.5 border-r border-slate-200 text-center font-mono font-bold text-slate-500">
+                        {idx + 1}
+                      </td>
+                      <td className="p-1.5 border-r border-slate-200 font-mono text-center text-slate-700 whitespace-nowrap">
+                        {formatDate(row.date)}
+                      </td>
+                      <td className="p-1.5 border-r border-slate-200 font-mono font-bold text-purple-950 whitespace-nowrap">
+                        {row.invoiceNumber}
+                      </td>
+                      <td className="p-1.5 border-r border-slate-200">
+                        <div className="font-bold text-slate-800">{row.supplierName}</div>
+                        <div className="text-[11px] text-slate-500 truncate">{row.description}</div>
+                      </td>
+                      <td className="p-1.5 border-r border-slate-200 text-right font-mono font-bold text-slate-900">
+                        {row.debitAmount > 0 ? formatCurrency(row.debitAmount, '') : '-'}
+                      </td>
+                      <td className="p-1.5 border-r border-slate-200 text-right font-mono font-bold text-emerald-800">
+                        {row.creditAmount > 0 ? formatCurrency(row.creditAmount, '') : '-'}
+                      </td>
+                      <td
+                        className={`p-1.5 border-r border-slate-200 text-right font-mono font-bold ${
+                          row.balance > 0 ? 'text-rose-700' : 'text-slate-700'
+                        }`}
+                      >
+                        {formatCurrency(row.balance, '')}
+                      </td>
+                      <td className="p-1.5 border-r border-slate-200 text-center whitespace-nowrap">
+                        <span
+                          className={`inline-block px-2 py-0.5 text-[10px] font-black uppercase rounded border ${
+                            row.status === 'PAID'
+                              ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                              : row.status === 'REPORT'
+                              ? 'bg-blue-100 text-blue-900 border-blue-300'
+                              : 'bg-rose-100 text-rose-900 border-rose-300'
+                          }`}
+                        >
+                          {row.status}
+                        </span>
+                      </td>
+                      <td className="p-1.5 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1">
+                          {row.recordType === 'PAYMENT_VOUCHER' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const found = payments.find((p) => p.invoiceNumber === row.invoiceNumber);
+                                if (found) {
+                                  openPrintModal({
+                                    type: 'payment',
+                                    title: `Supplier Payment Voucher - ${found.invoiceNumber}`,
+                                    data: found,
+                                    items: found.items,
+                                  });
+                                }
+                              }}
+                              className="px-2 py-0.5 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 rounded text-[10px] font-bold cursor-pointer"
+                              title="Preview PDF"
+                            >
+                              PDF
+                            </button>
+                          )}
+                          {row.recordType === 'PURCHASE_BILL' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const found = purchases.find((p) => p.invoiceNumber === row.invoiceNumber);
+                                if (found) {
+                                  openPrintModal({
+                                    type: 'purchase',
+                                    title: `Purchase Consignment Bill - ${found.invoiceNumber}`,
+                                    data: found,
+                                    items: found.items,
+                                  });
+                                }
+                              }}
+                              className="px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 rounded text-[10px] font-bold cursor-pointer"
+                              title="Preview Purchase PDF"
+                            >
+                              PDF
+                            </button>
+                          )}
+                          {row.balance > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSupplierName(row.supplierName);
+                                setOverallPreviousAmount(row.balance);
+                                showToast(
+                                  `Applied ${row.supplierName}'s balance (${formatCurrency(
+                                    row.balance,
+                                    companyProfile.currency
+                                  )}) to Previous Amount.`
+                                );
+                              }}
+                              className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded text-[10px] font-bold cursor-pointer"
+                              title="Apply balance to payment form"
+                            >
+                              Apply
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              <tfoot>
+                <tr className="bg-[#242b58] text-white font-bold border-t-2 border-indigo-900">
+                  <td colSpan={4} className="px-3 py-2 text-right uppercase tracking-wider text-[11px]">
+                    SUPPLIER DETAILS GRAND TOTAL ({supplierRecordHistory.length} RECORDS):
+                  </td>
+                  <td className="px-2.5 py-2 text-right font-mono text-amber-300 font-black text-xs">
+                    {supplierHistoryTotals.totalDebit.toFixed(2)}
+                  </td>
+                  <td className="px-2.5 py-2 text-right font-mono text-emerald-300 font-bold text-xs">
+                    {supplierHistoryTotals.totalCredit.toFixed(2)}
+                  </td>
+                  <td className="px-2.5 py-2 text-right font-mono text-rose-300 font-black text-xs">
+                    {supplierHistoryTotals.totalBalance.toFixed(2)}
+                  </td>
+                  <td colSpan={2} className="px-2.5 py-2 text-center text-[10px] font-mono text-amber-200 font-bold">
+                    {supplierHistoryTotals.paidCount} PAID · {supplierHistoryTotals.reportCount} REPORT · {supplierHistoryTotals.noReportCount} NO REPORT
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

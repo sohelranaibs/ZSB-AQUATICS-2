@@ -388,10 +388,11 @@ export const MonthlyReportsExportView: React.FC<MonthlyReportsExportViewProps> =
           </div>
         </div>
 
-        {/* Main Monthly Reconciliation Spreadsheet Table */}
-        <div className="overflow-x-auto">
+        {/* Main Monthly Reconciliation Spreadsheet Table inside Scrollable Box */}
+        <div className="p-3 bg-slate-50/70">
+          <div className="max-h-[420px] overflow-y-auto overflow-x-auto border-2 border-slate-300 rounded-lg bg-white shadow-inner">
           <table className="w-full text-xs text-left border-collapse min-w-[950px]">
-            <thead>
+            <thead className="sticky top-0 z-10 shadow-xs">
               <tr className="bg-slate-900 text-white uppercase text-[11px] font-bold border-b border-slate-800">
                 <th className="py-3 px-4 w-44">Month / Period</th>
                 <th className="py-3 px-3 text-right">
@@ -707,7 +708,7 @@ export const MonthlyReportsExportView: React.FC<MonthlyReportsExportViewProps> =
 
             {/* Total / Cumulative Rollup Row */}
             {filteredItems.length > 0 && (
-              <tfoot>
+              <tfoot className="sticky bottom-0 z-10">
                 <tr className="bg-slate-900 text-white font-bold text-xs border-t-2 border-slate-700">
                   <td className="py-3 px-4 uppercase text-amber-400 font-serif font-black tracking-wider whitespace-nowrap">
                     CUMULATIVE TOTAL ({filteredItems.length} M)
@@ -757,6 +758,7 @@ export const MonthlyReportsExportView: React.FC<MonthlyReportsExportViewProps> =
               </tfoot>
             )}
           </table>
+          </div>
         </div>
       </section>
     </div>

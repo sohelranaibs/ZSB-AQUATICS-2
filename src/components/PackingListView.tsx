@@ -943,13 +943,17 @@ export const PackingListView: React.FC = () => {
               </div>
             )}
 
-            {/* Redesigned Manifest Line-Item Table Grid */}
-            <div className="overflow-x-auto">
+            {/* Redesigned Manifest Line-Item Table Grid inside Scrollable Box */}
+            <div className="p-2.5 bg-slate-50/70">
+              <div
+                data-testid="packing-entry-scroll-box"
+                className="max-h-[400px] overflow-y-auto overflow-x-auto border-2 border-amber-200 rounded-lg bg-white shadow-inner"
+              >
               <table
                 className="w-full border-collapse text-xs"
                 data-testid="packing-entry-table"
               >
-                <thead>
+                <thead className="sticky top-0 z-10 shadow-xs">
                   <tr className="bg-[#e67327] text-white uppercase text-[11px] font-bold tracking-wider border-b border-amber-800">
                     <th className="px-2 py-2.5 border-r border-amber-600/60 w-10 text-center">
                       SL #
@@ -1206,7 +1210,7 @@ export const PackingListView: React.FC = () => {
                 </tbody>
 
                 {/* Subtotals Row */}
-                <tfoot>
+                <tfoot className="sticky bottom-0 z-10">
                   <tr className="bg-[#e67327] text-white font-bold border-t-2 border-amber-800">
                     <td
                       colSpan={2}
@@ -1242,6 +1246,7 @@ export const PackingListView: React.FC = () => {
                   </tr>
                 </tfoot>
               </table>
+              </div>
             </div>
 
             {/* Table Action Bar (+ Add Row & Formula Summary) */}

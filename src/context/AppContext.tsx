@@ -316,17 +316,17 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const STORAGE_KEYS = {
   PROFILE: 'zsb_company_profile_v1',
   DROPDOWNS: 'zsb_dropdown_options_v1',
-  PURCHASES: 'zsb_purchases_v6',
-  PACKINGS: 'zsb_packings_v6',
-  PACKING_DRAFT: 'zsb_packing_draft_v6',
-  PAYMENTS: 'zsb_payments_v6',
-  OTHER_COSTS: 'zsb_other_costs_v6',
-  SUPPLIER_CREDITS: 'zsb_supplier_credits_v4',
-  MORTALITIES: 'zsb_mortalities_v4',
+  PURCHASES: 'zsb_purchases_v7',
+  PACKINGS: 'zsb_packings_v7',
+  PACKING_DRAFT: 'zsb_packing_draft_v7',
+  PAYMENTS: 'zsb_payments_v7',
+  OTHER_COSTS: 'zsb_other_costs_v7',
+  SUPPLIER_CREDITS: 'zsb_supplier_credits_v5',
+  MORTALITIES: 'zsb_mortalities_v5',
   SUPER_ADMIN_PASSWORD: 'zsb_super_admin_password_v1',
-  SNAPSHOTS: 'zsb_database_snapshots_v1',
+  SNAPSHOTS: 'zsb_database_snapshots_v2',
   AUTH_USER: 'zsb_auth_user_v1',
-  AUDIT_LOGS: 'zsb_audit_logs_v1',
+  AUDIT_LOGS: 'zsb_audit_logs_v2',
   LIVE_SYNC: 'zsb_live_sync_enabled_v1',
 };
 
@@ -345,7 +345,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         }
         const searchParams = new URLSearchParams(window.location.search);
-        if (searchParams.get('autostart') === '1' || initialDeepLink?.isShipmentLink) {
+        if (
+          searchParams.get('autostart') === '1' ||
+          Boolean(searchParams.get('wechat_tx')) ||
+          Boolean(searchParams.get('wechat_tmp_token')) ||
+          initialDeepLink?.isShipmentLink
+        ) {
           return {
             username: DEFAULT_ADMIN_ACCOUNTS[0].username,
             displayName: DEFAULT_ADMIN_ACCOUNTS[0].displayName,
@@ -374,9 +379,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>(() =>
-    initialDeepLink?.isShipmentLink ? 'packing_db' : 'dashboard'
-  );
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const tabParam = searchParams.get('tab') as ActiveTab | null;
+      if (tabParam === 'exporter_payment_form' || tabParam === 'exporter_payment_slip') {
+        return tabParam;
+      }
+      if (searchParams.get('wechat_tx') || searchParams.get('wechat_tmp_token')) {
+        return 'exporter_payment_form';
+      }
+    }
+    return initialDeepLink?.isShipmentLink ? 'packing_db' : 'dashboard';
+  });
   const [focusedShipmentInvoice, setFocusedShipmentInvoice] = useState<string | null>(() => {
     if (initialDeepLink?.isShipmentLink) {
       return initialDeepLink.invoiceNumber || initialDeepLink.shippingMark || null;
@@ -451,6 +466,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('zsb_purchases_v3');
       localStorage.removeItem('zsb_purchases_v4');
       localStorage.removeItem('zsb_purchases_v5');
+      localStorage.removeItem('zsb_purchases_v6');
       const saved = localStorage.getItem(STORAGE_KEYS.PURCHASES);
       if (!saved) return initialPurchases;
       const parsed = JSON.parse(saved);
@@ -467,6 +483,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('zsb_packings_v3');
       localStorage.removeItem('zsb_packings_v4');
       localStorage.removeItem('zsb_packings_v5');
+      localStorage.removeItem('zsb_packings_v6');
       const saved = localStorage.getItem(STORAGE_KEYS.PACKINGS);
       if (!saved) return initialPackings;
       const parsed = JSON.parse(saved);
@@ -483,6 +500,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('zsb_packing_draft_v3');
       localStorage.removeItem('zsb_packing_draft_v4');
       localStorage.removeItem('zsb_packing_draft_v5');
+      localStorage.removeItem('zsb_packing_draft_v6');
       const saved = localStorage.getItem(STORAGE_KEYS.PACKING_DRAFT);
       if (!saved) return createInitialPackingDraft(0);
       const parsed = JSON.parse(saved);
@@ -510,6 +528,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('zsb_payments_v3');
       localStorage.removeItem('zsb_payments_v4');
       localStorage.removeItem('zsb_payments_v5');
+      localStorage.removeItem('zsb_payments_v6');
       const saved = localStorage.getItem(STORAGE_KEYS.PAYMENTS);
       if (!saved) return initialPayments;
       const parsed = JSON.parse(saved);
@@ -526,6 +545,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('zsb_other_costs_v3');
       localStorage.removeItem('zsb_other_costs_v4');
       localStorage.removeItem('zsb_other_costs_v5');
+      localStorage.removeItem('zsb_other_costs_v6');
       const saved = localStorage.getItem(STORAGE_KEYS.OTHER_COSTS);
       if (!saved) return initialOtherCosts;
       const parsed = JSON.parse(saved);
@@ -540,6 +560,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('zsb_supplier_credits_v1');
       localStorage.removeItem('zsb_supplier_credits_v2');
       localStorage.removeItem('zsb_supplier_credits_v3');
+      localStorage.removeItem('zsb_supplier_credits_v4');
       const saved = localStorage.getItem(STORAGE_KEYS.SUPPLIER_CREDITS);
       if (!saved) return [];
       const parsed = JSON.parse(saved);
@@ -554,6 +575,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('zsb_mortalities_v1');
       localStorage.removeItem('zsb_mortalities_v2');
       localStorage.removeItem('zsb_mortalities_v3');
+      localStorage.removeItem('zsb_mortalities_v4');
       const saved = localStorage.getItem(STORAGE_KEYS.MORTALITIES);
       if (!saved) return [];
       const parsed = JSON.parse(saved);
@@ -891,19 +913,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const legacyKeys = [
         'zsb_purchases_v1',
         'zsb_purchases_v2',
+        'zsb_purchases_v3',
+        'zsb_purchases_v4',
+        'zsb_purchases_v5',
+        'zsb_purchases_v6',
         'zsb_packings_v1',
         'zsb_packings_v2',
+        'zsb_packings_v3',
+        'zsb_packings_v4',
         'zsb_packings_v5',
+        'zsb_packings_v6',
         'zsb_packing_draft_v1',
         'zsb_packing_draft_v2',
+        'zsb_packing_draft_v3',
+        'zsb_packing_draft_v4',
+        'zsb_packing_draft_v5',
+        'zsb_packing_draft_v6',
         'zsb_payments_v1',
         'zsb_payments_v2',
+        'zsb_payments_v3',
+        'zsb_payments_v4',
+        'zsb_payments_v5',
+        'zsb_payments_v6',
         'zsb_other_costs_v1',
         'zsb_other_costs_v2',
+        'zsb_other_costs_v3',
+        'zsb_other_costs_v4',
+        'zsb_other_costs_v5',
+        'zsb_other_costs_v6',
+        'zsb_supplier_credits_v1',
+        'zsb_supplier_credits_v2',
+        'zsb_supplier_credits_v3',
+        'zsb_supplier_credits_v4',
+        'zsb_mortalities_v1',
+        'zsb_mortalities_v2',
+        'zsb_mortalities_v3',
+        'zsb_mortalities_v4',
+        'zsb_database_snapshots_v1',
+        'zsb_audit_logs_v1',
+        'zsb_awb_row_overrides_v1',
         'zsb_exporter_slip_custom_rows_v1',
         'zsb_exporter_slip_custom_rows_v2',
+        'zsb_exporter_slip_custom_rows_v3',
       ];
       legacyKeys.forEach((k) => localStorage.removeItem(k));
+      if (!localStorage.getItem('zsb_db_wiped_v7')) {
+        indexedStorageDriver.clearAllStores();
+        localStorage.setItem('zsb_db_wiped_v7', '1');
+      }
     } catch {
       // ignore
     }
@@ -1824,6 +1881,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         'zsb_exporter_slip_custom_rows_v3',
       ];
       keysToClear.forEach((k) => localStorage.removeItem(k));
+      indexedStorageDriver.clearAllStores();
       window.dispatchEvent(new CustomEvent('zsb-clear-all-db'));
     } catch (e) {
       console.error(e);

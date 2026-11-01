@@ -44,6 +44,10 @@ import {
   Save,
   ImageDown,
   Loader2,
+  Eye,
+  Link2,
+  Check,
+  X,
 } from 'lucide-react';
 
 import {
@@ -51,8 +55,17 @@ import {
   WhatsAppIcon,
   WeChatIcon,
 } from './PngShareModal.tsx';
+import { ExporterRecordImageModal } from './ExporterRecordImageModal.tsx';
+import {
+  ExporterRecordSharePayload,
+  CopyLinkToastConfirmation,
+  normalizeExporterRowForShare,
+  parseExporterWeChatDeepLinkFromSearch,
+  copyTemporaryTransactionLinkToClipboard,
+  buildCopyTemporaryLinkToastConfirmation,
+} from '../utils/exporterWeChatShare.ts';
 
-const CUSTOM_SLIP_ROWS_STORAGE_KEY = 'zsb_exporter_slip_custom_rows_v3';
+const CUSTOM_SLIP_ROWS_STORAGE_KEY = 'zsb_exporter_slip_custom_rows_v4';
 
 export const ExporterPaymentSlipView: React.FC = () => {
   const {
@@ -76,6 +89,36 @@ export const ExporterPaymentSlipView: React.FC = () => {
   const [isExportingPng, setIsExportingPng] = useState<boolean>(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [shareChannel, setShareChannel] = useState<'whatsapp' | 'wechat'>('wechat');
+  const [selectedImageRowPayload, setSelectedImageRowPayload] =
+    useState<ExporterRecordSharePayload | null>(null);
+  const [autoShareWeChat, setAutoShareWeChat] = useState<boolean>(false);
+  const [copiedRowLinkId, setCopiedRowLinkId] = useState<string | null>(null);
+  const [copyLinkToast, setCopyLinkToast] =
+    useState<CopyLinkToastConfirmation | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const sharedPayload = parseExporterWeChatDeepLinkFromSearch(
+      window.location.search,
+      {
+        companyName: companyProfile.companyName,
+        companyAddress: companyProfile.address,
+        companyMobiles: companyProfile.mobiles,
+        companyEmail: companyProfile.email,
+        partnerName: companyProfile.partner,
+      }
+    );
+    if (sharedPayload) {
+      setAutoShareWeChat(false);
+      setSelectedImageRowPayload(sharedPayload);
+    }
+  }, [
+    companyProfile.companyName,
+    companyProfile.address,
+    companyProfile.mobiles,
+    companyProfile.email,
+    companyProfile.partner,
+  ]);
 
   // Custom / manual rows added directly inside the Payment Slip form (defaults to 3 rows)
   const [customRows, setCustomRows] = useState<ExporterPaymentSlipRow[]>(() => {
@@ -937,12 +980,15 @@ export const ExporterPaymentSlipView: React.FC = () => {
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-lg border border-slate-300">
+          <div
+            data-testid="exporter-lookup-history-scroll-box"
+            className="max-h-[400px] overflow-y-auto overflow-x-auto rounded-lg border-2 border-slate-300 bg-white shadow-inner"
+          >
             <table
               data-testid="exporter-lookup-record-history-table"
               className="w-full border-collapse text-xs"
             >
-              <thead>
+              <thead className="sticky top-0 z-10 shadow-xs">
                 <tr className="bg-[#0f3d4c] text-white uppercase text-[11px] font-bold tracking-wider border-b border-slate-800">
                   <th className="py-2 px-2.5 border-r border-slate-700 text-center w-10">SL</th>
                   <th className="py-2 px-2.5 border-r border-slate-700 text-left w-28">
@@ -963,15 +1009,18 @@ export const ExporterPaymentSlipView: React.FC = () => {
                   <th className="py-2 px-2.5 border-r border-slate-700 text-right w-32">
                     BALANCE (RMB)
                   </th>
-                  <th className="py-2 px-2.5 text-center w-44">
+                  <th className="py-2 px-2.5 border-r border-slate-700 text-center w-36 min-w-[100px]">
                     STATUS (PAID / UNPAID)
+                  </th>
+                  <th className="py-2 px-2.5 text-center w-56 min-w-[236px]">
+                    IMAGE VIEW / WECHAT
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
                 {historyRows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-5 text-center text-slate-400 italic">
+                    <td colSpan={9} className="py-5 text-center text-slate-400 italic">
                       No exporter records match the selected Shipping Mark &amp; Packing Date filter.
                     </td>
                   </tr>
@@ -1048,7 +1097,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
                       >
                         {formatRMB(row.balance)}
                       </td>
-                      <td className="py-1 px-2 text-center">
+                      <td className="py-1 px-2 border-r border-slate-200 text-center">
                         <select
                           aria-label={`History Row ${idx + 1} Status`}
                           value={row.status === 'PAID' ? 'PAID' : 'UNPAID'}
@@ -1068,11 +1117,122 @@ export const ExporterPaymentSlipView: React.FC = () => {
                           ))}
                         </select>
                       </td>
+                      <td className="py-1 px-2 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            data-testid={`exporter-slip-history-row-${idx + 1}-image-view-btn`}
+                            onClick={() => {
+                              const payload = normalizeExporterRowForShare(row, {
+                                rowNumber: idx + 1,
+                                fallbackMark: row.shippingMark,
+                                fallbackDate: row.date,
+                                fallbackVoucher: row.invoiceNumber,
+                                companyName: companyProfile.companyName,
+                                companyAddress: companyProfile.address,
+                                companyMobiles: companyProfile.mobiles,
+                                companyEmail: companyProfile.email,
+                                partnerName: companyProfile.partner,
+                              });
+                              setAutoShareWeChat(false);
+                              setSelectedImageRowPayload(payload);
+                            }}
+                            title={`Image View for row ${idx + 1}`}
+                            aria-label={`Image view for exporter history row ${idx + 1}`}
+                            className="inline-flex items-center space-x-1 px-2 py-1 bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-300 rounded text-[10px] font-black transition cursor-pointer"
+                          >
+                            <Eye className="w-3 h-3 text-teal-700 shrink-0" />
+                            <span>Image View</span>
+                          </button>
+                          <button
+                            type="button"
+                            data-testid={`exporter-slip-history-row-${idx + 1}-wechat-share-btn`}
+                            onClick={() => {
+                              const payload = normalizeExporterRowForShare(row, {
+                                rowNumber: idx + 1,
+                                fallbackMark: row.shippingMark,
+                                fallbackDate: row.date,
+                                fallbackVoucher: row.invoiceNumber,
+                                companyName: companyProfile.companyName,
+                                companyAddress: companyProfile.address,
+                                companyMobiles: companyProfile.mobiles,
+                                companyEmail: companyProfile.email,
+                                partnerName: companyProfile.partner,
+                              });
+                              setAutoShareWeChat(true);
+                              setSelectedImageRowPayload(payload);
+                            }}
+                            title={`Share via WeChat for row ${idx + 1} (微信扫码与分享)`}
+                            aria-label={`Share via WeChat for exporter history row ${idx + 1}`}
+                            className="inline-flex items-center space-x-1 px-2 py-1 bg-[#07C160] hover:bg-[#06ad56] text-white rounded text-[10px] font-black shadow-2xs transition cursor-pointer whitespace-nowrap"
+                          >
+                            <WeChatIcon className="w-3 h-3 text-white shrink-0" size={12} />
+                            <span>Share via WeChat</span>
+                          </button>
+                          <button
+                            type="button"
+                            data-testid={`exporter-slip-history-row-${idx + 1}-copy-link-btn`}
+                            onClick={async () => {
+                              const payload = normalizeExporterRowForShare(row, {
+                                rowNumber: idx + 1,
+                                fallbackMark: row.shippingMark,
+                                fallbackDate: row.date,
+                                fallbackVoucher: row.invoiceNumber,
+                                companyName: companyProfile.companyName,
+                                companyAddress: companyProfile.address,
+                                companyMobiles: companyProfile.mobiles,
+                                companyEmail: companyProfile.email,
+                                partnerName: companyProfile.partner,
+                              });
+                              const res = await copyTemporaryTransactionLinkToClipboard(
+                                payload,
+                                {
+                                  tab: 'exporter_payment_slip',
+                                }
+                              );
+                              const toastInfo = buildCopyTemporaryLinkToastConfirmation(
+                                payload,
+                                res
+                              );
+                              setCopiedRowLinkId(row.id);
+                              setCopyLinkToast(toastInfo);
+                              setTimeout(() => {
+                                setCopiedRowLinkId((prev) =>
+                                  prev === row.id ? null : prev
+                                );
+                              }, 3500);
+                              setTimeout(() => {
+                                setCopyLinkToast((prev) =>
+                                  prev?.copiedUrl === toastInfo.copiedUrl ? null : prev
+                                );
+                              }, 4500);
+                            }}
+                            title="Copy Link (Secure 24h Temporary Public Link for WeChat)"
+                            aria-label={`Copy Link for exporter history row ${idx + 1}`}
+                            className={`inline-flex items-center justify-center gap-1 px-1.5 py-1 rounded border text-[10px] font-black transition cursor-pointer shrink-0 ${
+                              copiedRowLinkId === row.id
+                                ? 'bg-emerald-100 text-emerald-900 border-emerald-500 ring-1 ring-emerald-300'
+                                : 'bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border-slate-300 hover:border-emerald-400'
+                            }`}
+                          >
+                            {copiedRowLinkId === row.id ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                                <span data-testid={`exporter-slip-row-${idx + 1}-copied-badge`}>
+                                  Copied!
+                                </span>
+                              </>
+                            ) : (
+                              <Link2 className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))
                 )}
               </tbody>
-              <tfoot>
+              <tfoot className="sticky bottom-0 z-10">
                 <tr className="bg-slate-900 text-white font-black text-xs border-t-2 border-slate-800">
                   <td colSpan={4} className="py-2 px-3 text-right uppercase tracking-wider">
                     TOTAL EXPORTER RECORD HISTORY:
@@ -1095,7 +1255,10 @@ export const ExporterPaymentSlipView: React.FC = () => {
                   >
                     {formatRMB(historyTotals.totalBalance)}
                   </td>
-                  <td className="py-2 px-2.5 text-center font-mono text-[11px] text-slate-200 border-l border-slate-700">
+                  <td
+                    colSpan={2}
+                    className="py-2 px-2.5 text-center font-mono text-[11px] text-slate-200 border-l border-slate-700"
+                  >
                     {historyTotals.paidCount} PAID ·{' '}
                     {historyTotals.reportCount + historyTotals.noReportCount} UNPAID
                   </td>
@@ -1152,12 +1315,17 @@ export const ExporterPaymentSlipView: React.FC = () => {
               </div>
             </div>
 
-            {/* 4. 7-Column Bilingual Exporter Payment Slip Table (RMB Column Removed) */}
+            {/* 4. 7-Column Bilingual Exporter Payment Slip Table inside Scrollable Box */}
+            <div className="p-2.5 bg-[#faefd0] border-b-2 border-black">
+              <div
+                data-testid="exporter-payment-slip-scroll-box"
+                className="max-h-[420px] overflow-y-auto overflow-x-auto border-2 border-black rounded-lg bg-[#faefd0] shadow-inner"
+              >
             <table
               className="w-full border-collapse text-center"
               data-testid="exporter-payment-slip-table"
             >
-              <thead>
+              <thead className="sticky top-0 z-10 shadow-xs">
                 <tr className="bg-[#98486f] text-white text-xs sm:text-sm font-bold uppercase border-b-2 border-black">
                   <th className="py-2.5 px-2 border-r-2 border-black w-36">
                     <div>DATE</div>
@@ -1333,7 +1501,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
               </tbody>
 
               {/* 5. GRAND TOTAL 累计 Plum Footer Row */}
-              <tfoot>
+              <tfoot className="sticky bottom-0 z-10">
                 <tr className="bg-[#98486f] text-white border-t-2 border-b-2 border-black text-sm sm:text-base font-black">
                   <td
                     colSpan={3}
@@ -1363,6 +1531,8 @@ export const ExporterPaymentSlipView: React.FC = () => {
                 </tr>
               </tfoot>
             </table>
+              </div>
+            </div>
 
             {/* Payment Slip Form Action Bar (+ Add Row, Print/PDF & Save .PNG Controls) */}
             <div
@@ -1461,6 +1631,50 @@ export const ExporterPaymentSlipView: React.FC = () => {
           defaultPhone=""
         />
       )}
+
+      {/* Visual Toast Notification Confirmation for Copy Link */}
+      {copyLinkToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          data-testid="copy-link-toast-confirmation"
+          className="fixed bottom-4 right-4 z-[70] w-full max-w-md bg-[#0f3d4c] text-white rounded-xl shadow-2xl border-2 border-[#07C160] p-3.5 flex items-start justify-between gap-3 print:hidden"
+        >
+          <div className="flex items-start gap-2.5 min-w-0">
+            <div className="p-1.5 rounded-lg bg-[#07C160] text-white shrink-0 mt-0.5 shadow-xs">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+            <div className="space-y-1 min-w-0">
+              <div className="font-black text-xs sm:text-sm text-emerald-300 tracking-wide">
+                {copyLinkToast.title}
+              </div>
+              <p className="text-[11px] text-slate-100 font-semibold leading-snug">
+                {copyLinkToast.message}
+              </p>
+              <div className="bg-slate-950/60 border border-teal-700/80 rounded px-2 py-1 font-mono text-[10px] text-amber-200 truncate">
+                {copyLinkToast.copiedUrl}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            aria-label="Dismiss Copy Link Toast Notification"
+            data-testid="dismiss-copy-link-toast-btn"
+            onClick={() => setCopyLinkToast(null)}
+            className="text-slate-300 hover:text-white p-1 rounded hover:bg-slate-800/60 transition cursor-pointer shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Exporter Record Row Image View & Share by WeChat Modal */}
+      <ExporterRecordImageModal
+        isOpen={Boolean(selectedImageRowPayload)}
+        onClose={() => setSelectedImageRowPayload(null)}
+        payload={selectedImageRowPayload}
+        autoTriggerWeChatShare={autoShareWeChat}
+      />
     </div>
   );
 };

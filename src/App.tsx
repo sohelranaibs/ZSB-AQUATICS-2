@@ -254,10 +254,10 @@ const MainContent: React.FC = () => {
           role="status"
           aria-live="polite"
           data-testid="global-toast-banner"
-          className="fixed bottom-4 right-4 z-50 bg-slate-900 text-white px-4 py-2.5 rounded-xl shadow-2xl border border-amber-500/50 flex items-center space-x-2 text-xs font-semibold transition-opacity duration-150 print:hidden"
+          className="fixed bottom-4 right-4 z-[70] bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl border-2 border-emerald-400/80 flex items-center space-x-2.5 text-xs font-bold transition-all duration-150 print:hidden max-w-md"
         >
-          <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
-          <span>{toastMessage}</span>
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span className="leading-snug">{toastMessage}</span>
         </div>
       )}
 

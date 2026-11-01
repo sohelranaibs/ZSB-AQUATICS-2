@@ -1475,9 +1475,13 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
         )}
 
         {activeDbType === 'purchase' && (
-          <div className="overflow-x-auto">
+          <div className="p-2.5 bg-slate-50/70">
+            <div
+              data-testid="purchase-db-scroll-box"
+              className="max-h-[420px] overflow-y-auto overflow-x-auto border-2 border-blue-200 rounded-lg bg-white shadow-inner"
+            >
             <table className="w-full text-left text-[11px]">
-              <thead className="bg-[#1b73b4] text-white font-bold uppercase text-[10px] tracking-tight border-b border-blue-900">
+              <thead className="sticky top-0 z-10 bg-[#1b73b4] text-white font-bold uppercase text-[10px] tracking-tight border-b border-blue-900 shadow-xs">
                 <tr>
                   <th className="px-1.5 py-2 w-7 text-center">
                     <input
@@ -1787,6 +1791,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 )}
               </tbody>
             </table>
+            </div>
           </div>
         )}
 
@@ -1800,9 +1805,13 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 Formula: <strong>Total Value (RMB) × RMB Rate = Total Amount (BDT)</strong>
               </div>
             </div>
-            <div className="overflow-x-auto">
+            <div className="p-2.5 bg-slate-50/70">
+              <div
+                data-testid="packing-db-scroll-box"
+                className="max-h-[420px] overflow-y-auto overflow-x-auto border-2 border-teal-200 rounded-lg bg-white shadow-inner"
+              >
               <table className="w-full text-left text-[11px]">
-                <thead className="bg-[#12776c] text-white font-bold uppercase text-[10px] tracking-tight border-b border-teal-900">
+                <thead className="sticky top-0 z-10 bg-[#12776c] text-white font-bold uppercase text-[10px] tracking-tight border-b border-teal-900 shadow-xs">
                   <tr>
                     <th className="px-1 py-2 w-6 text-center">
                       <input
@@ -2116,7 +2125,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 )}
               </tbody>
               {filteredPackings.length > 0 && (
-                <tfoot>
+                <tfoot className="sticky bottom-0 z-10">
                   <tr className="bg-teal-50 font-black border-t-2 border-teal-200 text-[11px]">
                     <td colSpan={8} className="px-1.5 py-2 text-right uppercase text-teal-950">
                       PACKING DB TOTALS:
@@ -2155,6 +2164,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 </tfoot>
               )}
             </table>
+              </div>
           </div>
           </div>
         )}
@@ -2214,9 +2224,13 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="p-2.5 bg-slate-50/70">
+              <div
+                data-testid="payment-db-scroll-box"
+                className="max-h-[420px] overflow-y-auto overflow-x-auto border-2 border-purple-200 rounded-lg bg-white shadow-inner"
+              >
               <table className="w-full text-left text-[11px]">
-                <thead className="bg-[#793282] text-white font-bold uppercase text-[10px] tracking-tight border-b border-purple-900">
+                <thead className="sticky top-0 z-10 bg-[#793282] text-white font-bold uppercase text-[10px] tracking-tight border-b border-purple-900 shadow-xs">
                   <tr>
                     <th className="px-1.5 py-2 w-7 text-center">
                       <input
@@ -2503,6 +2517,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   )}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         )}

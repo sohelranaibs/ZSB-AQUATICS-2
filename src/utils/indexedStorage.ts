@@ -342,6 +342,35 @@ export class IndexedDBStorageDriver {
       return null;
     }
   }
+
+  public async clearAllStores(): Promise<boolean> {
+    try {
+      if (!this.dbPromise) return false;
+      const db = await this.dbPromise;
+      if (!db) return false;
+
+      const storeNames = [
+        DB_STORE_NAMES.PURCHASES,
+        DB_STORE_NAMES.PACKINGS,
+        DB_STORE_NAMES.PAYMENTS,
+        DB_STORE_NAMES.OTHER_COSTS,
+      ].filter((name) => db.objectStoreNames.contains(name));
+
+      if (storeNames.length === 0) return true;
+
+      return new Promise((resolve) => {
+        const tx = db.transaction(storeNames, 'readwrite');
+        for (const name of storeNames) {
+          tx.objectStore(name).clear();
+        }
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      });
+    } catch {
+      return false;
+    }
+  }
 }
 
 export const indexedStorageDriver = new IndexedDBStorageDriver();
+

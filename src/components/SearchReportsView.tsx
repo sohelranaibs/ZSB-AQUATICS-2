@@ -778,9 +778,13 @@ export const SearchReportsView: React.FC = () => {
             </button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="p-3 bg-slate-50/70">
+            <div
+              data-testid="search-reports-scroll-box"
+              className="max-h-[420px] overflow-y-auto overflow-x-auto border-2 border-slate-300 rounded-lg bg-white shadow-inner"
+            >
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-100 text-slate-700 uppercase font-bold text-[10px] border-b">
+              <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 uppercase font-bold text-[10px] border-b shadow-2xs">
                 <tr>
                   <th className="p-2.5">DATE</th>
                   <th className="p-2.5">TYPE</th>
@@ -923,6 +927,7 @@ export const SearchReportsView: React.FC = () => {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>

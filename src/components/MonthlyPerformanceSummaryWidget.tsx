@@ -282,14 +282,15 @@ export const MonthlyPerformanceSummaryWidget: React.FC = () => {
         </div>
       </div>
 
-      {/* Collapsible Side-by-Side Monthly Comparison Ledger Table */}
+      {/* Collapsible Side-by-Side Monthly Comparison Ledger Table inside Scrollable Box */}
       {showComparisonTable && (
-        <div className="overflow-x-auto">
+        <div className="p-3 bg-slate-50/70">
+          <div className="max-h-[360px] overflow-y-auto overflow-x-auto border-2 border-slate-200 rounded-lg bg-white shadow-inner">
           <table
             data-testid="monthly-performance-comparison-table"
             className="w-full text-xs border-collapse"
           >
-            <thead>
+            <thead className="sticky top-0 z-10 shadow-2xs">
               <tr className="bg-slate-100 text-slate-700 uppercase font-bold text-[11px] border-b border-slate-200">
                 <th className="py-2.5 px-4 text-left">MONTH</th>
                 <th className="py-2.5 px-3 text-center">CHALLANS / VOL</th>
@@ -361,7 +362,7 @@ export const MonthlyPerformanceSummaryWidget: React.FC = () => {
                 </tr>
               ))}
             </tbody>
-            <tfoot>
+            <tfoot className="sticky bottom-0 z-10">
               <tr className="bg-slate-100 font-black text-xs border-t-2 border-slate-300">
                 <td className="py-2.5 px-4 uppercase text-slate-900">
                   PERIOD TOTAL ({periodRangeLabel})
@@ -393,6 +394,7 @@ export const MonthlyPerformanceSummaryWidget: React.FC = () => {
               </tr>
             </tfoot>
           </table>
+          </div>
         </div>
       )}
     </section>

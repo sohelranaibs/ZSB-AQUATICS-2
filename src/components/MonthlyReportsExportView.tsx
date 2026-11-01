@@ -388,11 +388,11 @@ export const MonthlyReportsExportView: React.FC<MonthlyReportsExportViewProps> =
           </div>
         </div>
 
-        {/* Main Monthly Reconciliation Spreadsheet Table inside Scrollable Box */}
+        {/* Main Monthly Reconciliation Spreadsheet Table */}
         <div className="p-3 bg-slate-50/70">
-          <div className="max-h-[420px] overflow-y-auto overflow-x-auto border-2 border-slate-300 rounded-lg bg-white shadow-inner">
+          <div className="overflow-x-auto border-2 border-slate-300 rounded-lg bg-white">
           <table className="w-full text-xs text-left border-collapse min-w-[950px]">
-            <thead className="sticky top-0 z-10 shadow-xs">
+            <thead>
               <tr className="bg-slate-900 text-white uppercase text-[11px] font-bold border-b border-slate-800">
                 <th className="py-3 px-4 w-44">Month / Period</th>
                 <th className="py-3 px-3 text-right">
@@ -601,7 +601,7 @@ export const MonthlyReportsExportView: React.FC<MonthlyReportsExportViewProps> =
                                       No purchase bills recorded for this month.
                                     </div>
                                   ) : (
-                                    <div className="max-h-48 overflow-y-auto border border-slate-200 rounded divide-y divide-slate-100 text-xs">
+                                    <div className="border border-slate-200 rounded divide-y divide-slate-100 text-xs">
                                       {monthPurchases.map((p) => (
                                         <div
                                           key={p.id}
@@ -657,7 +657,7 @@ export const MonthlyReportsExportView: React.FC<MonthlyReportsExportViewProps> =
                                       No export packing manifests recorded for this month.
                                     </div>
                                   ) : (
-                                    <div className="max-h-48 overflow-y-auto border border-slate-200 rounded divide-y divide-slate-100 text-xs">
+                                    <div className="border border-slate-200 rounded divide-y divide-slate-100 text-xs">
                                       {monthPackings.map((pk) => (
                                         <div
                                           key={pk.id}
@@ -708,7 +708,7 @@ export const MonthlyReportsExportView: React.FC<MonthlyReportsExportViewProps> =
 
             {/* Total / Cumulative Rollup Row */}
             {filteredItems.length > 0 && (
-              <tfoot className="sticky bottom-0 z-10">
+              <tfoot>
                 <tr className="bg-slate-900 text-white font-bold text-xs border-t-2 border-slate-700">
                   <td className="py-3 px-4 uppercase text-amber-400 font-serif font-black tracking-wider whitespace-nowrap">
                     CUMULATIVE TOTAL ({filteredItems.length} M)

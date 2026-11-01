@@ -39,10 +39,8 @@ import {
   Loader2,
   UploadCloud,
 } from 'lucide-react';
-import { ShipmentQrBadge } from './ShipmentQrBadge.tsx';
 import {
   PngShareModal,
-  WhatsAppIcon,
   WeChatIcon,
 } from './PngShareModal.tsx';
 
@@ -60,7 +58,6 @@ export const PackingListView: React.FC = () => {
     openDataCenterModal,
     setActiveTab,
     showToast,
-    openShipmentDetails,
   } = useApp();
 
   // Manifest Header Fields (From Date & To Date removed per user request)
@@ -79,7 +76,6 @@ export const PackingListView: React.FC = () => {
   const [remarks, setRemarks] = useState<string>('');
   const [lastSavedRecord, setLastSavedRecord] = useState<{ id: string; invoiceNumber: string } | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
-  const [shareChannel, setShareChannel] = useState<'whatsapp' | 'wechat'>('whatsapp');
 
   // 5 standard empty rows ready for data entry
   const createEmptyRow = (id: string): PackingItemRow => ({
@@ -943,17 +939,17 @@ export const PackingListView: React.FC = () => {
               </div>
             )}
 
-            {/* Redesigned Manifest Line-Item Table Grid inside Scrollable Box */}
+            {/* Redesigned Manifest Line-Item Table Grid */}
             <div className="p-2.5 bg-slate-50/70">
               <div
                 data-testid="packing-entry-scroll-box"
-                className="max-h-[400px] overflow-y-auto overflow-x-auto border-2 border-amber-200 rounded-lg bg-white shadow-inner"
+                className="overflow-x-auto border-2 border-amber-200 rounded-lg bg-white"
               >
               <table
                 className="w-full border-collapse text-xs"
                 data-testid="packing-entry-table"
               >
-                <thead className="sticky top-0 z-10 shadow-xs">
+                <thead>
                   <tr className="bg-[#e67327] text-white uppercase text-[11px] font-bold tracking-wider border-b border-amber-800">
                     <th className="px-2 py-2.5 border-r border-amber-600/60 w-10 text-center">
                       SL #
@@ -1210,7 +1206,7 @@ export const PackingListView: React.FC = () => {
                 </tbody>
 
                 {/* Subtotals Row */}
-                <tfoot className="sticky bottom-0 z-10">
+                <tfoot>
                   <tr className="bg-[#e67327] text-white font-bold border-t-2 border-amber-800">
                     <td
                       colSpan={2}
@@ -1331,24 +1327,6 @@ export const PackingListView: React.FC = () => {
                   className="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
                 />
               </div>
-
-              {/* Live Shipment QR Code Preview & Direct System Link */}
-              <ShipmentQrBadge
-                shipment={{
-                  id: editingPackingId || undefined,
-                  invoiceNumber,
-                  shippingMark,
-                  packingDate,
-                  flight,
-                  destination,
-                  totalBox,
-                  totalWeight,
-                  totalAmount,
-                }}
-                showInteractiveControls={true}
-                onOpenInSystem={openShipmentDetails}
-                testIdPrefix="packing-form-shipment-qr"
-              />
             </div>
           </div>
         </div>
@@ -1430,36 +1408,17 @@ export const PackingListView: React.FC = () => {
               </button>
             </div>
 
-            {/* Share via WhatsApp & WeChat (.PNG) */}
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                data-testid="packing-share-whatsapp-btn"
-                onClick={() => {
-                  setShareChannel('whatsapp');
-                  setIsShareModalOpen(true);
-                }}
-                className="w-full bg-[#25D366] hover:bg-[#20ba5a] text-white py-2 px-2.5 rounded-lg font-bold text-xs shadow-xs flex items-center justify-center space-x-1.5 transition cursor-pointer"
-                title="Share Packing List Manifest .PNG to WhatsApp"
-              >
-                <WhatsAppIcon className="w-3.5 h-3.5 shrink-0" />
-                <span>WHATSAPP</span>
-              </button>
-
-              <button
-                type="button"
-                data-testid="packing-share-wechat-btn"
-                onClick={() => {
-                  setShareChannel('wechat');
-                  setIsShareModalOpen(true);
-                }}
-                className="w-full bg-[#07C160] hover:bg-[#06a853] text-white py-2 px-2.5 rounded-lg font-bold text-xs shadow-xs flex items-center justify-center space-x-1.5 transition cursor-pointer"
-                title="Share Packing List Manifest .PNG to WeChat (微信)"
-              >
-                <WeChatIcon className="w-3.5 h-3.5 shrink-0" />
-                <span>WECHAT (微信)</span>
-              </button>
-            </div>
+            {/* Share via WeChat (.PNG) */}
+            <button
+              type="button"
+              data-testid="packing-share-wechat-btn"
+              onClick={() => setIsShareModalOpen(true)}
+              className="w-full bg-[#07C160] hover:bg-[#06a853] text-white py-2.5 px-3 rounded-lg font-bold text-xs shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
+              title="Share Packing List Manifest .PNG to WeChat (微信)"
+            >
+              <WeChatIcon className="w-4 h-4 shrink-0" />
+              <span>SHARE VIA WECHAT (微信)</span>
+            </button>
 
             {/* SEARCH Button - Royal Blue */}
             {/* FLIGHT RETURN BILL Monthly Statement Button */}
@@ -2019,23 +1978,6 @@ export const PackingListView: React.FC = () => {
             </div>
           )}
 
-          {/* Shipment QR Code for Direct System Lookup on PNG Export Canvas */}
-          <ShipmentQrBadge
-            shipment={{
-              id: editingPackingId || undefined,
-              invoiceNumber,
-              shippingMark,
-              packingDate,
-              flight,
-              destination,
-              totalBox,
-              totalWeight,
-              totalAmount,
-            }}
-            inlineStylesOnly={true}
-            testIdPrefix="packing-canvas-shipment-qr"
-          />
-
           {/* Dual Official Signatures */}
           <div
             style={{
@@ -2135,7 +2077,7 @@ export const PackingListView: React.FC = () => {
         </div>
       </div>
 
-      {/* Interactive PNG WeChat & WhatsApp Share Modal */}
+      {/* Interactive PNG WeChat Share Modal */}
       {isShareModalOpen && (
         <PngShareModal
           isOpen={isShareModalOpen}
@@ -2156,7 +2098,6 @@ export const PackingListView: React.FC = () => {
           }}
           targetElementId="packing-manifest-export-canvas"
           defaultFilename={formatPackingExportFilename(invoiceNumber, shippingMark, packingDate, 'png')}
-          defaultPhone=""
         />
       )}
     </div>

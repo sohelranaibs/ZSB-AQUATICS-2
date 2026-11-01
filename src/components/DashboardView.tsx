@@ -955,12 +955,12 @@ export const DashboardView: React.FC = () => {
                 </div>
 
                 <div className="p-2.5 bg-purple-50/30">
-                  <div className="overflow-x-auto overflow-y-auto max-h-[340px] border-2 border-purple-200 rounded-lg bg-white shadow-inner">
+                  <div className="overflow-x-auto border-2 border-purple-200 rounded-lg bg-white">
                   <table
                     data-testid="mortality-history-table"
                     className="w-full text-left text-xs"
                   >
-                    <thead className="bg-purple-50/95 text-purple-950 font-bold uppercase text-[10px] border-b border-purple-200 sticky top-0 z-10">
+                    <thead className="bg-purple-50/95 text-purple-950 font-bold uppercase text-[10px] border-b border-purple-200">
                       <tr>
                         <th className="p-2.5">DATE</th>
                         <th className="p-2.5">SPECIES / GRADE</th>
@@ -1796,10 +1796,10 @@ export const DashboardView: React.FC = () => {
         <div className="p-3 bg-slate-50/70">
           <div
             data-testid="recent-activities-scroll-box"
-            className="max-h-[380px] overflow-y-auto overflow-x-auto border-2 border-slate-200 rounded-lg bg-white shadow-inner"
+            className="overflow-x-auto border-2 border-slate-200 rounded-lg bg-white"
           >
           <table className="w-full text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 font-semibold border-b border-slate-200 shadow-2xs">
+            <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
               <tr>
                 <th className="px-4 py-3">Ledger Type</th>
                 <th className="px-4 py-3">Voucher / Document No.</th>

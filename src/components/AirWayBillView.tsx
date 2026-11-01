@@ -41,7 +41,6 @@ import {
 } from 'lucide-react';
 import {
   PngShareModal,
-  WhatsAppIcon,
   WeChatIcon,
 } from './PngShareModal.tsx';
 
@@ -64,7 +63,6 @@ export const AirWayBillView: React.FC = () => {
   const [selectedShipper, setSelectedShipper] = useState<string>('ALL');
   const [selectedFlight, setSelectedFlight] = useState<string>('ALL');
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
-  const [shareChannel, setShareChannel] = useState<'whatsapp' | 'wechat'>('whatsapp');
 
   const [rowOverrides, setRowOverrides] = useState<Record<string, AirWayBillRowOverride>>(() => {
     try {
@@ -408,29 +406,11 @@ export const AirWayBillView: React.FC = () => {
             <span>SAVE .PNG</span>
           </button>
 
-          {/* Share via WhatsApp Button */}
-          <button
-            type="button"
-            data-testid="awb-share-whatsapp-btn"
-            onClick={() => {
-              setShareChannel('whatsapp');
-              setIsShareModalOpen(true);
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-[#25D366] hover:bg-[#20ba5a] text-white rounded shadow transition cursor-pointer"
-            title="Share Flight Return Bill .PNG via WhatsApp"
-          >
-            <WhatsAppIcon className="w-3.5 h-3.5 text-white" />
-            <span>WHATSAPP</span>
-          </button>
-
           {/* Share via WeChat (微信) Button */}
           <button
             type="button"
             data-testid="awb-share-wechat-btn"
-            onClick={() => {
-              setShareChannel('wechat');
-              setIsShareModalOpen(true);
-            }}
+            onClick={() => setIsShareModalOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-[#07C160] hover:bg-[#06a853] text-white rounded shadow transition cursor-pointer"
             title="Share Flight Return Bill .PNG via WeChat (微信)"
           >
@@ -682,7 +662,7 @@ export const AirWayBillView: React.FC = () => {
 
         <div
           data-testid="awb-statement-scroll-box"
-          className="max-h-[420px] overflow-y-auto overflow-x-auto border-2 border-slate-800 rounded-lg bg-white shadow-inner my-1"
+          className="overflow-x-auto border-2 border-slate-800 rounded-lg bg-white my-1"
         >
         <table
           data-testid="awb-statement-table"
@@ -703,7 +683,7 @@ export const AirWayBillView: React.FC = () => {
             <col style={{ width: '9%' }} />
             <col style={{ width: '16%' }} />
           </colgroup>
-          <thead className="sticky top-0 z-10">
+          <thead>
             {/* Row 1: Deep Blue "AIR WAY BILL" Title Banner */}
             <tr>
               <th
@@ -1036,6 +1016,30 @@ export const AirWayBillView: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Interactive PNG WeChat Share Modal */}
+      {isShareModalOpen && (
+        <PngShareModal
+          isOpen={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
+          title={`Flight Return Bill Monthly Statement — ${
+            selectedMonth !== 'all' ? formatYearMonthLabel(selectedMonth) : 'All Active Months'
+          } (${selectedShipper})`}
+          documentType="air_way_bill"
+          documentData={{
+            yearMonth: selectedMonth,
+            monthLabel:
+              selectedMonth !== 'all'
+                ? formatYearMonthLabel(selectedMonth)
+                : 'All Active Months',
+            shipper: selectedShipper,
+            flight: selectedFlight,
+            totals,
+          }}
+          targetElementId="awb-printable-sheet"
+          defaultFilename={formatAirWayBillExportFilename(selectedMonth, selectedShipper, 'png')}
+        />
+      )}
     </div>
   );
 };

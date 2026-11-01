@@ -533,6 +533,8 @@ export function formatRMB(amount: number): string {
 export interface ExporterSlipFilterOptions {
   shippingMark?: string;
   packingDate?: string;
+  fromDate?: string;
+  toDate?: string;
   flight?: string;
   status?: string;
   rmbExchangeRate?: number;
@@ -805,6 +807,8 @@ export function buildExporterPaymentSlipRows(
   const {
     shippingMark = 'ALL',
     packingDate = 'ALL',
+    fromDate = '',
+    toDate = '',
     flight = 'ALL',
     status = 'ALL',
     rmbExchangeRate = 16.5,
@@ -815,12 +819,26 @@ export function buildExporterPaymentSlipRows(
   const dateTarget = (packingDate || 'ALL').trim();
   const flightTarget = (flight || 'ALL').trim().toLowerCase();
   const statusTarget = (status || 'ALL').trim().toLowerCase();
+  const cleanFrom = (fromDate || '').trim();
+  const cleanTo = (toDate || '').trim();
+  const hasDateRange =
+    (cleanFrom !== '' && cleanFrom !== 'ALL') ||
+    (cleanTo !== '' && cleanTo !== 'ALL');
 
   const matchedPackings = packings.filter((pkg) => {
     if (markTarget !== 'all' && markTarget !== '' && (pkg.shippingMark || '').trim().toLowerCase() !== markTarget) {
       return false;
     }
-    if (dateTarget !== 'ALL' && dateTarget !== 'all' && dateTarget !== '' && pkg.packingDate !== dateTarget) {
+    const pkgDate = (pkg.packingDate || '').trim();
+    if (hasDateRange) {
+      if (cleanFrom && cleanTo) {
+        if (pkgDate < cleanFrom || pkgDate > cleanTo) return false;
+      } else if (cleanFrom) {
+        if (pkgDate < cleanFrom) return false;
+      } else if (cleanTo) {
+        if (pkgDate > cleanTo) return false;
+      }
+    } else if (dateTarget !== 'ALL' && dateTarget !== 'all' && dateTarget !== '' && pkgDate !== dateTarget) {
       return false;
     }
     if (flightTarget !== 'all' && flightTarget !== '' && (pkg.flight || '').trim().toLowerCase() !== flightTarget) {
@@ -872,7 +890,19 @@ export function buildExporterPaymentSlipRows(
     }
 
     const rmb = Math.round(computedRmb * 100) / 100;
-    const computedAmount = calculateExporterSlipRowAmount(weightKg, rmb);
+    const weightXRate = calculateExporterSlipRowAmount(weightKg, rmb);
+    const settled = Number(pkg.settledAmount) || Number(pkg.debitAmount) || 0;
+    const hasExplicitRmbRate = pkg.rmbAmount !== undefined && Number(pkg.rmbAmount) > 0;
+    const computedAmount =
+      settled > 0 && !hasExplicitRmbRate
+        ? Math.round(settled * 100) / 100
+        : weightKg > 0 && rmb > 0
+        ? weightXRate
+        : settled > 0
+        ? Math.round(settled * 100) / 100
+        : rawTotalAmount > 0 && !hasExplicitRmbRate
+        ? Math.round(rawTotalAmount * 100) / 100
+        : 0;
 
     return {
       id: pkg.id,
@@ -893,7 +923,13 @@ export function buildExporterPaymentSlipRows(
   });
 
   if (statusTarget !== 'all' && statusTarget !== '') {
-    return rows.filter((r) => (r.status || '').trim().toLowerCase() === statusTarget);
+    return rows.filter((r) => {
+      const normalizedStatus = (r.status || '').trim().toLowerCase();
+      if (statusTarget === 'unpaid') {
+        return normalizedStatus !== 'paid';
+      }
+      return normalizedStatus === statusTarget;
+    });
   }
 
   return rows;
@@ -909,12 +945,15 @@ export function calculateExporterSlipTotals(
   const totalWeightKg = rows.reduce((acc, r) => acc + (Number(r.weightKg) || 0), 0);
   const totalRmb = rows.reduce((acc, r) => acc + (Number(r.rmb) || 0), 0);
   const totalAmount = rows.reduce((acc, r) => {
+    const explicitAmount = Number(r.amount) || 0;
     const rowWeight = Number(r.weightKg) || 0;
     const rowRmb = Number(r.rmb) || 0;
     const computed =
-      rowWeight > 0 && rowRmb > 0
+      explicitAmount > 0
+        ? explicitAmount
+        : rowWeight > 0 && rowRmb > 0
         ? calculateExporterSlipRowAmount(rowWeight, rowRmb)
-        : Number(r.amount) || 0;
+        : 0;
     return acc + computed;
   }, 0);
 
@@ -936,17 +975,41 @@ export function formatExporterSlipExportFilename(
   shippingMark: string = 'ALL',
   packingDate: string = 'ALL',
   extension: 'pdf' | 'png' = 'png',
-  referenceDateStr?: string
+  referenceOrDateRange?: string | { fromDate?: string; toDate?: string },
+  maybeDateRange?: { fromDate?: string; toDate?: string }
 ): string {
   const cleanMark =
     shippingMark && shippingMark !== 'ALL'
       ? shippingMark.trim().replace(/[^a-zA-Z0-9_-]/g, '_')
       : 'ALL_MARKS';
+
+  const dateRange =
+    typeof referenceOrDateRange === 'object' && referenceOrDateRange !== null
+      ? referenceOrDateRange
+      : maybeDateRange;
+
+  const referenceDateStr =
+    typeof referenceOrDateRange === 'string' ? referenceOrDateRange : undefined;
+
   const fallbackDate = referenceDateStr ?? new Date().toISOString().slice(0, 10);
-  const cleanDate =
-    packingDate && packingDate !== 'ALL'
-      ? packingDate.trim().replace(/[^a-zA-Z0-9_-]/g, '-')
-      : fallbackDate;
+  let cleanDate = fallbackDate;
+
+  if (dateRange && (dateRange.fromDate || dateRange.toDate)) {
+    if (dateRange.fromDate && dateRange.toDate) {
+      const fromPart = dateRange.fromDate.trim().replace(/[^a-zA-Z0-9_-]/g, '-');
+      const toPart = dateRange.toDate.trim().replace(/[^a-zA-Z0-9_-]/g, '-');
+      cleanDate = `${fromPart}_to_${toPart}`;
+    } else if (dateRange.fromDate) {
+      const fromPart = dateRange.fromDate.trim().replace(/[^a-zA-Z0-9_-]/g, '-');
+      cleanDate = `from_${fromPart}`;
+    } else if (dateRange.toDate) {
+      const toPart = dateRange.toDate.trim().replace(/[^a-zA-Z0-9_-]/g, '-');
+      cleanDate = `until_${toPart}`;
+    }
+  } else if (packingDate && packingDate !== 'ALL') {
+    cleanDate = packingDate.trim().replace(/[^a-zA-Z0-9_-]/g, '-');
+  }
+
   const ext = extension.toLowerCase() === 'pdf' ? 'pdf' : 'png';
   return `ZSB_AQUATICS_Payment_Slip_${cleanMark}_${cleanDate}.${ext}`;
 }
@@ -1027,6 +1090,8 @@ export function mergeExporterPaymentSlipRows(
   const {
     shippingMark = 'ALL',
     packingDate = 'ALL',
+    fromDate = '',
+    toDate = '',
     flight = 'ALL',
     status = 'ALL',
   } = filters;
@@ -1035,6 +1100,11 @@ export function mergeExporterPaymentSlipRows(
   const dateTarget = (packingDate || 'ALL').trim();
   const flightTarget = (flight || 'ALL').trim().toLowerCase();
   const statusTarget = (status || 'ALL').trim().toLowerCase();
+  const cleanFrom = (fromDate || '').trim();
+  const cleanTo = (toDate || '').trim();
+  const hasDateRange =
+    (cleanFrom !== '' && cleanFrom !== 'ALL') ||
+    (cleanTo !== '' && cleanTo !== 'ALL');
 
   const dbMarksSet = new Set(
     dbRows.map((r) => (r.mark || '').trim().toLowerCase()).filter(Boolean)
@@ -1073,7 +1143,15 @@ export function mergeExporterPaymentSlipRows(
       }
 
       const rowDate = (row.date || '').trim();
-      if (dateTarget !== 'ALL' && dateTarget !== 'all' && dateTarget !== '' && rowDate !== '' && rowDate !== dateTarget) {
+      if (hasDateRange) {
+        if (cleanFrom && cleanTo) {
+          if (rowDate && (rowDate < cleanFrom || rowDate > cleanTo)) return false;
+        } else if (cleanFrom) {
+          if (rowDate && rowDate < cleanFrom) return false;
+        } else if (cleanTo) {
+          if (rowDate && rowDate > cleanTo) return false;
+        }
+      } else if (dateTarget !== 'ALL' && dateTarget !== 'all' && dateTarget !== '' && rowDate !== '' && rowDate !== dateTarget) {
         return false;
       }
 
@@ -1083,8 +1161,12 @@ export function mergeExporterPaymentSlipRows(
       }
 
       const rowStatus = (row.status || '').trim().toLowerCase();
-      if (statusTarget !== 'all' && statusTarget !== '' && rowStatus !== '' && rowStatus !== statusTarget) {
-        return false;
+      if (statusTarget !== 'all' && statusTarget !== '' && rowStatus !== '') {
+        if (statusTarget === 'unpaid') {
+          if (rowStatus === 'paid') return false;
+        } else if (rowStatus !== statusTarget) {
+          return false;
+        }
       }
 
       return true;
@@ -1095,7 +1177,7 @@ export function mergeExporterPaymentSlipRows(
       return {
         ...row,
         amount:
-          weightKg > 0 || rmb > 0
+          weightKg > 0 && rmb > 0
             ? calculateExporterSlipRowAmount(weightKg, rmb)
             : Number(row.amount) || 0,
       };
@@ -1104,9 +1186,15 @@ export function mergeExporterPaymentSlipRows(
   const normalizedDbRows = dbRows.map((row) => {
     const weightKg = Number(row.weightKg) || 0;
     const rmb = Number(row.rmb) || 0;
+    const explicitAmount = Number(row.amount) || 0;
     return {
       ...row,
-      amount: calculateExporterSlipRowAmount(weightKg, rmb),
+      amount:
+        explicitAmount > 0
+          ? explicitAmount
+          : weightKg > 0 && rmb > 0
+          ? calculateExporterSlipRowAmount(weightKg, rmb)
+          : 0,
     };
   });
 

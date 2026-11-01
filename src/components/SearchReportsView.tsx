@@ -781,10 +781,10 @@ export const SearchReportsView: React.FC = () => {
           <div className="p-3 bg-slate-50/70">
             <div
               data-testid="search-reports-scroll-box"
-              className="max-h-[420px] overflow-y-auto overflow-x-auto border-2 border-slate-300 rounded-lg bg-white shadow-inner"
+              className="overflow-x-auto border-2 border-slate-300 rounded-lg bg-white"
             >
             <table className="w-full text-left text-xs">
-              <thead className="sticky top-0 z-10 bg-slate-100 text-slate-700 uppercase font-bold text-[10px] border-b shadow-2xs">
+              <thead className="bg-slate-100 text-slate-700 uppercase font-bold text-[10px] border-b">
                 <tr>
                   <th className="p-2.5">DATE</th>
                   <th className="p-2.5">TYPE</th>

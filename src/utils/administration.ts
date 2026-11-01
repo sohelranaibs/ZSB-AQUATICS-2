@@ -37,7 +37,7 @@ export const SYSTEM_PERMISSIONS: PermissionDefinition[] = [
     id: 'perm_packing_manifest',
     label: 'Air Freight Export Manifests',
     category: 'Logistics & Manifests',
-    description: 'Draft carton-level export packing lists, shipping mark dispatches and QR tracking codes.',
+    description: 'Draft carton-level export packing lists and shipping mark dispatches.',
   },
   {
     id: 'perm_flight_return_bill',

@@ -213,7 +213,7 @@ export const LandingLoginView: React.FC = () => {
                     <Plane className="w-4 h-4 text-teal-400 shrink-0" />
                   </div>
                   <div className="text-sm font-bold text-white mt-1">
-                    Export Packing Lists &amp; QR Tracking
+                    Export Packing Lists
                   </div>
                   <p className="text-xs text-slate-300 mt-1 leading-relaxed">
                     Carton-level weight verification, shipping mark dispatch, flight manifests, and bilingual Exporter Payment Slips (付款单).

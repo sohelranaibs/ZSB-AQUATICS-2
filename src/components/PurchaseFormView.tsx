@@ -36,7 +36,6 @@ import {
 } from 'lucide-react';
 import {
   PngShareModal,
-  WhatsAppIcon,
   WeChatIcon,
 } from './PngShareModal.tsx';
 
@@ -64,7 +63,6 @@ export const PurchaseFormView: React.FC = () => {
   const [remarks, setRemarks] = useState<string>('');
   const [lastSavedRecord, setLastSavedRecord] = useState<{ id: string; invoiceNumber: string } | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
-  const [shareChannel, setShareChannel] = useState<'whatsapp' | 'wechat'>('whatsapp');
 
   const createEmptyRow = (id: string): PurchaseItemRow => ({
     id,
@@ -795,17 +793,17 @@ export const PurchaseFormView: React.FC = () => {
               </div>
             )}
 
-            {/* Redesigned 6-Column Line-Item Table inside Scrollable Box */}
+            {/* Redesigned 6-Column Line-Item Table */}
             <div className="p-2.5 bg-slate-50/70">
               <div
                 data-testid="purchase-entry-scroll-box"
-                className="max-h-[400px] overflow-y-auto overflow-x-auto border-2 border-pink-200 rounded-lg bg-white shadow-inner"
+                className="overflow-x-auto border-2 border-pink-200 rounded-lg bg-white"
               >
               <table
                 className="w-full border-collapse text-xs"
                 data-testid="purchase-entry-table"
               >
-                <thead className="sticky top-0 z-10 shadow-xs">
+                <thead>
                   <tr className="bg-[#7c2d4d] text-white uppercase text-[11px] font-bold tracking-wider border-b border-pink-950">
                     <th className="px-2.5 py-2.5 border-r border-pink-900/60 w-12 text-center whitespace-nowrap">
                       SL #
@@ -978,7 +976,7 @@ export const PurchaseFormView: React.FC = () => {
                 </tbody>
 
                 {/* Clean 6-Column Aligned Subtotal Footer */}
-                <tfoot className="sticky bottom-0 z-10">
+                <tfoot>
                   <tr className="bg-[#7c2d4d] text-white font-bold border-t-2 border-pink-950">
                     <td colSpan={2} className="px-3 py-2.5">
                       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1285,36 +1283,17 @@ export const PurchaseFormView: React.FC = () => {
               </span>
             </button>
 
-            {/* Share via WhatsApp & WeChat (.PNG) */}
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                data-testid="purchase-share-whatsapp-btn"
-                onClick={() => {
-                  setShareChannel('whatsapp');
-                  setIsShareModalOpen(true);
-                }}
-                className="w-full bg-[#25D366] hover:bg-[#20ba5a] text-white py-2 px-2 rounded-lg font-bold text-xs shadow-xs flex items-center justify-center space-x-1 transition cursor-pointer"
-                title="Share Purchase Challan .PNG to WhatsApp"
-              >
-                <WhatsAppIcon className="w-3.5 h-3.5 shrink-0" />
-                <span>WHATSAPP</span>
-              </button>
-
-              <button
-                type="button"
-                data-testid="purchase-share-wechat-btn"
-                onClick={() => {
-                  setShareChannel('wechat');
-                  setIsShareModalOpen(true);
-                }}
-                className="w-full bg-[#07C160] hover:bg-[#06a853] text-white py-2 px-2 rounded-lg font-bold text-xs shadow-xs flex items-center justify-center space-x-1 transition cursor-pointer"
-                title="Share Purchase Challan .PNG to WeChat (微信)"
-              >
-                <WeChatIcon className="w-3.5 h-3.5 shrink-0" />
-                <span>WECHAT (微信)</span>
-              </button>
-            </div>
+            {/* Share via WeChat (.PNG) */}
+            <button
+              type="button"
+              data-testid="purchase-share-wechat-btn"
+              onClick={() => setIsShareModalOpen(true)}
+              className="w-full bg-[#07C160] hover:bg-[#06a853] text-white py-2.5 px-3 rounded-lg font-bold text-xs shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
+              title="Share Purchase Challan .PNG to WeChat (微信)"
+            >
+              <WeChatIcon className="w-4 h-4 shrink-0" />
+              <span>SHARE VIA WECHAT (微信)</span>
+            </button>
 
             {/* MONTHLY STATEMENT (PDF) Button */}
             <button
@@ -2009,7 +1988,7 @@ export const PurchaseFormView: React.FC = () => {
         </div>
       </div>
 
-      {/* Interactive PNG WeChat & WhatsApp Share Modal */}
+      {/* Interactive PNG WeChat Share Modal */}
       {isShareModalOpen && (
         <PngShareModal
           isOpen={isShareModalOpen}
@@ -2027,7 +2006,6 @@ export const PurchaseFormView: React.FC = () => {
           }}
           targetElementId="purchase-voucher-export-canvas"
           defaultFilename={formatPurchaseExportFilename(invoiceNumber, description, date, 'png')}
-          defaultPhone={contactNumber}
         />
       )}
     </div>

@@ -15,7 +15,6 @@ import {
   generateTemporaryPublicTransactionLink,
   verifyAndDecodeTemporaryTransactionLink,
   copyTemporaryTransactionLinkToClipboard,
-  buildCopyTemporaryLinkToastConfirmation,
   DEFAULT_TEMP_LINK_TTL_MS,
 } from './exporterWeChatShare.ts';
 
@@ -118,7 +117,7 @@ test('formatExporterRowWeChatText produces bilingual English and Chinese summary
   assert.ok(text.includes('http://localhost:3000/?autostart=1&tab=exporter_payment_form&wechat_tx='));
 });
 
-test('generateExporterRowCardSvg produces valid SVG containing company header, financial fields, and embedded QR', () => {
+test('generateExporterRowCardSvg produces valid SVG containing company header, INVOICE banner, and financial fields', () => {
   const payload = normalizeExporterRowForShare(
     {
       invoiceNumber: 'EXP-PAY-009',
@@ -134,11 +133,12 @@ test('generateExporterRowCardSvg produces valid SVG containing company header, f
 
   const svg = generateExporterRowCardSvg(payload, 'http://localhost:3000');
   assert.ok(svg.startsWith('<svg'));
-  assert.ok(svg.includes('EXPORTER RECORD HISTORY SLIP'));
+  assert.ok(svg.includes('INVOICE · 出口商结算发票'));
+  assert.ok(svg.includes('EXP-PAY-009'));
   assert.ok(svg.includes('KM-99'));
   assert.ok(svg.includes('PAID · 已付款'));
   assert.ok(svg.includes('¥20,000.00'));
-  assert.ok(svg.includes('WECHAT VERIFIED QR SLIP'));
+  assert.ok(svg.includes('OFFICIAL EXPORTER INVOICE'));
 });
 
 test('encodeExporterRowShareParam and decodeExporterRowShareParam round-trip transaction details accurately', () => {
@@ -338,16 +338,5 @@ test('generateTemporaryPublicTransactionLink creates signed 24h link and verifyA
   });
   assert.equal(clipRes.url, generated.url);
   assert.equal(clipRes.token, generated.token);
-
-  // 6. buildCopyTemporaryLinkToastConfirmation returns structured toast feedback details
-  const toastConfirm = buildCopyTemporaryLinkToastConfirmation(payload, clipRes);
-  assert.ok(toastConfirm.title.includes('Link Copied to Clipboard'));
-  assert.ok(toastConfirm.title.includes('GZ-TEMP-01'));
-  assert.ok(toastConfirm.message.includes('URL copied to clipboard for Row #3'));
-  assert.ok(toastConfirm.message.includes('PKG-TEMP-88'));
-  assert.equal(toastConfirm.copiedUrl, generated.url);
-  assert.equal(toastConfirm.rowNumber, 3);
-  assert.equal(toastConfirm.shippingMark, 'GZ-TEMP-01');
-  assert.equal(toastConfirm.invoiceNumber, 'PKG-TEMP-88');
 });
 

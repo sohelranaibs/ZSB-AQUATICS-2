@@ -1459,9 +1459,9 @@ export const AdministrationView: React.FC = () => {
               </span>
             </div>
 
-            <div className="overflow-x-auto max-h-[500px]">
+            <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-[#1b2b44] text-white font-bold uppercase text-[10.5px] sticky top-0 z-10">
+                <thead className="bg-[#1b2b44] text-white font-bold uppercase text-[10.5px]">
                   <tr>
                     <th className="py-2.5 px-3">Timestamp</th>
                     <th className="py-2.5 px-3">Action</th>

@@ -536,17 +536,17 @@ export const AuditLogsView: React.FC = () => {
             </div>
           </div>
 
-          {/* Audit Logs Table inside Scrollable Box */}
+          {/* Audit Logs Table */}
           <div className="p-3 bg-slate-50/70">
             <div
               data-testid="audit-logs-scroll-box"
-              className="max-h-[420px] overflow-y-auto overflow-x-auto border-2 border-slate-300 rounded-lg bg-white shadow-inner"
+              className="overflow-x-auto border-2 border-slate-300 rounded-lg bg-white"
             >
             <table
               data-testid="audit-logs-table"
               className="w-full text-left text-xs border-collapse"
             >
-              <thead className="sticky top-0 z-10 shadow-xs">
+              <thead>
                 <tr className="bg-slate-900 text-white font-bold uppercase text-[11px] border-b border-slate-800">
                   <th className="py-2.5 px-3.5">TIMESTAMP</th>
                   <th className="py-2.5 px-3 text-center">ACTION</th>

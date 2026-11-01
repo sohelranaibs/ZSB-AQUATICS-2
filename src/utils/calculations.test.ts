@@ -733,6 +733,24 @@ test('createEmptyExporterSlipRow, isExporterSlipRowPopulated, and mergeExporterP
   assert.equal(mergedOneDbWithInitial[1].id, 'slip-row-1');
   assert.equal(mergedOneDbWithInitial[2].id, 'slip-row-2');
 
+  // Direct AMOUNT entry on custom row (weightKg > 0, rmb === 0) preserves user-entered amount
+  const directAmountRow = createEmptyExporterSlipRow('custom-direct', {
+    date: '2026-10-22',
+    flight: 'CAN',
+    mark: 'HM-105',
+    box: 10,
+    weightKg: 150,
+    rmb: 0,
+    amount: 9500,
+    status: 'UNPAID',
+  });
+  const mergedDirect = mergeExporterPaymentSlipRows([], [directAmountRow]);
+  assert.equal(mergedDirect[0].amount, 9500);
+  const directTotals = calculateExporterSlipTotals(mergedDirect);
+  assert.equal(directTotals.totalBox, 10);
+  assert.equal(directTotals.totalWeightKg, 150);
+  assert.equal(directTotals.totalAmount, 9500);
+
   // Verify export filenames for PDF and PNG
   assert.equal(
     formatExporterSlipExportFilename('HM-105', '2026-10-19', 'png', '2026-10-22'),
@@ -1065,3 +1083,150 @@ test('generateDetailedMonthlyExportsPurchasesCSV filters by month and formats bo
   assert.ok(csvAll.includes('PKG-001'));
   assert.ok(csvAll.includes('PKG-002'));
 });
+
+test('buildExporterPaymentSlipRows filters records by date range (fromDate & toDate)', () => {
+  const samplePackings: any[] = [
+    {
+      id: 'p-1',
+      invoiceNumber: 'INV-101',
+      packingDate: '2026-10-15',
+      shippingMark: 'HM-105',
+      flight: 'CZ-392',
+      destination: 'CAN',
+      shipper: 'ZSB',
+      totalBox: 12,
+      totalWeight: 180,
+      totalAmount: 4500,
+      paymentStatus: 'PAID',
+      items: [],
+    },
+    {
+      id: 'p-2',
+      invoiceNumber: 'INV-102',
+      packingDate: '2026-10-20',
+      shippingMark: 'HM-105',
+      flight: 'MU-203',
+      destination: 'PVG',
+      shipper: 'ZSB',
+      totalBox: 15,
+      totalWeight: 220,
+      totalAmount: 5500,
+      paymentStatus: 'UNPAID',
+      items: [],
+    },
+    {
+      id: 'p-3',
+      invoiceNumber: 'INV-103',
+      packingDate: '2026-10-25',
+      shippingMark: 'HM-105',
+      flight: 'CZ-392',
+      destination: 'CAN',
+      shipper: 'ZSB',
+      totalBox: 10,
+      totalWeight: 150,
+      totalAmount: 3800,
+      paymentStatus: 'PAID',
+      items: [],
+    },
+    {
+      id: 'p-4',
+      invoiceNumber: 'INV-104',
+      packingDate: '2026-11-02',
+      shippingMark: 'HM-105',
+      flight: 'BG-088',
+      destination: 'KMG',
+      shipper: 'ZSB',
+      totalBox: 8,
+      totalWeight: 120,
+      totalAmount: 3000,
+      paymentStatus: 'UNPAID',
+      items: [],
+    },
+  ];
+
+  // 1. Both fromDate and toDate provided
+  const rangeRows = buildExporterPaymentSlipRows(samplePackings, [], {
+    shippingMark: 'HM-105',
+    fromDate: '2026-10-18',
+    toDate: '2026-10-26',
+  });
+  assert.equal(rangeRows.length, 2);
+  assert.equal(rangeRows[0].invoiceNumber, 'INV-102');
+  assert.equal(rangeRows[1].invoiceNumber, 'INV-103');
+
+  // 2. Only fromDate provided
+  const fromOnlyRows = buildExporterPaymentSlipRows(samplePackings, [], {
+    shippingMark: 'HM-105',
+    fromDate: '2026-10-25',
+  });
+  assert.equal(fromOnlyRows.length, 2);
+  assert.equal(fromOnlyRows[0].invoiceNumber, 'INV-103');
+  assert.equal(fromOnlyRows[1].invoiceNumber, 'INV-104');
+
+  // 3. Only toDate provided
+  const toOnlyRows = buildExporterPaymentSlipRows(samplePackings, [], {
+    shippingMark: 'HM-105',
+    toDate: '2026-10-18',
+  });
+  assert.equal(toOnlyRows.length, 1);
+  assert.equal(toOnlyRows[0].invoiceNumber, 'INV-101');
+});
+
+test('mergeExporterPaymentSlipRows respects date range filtering for custom manual rows', () => {
+  const manualRows = [
+    createEmptyExporterSlipRow('m-1', {
+      date: '2026-10-10',
+      mark: 'HM-105',
+      flight: 'CZ',
+      box: 5,
+      weightKg: 70,
+      rmb: 25,
+      amount: 1750,
+    }),
+    createEmptyExporterSlipRow('m-2', {
+      date: '2026-10-22',
+      mark: 'HM-105',
+      flight: 'CZ',
+      box: 6,
+      weightKg: 85,
+      rmb: 25,
+      amount: 2125,
+    }),
+  ];
+
+  const merged = mergeExporterPaymentSlipRows([], manualRows, {
+    shippingMark: 'HM-105',
+    fromDate: '2026-10-15',
+    toDate: '2026-10-30',
+  });
+
+  // Should only keep m-2 and fill up to minimum rows
+  assert.ok(merged.some((r) => r.id === 'm-2'));
+  assert.ok(!merged.some((r) => r.id === 'm-1'));
+});
+
+test('formatExporterSlipExportFilename creates date range filename when range is provided', () => {
+  const filename = formatExporterSlipExportFilename('HM-105', 'ALL', 'png', {
+    fromDate: '2026-10-01',
+    toDate: '2026-10-31',
+  });
+  assert.equal(
+    filename,
+    'ZSB_AQUATICS_Payment_Slip_HM-105_2026-10-01_to_2026-10-31.png'
+  );
+
+  const fromOnlyFilename = formatExporterSlipExportFilename('HM-105', 'ALL', 'pdf', {
+    fromDate: '2026-10-15',
+  });
+  assert.equal(
+    fromOnlyFilename,
+    'ZSB_AQUATICS_Payment_Slip_HM-105_from_2026-10-15.pdf'
+  );
+
+  const singleDateFilename = formatExporterSlipExportFilename('HM-105', '2026-10-20', 'png');
+  assert.equal(
+    singleDateFilename,
+    'ZSB_AQUATICS_Payment_Slip_HM-105_2026-10-20.png'
+  );
+});
+

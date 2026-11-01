@@ -1041,17 +1041,17 @@ export const PaymentFormView: React.FC = () => {
               </div>
             )}
 
-            {/* Data Entry & Record History Table Grid (10-Row Scrollable Box) */}
+            {/* Data Entry & Record History Table Grid */}
             <div className="p-2.5 bg-slate-50 border-b border-slate-200">
               <div
                 data-testid="supplier-payment-history-scroll-box"
-                className="max-h-[400px] overflow-y-auto overflow-x-auto border-2 border-purple-200 rounded-lg bg-white shadow-inner"
+                className="overflow-x-auto border-2 border-purple-200 rounded-lg bg-white"
               >
                 <table
                   data-testid="supplier-payment-history-table"
                   className="w-full border-collapse text-xs table-fixed"
                 >
-                  <thead className="sticky top-0 z-10 shadow-xs">
+                  <thead>
                     <tr className="bg-[#8b3858] text-white uppercase text-[11px] font-bold tracking-wider text-center border-b border-pink-900">
                       <th className="px-2 py-2.5 border-r border-pink-800/60 w-12">SL</th>
                       <th className="px-3 py-2.5 border-r border-pink-800/60 text-left">

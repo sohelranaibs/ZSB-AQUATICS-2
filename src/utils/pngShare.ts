@@ -1,34 +1,7 @@
 import { renderElementToHighResCanvas } from './pdfGenerator.ts';
 
 /**
- * Normalizes phone numbers for WhatsApp API links (digits only, no +, -, or spaces).
- * Defaulting to Bangladesh (+880) prefix if local format provided.
- */
-export function cleanPhoneNumberForWhatsApp(phone?: string): string {
-  if (!phone) return '';
-  const digits = phone.replace(/\D/g, '');
-  if (!digits) return '';
-  // If local Bangladesh number starting with 01
-  if (digits.startsWith('01') && digits.length === 11) {
-    return `880${digits.slice(1)}`;
-  }
-  return digits;
-}
-
-/**
- * Builds standard WhatsApp web/mobile direct chat URL with pre-filled message text.
- */
-export function buildWhatsAppShareUrl(text: string, phone?: string): string {
-  const cleanPhone = cleanPhoneNumberForWhatsApp(phone);
-  const encodedText = encodeURIComponent(text);
-  if (cleanPhone) {
-    return `https://wa.me/${cleanPhone}?text=${encodedText}`;
-  }
-  return `https://api.whatsapp.com/send?text=${encodedText}`;
-}
-
-/**
- * Formats a clean, professional document summary message in English for WhatsApp trade chats.
+ * Formats a clean, professional document summary message in English for trade ledger sharing.
  */
 export function formatDocumentShareSummary(
   type: string,
@@ -36,7 +9,7 @@ export function formatDocumentShareSummary(
   companyName: string = 'ZSB AQUATICS'
 ): string {
   const dateStr = data?.packingDate || data?.date || new Date().toISOString().slice(0, 10);
-  const invoiceNo = data?.invoiceNumber || (data?.records?.[0]?.invoiceNumber) || 'DOC';
+  const invoiceNo = data?.invoiceNumber || data?.records?.[0]?.invoiceNumber || 'DOC';
   const shippingMark = data?.shippingMark || data?.mark || '';
   const supplierOrShipper = data?.description || data?.shipper || data?.supplierName || '';
 
@@ -111,6 +84,7 @@ export function formatWeChatShareText(
 ): string {
   const dateStr = data?.packingDate || data?.date || new Date().toISOString().slice(0, 10);
   const shippingMark = data?.shippingMark || data?.mark || 'ALL';
+  const invoiceNo = data?.invoiceNumber || data?.records?.[0]?.invoiceNumber || 'DOC';
 
   if (type === 'exporter_payment_slip') {
     const totalRmb = typeof data?.totalRmb === 'number' ? `¥${data.totalRmb.toFixed(2)}` : '';
@@ -124,9 +98,50 @@ export function formatWeChatShareText(
     );
   }
 
+  if (type === 'packing') {
+    const boxes = data?.totalBox ? `${data.totalBox} Box` : '';
+    const weight = typeof data?.totalWeight === 'number' ? `${data.totalWeight.toFixed(2)} KG` : '';
+    return (
+      `【${companyName} 空运装箱单 (Export Packing Manifest)】\n` +
+      `• 单号 (Manifest No): #${invoiceNo}\n` +
+      `• 唛头 (Shipping Mark): ${shippingMark}\n` +
+      `• 航班 / 日期 (Flight/Date): ${data?.flight || 'Scheduled'} (${dateStr})\n` +
+      (boxes || weight ? `• 件数 / 重量 (Volume): ${[boxes, weight].filter(Boolean).join(' / ')}\n` : '') +
+      `• 凭证格式: 高清 .PNG 图片已生成，请查收核验。`
+    );
+  }
+
+  if (type === 'air_way_bill') {
+    const totalBoxes = data?.totals?.totalBoxes || data?.totalBoxes || 0;
+    const totalRmb = data?.totals?.totalRmb || data?.totalRmb || 0;
+    return (
+      `【${companyName} 航班运费结算单 (Flight Return Bill Statement)】\n` +
+      `• 发货人 / 航司 (Shipper): ${data?.shipper || 'ALL'}\n` +
+      `• 账期 (Period): ${data?.monthLabel || data?.yearMonth || dateStr}\n` +
+      (totalBoxes ? `• 总件数 (Total Boxes): ${totalBoxes} Box\n` : '') +
+      (totalRmb ? `• 总运费 (Total RMB): ¥${Number(totalRmb).toFixed(2)} RMB\n` : '') +
+      `• 凭证格式: 高清 .PNG 图片已生成，请查收核验。`
+    );
+  }
+
+  if (type === 'purchase') {
+    const supplier = data?.description || data?.supplierName || 'Supplier';
+    const totalQty = typeof data?.totalQty === 'number' ? `${data.totalQty.toFixed(2)} KG` : '';
+    const billAmount = typeof data?.billAmount === 'number' ? `TK ${data.billAmount.toLocaleString()}` : '';
+    return (
+      `【${companyName} 采购入库结算单 (Procurement Challan)】\n` +
+      `• 单号 (Voucher No): #${invoiceNo}\n` +
+      `• 供应商 (Supplier): ${supplier}\n` +
+      `• 日期 (Date): ${dateStr}\n` +
+      (totalQty ? `• 总重量 (Total Qty): ${totalQty}\n` : '') +
+      (billAmount ? `• 账单金额 (Bill Amount): ${billAmount}\n` : '') +
+      `• 凭证格式: 高清 .PNG 图片已生成，请查收核验。`
+    );
+  }
+
   return (
     `【${companyName} 贸易出口凭单 (Trade Document)】\n` +
-    `• 唛头 / 单号: ${shippingMark || data?.invoiceNumber || 'DOC'}\n` +
+    `• 唛头 / 单号: ${shippingMark !== 'ALL' ? shippingMark : invoiceNo}\n` +
     `• 日期: ${dateStr}\n` +
     `• 附件: 高清 .PNG 图片已生成，请查收核验。`
   );
@@ -195,7 +210,7 @@ export async function renderElementToPngBlob(
 
 /**
  * Copies a PNG Blob directly to the system clipboard so the user can paste (Ctrl+V)
- * into WhatsApp Web, WeChat Desktop, Telegram, or Email immediately.
+ * into WeChat Desktop, WeChat Web, or Email immediately.
  */
 export async function copyPngBlobToClipboard(blob: Blob): Promise<{ success: boolean; error?: string }> {
   if (typeof navigator === 'undefined' || !navigator.clipboard) {
@@ -235,7 +250,7 @@ export function canSharePngFile(): boolean {
 
 /**
  * Triggers native Web Share API with the PNG file.
- * This opens the system share sheet where WhatsApp and WeChat appear and receive the file.
+ * This opens the system share sheet where WeChat appears and receives the file.
  */
 export async function sharePngViaWebShare(
   file: File,
@@ -289,72 +304,13 @@ export function downloadPngFile(blobOrDataUrl: Blob | string, filename: string):
 }
 
 export interface PngShareResult {
-  actionTaken: 'web_share' | 'whatsapp_link_and_clipboard' | 'wechat_clipboard_and_download';
+  actionTaken: 'web_share' | 'wechat_clipboard_and_download';
   copiedToClipboard: boolean;
+  copiedTextToClipboard?: boolean;
   downloaded: boolean;
   openedLink: boolean;
+  wechatDeepLinkUri: string;
   message: string;
-}
-
-/**
- * Executes high-level share flow for WhatsApp:
- * 1. If Web Share with files is available: opens native share target with the PNG image!
- * 2. If on desktop / Web Share unavailable:
- *    - Copies image to clipboard for instant Ctrl+V pasting into WhatsApp chat.
- *    - Downloads the .PNG file so user has it immediately.
- *    - Opens WhatsApp chat with document summary.
- */
-export async function executePngShareToWhatsApp(options: {
-  file: File;
-  blob: Blob;
-  filename: string;
-  text: string;
-  phone?: string;
-}): Promise<PngShareResult> {
-  const { file, blob, filename, text, phone } = options;
-
-  // Try Web Share API first (Mobile Chrome/Safari/Edge, Android, iOS)
-  if (canSharePngFile()) {
-    const res = await sharePngViaWebShare(file, filename, text);
-    if (res.success) {
-      return {
-        actionTaken: 'web_share',
-        copiedToClipboard: false,
-        downloaded: false,
-        openedLink: false,
-        message: 'Shared .PNG image directly via system share sheet (WhatsApp)!',
-      };
-    }
-    if (res.cancelled) {
-      // User cancelled share sheet, do not fallback aggressively
-      return {
-        actionTaken: 'web_share',
-        copiedToClipboard: false,
-        downloaded: false,
-        openedLink: false,
-        message: 'Share cancelled.',
-      };
-    }
-  }
-
-  // Desktop or fallback: copy image to clipboard + download PNG + open WhatsApp
-  const copyRes = await copyPngBlobToClipboard(blob);
-  downloadPngFile(blob, filename);
-
-  const whatsappUrl = buildWhatsAppShareUrl(text, phone);
-  if (typeof window !== 'undefined') {
-    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
-  }
-
-  return {
-    actionTaken: 'whatsapp_link_and_clipboard',
-    copiedToClipboard: copyRes.success,
-    downloaded: true,
-    openedLink: true,
-    message: copyRes.success
-      ? 'PNG downloaded and copied to clipboard! Paste (Ctrl+V) directly into your WhatsApp chat.'
-      : 'PNG downloaded and WhatsApp opened. Attach the downloaded image to your chat.',
-  };
 }
 
 /**
@@ -362,6 +318,7 @@ export async function executePngShareToWhatsApp(options: {
  * 1. If Web Share with files is available: opens native share target with the PNG image.
  * 2. In desktop browsers / fallback:
  *    - Automatically copies PNG image to clipboard for instant Ctrl+V into WeChat desktop / web.
+ *    - Falls back to copying the bilingual WeChat text if image clipboard is restricted.
  *    - Automatically downloads the .PNG file.
  *    - Returns clear bilingual confirmation.
  */
@@ -372,6 +329,7 @@ export async function executePngShareToWeChat(options: {
   text: string;
 }): Promise<PngShareResult> {
   const { file, blob, filename, text } = options;
+  const wechatDeepLinkUri = 'weixin://dl/chat';
 
   // Try Web Share API first
   if (canSharePngFile()) {
@@ -382,7 +340,8 @@ export async function executePngShareToWeChat(options: {
         copiedToClipboard: false,
         downloaded: false,
         openedLink: false,
-        message: 'Shared .PNG image directly via system share sheet (WeChat)!',
+        wechatDeepLinkUri,
+        message: 'Shared .PNG image directly via system share sheet (WeChat 微信)!',
       };
     }
     if (res.cancelled) {
@@ -391,22 +350,37 @@ export async function executePngShareToWeChat(options: {
         copiedToClipboard: false,
         downloaded: false,
         openedLink: false,
+        wechatDeepLinkUri,
         message: 'Share cancelled.',
       };
     }
   }
 
-  // Desktop or fallback: copy image to clipboard + download PNG
+  // Desktop or fallback: copy image to clipboard + copy text fallback + download PNG
   const copyRes = await copyPngBlobToClipboard(blob);
+  let copiedText = false;
+  if (!copyRes.success && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      copiedText = true;
+    } catch {
+      copiedText = false;
+    }
+  }
+
   downloadPngFile(blob, filename);
 
   return {
     actionTaken: 'wechat_clipboard_and_download',
     copiedToClipboard: copyRes.success,
+    copiedTextToClipboard: copiedText,
     downloaded: true,
     openedLink: false,
+    wechatDeepLinkUri,
     message: copyRes.success
       ? 'PNG downloaded & copied to clipboard! 在微信聊天窗口中直接按 Ctrl+V 粘贴发送图片。'
-      : 'PNG image downloaded. Attach the file in WeChat.',
+      : copiedText
+      ? 'PNG image downloaded & WeChat summary text copied to clipboard! Attach the image in WeChat (微信).'
+      : 'PNG image downloaded. Attach the file in WeChat (微信).',
   };
 }

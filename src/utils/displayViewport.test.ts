@@ -14,6 +14,8 @@ import {
   DESKTOP_VIEW_WIDTH_PX,
   SWIPE_MOMENTUM_VELOCITY_MULTIPLIER,
   SWIPE_MOMENTUM_MIN_VELOCITY,
+  PASSIVE_TOUCH_LISTENER_OPTIONS,
+  bindPassiveTouchListeners,
 } from './displayViewport.ts';
 
 describe('displayViewport utilities', () => {
@@ -163,6 +165,62 @@ describe('displayViewport utilities', () => {
     assert.equal(atEnd.canScrollLeft, true);
     assert.equal(atEnd.canScrollRight, false);
     assert.equal(atEnd.scrollProgressPercent, 100);
+  });
+
+  it('registers and cleans up passive touchstart and touchmove listeners with { passive: true }', () => {
+    assert.equal(PASSIVE_TOUCH_LISTENER_OPTIONS.passive, true);
+    assert.equal(PASSIVE_TOUCH_LISTENER_OPTIONS.capture, false);
+
+    const added: Array<{ type: string; options: unknown }> = [];
+    const removed: Array<{ type: string; options: unknown }> = [];
+    const listeners = new Map<string, (event: TouchEvent) => void>();
+
+    const mockTarget = {
+      addEventListener(type: string, listener: (event: TouchEvent) => void, options?: unknown) {
+        added.push({ type, options });
+        listeners.set(type, listener);
+      },
+      removeEventListener(type: string, _listener: (event: TouchEvent) => void, options?: unknown) {
+        removed.push({ type, options });
+        listeners.delete(type);
+      },
+    };
+
+    let startCalls = 0;
+    let moveCalls = 0;
+    let endCalls = 0;
+
+    const unbind = bindPassiveTouchListeners(mockTarget, {
+      onTouchStart: () => {
+        startCalls += 1;
+      },
+      onTouchMove: () => {
+        moveCalls += 1;
+      },
+      onTouchEnd: () => {
+        endCalls += 1;
+      },
+    });
+
+    assert.equal(added.length, 4);
+    for (const entry of added) {
+      assert.deepEqual(entry.options, { passive: true, capture: false });
+    }
+    assert.deepEqual(
+      added.map((e) => e.type),
+      ['touchstart', 'touchmove', 'touchend', 'touchcancel']
+    );
+
+    listeners.get('touchstart')?.({} as TouchEvent);
+    listeners.get('touchmove')?.({} as TouchEvent);
+    listeners.get('touchend')?.({} as TouchEvent);
+    assert.equal(startCalls, 1);
+    assert.equal(moveCalls, 1);
+    assert.equal(endCalls, 1);
+
+    unbind();
+    assert.equal(removed.length, 4);
+    assert.equal(listeners.size, 0);
   });
 });
 

@@ -761,9 +761,9 @@ export const ProfitLossView: React.FC = () => {
               </div>
 
               <div className="p-2.5">
-                <div className="overflow-x-auto max-h-[280px] overflow-y-auto border-2 border-slate-200 rounded-lg bg-white shadow-inner">
+                <div className="overflow-x-auto border-2 border-slate-200 rounded-lg bg-white">
                 <table className="w-full text-xs">
-                  <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold sticky top-0 z-10 border-b border-slate-200">
+                  <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold border-b border-slate-200">
                     <tr>
                       <th className="py-2 px-3 text-left">Month</th>
                       <th className="py-2 px-2.5 text-right">Export Rev</th>
@@ -1271,9 +1271,9 @@ export const ProfitLossView: React.FC = () => {
                 </div>
 
                 <div className="p-2.5">
-                  <div className="overflow-x-auto max-h-[300px] overflow-y-auto border-2 border-slate-200 rounded-lg bg-white shadow-inner">
+                  <div className="overflow-x-auto border-2 border-slate-200 rounded-lg bg-white">
                   <table className="w-full text-xs">
-                    <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold sticky top-0 z-10 border-b border-slate-200">
+                    <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold border-b border-slate-200">
                       <tr>
                         <th className="py-2 px-3 text-left">Rank &amp; Supplier</th>
                         <th className="py-2 px-2 text-right">Volume</th>
@@ -1528,9 +1528,9 @@ export const ProfitLossView: React.FC = () => {
               </div>
 
               <div className="p-2.5">
-                <div className="overflow-x-auto max-h-[340px] overflow-y-auto border-2 border-slate-200 rounded-lg bg-white shadow-inner">
+                <div className="overflow-x-auto border-2 border-slate-200 rounded-lg bg-white">
                 <table className="w-full text-xs" data-testid="pl-credit-ledger-table">
-                  <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold sticky top-0 z-10 border-b border-slate-200 whitespace-nowrap">
+                  <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold border-b border-slate-200 whitespace-nowrap">
                     <tr>
                       <th className="py-2 px-2.5 text-left">Credit Note &amp; Supplier</th>
                       <th className="py-2 px-2 text-left">Reason &amp; Ref</th>
@@ -1807,7 +1807,7 @@ export const ProfitLossView: React.FC = () => {
           </div>
 
           <div className="p-3 bg-slate-50/70">
-            <div className="max-h-[380px] overflow-y-auto overflow-x-auto border-2 border-slate-200 rounded-lg bg-white shadow-inner">
+            <div className="overflow-x-auto border-2 border-slate-200 rounded-lg bg-white">
             <table className="w-full text-xs">
               <tbody className="divide-y divide-slate-200">
                 <tr className="bg-slate-50/80">

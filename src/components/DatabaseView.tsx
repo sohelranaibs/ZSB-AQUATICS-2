@@ -31,6 +31,7 @@ import {
   FileDown,
   Loader2,
   Layers,
+  Sparkles,
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
@@ -44,7 +45,6 @@ import {
   SortConfig,
 } from '../utils/databaseSorting.ts';
 import { findShipmentByDeepLink } from '../utils/shipmentQrCode.ts';
-import { ShipmentQrBadge } from './ShipmentQrBadge.tsx';
 import {
   downloadCsvFile,
   generatePurchasesCSV,
@@ -934,8 +934,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   )}
                 </div>
                 <p className="text-xs text-slate-600 mt-1">
-                  Automatically cross-references Purchase Challans against Supplier Payment Vouchers to highlight missing payment vouchers, paid amount mismatches, and balance drift in the{' '}
-                  <strong className="text-slate-900">RECONCILIATION STATUS</strong> column below.
+                  Automatically cross-references Purchase Challans against Supplier Payment Vouchers to reconcile missing payment vouchers, paid amount mismatches, and balance drift across ledgers.
                 </p>
               </div>
             </div>
@@ -1291,6 +1290,32 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
             <span>BATCH UPDATE ({selectedIds.length})</span>
           </button>
 
+          {/* Update All Button */}
+          <button
+            type="button"
+            data-testid="database-update-all-btn"
+            onClick={() => {
+              const allIds =
+                activeDbType === 'purchase'
+                  ? sortedPurchases.map((p) => p.id)
+                  : activeDbType === 'packing'
+                  ? sortedPackings.map((p) => p.id)
+                  : sortedPayments.map((p) => p.id);
+              setSelectedIds(allIds);
+              setIsBatchSidebarOpen(true);
+            }}
+            disabled={currentFilteredCount === 0}
+            className={`flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-sm transition whitespace-nowrap ${
+              currentFilteredCount > 0
+                ? 'bg-amber-600 hover:bg-amber-500 text-white cursor-pointer active:bg-amber-700'
+                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+            }`}
+            title={`Select all ${currentFilteredCount} records and open batch update panel`}
+          >
+            <Sparkles className="w-4 h-4 text-amber-200" />
+            <span>UPDATE ALL ({currentFilteredCount})</span>
+          </button>
+
           {/* Batch Print Button */}
           <button
             type="button"
@@ -1478,10 +1503,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
           <div className="p-2.5 bg-slate-50/70">
             <div
               data-testid="purchase-db-scroll-box"
-              className="max-h-[420px] overflow-y-auto overflow-x-auto border-2 border-blue-200 rounded-lg bg-white shadow-inner"
+              className="overflow-x-auto border-2 border-blue-200 rounded-lg bg-white"
             >
             <table className="w-full text-left text-[11px]">
-              <thead className="sticky top-0 z-10 bg-[#1b73b4] text-white font-bold uppercase text-[10px] tracking-tight border-b border-blue-900 shadow-xs">
+              <thead className="bg-[#1b73b4] text-white font-bold uppercase text-[10px] tracking-tight border-b border-blue-900">
                 <tr>
                   <th className="px-1.5 py-2 w-7 text-center">
                     <input
@@ -1504,21 +1529,19 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   {renderSortableHeader('totalAmount', 'TOTAL AMOUNT', 'right', 'whitespace-nowrap')}
                   {renderSortableHeader('paidAmount', 'PAID AMOUNT', 'right', 'whitespace-nowrap')}
                   {renderSortableHeader('balance', 'BALANCE', 'right', 'whitespace-nowrap')}
-                  {renderSortableHeader('reconciliation', 'RECONCILIATION STATUS', 'left')}
                   <th className="px-1.5 py-2 text-center whitespace-nowrap">ACTIONS</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 font-medium">
                 {sortedPurchases.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="p-8 text-center text-slate-400">
+                    <td colSpan={11} className="p-8 text-center text-slate-400">
                       No purchase records found.
                     </td>
                   </tr>
                 ) : (
                   sortedPurchases.map((p, idx) => {
                     const isSelected = selectedIds.includes(p.id);
-                    const rec = smartSyncAnalysis.purchaseReconciliations[p.id];
                     const isEvenRow = idx % 2 === 1;
                     const rowValidation = validationSummary.resultsByRecordId[p.id] || {};
                     const rowDrafts = cellDraftsByDb.purchase[p.id] || {};
@@ -1697,56 +1720,6 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                           onCommitValid={handleCellCommitValid}
                           onClearDraft={handleCellClearDraft}
                         />
-                        <td
-                          className="px-1.5 py-1.5 max-w-[175px]"
-                          data-testid={`reconciliation-status-cell-${p.id}`}
-                        >
-                          {rec && (
-                            <div className="space-y-0.5">
-                              <div className="flex flex-wrap items-center gap-1">
-                                <span
-                                  data-testid={`reconciliation-badge-${p.id}`}
-                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
-                                    rec.status === 'RECONCILED'
-                                      ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                                      : rec.status === 'UNPAID_PENDING'
-                                      ? 'bg-slate-100 text-slate-700 border border-slate-300'
-                                      : 'bg-rose-600 text-white shadow-xs'
-                                  }`}
-                                >
-                                  {rec.hasDiscrepancy ? (
-                                    <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
-                                  ) : (
-                                    <CheckCircle2 className="w-2.5 h-2.5 shrink-0" />
-                                  )}
-                                  <span>{rec.label}</span>
-                                </span>
-
-                                {rec.hasDiscrepancy && (
-                                  <span className="font-mono text-[9px] font-black text-rose-800 bg-rose-100 px-1 py-0.5 rounded">
-                                    Δ {formatCurrency(rec.discrepancyAmount, companyProfile.currency)}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-[10px] text-slate-600 leading-tight">
-                                {rec.summaryText}
-                              </div>
-                              {rec.hasDiscrepancy && (
-                                <div data-export-ignore="true" className="pt-0.5">
-                                  <button
-                                    type="button"
-                                    data-testid={`reconcile-record-btn-${p.id}`}
-                                    onClick={() => handleSmartSyncReconcile(p.id)}
-                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#1b2b44] hover:bg-blue-800 text-amber-300 text-[9px] font-black uppercase tracking-wide transition cursor-pointer shadow-xs"
-                                  >
-                                    <RefreshCw className="w-2.5 h-2.5" />
-                                    <span>Auto-Sync: {rec.resolutionLabel}</span>
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </td>
                         <td className="px-1.5 py-1.5 text-center whitespace-nowrap">
                           <div className="flex items-center justify-center space-x-1">
                             <button
@@ -1808,10 +1781,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
             <div className="p-2.5 bg-slate-50/70">
               <div
                 data-testid="packing-db-scroll-box"
-                className="max-h-[420px] overflow-y-auto overflow-x-auto border-2 border-teal-200 rounded-lg bg-white shadow-inner"
+                className="overflow-x-auto border-2 border-teal-200 rounded-lg bg-white"
               >
               <table className="w-full text-left text-[11px]">
-                <thead className="sticky top-0 z-10 bg-[#12776c] text-white font-bold uppercase text-[10px] tracking-tight border-b border-teal-900 shadow-xs">
+                <thead className="bg-[#12776c] text-white font-bold uppercase text-[10px] tracking-tight border-b border-teal-900">
                   <tr>
                     <th className="px-1 py-2 w-6 text-center">
                       <input
@@ -2125,7 +2098,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 )}
               </tbody>
               {filteredPackings.length > 0 && (
-                <tfoot className="sticky bottom-0 z-10">
+                <tfoot>
                   <tr className="bg-teal-50 font-black border-t-2 border-teal-200 text-[11px]">
                     <td colSpan={8} className="px-1.5 py-2 text-right uppercase text-teal-950">
                       PACKING DB TOTALS:
@@ -2227,10 +2200,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
             <div className="p-2.5 bg-slate-50/70">
               <div
                 data-testid="payment-db-scroll-box"
-                className="max-h-[420px] overflow-y-auto overflow-x-auto border-2 border-purple-200 rounded-lg bg-white shadow-inner"
+                className="overflow-x-auto border-2 border-purple-200 rounded-lg bg-white"
               >
               <table className="w-full text-left text-[11px]">
-                <thead className="sticky top-0 z-10 bg-[#793282] text-white font-bold uppercase text-[10px] tracking-tight border-b border-purple-900 shadow-xs">
+                <thead className="bg-[#793282] text-white font-bold uppercase text-[10px] tracking-tight border-b border-purple-900">
                   <tr>
                     <th className="px-1.5 py-2 w-7 text-center">
                       <input
@@ -2252,14 +2225,13 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                     {renderSortableHeader('paidAmount', 'PAID AMOUNT', 'right', 'whitespace-nowrap')}
                     {renderSortableHeader('balance', 'BALANCE', 'right', 'whitespace-nowrap')}
                     {renderSortableHeader('exportRef', 'EXPORT REF', 'left', 'whitespace-nowrap')}
-                    {renderSortableHeader('reconciliation', 'RECONCILIATION STATUS', 'left')}
                     <th className="px-1.5 py-2 text-center whitespace-nowrap">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 font-medium">
                   {sortedPayments.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="p-8 text-center text-slate-400">
+                      <td colSpan={10} className="p-8 text-center text-slate-400">
                         No payment records found.
                       </td>
                     </tr>
@@ -2267,7 +2239,6 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                     sortedPayments.map((pm, idx) => {
                       const isSelected = selectedIds.includes(pm.id);
                       const category = classifyPaymentCategory(pm);
-                      const rec = smartSyncAnalysis.paymentReconciliations[pm.id];
                       const isEvenRow = idx % 2 === 1;
                       const rowValidation = validationSummary.resultsByRecordId[pm.id] || {};
                       const rowDrafts = cellDraftsByDb.payment[pm.id] || {};
@@ -2431,55 +2402,6 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             onCommitValid={handleCellCommitValid}
                             onClearDraft={handleCellClearDraft}
                           />
-                          <td
-                            className="px-1.5 py-1.5 max-w-[175px]"
-                            data-testid={`reconciliation-status-cell-${pm.id}`}
-                          >
-                            {rec && (
-                              <div className="space-y-0.5">
-                                <div className="flex flex-wrap items-center gap-1">
-                                  <span
-                                    data-testid={`reconciliation-badge-${pm.id}`}
-                                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
-                                      rec.status === 'RECONCILED'
-                                        ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                                        : rec.status === 'EXPORTER_LEDGER'
-                                        ? 'bg-teal-100 text-teal-900 border border-teal-300'
-                                        : 'bg-rose-600 text-white shadow-xs'
-                                    }`}
-                                  >
-                                    {rec.hasDiscrepancy ? (
-                                      <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
-                                    ) : (
-                                      <CheckCircle2 className="w-2.5 h-2.5 shrink-0" />
-                                    )}
-                                    <span>{rec.label}</span>
-                                  </span>
-                                  {rec.hasDiscrepancy && (
-                                    <span className="font-mono text-[9px] font-black text-rose-800 bg-rose-100 px-1 py-0.5 rounded">
-                                      Δ {formatCurrency(rec.discrepancyAmount, companyProfile.currency)}
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-[10px] text-slate-600 leading-tight">
-                                  {rec.summaryText}
-                                </div>
-                                {rec.hasDiscrepancy && (
-                                  <div data-export-ignore="true" className="pt-0.5">
-                                    <button
-                                      type="button"
-                                      data-testid={`reconcile-record-btn-${pm.id}`}
-                                      onClick={() => handleSmartSyncReconcile(pm.id)}
-                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#1b2b44] hover:bg-purple-800 text-amber-300 text-[9px] font-black uppercase tracking-wide transition cursor-pointer shadow-xs"
-                                    >
-                                      <RefreshCw className="w-2.5 h-2.5" />
-                                      <span>Auto-Sync: {rec.resolutionLabel}</span>
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </td>
                           <td className="px-1.5 py-1.5 text-center whitespace-nowrap">
                             <div className="flex items-center justify-center space-x-1">
                               <button

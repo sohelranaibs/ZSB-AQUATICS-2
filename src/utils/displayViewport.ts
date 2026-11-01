@@ -125,6 +125,64 @@ export const SWIPE_MOMENTUM_DURATION_MS = 380;
 export const SWIPE_MOMENTUM_VELOCITY_MULTIPLIER = 1.65;
 export const SWIPE_MOMENTUM_MIN_VELOCITY = 0.04;
 
+/**
+ * Passive event listener configuration for mobile touch gestures (`touchstart`, `touchmove`, `touchend`, `touchcancel`)
+ * on `sheet-viewport-scroll-wrapper`. Declaring `{ passive: true }` guarantees the browser compositor thread
+ * never blocks waiting for `preventDefault()`, reducing touch input latency on mobile screens.
+ */
+export const PASSIVE_TOUCH_LISTENER_OPTIONS: AddEventListenerOptions = Object.freeze({
+  passive: true,
+  capture: false,
+});
+
+export interface PassiveTouchEventTarget {
+  addEventListener(
+    type: 'touchstart' | 'touchmove' | 'touchend' | 'touchcancel',
+    listener: (event: TouchEvent) => void,
+    options?: boolean | AddEventListenerOptions
+  ): void;
+  removeEventListener(
+    type: 'touchstart' | 'touchmove' | 'touchend' | 'touchcancel',
+    listener: (event: TouchEvent) => void,
+    options?: boolean | EventListenerOptions
+  ): void;
+}
+
+export interface PassiveTouchHandlers {
+  onTouchStart: (event: TouchEvent) => void;
+  onTouchMove: (event: TouchEvent) => void;
+  onTouchEnd: (event: TouchEvent) => void;
+  onTouchCancel?: (event: TouchEvent) => void;
+}
+
+/**
+ * Attaches native `{ passive: true }` touch listeners (`touchstart`, `touchmove`, `touchend`, `touchcancel`)
+ * directly to the scroll wrapper element and returns an unbind cleanup callback.
+ */
+export function bindPassiveTouchListeners(
+  element: PassiveTouchEventTarget | null | undefined,
+  handlers: PassiveTouchHandlers
+): () => void {
+  if (!element) {
+    return () => {};
+  }
+
+  const { onTouchStart, onTouchMove, onTouchEnd } = handlers;
+  const onTouchCancel = handlers.onTouchCancel ?? onTouchEnd;
+
+  element.addEventListener('touchstart', onTouchStart, PASSIVE_TOUCH_LISTENER_OPTIONS);
+  element.addEventListener('touchmove', onTouchMove, PASSIVE_TOUCH_LISTENER_OPTIONS);
+  element.addEventListener('touchend', onTouchEnd, PASSIVE_TOUCH_LISTENER_OPTIONS);
+  element.addEventListener('touchcancel', onTouchCancel, PASSIVE_TOUCH_LISTENER_OPTIONS);
+
+  return () => {
+    element.removeEventListener('touchstart', onTouchStart, PASSIVE_TOUCH_LISTENER_OPTIONS);
+    element.removeEventListener('touchmove', onTouchMove, PASSIVE_TOUCH_LISTENER_OPTIONS);
+    element.removeEventListener('touchend', onTouchEnd, PASSIVE_TOUCH_LISTENER_OPTIONS);
+    element.removeEventListener('touchcancel', onTouchCancel, PASSIVE_TOUCH_LISTENER_OPTIONS);
+  };
+}
+
 export interface HorizontalScrollState {
   scrollLeft: number;
   maxScrollLeft: number;

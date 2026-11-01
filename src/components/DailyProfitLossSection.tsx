@@ -441,17 +441,17 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
         </div>
       </div>
 
-      {/* Main Chronological Daily Profit & Loss Statement Table inside Scrollable Box */}
+      {/* Main Chronological Daily Profit & Loss Statement Table */}
       <div className="p-3 bg-slate-50/70">
         <div
           data-testid="pl-daily-report-scroll-box"
-          className="max-h-[400px] overflow-y-auto overflow-x-auto border-2 border-slate-300 rounded-lg bg-white shadow-inner"
+          className="overflow-x-auto border-2 border-slate-300 rounded-lg bg-white"
         >
         <table
           className="w-full text-xs border-collapse"
           data-testid="pl-daily-report-table"
         >
-          <thead className="sticky top-0 z-10 bg-slate-800 text-white uppercase text-[10px] font-bold tracking-wider border-b border-slate-700 whitespace-nowrap shadow-xs">
+          <thead className="bg-slate-800 text-white uppercase text-[10px] font-bold tracking-wider border-b border-slate-700 whitespace-nowrap">
             <tr>
               <th className="py-2.5 px-3 text-left">Date &amp; Particulars</th>
               <th className="py-2.5 px-2.5 text-right">Export Revenue (A)</th>
@@ -662,7 +662,7 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
             )}
           </tbody>
           {dailyReport.entries.length > 0 && (
-            <tfoot className="sticky bottom-0 z-10 bg-slate-900 text-white font-mono text-xs font-black border-t-2 border-amber-500 whitespace-nowrap">
+            <tfoot className="bg-slate-900 text-white font-mono text-xs font-black border-t-2 border-amber-500 whitespace-nowrap">
               <tr>
                 <td className="py-3 px-3 font-sans uppercase">
                   TOTAL ({totals.totalDays} {totals.totalDays === 1 ? 'DAY' : 'DAYS'}):
@@ -780,7 +780,7 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
                   {formatCurrency(activeDayEntry.exportAmountBDT, companyProfile.currency)}
                 </span>
               </div>
-              <div className="overflow-x-auto max-h-48 overflow-y-auto">
+              <div className="overflow-x-auto">
                 <table className="w-full text-[11px]">
                   <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold border-b border-slate-200">
                     <tr>
@@ -855,7 +855,7 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
                   {formatCurrency(activeDayEntry.purchaseAmount, companyProfile.currency)}
                 </span>
               </div>
-              <div className="overflow-x-auto max-h-48 overflow-y-auto">
+              <div className="overflow-x-auto">
                 <table className="w-full text-[11px]">
                   <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold border-b border-slate-200">
                     <tr>
@@ -921,7 +921,7 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
                   {formatCurrency(activeDayEntry.otherCostAmount, companyProfile.currency)}
                 </span>
               </div>
-              <div className="overflow-x-auto max-h-48 overflow-y-auto">
+              <div className="overflow-x-auto">
                 <table className="w-full text-[11px]">
                   <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold border-b border-slate-200">
                     <tr>
@@ -976,7 +976,7 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
                   {formatCurrency(activeDayEntry.supplierPaymentAmount, companyProfile.currency)}
                 </span>
               </div>
-              <div className="overflow-x-auto max-h-48 overflow-y-auto">
+              <div className="overflow-x-auto">
                 <table className="w-full text-[11px]">
                   <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold border-b border-slate-200">
                     <tr>

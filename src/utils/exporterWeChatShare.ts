@@ -538,41 +538,6 @@ export async function copyTemporaryTransactionLinkToClipboard(
   };
 }
 
-export interface CopyLinkToastConfirmation {
-  title: string;
-  message: string;
-  copiedUrl: string;
-  expiresAtFormatted: string;
-  rowNumber: number;
-  shippingMark: string;
-  invoiceNumber: string;
-}
-
-/**
- * Builds a structured visual toast notification confirmation payload after the 'Copy Link'
- * icon is clicked for an Exporter Record transaction row.
- */
-export function buildCopyTemporaryLinkToastConfirmation(
-  payload: ExporterRecordSharePayload,
-  linkResult: TemporaryPublicTransactionLinkResult & { copied?: boolean }
-): CopyLinkToastConfirmation {
-  const rowNumber = payload.rowNumber || 1;
-  const shippingMark = payload.shippingMark || 'EXPORTER MARK';
-  const invoiceNumber = payload.invoiceNumber || 'EXP-REC';
-  const title = `Link Copied to Clipboard · 链接已复制 (SL #${rowNumber} · ${shippingMark})`;
-  const message = `URL copied to clipboard for Row #${rowNumber} (${shippingMark} · ${invoiceNumber})! Valid 24h (until ${linkResult.expiresAtFormatted}) for WeChat sharing.`;
-
-  return {
-    title,
-    message,
-    copiedUrl: linkResult.url,
-    expiresAtFormatted: linkResult.expiresAtFormatted,
-    rowNumber,
-    shippingMark,
-    invoiceNumber,
-  };
-}
-
 /**
  * Parses a URL query string (`window.location.search`) for `?wechat_tmp_token=...` or `?wechat_tx=...`
  * and returns the decoded payload if valid and unexpired.
@@ -771,13 +736,12 @@ function escapeXml(unsafe: string): string {
 }
 
 /**
- * Generates a crisp, self-contained 1000x580 SVG image representing the Exporter Record
- * in the signature ZSB AQUATICS bilingual Exporter Payment Slip aesthetic, with an embedded
- * WeChat verification QR code in the footer.
+ * Generates a crisp, self-contained 1000x580 SVG image representing ONLY the official
+ * ZSB AQUATICS Exporter Invoice for Image View and WeChat sharing.
  */
 export function generateExporterRowCardSvg(
   payload: ExporterRecordSharePayload,
-  baseUrl?: string
+  _baseUrl?: string
 ): string {
   const isPaid = payload.status === 'PAID';
   const statusBg = isPaid ? '#d1fae5' : '#ffe4e6';
@@ -787,26 +751,13 @@ export function generateExporterRowCardSvg(
 
   const balanceColor = payload.balance > 0 ? '#be123c' : '#047857';
   const truncatedDesc =
-    payload.description.length > 78
-      ? payload.description.slice(0, 75) + '...'
+    payload.description.length > 52
+      ? payload.description.slice(0, 49) + '...'
       : payload.description;
 
-  // Generate embedded mini QR code for the slip footer
-  const qrMatrix = generateQrMatrix(buildExporterQrPayloadText(payload, baseUrl));
-  const qrLen = qrMatrix.length;
-  const qrBoxSize = 68;
-  const qrModuleScale = qrBoxSize / (qrLen + 2);
-  let miniQrRects = '';
-  for (let r = 0; r < qrLen; r++) {
-    for (let c = 0; c < qrLen; c++) {
-      if (qrMatrix[r][c]) {
-        const x = (40 + (c + 1) * qrModuleScale).toFixed(2);
-        const y = (474 + (r + 1) * qrModuleScale).toFixed(2);
-        const s = (qrModuleScale + 0.08).toFixed(2);
-        miniQrRects += `<rect x="${x}" y="${y}" width="${s}" height="${s}" fill="#0f172a" />`;
-      }
-    }
-  }
+  const flightDisplay = payload.flight ? payload.flight : '-';
+  const boxDisplay = payload.box > 0 ? String(payload.box) : '-';
+  const weightDisplay = payload.weightKg > 0 ? `${payload.weightKg} KG` : '-';
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="580" viewBox="0 0 1000 580">
   <defs>
@@ -822,85 +773,106 @@ export function generateExporterRowCardSvg(
     </linearGradient>
   </defs>
 
-  <!-- Outer Card Background -->
+  <!-- Outer Invoice Sheet Background -->
   <rect x="0" y="0" width="1000" height="580" fill="#f8fafc" />
-  <rect x="16" y="16" width="968" height="548" rx="12" fill="#ffffff" stroke="#0f3d4c" stroke-width="3" />
+  <rect x="16" y="16" width="968" height="548" rx="10" fill="#ffffff" stroke="#0f3d4c" stroke-width="3" />
 
   <!-- Top Brand Header -->
-  <rect x="18" y="18" width="964" height="78" rx="10" fill="url(#headerGrad)" />
+  <rect x="18" y="18" width="964" height="78" rx="8" fill="url(#headerGrad)" />
   <text x="500" y="54" text-anchor="middle" font-family="Georgia, serif" font-size="30" font-weight="900" fill="#ffe57f" letter-spacing="3">${escapeXml(payload.companyName)}</text>
   <text x="500" y="79" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#e2e8f0" letter-spacing="1">${escapeXml(payload.companyAddress)}  |  TEL: ${escapeXml(payload.companyMobiles.join(', '))}</text>
 
-  <!-- Bilingual Sub-Banner -->
+  <!-- Official INVOICE Banner -->
   <rect x="18" y="96" width="964" height="44" fill="url(#plumBanner)" />
-  <text x="500" y="124" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="900" fill="#ffffff" letter-spacing="1.5">EXPORTER RECORD HISTORY SLIP · 出口商账单明细凭单</text>
+  <text x="500" y="124" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="900" fill="#ffffff" letter-spacing="2.5">INVOICE · 出口商结算发票</text>
 
-  <!-- Metadata Strip -->
-  <rect x="36" y="156" width="928" height="62" rx="8" fill="#faefd0" stroke="#d97706" stroke-width="1.5" />
-  <text x="56" y="180" font-family="Arial, sans-serif" font-size="11" font-weight="800" fill="#64748b">SHIPPING MARK (唛头)</text>
-  <text x="56" y="204" font-family="Arial, sans-serif" font-size="19" font-weight="900" fill="#98486f">${escapeXml(payload.shippingMark)}</text>
+  <!-- Invoice Metadata Strip -->
+  <rect x="36" y="154" width="928" height="62" rx="6" fill="#faefd0" stroke="#d97706" stroke-width="1.5" />
+  <text x="54" y="177" font-family="Arial, sans-serif" font-size="11" font-weight="800" fill="#64748b">INVOICE NO (发票编号)</text>
+  <text x="54" y="201" font-family="Courier New, monospace" font-size="16" font-weight="900" fill="#0f3d4c">${escapeXml(payload.invoiceNumber)} (SL #${payload.rowNumber})</text>
 
-  <line x1="275" y1="164" x2="275" y2="210" stroke="#cbd5e1" stroke-width="1.5" />
-  <text x="292" y="180" font-family="Arial, sans-serif" font-size="11" font-weight="800" fill="#64748b">PACKING DATE (发货日期)</text>
-  <text x="292" y="203" font-family="Courier New, monospace" font-size="15" font-weight="800" fill="#0f172a">${escapeXml(payload.formattedDate)} (${escapeXml(payload.date)})</text>
+  <line x1="305" y1="162" x2="305" y2="208" stroke="#cbd5e1" stroke-width="1.5" />
+  <text x="322" y="177" font-family="Arial, sans-serif" font-size="11" font-weight="800" fill="#64748b">INVOICE DATE (发票日期)</text>
+  <text x="322" y="201" font-family="Courier New, monospace" font-size="15" font-weight="800" fill="#0f172a">${escapeXml(payload.formattedDate)} (${escapeXml(payload.date)})</text>
 
-  <line x1="555" y1="164" x2="555" y2="210" stroke="#cbd5e1" stroke-width="1.5" />
-  <text x="572" y="180" font-family="Arial, sans-serif" font-size="11" font-weight="800" fill="#64748b">VOUCHER / REF (单据编号)</text>
-  <text x="572" y="203" font-family="Courier New, monospace" font-size="15" font-weight="800" fill="#0f3d4c">SL #${payload.rowNumber} · ${escapeXml(payload.invoiceNumber)}</text>
+  <line x1="585" y1="162" x2="585" y2="208" stroke="#cbd5e1" stroke-width="1.5" />
+  <text x="602" y="177" font-family="Arial, sans-serif" font-size="11" font-weight="800" fill="#64748b">SHIPPING MARK (唛头)</text>
+  <text x="602" y="202" font-family="Arial, sans-serif" font-size="19" font-weight="900" fill="#98486f">${escapeXml(payload.shippingMark)}</text>
 
-  <!-- Status Pill on Metadata Strip -->
-  <rect x="815" y="169" width="132" height="36" rx="18" fill="${statusBg}" stroke="${statusBorder}" stroke-width="2" />
-  <text x="881" y="192" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="900" fill="${statusText}">${escapeXml(statusLabel)}</text>
+  <!-- Status Badge on Invoice Header -->
+  <rect x="815" y="167" width="132" height="36" rx="6" fill="${statusBg}" stroke="${statusBorder}" stroke-width="2" />
+  <text x="881" y="190" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="900" fill="${statusText}">${escapeXml(statusLabel)}</text>
 
-  <!-- Shipment Particulars Box -->
-  <rect x="36" y="234" width="928" height="76" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" />
-  <text x="56" y="258" font-family="Arial, sans-serif" font-size="11" font-weight="800" fill="#126b62">RECORD HISTORY / SHIPMENT PARTICULARS (账单及装箱明细)</text>
-  <text x="56" y="286" font-family="Arial, sans-serif" font-size="15" font-weight="700" fill="#1e293b">${escapeXml(truncatedDesc)}</text>
+  <!-- Formal Invoice Table -->
+  <rect x="36" y="230" width="928" height="104" rx="4" fill="#ffffff" stroke="#0f172a" stroke-width="1.5" />
+  <rect x="37" y="231" width="926" height="36" fill="#0f3d4c" />
+
+  <!-- Table Header Columns -->
+  <text x="64" y="254" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="800" fill="#ffffff">SL</text>
+  <line x1="92" y1="230" x2="92" y2="334" stroke="#cbd5e1" stroke-width="1" />
+
+  <text x="106" y="254" font-family="Arial, sans-serif" font-size="11" font-weight="800" fill="#ffffff">INVOICE PARTICULARS / DESCRIPTION (货物明细)</text>
+  <line x1="450" y1="230" x2="450" y2="334" stroke="#cbd5e1" stroke-width="1" />
+
+  <text x="495" y="254" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="800" fill="#ffffff">FLIGHT</text>
+  <line x1="540" y1="230" x2="540" y2="334" stroke="#cbd5e1" stroke-width="1" />
+
+  <text x="575" y="254" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="800" fill="#ffffff">BOX</text>
+  <line x1="610" y1="230" x2="610" y2="334" stroke="#cbd5e1" stroke-width="1" />
+
+  <text x="660" y="254" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="800" fill="#ffffff">WEIGHT</text>
+  <line x1="710" y1="230" x2="710" y2="334" stroke="#cbd5e1" stroke-width="1" />
+
+  <text x="788" y="254" text-anchor="end" font-family="Arial, sans-serif" font-size="11" font-weight="800" fill="#ffe57f">INVOICE RMB</text>
+  <line x1="800" y1="230" x2="800" y2="334" stroke="#cbd5e1" stroke-width="1" />
+
+  <text x="874" y="254" text-anchor="end" font-family="Arial, sans-serif" font-size="11" font-weight="800" fill="#a7f3d0">PAID RMB</text>
+  <line x1="884" y1="230" x2="884" y2="334" stroke="#cbd5e1" stroke-width="1" />
+
+  <text x="954" y="254" text-anchor="end" font-family="Arial, sans-serif" font-size="11" font-weight="800" fill="#fecdd3">BALANCE</text>
+
+  <!-- Table Body Row -->
+  <text x="64" y="305" text-anchor="middle" font-family="Courier New, monospace" font-size="14" font-weight="800" fill="#334155">${payload.rowNumber}</text>
+  <text x="106" y="305" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#0f172a">${escapeXml(truncatedDesc)}</text>
+  <text x="495" y="305" text-anchor="middle" font-family="Courier New, monospace" font-size="13" font-weight="800" fill="#0f172a">${escapeXml(flightDisplay)}</text>
+  <text x="575" y="305" text-anchor="middle" font-family="Courier New, monospace" font-size="13" font-weight="800" fill="#0f172a">${escapeXml(boxDisplay)}</text>
+  <text x="660" y="305" text-anchor="middle" font-family="Courier New, monospace" font-size="13" font-weight="800" fill="#0f172a">${escapeXml(weightDisplay)}</text>
+  <text x="788" y="305" text-anchor="end" font-family="Courier New, monospace" font-size="13" font-weight="900" fill="#0f172a">${escapeXml(formatRMB(payload.debitAmount))}</text>
+  <text x="874" y="305" text-anchor="end" font-family="Courier New, monospace" font-size="13" font-weight="900" fill="#047857">${escapeXml(formatRMB(payload.creditAmount))}</text>
+  <text x="954" y="305" text-anchor="end" font-family="Courier New, monospace" font-size="13" font-weight="900" fill="${balanceColor}">${escapeXml(formatRMB(payload.balance))}</text>
+
+  <!-- Invoice Totals Grid (Debit, Credit, Balance in RMB) -->
+  <!-- 1. Total Invoice / Debit Box -->
+  <rect x="36" y="350" width="296" height="104" rx="8" fill="#f0fdfa" stroke="#0d9488" stroke-width="2" />
+  <text x="56" y="376" font-family="Arial, sans-serif" font-size="12" font-weight="800" fill="#0f766e">INVOICE AMOUNT · 发票应收 (RMB)</text>
+  <text x="56" y="418" font-family="Courier New, monospace" font-size="27" font-weight="900" fill="#0f172a">${escapeXml(formatRMB(payload.debitAmount))}</text>
+  <text x="56" y="440" font-family="Arial, sans-serif" font-size="11" font-weight="600" fill="#64748b">Total Invoiced Value (Debit)</text>
+
+  <!-- 2. Paid / Credit Box -->
+  <rect x="352" y="350" width="296" height="104" rx="8" fill="#ecfdf5" stroke="#10b981" stroke-width="2" />
+  <text x="372" y="376" font-family="Arial, sans-serif" font-size="12" font-weight="800" fill="#047857">PAID AMOUNT · 已收金额 (RMB)</text>
+  <text x="372" y="418" font-family="Courier New, monospace" font-size="27" font-weight="900" fill="#065f46">${escapeXml(formatRMB(payload.creditAmount))}</text>
+  <text x="372" y="440" font-family="Arial, sans-serif" font-size="11" font-weight="600" fill="#64748b">Received / Settled Amount (Credit)</text>
+
+  <!-- 3. Balance Due Box -->
+  <rect x="668" y="350" width="296" height="104" rx="8" fill="#fff1f2" stroke="#f43f5e" stroke-width="2" />
+  <text x="688" y="376" font-family="Arial, sans-serif" font-size="12" font-weight="800" fill="#be123c">BALANCE DUE · 待结余额 (RMB)</text>
+  <text x="688" y="418" font-family="Courier New, monospace" font-size="27" font-weight="900" fill="${balanceColor}">${escapeXml(formatRMB(payload.balance))}</text>
+  <text x="688" y="440" font-family="Arial, sans-serif" font-size="11" font-weight="600" fill="#64748b">Net Outstanding Invoice Balance</text>
+
+  <!-- Official Invoice Footer & Signature -->
+  <line x1="36" y1="472" x2="964" y2="472" stroke="#cbd5e1" stroke-width="1.5" />
+  <text x="40" y="502" font-family="Arial, sans-serif" font-size="12" font-weight="800" fill="#0f3d4c">OFFICIAL EXPORTER INVOICE · 出口商正式账单发票</text>
+  <text x="40" y="522" font-family="Arial, sans-serif" font-size="11" font-weight="600" fill="#475569">${escapeXml(payload.companyName)} · ${escapeXml(payload.companyEmail)}</text>
   ${
-    payload.box > 0 || payload.weightKg > 0 || payload.flight
-      ? `<text x="56" y="303" font-family="Courier New, monospace" font-size="12" font-weight="700" fill="#475569">${escapeXml(
-          [
-            payload.flight ? `Flight: ${payload.flight}` : '',
-            payload.box > 0 ? `Boxes: ${payload.box}` : '',
-            payload.weightKg > 0 ? `Net Weight: ${payload.weightKg} KG` : '',
-          ]
-            .filter(Boolean)
-            .join('   |   ')
-        )}</text>`
-      : ''
+    payload.remarks
+      ? `<text x="40" y="540" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#334155">Remarks: ${escapeXml(payload.remarks.slice(0, 80))}</text>`
+      : `<text x="40" y="540" font-family="Arial, sans-serif" font-size="10" font-weight="600" fill="#64748b">Computer-generated commercial invoice statement.</text>`
   }
 
-  <!-- Financial Summary Grid (Debit, Credit, Balance in RMB) -->
-  <!-- 1. Debit Box -->
-  <rect x="36" y="328" width="296" height="114" rx="10" fill="#f0fdfa" stroke="#0d9488" stroke-width="2" />
-  <text x="56" y="356" font-family="Arial, sans-serif" font-size="12" font-weight="800" fill="#0f766e">DEBIT AMOUNT · 应收金额 (RMB)</text>
-  <text x="56" y="402" font-family="Courier New, monospace" font-size="28" font-weight="900" fill="#0f172a">${escapeXml(formatRMB(payload.debitAmount))}</text>
-  <text x="56" y="426" font-family="Arial, sans-serif" font-size="11" font-weight="600" fill="#64748b">Export Consignment Value</text>
-
-  <!-- 2. Credit Box -->
-  <rect x="352" y="328" width="296" height="114" rx="10" fill="#ecfdf5" stroke="#10b981" stroke-width="2" />
-  <text x="372" y="356" font-family="Arial, sans-serif" font-size="12" font-weight="800" fill="#047857">CREDIT AMOUNT · 已收金额 (RMB)</text>
-  <text x="372" y="402" font-family="Courier New, monospace" font-size="28" font-weight="900" fill="#065f46">${escapeXml(formatRMB(payload.creditAmount))}</text>
-  <text x="372" y="426" font-family="Arial, sans-serif" font-size="11" font-weight="600" fill="#64748b">Settled / Remitted RMB</text>
-
-  <!-- 3. Balance Box -->
-  <rect x="668" y="328" width="296" height="114" rx="10" fill="#fff1f2" stroke="#f43f5e" stroke-width="2" />
-  <text x="688" y="356" font-family="Arial, sans-serif" font-size="12" font-weight="800" fill="#be123c">BALANCE · 待结余额 (RMB)</text>
-  <text x="688" y="402" font-family="Courier New, monospace" font-size="28" font-weight="900" fill="${balanceColor}">${escapeXml(formatRMB(payload.balance))}</text>
-  <text x="688" y="426" font-family="Arial, sans-serif" font-size="11" font-weight="600" fill="#64748b">Formula: Debit − Credit = Balance</text>
-
-  <!-- Footer & WeChat QR Stamp -->
-  <line x1="36" y1="464" x2="964" y2="464" stroke="#cbd5e1" stroke-width="1.5" />
-  <rect x="36" y="470" width="430" height="74" rx="8" fill="#07C160" fill-opacity="0.1" stroke="#07C160" stroke-width="1.5" />
-  <rect x="40" y="474" width="68" height="68" rx="4" fill="#ffffff" stroke="#07C160" stroke-width="1" />
-  ${miniQrRects}
-  <text x="120" y="496" font-family="Arial, sans-serif" font-size="13" font-weight="900" fill="#065f46">WECHAT VERIFIED QR SLIP · 微信扫码对账凭单</text>
-  <text x="120" y="515" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#0f3d4c">Scan QR in WeChat to view live transaction slip &amp; details</text>
-  <text x="120" y="532" font-family="Arial, sans-serif" font-size="10" font-weight="600" fill="#475569">Direct Exporter Ledger · ${escapeXml(payload.companyEmail)}</text>
-
-  <text x="956" y="494" text-anchor="end" font-family="Arial, sans-serif" font-size="12" font-weight="800" fill="#334155">YOURS FAITHFULLY - 此致</text>
-  <text x="956" y="518" text-anchor="end" font-family="Arial, sans-serif" font-size="15" font-weight="900" fill="#0f172a">${escapeXml(payload.partnerName)}</text>
-  <text x="956" y="536" text-anchor="end" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#64748b">PARTNER · ${escapeXml(payload.companyName)}</text>
+  <text x="956" y="496" text-anchor="end" font-family="Arial, sans-serif" font-size="12" font-weight="800" fill="#334155">YOURS FAITHFULLY - 此致</text>
+  <text x="956" y="520" text-anchor="end" font-family="Arial, sans-serif" font-size="16" font-weight="900" fill="#0f172a">${escapeXml(payload.partnerName)}</text>
+  <text x="956" y="538" text-anchor="end" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#64748b">PARTNER · ${escapeXml(payload.companyName)}</text>
 </svg>`;
 }
 

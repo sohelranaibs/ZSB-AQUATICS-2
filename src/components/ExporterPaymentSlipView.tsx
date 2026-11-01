@@ -10,17 +10,12 @@ import {
   createInitialExporterSlipRows,
   isExporterSlipRowPopulated,
   mergeExporterPaymentSlipRows,
+  collectPackingManifestRecords,
   generateInvoiceNumber,
   formatDate,
   formatRMB,
-  calculatePaymentRow,
+  ExporterSlipFilterOptions,
 } from '../utils/calculations.ts';
-import {
-  EXPORTER_STATUS_OPTIONS,
-  ExporterRecordHistoryRow,
-  buildExporterRecordHistory,
-  calculateExporterHistoryTotals,
-} from '../utils/exporterHistory.ts';
 import { ExporterPaymentSlipRow, ExporterStatus } from '../types/index.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
 import { exportElementToPng } from '../utils/pdfGenerator.ts';
@@ -32,7 +27,6 @@ import {
   Printer,
   Filter,
   RotateCcw,
-  FileSpreadsheet,
   Calendar,
   Tag,
   Plane,
@@ -44,25 +38,16 @@ import {
   Save,
   ImageDown,
   Loader2,
-  Eye,
-  Link2,
-  Check,
-  X,
 } from 'lucide-react';
 
 import {
   PngShareModal,
-  WhatsAppIcon,
   WeChatIcon,
 } from './PngShareModal.tsx';
 import { ExporterRecordImageModal } from './ExporterRecordImageModal.tsx';
 import {
   ExporterRecordSharePayload,
-  CopyLinkToastConfirmation,
-  normalizeExporterRowForShare,
   parseExporterWeChatDeepLinkFromSearch,
-  copyTemporaryTransactionLinkToClipboard,
-  buildCopyTemporaryLinkToastConfirmation,
 } from '../utils/exporterWeChatShare.ts';
 
 const CUSTOM_SLIP_ROWS_STORAGE_KEY = 'zsb_exporter_slip_custom_rows_v4';
@@ -70,10 +55,12 @@ const CUSTOM_SLIP_ROWS_STORAGE_KEY = 'zsb_exporter_slip_custom_rows_v4';
 export const ExporterPaymentSlipView: React.FC = () => {
   const {
     packings,
+    packingDraft,
+    setPackingDraft,
+    editingPackingId,
     payments,
     addPacking,
     updatePacking,
-    updatePayment,
     dropdownOptions,
     companyProfile,
     openPrintModal,
@@ -81,20 +68,24 @@ export const ExporterPaymentSlipView: React.FC = () => {
     showToast,
   } = useApp();
 
-  // Primary automatic lookup dropdown states: Shipping Mark & Packing Date
+  const allPackingRecords = useMemo(
+    () => collectPackingManifestRecords(packings, packingDraft, editingPackingId),
+    [packings, packingDraft, editingPackingId]
+  );
+
+  // Primary automatic lookup dropdown states: Shipping Mark & Packing Date (Single Date or Date to Date Range)
   const [selectedMark, setSelectedMark] = useState<string>('ALL');
+  const [dateFilterMode, setDateFilterMode] = useState<'single' | 'range'>('single');
   const [selectedDate, setSelectedDate] = useState<string>('ALL');
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
   const [selectedFlight, setSelectedFlight] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [isExportingPng, setIsExportingPng] = useState<boolean>(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
-  const [shareChannel, setShareChannel] = useState<'whatsapp' | 'wechat'>('wechat');
   const [selectedImageRowPayload, setSelectedImageRowPayload] =
     useState<ExporterRecordSharePayload | null>(null);
   const [autoShareWeChat, setAutoShareWeChat] = useState<boolean>(false);
-  const [copiedRowLinkId, setCopiedRowLinkId] = useState<string | null>(null);
-  const [copyLinkToast, setCopyLinkToast] =
-    useState<CopyLinkToastConfirmation | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -159,17 +150,19 @@ export const ExporterPaymentSlipView: React.FC = () => {
 
   // Unique Shipping Marks present in Exporter DB (packings) + dropdownOptions
   const availableMarks = useMemo(() => {
-    const dbMarks = Array.from(new Set(packings.map((p) => p.shippingMark).filter(Boolean)));
+    const dbMarks = Array.from(
+      new Set(allPackingRecords.map((p) => p.shippingMark).filter(Boolean))
+    );
     const otherMarks = dropdownOptions.shippingMarks.filter((m) => !dbMarks.includes(m));
     return { dbMarks, otherMarks };
-  }, [packings, dropdownOptions.shippingMarks]);
+  }, [allPackingRecords, dropdownOptions.shippingMarks]);
 
   // Unique Packing Dates present in Exporter DB (filtered by selectedMark if set, plus all dates)
   const availableDates = useMemo(() => {
     const matchingPackings =
       selectedMark === 'ALL'
-        ? packings
-        : packings.filter(
+        ? allPackingRecords
+        : allPackingRecords.filter(
             (p) => p.shippingMark.trim().toLowerCase() === selectedMark.trim().toLowerCase()
           );
 
@@ -178,26 +171,26 @@ export const ExporterPaymentSlipView: React.FC = () => {
     ).sort((a, b) => b.localeCompare(a));
 
     const allDates = Array.from(
-      new Set(packings.map((p) => p.packingDate).filter(Boolean))
+      new Set(allPackingRecords.map((p) => p.packingDate).filter(Boolean))
     ).sort((a, b) => b.localeCompare(a));
 
     const otherDates =
       selectedMark === 'ALL' ? allDates : allDates.filter((d) => !markDates.includes(d));
 
     return { markDates, otherDates };
-  }, [packings, selectedMark]);
+  }, [allPackingRecords, selectedMark]);
 
   // Unique Flights in Exporter DB + dropdownOptions
   const availableFlights = useMemo(() => {
-    const dbFlights = packings.map((p) => p.flight).filter(Boolean);
+    const dbFlights = allPackingRecords.map((p) => p.flight).filter(Boolean);
     return Array.from(new Set([...dbFlights, ...dropdownOptions.flights]));
-  }, [packings, dropdownOptions.flights]);
+  }, [allPackingRecords, dropdownOptions.flights]);
 
   // Handle Shipping Mark dropdown change with automatic date synchronization
   const handleMarkChange = (newMark: string) => {
     setSelectedMark(newMark);
     if (newMark !== 'ALL' && selectedDate !== 'ALL') {
-      const hasRecordOnDate = packings.some(
+      const hasRecordOnDate = allPackingRecords.some(
         (p) =>
           p.shippingMark.trim().toLowerCase() === newMark.trim().toLowerCase() &&
           p.packingDate === selectedDate
@@ -210,7 +203,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
     // If no DB records exist for the selected mark, reflect the selected mark in the first blank custom row
     const hasDbRecordsForMark =
       newMark !== 'ALL' &&
-      packings.some(
+      allPackingRecords.some(
         (p) => p.shippingMark.trim().toLowerCase() === newMark.trim().toLowerCase()
       );
     setCustomRows((prev) =>
@@ -219,7 +212,8 @@ export const ExporterPaymentSlipView: React.FC = () => {
           Boolean((row.flight || '').trim()) ||
           Number(row.box) > 0 ||
           Number(row.weightKg) > 0 ||
-          Number(row.rmb) > 0;
+          Number(row.rmb) > 0 ||
+          Number(row.amount) > 0;
         if (idx === 0 && !hasOtherData) {
           return {
             ...row,
@@ -235,7 +229,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
   const handleDateChange = (newDate: string) => {
     setSelectedDate(newDate);
     if (newDate !== 'ALL' && selectedMark !== 'ALL') {
-      const hasRecordForMark = packings.some(
+      const hasRecordForMark = allPackingRecords.some(
         (p) =>
           p.packingDate === newDate &&
           p.shippingMark.trim().toLowerCase() === selectedMark.trim().toLowerCase()
@@ -249,6 +243,9 @@ export const ExporterPaymentSlipView: React.FC = () => {
   const handleResetFilters = () => {
     setSelectedMark('ALL');
     setSelectedDate('ALL');
+    setFromDate('');
+    setToDate('');
+    setDateFilterMode('single');
     setSelectedFlight('ALL');
     setSelectedStatus('ALL');
     setCustomRows((prev) =>
@@ -257,7 +254,8 @@ export const ExporterPaymentSlipView: React.FC = () => {
           Boolean((row.flight || '').trim()) ||
           Number(row.box) > 0 ||
           Number(row.weightKg) > 0 ||
-          Number(row.rmb) > 0;
+          Number(row.rmb) > 0 ||
+          Number(row.amount) > 0;
         if (idx === 0 && !hasOtherData) {
           return { ...row, mark: '' };
         }
@@ -267,34 +265,34 @@ export const ExporterPaymentSlipView: React.FC = () => {
     showToast('Showing all Exporter Database records in Payment Slip.');
   };
 
-  // Build rows automatically from Exporter Database (packings + payments)
-  const dbSlipRows = useMemo(() => {
-    return buildExporterPaymentSlipRows(packings, payments, {
-      shippingMark: selectedMark,
-      packingDate: selectedDate,
-      flight: selectedFlight,
-      status: selectedStatus,
-      rmbExchangeRate: companyProfile.rmbExchangeRate,
-    });
-  }, [
-    packings,
-    payments,
+  const effectiveFilterOptions = useMemo<ExporterSlipFilterOptions>(() => ({
+    shippingMark: selectedMark,
+    packingDate: dateFilterMode === 'single' ? selectedDate : 'ALL',
+    fromDate: dateFilterMode === 'range' ? fromDate : undefined,
+    toDate: dateFilterMode === 'range' ? toDate : undefined,
+    flight: selectedFlight,
+    status: selectedStatus,
+    rmbExchangeRate: companyProfile.rmbExchangeRate,
+  }), [
     selectedMark,
+    dateFilterMode,
     selectedDate,
+    fromDate,
+    toDate,
     selectedFlight,
     selectedStatus,
     companyProfile.rmbExchangeRate,
   ]);
 
+  // Build rows automatically from Exporter Database (packings + active packing draft + payments)
+  const dbSlipRows = useMemo(() => {
+    return buildExporterPaymentSlipRows(allPackingRecords, payments, effectiveFilterOptions);
+  }, [allPackingRecords, payments, effectiveFilterOptions]);
+
   // Merge auto-synced DB rows with custom rows in the Payment Slip form
   const slipRows = useMemo(() => {
-    return mergeExporterPaymentSlipRows(dbSlipRows, customRows, {
-      shippingMark: selectedMark,
-      packingDate: selectedDate,
-      flight: selectedFlight,
-      status: selectedStatus,
-    });
-  }, [dbSlipRows, customRows, selectedMark, selectedDate, selectedFlight, selectedStatus]);
+    return mergeExporterPaymentSlipRows(dbSlipRows, customRows, effectiveFilterOptions);
+  }, [dbSlipRows, customRows, effectiveFilterOptions]);
 
   const populatedSlipRows = useMemo(
     () => slipRows.filter((r) => isExporterSlipRowPopulated(r)),
@@ -308,96 +306,25 @@ export const ExporterPaymentSlipView: React.FC = () => {
 
   const totals = useMemo(() => calculateExporterSlipTotals(slipRows), [slipRows]);
 
-  // Build All Exporter Record History (Debit, Credit, Balance & Status: Report, No Report, Paid)
-  const historyRows = useMemo(
-    () =>
-      buildExporterRecordHistory(packings, payments, {
-        shippingMark: selectedMark,
-        packingDate: selectedDate,
-        flight: selectedFlight,
-        status: selectedStatus,
-        rmbExchangeRate: companyProfile.rmbExchangeRate,
-      }),
-    [
-      packings,
-      payments,
-      selectedMark,
-      selectedDate,
-      selectedFlight,
-      selectedStatus,
-      companyProfile.rmbExchangeRate,
-    ]
-  );
-
-  const historyTotals = useMemo(
-    () => calculateExporterHistoryTotals(historyRows),
-    [historyRows]
-  );
-
   const statusOptions = useMemo(() => {
     return dropdownOptions.paymentStatuses.length > 0
       ? dropdownOptions.paymentStatuses
       : ['PAID', 'UNPAID'];
   }, [dropdownOptions.paymentStatuses]);
 
-  const handleUpdateHistoryRow = (
-    row: ExporterRecordHistoryRow,
-    field: 'debitAmount' | 'creditAmount' | 'status',
-    value: number | string
-  ) => {
-    if (row.packingId) {
-      if (field === 'debitAmount') {
-        const nextDebit = Math.max(0, Number(value) || 0);
-        const nextBalance = calculatePaymentRow(nextDebit, row.creditAmount);
-        updatePacking(row.packingId, {
-          debitAmount: nextDebit,
-          settledAmount: nextDebit,
-          balanceAmount: nextBalance,
-        });
-      } else if (field === 'creditAmount') {
-        const nextCredit = Math.max(0, Number(value) || 0);
-        const nextBalance = calculatePaymentRow(row.debitAmount, nextCredit);
-        updatePacking(row.packingId, {
-          creditAmount: nextCredit,
-          balanceAmount: nextBalance,
-        });
-      } else if (field === 'status') {
-        const nextStatus = String(value) as ExporterStatus;
-        updatePacking(row.packingId, {
-          exporterStatus: nextStatus,
-          paymentStatus: nextStatus,
-        });
-      }
-    } else if (row.paymentId) {
-      if (field === 'debitAmount') {
-        const nextDebit = Math.max(0, Number(value) || 0);
-        const nextBalance = calculatePaymentRow(nextDebit, row.creditAmount);
-        updatePayment(row.paymentId, {
-          totalAmount: nextDebit,
-          balance: nextBalance,
-        });
-      } else if (field === 'creditAmount') {
-        const nextCredit = Math.max(0, Number(value) || 0);
-        const nextBalance = calculatePaymentRow(row.debitAmount, nextCredit);
-        updatePayment(row.paymentId, {
-          paidAmount: nextCredit,
-          balance: nextBalance,
-        });
-      } else if (field === 'status') {
-        updatePayment(row.paymentId, {
-          status: String(value) as ExporterStatus,
-        });
-      }
-    }
-  };
-
   // Add a new row to the Payment Slip form
   const handleAddRow = () => {
+    const defaultDate =
+      dateFilterMode === 'range'
+        ? toDate || fromDate || new Date().toISOString().slice(0, 10)
+        : selectedDate !== 'ALL'
+        ? selectedDate
+        : new Date().toISOString().slice(0, 10);
     const newRow = createEmptyExporterSlipRow(generateRecordId('sliprow'), {
-      date: selectedDate !== 'ALL' ? selectedDate : new Date().toISOString().slice(0, 10),
+      date: defaultDate,
       flight: selectedFlight !== 'ALL' ? selectedFlight : '',
       mark: selectedMark !== 'ALL' ? selectedMark : '',
-      status: selectedStatus !== 'ALL' ? selectedStatus : 'REPORT',
+      status: selectedStatus !== 'ALL' ? selectedStatus : 'UNPAID',
     });
     setCustomRows((prev) => [...prev, newRow]);
     showToast('Added new row to Exporter Payment Slip (付款单).');
@@ -425,43 +352,73 @@ export const ExporterPaymentSlipView: React.FC = () => {
   };
 
   // Update any field on a row (persists to PackingRecord if DB-linked, or updates customRows)
-  // Calculation: Weight * RMB = Amount
   const handleUpdateRow = (
     row: ExporterPaymentSlipRow,
     field: keyof ExporterPaymentSlipRow,
     value: string | number
   ) => {
     if (row.packingId) {
+      if (row.packingId === 'draft-packing-manifest') {
+        setPackingDraft((prev) => {
+          const next = { ...prev };
+          if (field === 'date') next.packingDate = String(value);
+          else if (field === 'flight') next.flight = String(value).toUpperCase();
+          else if (field === 'mark') next.shippingMark = String(value).toUpperCase();
+          else if (field === 'status') next.paymentStatus = String(value) as ExporterStatus;
+          return next;
+        });
+        return;
+      }
+
       if (field === 'date') {
-        updatePacking(row.packingId, { packingDate: String(value) });
+        updatePacking(row.packingId, { packingDate: String(value) }, true);
       } else if (field === 'flight') {
-        updatePacking(row.packingId, { flight: String(value).toUpperCase() });
+        updatePacking(row.packingId, { flight: String(value).toUpperCase() }, true);
       } else if (field === 'mark') {
-        updatePacking(row.packingId, { shippingMark: String(value).toUpperCase() });
+        updatePacking(row.packingId, { shippingMark: String(value).toUpperCase() }, true);
       } else if (field === 'box') {
-        updatePacking(row.packingId, { totalBox: Number(value) || 0 });
+        updatePacking(row.packingId, { totalBox: Number(value) || 0 }, true);
       } else if (field === 'weightKg') {
         const newWeight = Number(value) || 0;
         if (Number(row.rmb) > 0) {
           const newAmount = calculateExporterSlipRowAmount(newWeight, row.rmb);
-          updatePacking(row.packingId, { totalWeight: newWeight, settledAmount: newAmount });
+          updatePacking(
+            row.packingId,
+            { totalWeight: newWeight, settledAmount: newAmount, debitAmount: newAmount },
+            true
+          );
         } else {
-          updatePacking(row.packingId, { totalWeight: newWeight });
+          updatePacking(row.packingId, { totalWeight: newWeight }, true);
         }
       } else if (field === 'rmb') {
         const newRmb = Number(value) || 0;
         const newAmount = calculateExporterSlipRowAmount(row.weightKg, newRmb);
-        updatePacking(row.packingId, { rmbAmount: newRmb, settledAmount: newAmount });
+        updatePacking(
+          row.packingId,
+          { rmbAmount: newRmb, settledAmount: newAmount, debitAmount: newAmount },
+          true
+        );
       } else if (field === 'amount') {
         const newAmount = Number(value) || 0;
-        const derivedRmb =
-          row.weightKg > 0 ? Math.round((newAmount / row.weightKg) * 100) / 100 : 0;
-        updatePacking(row.packingId, {
-          settledAmount: newAmount,
-          rmbAmount: derivedRmb,
-        });
+        updatePacking(
+          row.packingId,
+          {
+            settledAmount: newAmount,
+            debitAmount: newAmount,
+            totalAmount: newAmount,
+            rmbAmount: 0,
+          },
+          true
+        );
       } else if (field === 'status') {
-        updatePacking(row.packingId, { exporterStatus: String(value) });
+        updatePacking(
+          row.packingId,
+          {
+            exporterStatus: String(value),
+            paymentStatus: String(value) as ExporterStatus,
+          },
+          true
+        );
       }
       return;
     }
@@ -491,6 +448,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
           updated.amount = calculateExporterSlipRowAmount(updated.weightKg, newRmb);
         } else if (field === 'amount') {
           updated.amount = Number(value) || 0;
+          updated.rmb = 0;
         } else if (field === 'status') {
           updated.status = String(value);
         }
@@ -503,20 +461,31 @@ export const ExporterPaymentSlipView: React.FC = () => {
   // Save a populated custom row into the master Exporter / Packing Database
   const handleSaveCustomRowToDb = (row: ExporterPaymentSlipRow) => {
     if (!isExporterSlipRowPopulated(row)) {
-      showToast('Enter Mark, Flight, Box, Weight, or RMB before saving to Exporter DB.');
+      showToast('Enter Mark, Flight, Box, Weight, or Amount before saving to Exporter DB.');
       return;
     }
     const rate = companyProfile.rmbExchangeRate || 16.5;
-    const computedSlipAmount = calculateExporterSlipRowAmount(row.weightKg, row.rmb);
+    const weightVal = Number(row.weightKg) || 0;
+    const rmbRateVal = Number(row.rmb) || 0;
+    const computedSlipAmount =
+      weightVal > 0 && rmbRateVal > 0
+        ? calculateExporterSlipRowAmount(weightVal, rmbRateVal)
+        : 0;
     const effectiveRmbTotal =
-      computedSlipAmount > 0 ? computedSlipAmount : Number(row.amount) || Number(row.rmb) || 0;
+      computedSlipAmount > 0 ? computedSlipAmount : Number(row.amount) || rmbRateVal || 0;
     const totalAmountBdt = Math.round(effectiveRmbTotal * rate * 100) / 100;
+    const perKgRateRmb =
+      weightVal > 0 && effectiveRmbTotal > 0
+        ? Math.round((effectiveRmbTotal / weightVal) * 100) / 100
+        : rmbRateVal;
+    const normalizedStatus: ExporterStatus =
+      (row.status || '').toUpperCase() === 'PAID' ? 'PAID' : 'UNPAID';
     const invoiceNo = generateInvoiceNumber('PKG', packings.length);
 
     addPacking({
       invoiceNumber: invoiceNo,
-      shippingMark: (row.mark || 'GENERAL').trim(),
-      flight: (row.flight || 'CAN').trim(),
+      shippingMark: (row.mark || (selectedMark !== 'ALL' ? selectedMark : 'GENERAL')).trim().toUpperCase(),
+      flight: (row.flight || (selectedFlight !== 'ALL' ? selectedFlight : 'CAN')).trim().toUpperCase(),
       destination: 'GUANGZHOU',
       shipper: companyProfile.companyName,
       packingDate: row.date || new Date().toISOString().slice(0, 10),
@@ -529,37 +498,55 @@ export const ExporterPaymentSlipView: React.FC = () => {
           box: Number(row.box) || 0,
           weight:
             Number(row.box) > 0
-              ? Math.round(((Number(row.weightKg) || 0) / Number(row.box)) * 100) / 100
-              : Number(row.weightKg) || 0,
-          totalWeight: Number(row.weightKg) || 0,
+              ? Math.round((weightVal / Number(row.box)) * 100) / 100
+              : weightVal,
+          totalWeight: weightVal,
           unit: 'KG',
-          rate:
-            Number(row.weightKg) > 0
-              ? Math.round((totalAmountBdt / Number(row.weightKg)) * 100) / 100
-              : 0,
-          amount: totalAmountBdt,
+          rate: perKgRateRmb,
+          amount: effectiveRmbTotal,
         },
       ],
       totalBox: Number(row.box) || 0,
-      totalWeight: Number(row.weightKg) || 0,
-      totalAmount: totalAmountBdt,
-      rmbAmount: Number(row.rmb) || 0,
+      totalWeight: weightVal,
+      totalAmount: effectiveRmbTotal,
+      totalAmountBDT: totalAmountBdt,
+      rmbAmount: rmbRateVal > 0 ? rmbRateVal : 0,
       settledAmount: effectiveRmbTotal,
-      exporterStatus: row.status || 'REPORT',
-      paymentStatus: row.status || 'REPORT',
+      debitAmount: effectiveRmbTotal,
+      creditAmount: normalizedStatus === 'PAID' ? effectiveRmbTotal : 0,
+      exporterStatus: normalizedStatus,
+      paymentStatus: normalizedStatus,
     });
 
-    setCustomRows((prev) => prev.filter((r) => r.id !== row.id));
+    setCustomRows((prev) => {
+      const remaining = prev.filter((r) => r.id !== row.id);
+      return remaining.length > 0
+        ? remaining
+        : createInitialExporterSlipRows(DEFAULT_EXPORTER_SLIP_ROWS);
+    });
   };
 
   const handlePrintSlip = () => {
+    let dateRangeLabel = '';
+    if (dateFilterMode === 'range') {
+      if (fromDate && toDate) {
+        dateRangeLabel = `${formatDate(fromDate)} to ${formatDate(toDate)}`;
+      } else if (fromDate) {
+        dateRangeLabel = `From ${formatDate(fromDate)}`;
+      } else if (toDate) {
+        dateRangeLabel = `Until ${formatDate(toDate)}`;
+      }
+    } else if (selectedDate !== 'ALL') {
+      dateRangeLabel = formatDate(selectedDate);
+    }
+
     const filterTitle =
-      selectedMark !== 'ALL' && selectedDate !== 'ALL'
-        ? `${selectedMark} (${formatDate(selectedDate)})`
+      selectedMark !== 'ALL' && dateRangeLabel
+        ? `${selectedMark} (${dateRangeLabel})`
         : selectedMark !== 'ALL'
         ? `Mark: ${selectedMark}`
-        : selectedDate !== 'ALL'
-        ? `Date: ${formatDate(selectedDate)}`
+        : dateRangeLabel
+        ? `Date: ${dateRangeLabel}`
         : 'All Shipments';
 
     const rowsToPrint = populatedSlipRows.length > 0 ? populatedSlipRows : slipRows;
@@ -569,7 +556,10 @@ export const ExporterPaymentSlipView: React.FC = () => {
       title: `Exporter Payment Slip 付款单 - ${filterTitle}`,
       data: {
         shippingMark: selectedMark,
-        packingDate: selectedDate,
+        packingDate:
+          dateFilterMode === 'range'
+            ? dateRangeLabel || 'Date Range'
+            : selectedDate,
         rows: rowsToPrint,
         totals,
       },
@@ -609,7 +599,16 @@ export const ExporterPaymentSlipView: React.FC = () => {
 
   const handleSavePngSlip = async () => {
     setIsExportingPng(true);
-    const filename = formatExporterSlipExportFilename(selectedMark, selectedDate, 'png');
+    const dateRange =
+      dateFilterMode === 'range' && (fromDate || toDate)
+        ? { fromDate, toDate }
+        : undefined;
+    const filename = formatExporterSlipExportFilename(
+      selectedMark,
+      dateFilterMode === 'range' ? 'ALL' : selectedDate,
+      'png',
+      dateRange
+    );
     try {
       const success = await exportElementToPng('exporter-payment-slip-canvas', filename, 900);
       if (success) {
@@ -661,7 +660,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
               </h1>
             </div>
             <p className="text-xs text-slate-300 mt-0.5">
-              Automatically receives shipment &amp; record history from Exporter Database (Select Shipping Mark &amp; Packing Date)
+              Automatically receives shipment records from Exporter Database (Select Shipping Mark &amp; Packing Date)
             </p>
           </div>
         </div>
@@ -728,30 +727,12 @@ export const ExporterPaymentSlipView: React.FC = () => {
           <button
             type="button"
             data-testid="exporter-share-wechat-btn"
-            onClick={() => {
-              setShareChannel('wechat');
-              setIsShareModalOpen(true);
-            }}
+            onClick={() => setIsShareModalOpen(true)}
             className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-black bg-[#07C160] hover:bg-[#06a853] text-white rounded-lg shadow-md transition cursor-pointer"
             title="Share Payment Slip .PNG directly to Chinese buyers via WeChat (微信)"
           >
             <WeChatIcon className="w-4 h-4 text-white" />
             <span>SHARE WECHAT (微信)</span>
-          </button>
-
-          {/* Share via WhatsApp Button */}
-          <button
-            type="button"
-            data-testid="exporter-share-whatsapp-btn"
-            onClick={() => {
-              setShareChannel('whatsapp');
-              setIsShareModalOpen(true);
-            }}
-            className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-black bg-[#25D366] hover:bg-[#20ba5a] text-white rounded-lg shadow-md transition cursor-pointer"
-            title="Share Payment Slip .PNG via WhatsApp"
-          >
-            <WhatsAppIcon className="w-4 h-4 text-white" />
-            <span>SHARE WHATSAPP</span>
           </button>
         </div>
       </div>
@@ -775,10 +756,21 @@ export const ExporterPaymentSlipView: React.FC = () => {
                 </span>
               </span>
             )}
+            {dateFilterMode === 'range' && (fromDate || toDate) && (
+              <span
+                data-testid="active-date-range-badge"
+                className="inline-flex items-center gap-1.5 bg-sky-50 border-2 border-sky-600 px-3 py-0.5 rounded-lg shadow-xs"
+              >
+                <span className="text-[11px] font-bold uppercase text-sky-800">RANGE:</span>
+                <span className="text-xs sm:text-sm font-black font-mono tracking-wide text-sky-950">
+                  {fromDate ? formatDate(fromDate) : 'Start'} → {toDate ? formatDate(toDate) : 'Present'}
+                </span>
+              </span>
+            )}
           </div>
           <div className="flex items-center space-x-3">
             <span className="text-xs font-mono text-slate-600 bg-slate-100 px-2.5 py-1 rounded border border-slate-200">
-              Record History: <strong className="text-slate-900">{historyRows.length}</strong> · Active Slip Rows: <strong className="text-slate-900">{populatedSlipRows.length}</strong>
+              Active Slip Rows: <strong className="text-slate-900">{populatedSlipRows.length}</strong>
             </span>
             <button
               type="button"
@@ -836,72 +828,162 @@ export const ExporterPaymentSlipView: React.FC = () => {
             </select>
           </div>
 
-          {/* 2. Packing Date Dropdown Box */}
+          {/* 2. Packing Date / Date to Date Range Filter */}
           <div>
-            <label
-              htmlFor="exporter-slip-date-select"
-              className="flex items-center justify-between text-[11px] font-black uppercase text-slate-700 mb-1.5"
-            >
+            <div className="flex items-center justify-between text-[11px] font-black uppercase text-slate-700 mb-1.5">
               <span className="flex items-center space-x-1">
                 <Calendar className="w-3.5 h-3.5 text-[#98486f]" />
-                <span>Packing Date (DATE 发货日期)</span>
+                <span>{dateFilterMode === 'range' ? 'Date Range (从日到日)' : 'Packing Date (发货日期)'}</span>
               </span>
-              <span className="text-[10px] font-semibold text-emerald-700">Auto-Sync</span>
-            </label>
-            <div className="flex items-center space-x-1.5">
-              <select
-                id="exporter-slip-date-select"
-                aria-label="Packing Date"
-                value={selectedDate}
-                onChange={(e) => handleDateChange(e.target.value)}
-                className="flex-1 px-3 py-2 text-xs sm:text-sm font-bold font-mono border-2 border-[#98486f]/40 rounded-lg bg-[#faefd0]/40 text-slate-900 focus:bg-white focus:border-[#98486f] focus:outline-none transition"
-              >
-                <option value="ALL">-- ALL PACKING DATES --</option>
-                {selectedMark !== 'ALL' && availableDates.markDates.length > 0 && (
-                  <optgroup label={`Dates for Mark: ${selectedMark}`}>
-                    {availableDates.markDates.map((d) => {
-                      const recs = packings.filter(
-                        (p) => p.packingDate === d && p.shippingMark === selectedMark
-                      );
-                      return (
-                        <option key={d} value={d}>
-                          {formatDate(d)} ({d}) — {recs.map((r) => r.flight).join(', ')}
-                        </option>
-                      );
-                    })}
-                  </optgroup>
-                )}
-                {availableDates.otherDates.length > 0 && (
-                  <optgroup
-                    label={
-                      selectedMark === 'ALL'
-                        ? 'All Exporter Packing Dates'
-                        : 'Other Exporter Packing Dates'
-                    }
-                  >
-                    {availableDates.otherDates.map((d) => {
-                      const recs = packings.filter((p) => p.packingDate === d);
-                      const marksList = Array.from(new Set(recs.map((r) => r.shippingMark))).join(
-                        ', '
-                      );
-                      return (
-                        <option key={d} value={d}>
-                          {formatDate(d)} ({marksList})
-                        </option>
-                      );
-                    })}
-                  </optgroup>
-                )}
-              </select>
-              <input
-                type="date"
-                aria-label="Calendar Date Picker"
-                value={selectedDate === 'ALL' ? '' : selectedDate}
-                onChange={(e) => handleDateChange(e.target.value || 'ALL')}
-                className="w-9 px-1.5 py-2 text-xs border-2 border-slate-300 rounded-lg bg-slate-50 hover:bg-white focus:border-[#98486f] focus:outline-none"
-                title="Pick packing date from calendar"
-              />
+              <div className="inline-flex rounded-md p-0.5 bg-slate-100 border border-slate-300">
+                <button
+                  type="button"
+                  data-testid="date-mode-single-btn"
+                  onClick={() => setDateFilterMode('single')}
+                  className={`px-2 py-0.5 text-[10px] font-black rounded transition cursor-pointer ${
+                    dateFilterMode === 'single'
+                      ? 'bg-[#98486f] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Single Date
+                </button>
+                <button
+                  type="button"
+                  data-testid="date-mode-range-btn"
+                  onClick={() => setDateFilterMode('range')}
+                  className={`px-2 py-0.5 text-[10px] font-black rounded transition cursor-pointer ${
+                    dateFilterMode === 'range'
+                      ? 'bg-[#98486f] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Date to Date
+                </button>
+              </div>
             </div>
+
+            {dateFilterMode === 'single' ? (
+              <div className="flex items-center space-x-1.5">
+                <select
+                  id="exporter-slip-date-select"
+                  aria-label="Packing Date"
+                  value={selectedDate}
+                  onChange={(e) => handleDateChange(e.target.value)}
+                  className="flex-1 px-3 py-2 text-xs sm:text-sm font-bold font-mono border-2 border-[#98486f]/40 rounded-lg bg-[#faefd0]/40 text-slate-900 focus:bg-white focus:border-[#98486f] focus:outline-none transition"
+                >
+                  <option value="ALL">-- ALL PACKING DATES --</option>
+                  {selectedMark !== 'ALL' && availableDates.markDates.length > 0 && (
+                    <optgroup label={`Dates for Mark: ${selectedMark}`}>
+                      {availableDates.markDates.map((d) => {
+                        const recs = packings.filter(
+                          (p) => p.packingDate === d && p.shippingMark === selectedMark
+                        );
+                        return (
+                          <option key={d} value={d}>
+                            {formatDate(d)} ({d}) — {recs.map((r) => r.flight).join(', ')}
+                          </option>
+                        );
+                      })}
+                    </optgroup>
+                  )}
+                  {availableDates.otherDates.length > 0 && (
+                    <optgroup
+                      label={
+                        selectedMark === 'ALL'
+                          ? 'All Exporter Packing Dates'
+                          : 'Other Exporter Packing Dates'
+                      }
+                    >
+                      {availableDates.otherDates.map((d) => {
+                        const recs = packings.filter((p) => p.packingDate === d);
+                        const marksList = Array.from(new Set(recs.map((r) => r.shippingMark))).join(
+                          ', '
+                        );
+                        return (
+                          <option key={d} value={d}>
+                            {formatDate(d)} ({marksList})
+                          </option>
+                        );
+                      })}
+                    </optgroup>
+                  )}
+                </select>
+                <input
+                  type="date"
+                  aria-label="Calendar Date Picker"
+                  value={selectedDate === 'ALL' ? '' : selectedDate}
+                  onChange={(e) => handleDateChange(e.target.value || 'ALL')}
+                  className="w-9 px-1.5 py-2 text-xs border-2 border-slate-300 rounded-lg bg-slate-50 hover:bg-white focus:border-[#98486f] focus:outline-none"
+                  title="Pick packing date from calendar"
+                />
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div>
+                    <span className="block text-[10px] font-black uppercase text-slate-500 mb-0.5">From Date</span>
+                    <input
+                      type="date"
+                      data-testid="exporter-slip-from-date"
+                      aria-label="From Date"
+                      value={fromDate}
+                      onChange={(e) => setFromDate(e.target.value)}
+                      className="w-full px-2 py-1.5 text-xs font-mono font-bold border-2 border-[#98486f]/50 rounded-lg bg-[#faefd0]/30 text-slate-900 focus:bg-white focus:border-[#98486f] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <span className="block text-[10px] font-black uppercase text-slate-500 mb-0.5">To Date</span>
+                    <input
+                      type="date"
+                      data-testid="exporter-slip-to-date"
+                      aria-label="To Date"
+                      value={toDate}
+                      onChange={(e) => setToDate(e.target.value)}
+                      className="w-full px-2 py-1.5 text-xs font-mono font-bold border-2 border-[#98486f]/50 rounded-lg bg-[#faefd0]/30 text-slate-900 focus:bg-white focus:border-[#98486f] focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-1 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const todayStr = new Date().toISOString().slice(0, 10);
+                      setFromDate(todayStr);
+                      setToDate(todayStr);
+                    }}
+                    className="text-[10px] font-bold px-1.5 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded transition cursor-pointer"
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const now = new Date();
+                      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
+                        .toISOString()
+                        .slice(0, 10);
+                      const todayStr = now.toISOString().slice(0, 10);
+                      setFromDate(firstDay);
+                      setToDate(todayStr);
+                    }}
+                    className="text-[10px] font-bold px-1.5 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded transition cursor-pointer"
+                  >
+                    This Month
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFromDate('');
+                      setToDate('');
+                    }}
+                    className="text-[10px] font-bold px-1.5 py-0.5 text-rose-600 hover:bg-rose-50 rounded transition cursor-pointer"
+                  >
+                    Clear Range
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 3. Flight Filter Dropdown */}
@@ -954,319 +1036,6 @@ export const ExporterPaymentSlipView: React.FC = () => {
             </select>
           </div>
         </div>
-
-        {/* All Exporter Record History Table (Debit, Credit, Balance & Status: Report, No Report, Paid) */}
-        <div
-          data-testid="exporter-lookup-record-history-section"
-          className="pt-2 border-t border-slate-200 space-y-2.5"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <FileSpreadsheet className="w-4 h-4 text-[#98486f]" />
-              <span className="text-xs font-black uppercase tracking-wider text-slate-800">
-                All Exporter Record History (Debit, Credit, Balance &amp; Status)
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono">
-              <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-bold border border-slate-200">
-                Records: {historyTotals.recordCount}
-              </span>
-              <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 font-bold border border-emerald-200">
-                PAID: {historyTotals.paidCount}
-              </span>
-              <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-800 font-bold border border-rose-200">
-                UNPAID: {historyTotals.reportCount + historyTotals.noReportCount}
-              </span>
-            </div>
-          </div>
-
-          <div
-            data-testid="exporter-lookup-history-scroll-box"
-            className="max-h-[400px] overflow-y-auto overflow-x-auto rounded-lg border-2 border-slate-300 bg-white shadow-inner"
-          >
-            <table
-              data-testid="exporter-lookup-record-history-table"
-              className="w-full border-collapse text-xs"
-            >
-              <thead className="sticky top-0 z-10 shadow-xs">
-                <tr className="bg-[#0f3d4c] text-white uppercase text-[11px] font-bold tracking-wider border-b border-slate-800">
-                  <th className="py-2 px-2.5 border-r border-slate-700 text-center w-10">SL</th>
-                  <th className="py-2 px-2.5 border-r border-slate-700 text-left w-28">
-                    PACKING DATE
-                  </th>
-                  <th className="py-2 px-2.5 border-r border-slate-700 text-left w-28">
-                    SHIPPING MARK
-                  </th>
-                  <th className="py-2 px-3 border-r border-slate-700 text-left">
-                    RECORD HISTORY / SHIPMENT PARTICULARS
-                  </th>
-                  <th className="py-2 px-2.5 border-r border-slate-700 text-right w-32">
-                    DEBIT (RMB)
-                  </th>
-                  <th className="py-2 px-2.5 border-r border-slate-700 text-right w-32">
-                    CREDIT (RMB)
-                  </th>
-                  <th className="py-2 px-2.5 border-r border-slate-700 text-right w-32">
-                    BALANCE (RMB)
-                  </th>
-                  <th className="py-2 px-2.5 border-r border-slate-700 text-center w-36 min-w-[100px]">
-                    STATUS (PAID / UNPAID)
-                  </th>
-                  <th className="py-2 px-2.5 text-center w-56 min-w-[236px]">
-                    IMAGE VIEW / WECHAT
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 bg-white">
-                {historyRows.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="py-5 text-center text-slate-400 italic">
-                      No exporter records match the selected Shipping Mark &amp; Packing Date filter.
-                    </td>
-                  </tr>
-                ) : (
-                  historyRows.map((row, idx) => (
-                    <tr
-                      key={row.id}
-                      data-testid={`exporter-history-row-${idx + 1}`}
-                      className={
-                        idx % 2 === 0
-                          ? 'bg-white hover:bg-amber-50/40'
-                          : 'bg-slate-50/70 hover:bg-amber-50/40'
-                      }
-                    >
-                      <td className="py-1.5 px-2 border-r border-slate-200 text-center font-mono font-bold text-slate-500">
-                        {idx + 1}
-                      </td>
-                      <td className="py-1.5 px-2.5 border-r border-slate-200 font-mono font-semibold text-slate-700">
-                        {formatDate(row.date)}
-                      </td>
-                      <td className="py-1.5 px-2.5 border-r border-slate-200 font-black text-sm text-[#98486f] uppercase">
-                        {row.shippingMark}
-                      </td>
-                      <td className="py-1.5 px-3 border-r border-slate-200 font-medium text-slate-800">
-                        <span className="font-mono font-bold text-teal-900">
-                          {row.invoiceNumber}
-                        </span>
-                        {row.flight ? ` · Flight ${row.flight}` : ''}
-                        {row.box > 0 || row.weightKg > 0
-                          ? ` (${row.box} Box / ${row.weightKg} KG)`
-                          : ''}
-                      </td>
-                      <td className="py-1 px-2 border-r border-slate-200 text-right">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          aria-label={`History Row ${idx + 1} Debit`}
-                          value={row.debitAmount || ''}
-                          onChange={(e) =>
-                            handleUpdateHistoryRow(
-                              row,
-                              'debitAmount',
-                              parseFloat(e.target.value) || 0
-                            )
-                          }
-                          placeholder="0.00"
-                          className="w-full px-2 py-1 text-right font-mono font-bold text-slate-900 bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-[#98486f]"
-                        />
-                      </td>
-                      <td className="py-1 px-2 border-r border-slate-200 text-right">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          aria-label={`History Row ${idx + 1} Credit`}
-                          value={row.creditAmount || ''}
-                          onChange={(e) =>
-                            handleUpdateHistoryRow(
-                              row,
-                              'creditAmount',
-                              parseFloat(e.target.value) || 0
-                            )
-                          }
-                          placeholder="0.00"
-                          className="w-full px-2 py-1 text-right font-mono font-bold text-emerald-800 bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-[#98486f]"
-                        />
-                      </td>
-                      <td
-                        data-testid={`exporter-history-balance-${idx + 1}`}
-                        className={`py-1.5 px-2.5 border-r border-slate-200 text-right font-mono font-black ${
-                          row.balance > 0 ? 'text-rose-700' : 'text-emerald-800'
-                        }`}
-                      >
-                        {formatRMB(row.balance)}
-                      </td>
-                      <td className="py-1 px-2 border-r border-slate-200 text-center">
-                        <select
-                          aria-label={`History Row ${idx + 1} Status`}
-                          value={row.status === 'PAID' ? 'PAID' : 'UNPAID'}
-                          onChange={(e) =>
-                            handleUpdateHistoryRow(row, 'status', e.target.value)
-                          }
-                          className={`w-full text-center text-xs font-black uppercase rounded px-2 py-1 border cursor-pointer focus:outline-none ${
-                            row.status === 'PAID'
-                              ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                              : 'bg-rose-100 text-rose-900 border-rose-300'
-                          }`}
-                        >
-                          {statusOptions.map((st) => (
-                            <option key={st} value={st} className="bg-white text-slate-900">
-                              {st}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="py-1 px-2 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            type="button"
-                            data-testid={`exporter-slip-history-row-${idx + 1}-image-view-btn`}
-                            onClick={() => {
-                              const payload = normalizeExporterRowForShare(row, {
-                                rowNumber: idx + 1,
-                                fallbackMark: row.shippingMark,
-                                fallbackDate: row.date,
-                                fallbackVoucher: row.invoiceNumber,
-                                companyName: companyProfile.companyName,
-                                companyAddress: companyProfile.address,
-                                companyMobiles: companyProfile.mobiles,
-                                companyEmail: companyProfile.email,
-                                partnerName: companyProfile.partner,
-                              });
-                              setAutoShareWeChat(false);
-                              setSelectedImageRowPayload(payload);
-                            }}
-                            title={`Image View for row ${idx + 1}`}
-                            aria-label={`Image view for exporter history row ${idx + 1}`}
-                            className="inline-flex items-center space-x-1 px-2 py-1 bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-300 rounded text-[10px] font-black transition cursor-pointer"
-                          >
-                            <Eye className="w-3 h-3 text-teal-700 shrink-0" />
-                            <span>Image View</span>
-                          </button>
-                          <button
-                            type="button"
-                            data-testid={`exporter-slip-history-row-${idx + 1}-wechat-share-btn`}
-                            onClick={() => {
-                              const payload = normalizeExporterRowForShare(row, {
-                                rowNumber: idx + 1,
-                                fallbackMark: row.shippingMark,
-                                fallbackDate: row.date,
-                                fallbackVoucher: row.invoiceNumber,
-                                companyName: companyProfile.companyName,
-                                companyAddress: companyProfile.address,
-                                companyMobiles: companyProfile.mobiles,
-                                companyEmail: companyProfile.email,
-                                partnerName: companyProfile.partner,
-                              });
-                              setAutoShareWeChat(true);
-                              setSelectedImageRowPayload(payload);
-                            }}
-                            title={`Share via WeChat for row ${idx + 1} (微信扫码与分享)`}
-                            aria-label={`Share via WeChat for exporter history row ${idx + 1}`}
-                            className="inline-flex items-center space-x-1 px-2 py-1 bg-[#07C160] hover:bg-[#06ad56] text-white rounded text-[10px] font-black shadow-2xs transition cursor-pointer whitespace-nowrap"
-                          >
-                            <WeChatIcon className="w-3 h-3 text-white shrink-0" size={12} />
-                            <span>Share via WeChat</span>
-                          </button>
-                          <button
-                            type="button"
-                            data-testid={`exporter-slip-history-row-${idx + 1}-copy-link-btn`}
-                            onClick={async () => {
-                              const payload = normalizeExporterRowForShare(row, {
-                                rowNumber: idx + 1,
-                                fallbackMark: row.shippingMark,
-                                fallbackDate: row.date,
-                                fallbackVoucher: row.invoiceNumber,
-                                companyName: companyProfile.companyName,
-                                companyAddress: companyProfile.address,
-                                companyMobiles: companyProfile.mobiles,
-                                companyEmail: companyProfile.email,
-                                partnerName: companyProfile.partner,
-                              });
-                              const res = await copyTemporaryTransactionLinkToClipboard(
-                                payload,
-                                {
-                                  tab: 'exporter_payment_slip',
-                                }
-                              );
-                              const toastInfo = buildCopyTemporaryLinkToastConfirmation(
-                                payload,
-                                res
-                              );
-                              setCopiedRowLinkId(row.id);
-                              setCopyLinkToast(toastInfo);
-                              setTimeout(() => {
-                                setCopiedRowLinkId((prev) =>
-                                  prev === row.id ? null : prev
-                                );
-                              }, 3500);
-                              setTimeout(() => {
-                                setCopyLinkToast((prev) =>
-                                  prev?.copiedUrl === toastInfo.copiedUrl ? null : prev
-                                );
-                              }, 4500);
-                            }}
-                            title="Copy Link (Secure 24h Temporary Public Link for WeChat)"
-                            aria-label={`Copy Link for exporter history row ${idx + 1}`}
-                            className={`inline-flex items-center justify-center gap-1 px-1.5 py-1 rounded border text-[10px] font-black transition cursor-pointer shrink-0 ${
-                              copiedRowLinkId === row.id
-                                ? 'bg-emerald-100 text-emerald-900 border-emerald-500 ring-1 ring-emerald-300'
-                                : 'bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border-slate-300 hover:border-emerald-400'
-                            }`}
-                          >
-                            {copiedRowLinkId === row.id ? (
-                              <>
-                                <Check className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                                <span data-testid={`exporter-slip-row-${idx + 1}-copied-badge`}>
-                                  Copied!
-                                </span>
-                              </>
-                            ) : (
-                              <Link2 className="w-3.5 h-3.5" />
-                            )}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-              <tfoot className="sticky bottom-0 z-10">
-                <tr className="bg-slate-900 text-white font-black text-xs border-t-2 border-slate-800">
-                  <td colSpan={4} className="py-2 px-3 text-right uppercase tracking-wider">
-                    TOTAL EXPORTER RECORD HISTORY:
-                  </td>
-                  <td
-                    data-testid="exporter-history-total-debit"
-                    className="py-2 px-2.5 text-right font-mono text-amber-300 border-l border-slate-700"
-                  >
-                    {formatRMB(historyTotals.totalDebit)}
-                  </td>
-                  <td
-                    data-testid="exporter-history-total-credit"
-                    className="py-2 px-2.5 text-right font-mono text-emerald-300 border-l border-slate-700"
-                  >
-                    {formatRMB(historyTotals.totalCredit)}
-                  </td>
-                  <td
-                    data-testid="exporter-history-total-balance"
-                    className="py-2 px-2.5 text-right font-mono text-rose-300 border-l border-slate-700"
-                  >
-                    {formatRMB(historyTotals.totalBalance)}
-                  </td>
-                  <td
-                    colSpan={2}
-                    className="py-2 px-2.5 text-center font-mono text-[11px] text-slate-200 border-l border-slate-700"
-                  >
-                    {historyTotals.paidCount} PAID ·{' '}
-                    {historyTotals.reportCount + historyTotals.noReportCount} UNPAID
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
       </div>
 
       {/* Main "Exporter Payment Slip" Spreadsheet Canvas */}
@@ -1315,17 +1084,17 @@ export const ExporterPaymentSlipView: React.FC = () => {
               </div>
             </div>
 
-            {/* 4. 7-Column Bilingual Exporter Payment Slip Table inside Scrollable Box */}
+            {/* 4. 7-Column Bilingual Exporter Payment Slip Table */}
             <div className="p-2.5 bg-[#faefd0] border-b-2 border-black">
               <div
                 data-testid="exporter-payment-slip-scroll-box"
-                className="max-h-[420px] overflow-y-auto overflow-x-auto border-2 border-black rounded-lg bg-[#faefd0] shadow-inner"
+                className="overflow-x-auto border-2 border-black rounded-lg bg-[#faefd0]"
               >
             <table
               className="w-full border-collapse text-center"
               data-testid="exporter-payment-slip-table"
             >
-              <thead className="sticky top-0 z-10 shadow-xs">
+              <thead>
                 <tr className="bg-[#98486f] text-white text-xs sm:text-sm font-bold uppercase border-b-2 border-black">
                   <th className="py-2.5 px-2 border-r-2 border-black w-36">
                     <div>DATE</div>
@@ -1501,7 +1270,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
               </tbody>
 
               {/* 5. GRAND TOTAL 累计 Plum Footer Row */}
-              <tfoot className="sticky bottom-0 z-10">
+              <tfoot>
                 <tr className="bg-[#98486f] text-white border-t-2 border-b-2 border-black text-sm sm:text-base font-black">
                   <td
                     colSpan={3}
@@ -1612,60 +1381,35 @@ export const ExporterPaymentSlipView: React.FC = () => {
         </div>
       </div>
 
-      {/* Interactive PNG WeChat & WhatsApp Share Modal */}
+      {/* Interactive PNG WeChat Share Modal */}
       {isShareModalOpen && (
         <PngShareModal
           isOpen={isShareModalOpen}
           onClose={() => setIsShareModalOpen(false)}
-          title={`Exporter Payment Slip (付款单) — ${selectedMark} (${selectedDate})`}
+          title={`Exporter Payment Slip (付款单) — ${selectedMark} (${
+            dateFilterMode === 'range' && (fromDate || toDate)
+              ? `${fromDate || 'Start'} to ${toDate || 'Present'}`
+              : selectedDate
+          })`}
           documentType="exporter_payment_slip"
           documentData={{
             shippingMark: selectedMark,
-            packingDate: selectedDate,
+            packingDate:
+              dateFilterMode === 'range' && (fromDate || toDate)
+                ? `${fromDate || 'Start'} to ${toDate || 'Present'}`
+                : selectedDate,
             totalRmb: totals.totalAmount,
             totalBdt: totals.totalAmount * (companyProfile.rmbExchangeRate || 16.5),
             flight: selectedFlight,
           }}
           targetElementId="exporter-payment-slip-canvas"
-          defaultFilename={formatExporterSlipExportFilename(selectedMark, selectedDate, 'png')}
-          defaultPhone=""
+          defaultFilename={formatExporterSlipExportFilename(
+            selectedMark,
+            dateFilterMode === 'range' ? 'ALL' : selectedDate,
+            'png',
+            dateFilterMode === 'range' && (fromDate || toDate) ? { fromDate, toDate } : undefined
+          )}
         />
-      )}
-
-      {/* Visual Toast Notification Confirmation for Copy Link */}
-      {copyLinkToast && (
-        <div
-          role="status"
-          aria-live="polite"
-          data-testid="copy-link-toast-confirmation"
-          className="fixed bottom-4 right-4 z-[70] w-full max-w-md bg-[#0f3d4c] text-white rounded-xl shadow-2xl border-2 border-[#07C160] p-3.5 flex items-start justify-between gap-3 print:hidden"
-        >
-          <div className="flex items-start gap-2.5 min-w-0">
-            <div className="p-1.5 rounded-lg bg-[#07C160] text-white shrink-0 mt-0.5 shadow-xs">
-              <CheckCircle2 className="w-4 h-4" />
-            </div>
-            <div className="space-y-1 min-w-0">
-              <div className="font-black text-xs sm:text-sm text-emerald-300 tracking-wide">
-                {copyLinkToast.title}
-              </div>
-              <p className="text-[11px] text-slate-100 font-semibold leading-snug">
-                {copyLinkToast.message}
-              </p>
-              <div className="bg-slate-950/60 border border-teal-700/80 rounded px-2 py-1 font-mono text-[10px] text-amber-200 truncate">
-                {copyLinkToast.copiedUrl}
-              </div>
-            </div>
-          </div>
-          <button
-            type="button"
-            aria-label="Dismiss Copy Link Toast Notification"
-            data-testid="dismiss-copy-link-toast-btn"
-            onClick={() => setCopyLinkToast(null)}
-            className="text-slate-300 hover:text-white p-1 rounded hover:bg-slate-800/60 transition cursor-pointer shrink-0"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
       )}
 
       {/* Exporter Record Row Image View & Share by WeChat Modal */}

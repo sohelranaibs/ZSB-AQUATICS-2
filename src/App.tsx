@@ -58,6 +58,7 @@ import {
   computeMomentumScrollLeft,
   computeHorizontalScrollState,
   SWIPE_MOMENTUM_MIN_VELOCITY,
+  bindPassiveTouchListeners,
   loadDisplayPreferences,
   saveDisplayPreferences,
 } from './utils/displayViewport.ts';
@@ -631,19 +632,21 @@ const MainContent: React.FC = () => {
   }, [syncScrollMetricsFromTarget]);
 
   const handleWrapperTouchStart = useCallback(
-    (e: React.TouchEvent<HTMLDivElement>) => {
+    (e: TouchEvent) => {
       if (layoutMetrics.displayMode !== 'smart_mobile' || e.touches.length !== 1) return;
+      if (isInteractiveSwipeExcludedTarget(e.target)) return;
       touchGestureActiveRef.current = true;
       const touch = e.touches[0];
       beginSwipeGesture(touch.clientX, touch.clientY, e.target, null);
     },
-    [beginSwipeGesture, layoutMetrics.displayMode]
+    [beginSwipeGesture, isInteractiveSwipeExcludedTarget, layoutMetrics.displayMode]
   );
 
   const handleWrapperTouchMove = useCallback(
-    (e: React.TouchEvent<HTMLDivElement>) => {
+    (e: TouchEvent) => {
       if (layoutMetrics.displayMode !== 'smart_mobile' || e.touches.length !== 1) return;
       const touch = e.touches[0];
+      // Passive touchmove listener: never calls preventDefault() so mobile browser compositor stays non-blocking
       updateSwipeGesture(touch.clientX, touch.clientY);
     },
     [layoutMetrics.displayMode, updateSwipeGesture]
@@ -655,6 +658,17 @@ const MainContent: React.FC = () => {
       touchGestureActiveRef.current = false;
     }, 80);
   }, [endSwipeGesture]);
+
+  useEffect(() => {
+    const wrapperEl = sheetScrollWrapperRef.current;
+    if (!wrapperEl) return;
+    return bindPassiveTouchListeners(wrapperEl, {
+      onTouchStart: handleWrapperTouchStart,
+      onTouchMove: handleWrapperTouchMove,
+      onTouchEnd: handleWrapperTouchEnd,
+      onTouchCancel: handleWrapperTouchEnd,
+    });
+  }, [handleWrapperTouchStart, handleWrapperTouchMove, handleWrapperTouchEnd]);
 
   const handleWrapperPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -797,6 +811,7 @@ const MainContent: React.FC = () => {
       <div
         ref={sheetScrollWrapperRef}
         data-testid="sheet-viewport-scroll-wrapper"
+        data-passive-touch="true"
         data-swipe-enabled={layoutMetrics.displayMode === 'smart_mobile' ? 'true' : 'false'}
         data-swipe-scrolling={isSwipeScrolling ? 'true' : 'false'}
         data-scroll-left={scrollState.scrollLeft}
@@ -804,10 +819,6 @@ const MainContent: React.FC = () => {
         data-can-scroll-left={scrollState.canScrollLeft ? 'true' : 'false'}
         data-can-scroll-right={scrollState.canScrollRight ? 'true' : 'false'}
         data-scroll-progress={scrollState.scrollProgressPercent}
-        onTouchStart={handleWrapperTouchStart}
-        onTouchMove={handleWrapperTouchMove}
-        onTouchEnd={handleWrapperTouchEnd}
-        onTouchCancel={handleWrapperTouchEnd}
         onPointerDown={handleWrapperPointerDown}
         onPointerMove={handleWrapperPointerMove}
         onPointerUp={handleWrapperPointerUp}

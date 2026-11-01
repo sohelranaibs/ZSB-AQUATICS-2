@@ -26,7 +26,6 @@ import {
   FileDown,
   ImageDown,
 } from 'lucide-react';
-import { ShipmentQrBadge } from './ShipmentQrBadge.tsx';
 import {
   GlobalViewTablePrintBody,
   GlobalOffscreenPrintHost,
@@ -39,7 +38,6 @@ import { PaymentRecord } from '../types/index.ts';
 import { COMPANY_LOGO_URL } from '../context/initialData.ts';
 import {
   PngShareModal,
-  WhatsAppIcon,
   WeChatIcon,
 } from './PngShareModal.tsx';
 
@@ -49,13 +47,11 @@ export const PrintPreviewModal: React.FC = () => {
     closePrintModal,
     companyProfile,
     showToast,
-    openShipmentDetails,
     globalViewReport,
   } = useApp();
   const [isSavingPdf, setIsSavingPdf] = useState(false);
   const [isSavingPng, setIsSavingPng] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [shareModalChannel, setShareModalChannel] = useState<'whatsapp' | 'wechat'>('whatsapp');
 
   if (!printModalData.isOpen) {
     return (
@@ -265,30 +261,11 @@ export const PrintPreviewModal: React.FC = () => {
               )}
             </button>
 
-            {/* Share via WhatsApp Button */}
-            <button
-              type="button"
-              data-testid="print-share-whatsapp-btn"
-              onClick={() => {
-                setShareModalChannel('whatsapp');
-                setIsShareModalOpen(true);
-              }}
-              disabled={isSavingPng || isSavingPdf}
-              className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#25D366] hover:bg-[#20ba5a] text-white rounded text-xs font-bold shadow transition cursor-pointer disabled:opacity-50"
-              title="Share .PNG image via WhatsApp"
-            >
-              <WhatsAppIcon className="w-4 h-4 text-white" />
-              <span>WhatsApp</span>
-            </button>
-
             {/* Share via WeChat (微信) Button */}
             <button
               type="button"
               data-testid="print-share-wechat-btn"
-              onClick={() => {
-                setShareModalChannel('wechat');
-                setIsShareModalOpen(true);
-              }}
+              onClick={() => setIsShareModalOpen(true)}
               disabled={isSavingPng || isSavingPdf}
               className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#07C160] hover:bg-[#06a853] text-white rounded text-xs font-bold shadow transition cursor-pointer disabled:opacity-50"
               title="Share .PNG image via WeChat (微信)"
@@ -614,24 +591,6 @@ export const PrintPreviewModal: React.FC = () => {
                   <strong className="text-slate-700">Flight &amp; Handling Remarks:</strong> {data.remarks}
                 </div>
               )}
-
-              {/* Shipment QR Code for Direct System Lookup */}
-              <ShipmentQrBadge
-                shipment={{
-                  id: data.id,
-                  invoiceNumber: data.invoiceNumber || 'PKG',
-                  shippingMark: data.shippingMark || '',
-                  packingDate: data.packingDate || '',
-                  flight: data.flight,
-                  destination: data.destination,
-                  totalBox: data.totalBox,
-                  totalWeight: data.totalWeight,
-                  totalAmount: data.totalAmount,
-                }}
-                showInteractiveControls={true}
-                onOpenInSystem={openShipmentDetails}
-                testIdPrefix="print-modal-shipment-qr"
-              />
             </div>
           )}
 
@@ -1608,7 +1567,7 @@ export const PrintPreviewModal: React.FC = () => {
       companyProfile={companyProfile}
     />
 
-    {/* Interactive PNG WhatsApp & WeChat Share Modal */}
+    {/* Interactive PNG WeChat Share Modal */}
     {isShareModalOpen && (
       <PngShareModal
         isOpen={isShareModalOpen}
@@ -1618,7 +1577,6 @@ export const PrintPreviewModal: React.FC = () => {
         documentData={data}
         targetElementId="printable-document"
         defaultFilename={getCleanFilename('png')}
-        defaultPhone=""
       />
     )}
   </div>

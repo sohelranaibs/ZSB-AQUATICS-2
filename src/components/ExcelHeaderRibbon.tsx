@@ -218,77 +218,77 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
     },
     {
       id: 'air_way_bill',
-      num: 'FRB',
+      num: '04',
       label: 'FLIGHT RETURN BILL',
       shortLabel: 'Flight Return Bill',
     },
     {
       id: 'payment_form',
-      num: '04',
+      num: '05',
       label: 'Supplier Payment Form',
       shortLabel: 'Supplier Payment',
     },
     {
       id: 'exporter_payment_form',
-      num: '05',
+      num: '06',
       label: 'Exporter Payment Form',
       shortLabel: 'Exporter Payment',
     },
     {
       id: 'exporter_payment_slip',
-      num: '06',
+      num: '07',
       label: 'Exporter Payment Slip 付款单',
       shortLabel: 'Payment Slip 付款单',
     },
     {
       id: 'profit_loss',
-      num: '07',
+      num: '08',
       label: 'Loss & Profit Analysis',
       shortLabel: 'Loss & Profit',
     },
     {
       id: 'purchase_db',
-      num: '08',
+      num: '09',
       label: 'Purchase Database',
       shortLabel: 'Purchase DB',
       badge: purchases.length,
     },
     {
       id: 'packing_db',
-      num: '09',
+      num: '10',
       label: 'Packing List Database',
       shortLabel: 'Packing DB',
       badge: packings.length,
     },
     {
       id: 'payment_db',
-      num: '10',
+      num: '11',
       label: 'Payment Vouchers DB',
       shortLabel: 'Payment DB',
       badge: payments.length,
     },
     {
       id: 'search_reports',
-      num: '11',
+      num: '12',
       label: 'Search & Audit Reports',
       shortLabel: 'Search & Reports',
     },
     {
       id: 'settings',
-      num: '12',
+      num: '13',
       label: 'Settings & Config',
       shortLabel: 'Settings',
     },
     {
       id: 'audit_logs',
-      num: '13',
+      num: '14',
       label: 'System Audit Logs',
       shortLabel: 'Audit Logs',
       badge: auditLogs.length,
     },
     {
       id: 'administration',
-      num: 'ADM',
+      num: '15',
       label: 'Administration (Super Admin 🔒)',
       shortLabel: 'Admin 🔒',
     },
@@ -809,29 +809,32 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
           <span className="hidden sm:inline">Sheets ({workbookSheets.length}):</span>
         </div>
 
-        {workbookSheets.map((s) => {
+        {workbookSheets.map((s, idx) => {
           const isActive = activeTab === s.id;
+          const serialStr = String(idx + 1).padStart(2, '0');
           return (
             <button
               key={s.id}
               type="button"
               data-testid={`sheet-tab-${s.id}`}
+              data-serial-number={serialStr}
               onClick={() => setActiveTab(s.id)}
               className={`flex items-center space-x-1.5 px-2.5 py-1.5 text-xs font-bold rounded-t-lg transition-all shrink-0 cursor-pointer ${
                 isActive
                   ? 'bg-[#1e293b] text-amber-300 border-t-2 border-t-amber-400 border-x border-slate-700/80 shadow-md font-black'
                   : 'bg-slate-900/90 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-800/80 font-semibold'
               }`}
-              title={`Switch to Sheet [${s.num}] ${s.label}`}
+              title={`Switch to Sheet #${serialStr} · ${s.label}`}
             >
               <span
-                className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${
+                data-testid={`sheet-tab-serial-${s.id}`}
+                className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-mono font-black tracking-tight shadow-2xs ${
                   isActive
-                    ? 'bg-amber-400 text-slate-950 font-black'
-                    : 'bg-slate-950 text-amber-400/90 border border-amber-500/30'
+                    ? 'bg-gradient-to-b from-amber-300 to-amber-500 text-slate-950 border border-amber-200 ring-1 ring-amber-400/50'
+                    : 'bg-gradient-to-b from-slate-800 to-slate-950 text-amber-300 border border-amber-500/40'
                 }`}
               >
-                {s.num}
+                #{serialStr}
               </span>
               <span className="whitespace-nowrap">{s.shortLabel || s.label}</span>
               {s.badge !== undefined && (

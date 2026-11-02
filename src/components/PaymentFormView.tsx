@@ -1419,8 +1419,10 @@ export const PaymentFormView: React.FC = () => {
                               : 'bg-slate-50/70 hover:bg-blue-50/30 h-10'
                           }
                         >
-                          <td className="p-1.5 border-r border-slate-200 text-center font-mono font-bold text-slate-500 w-12">
-                            {idx + 1}
+                          <td className="p-1.5 border-r border-slate-200 text-center w-12">
+                            <span className="zsb-sl-badge">
+                              {String(idx + 1).padStart(2, '0')}
+                            </span>
                           </td>
 
                           {/* Editable Date */}

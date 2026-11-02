@@ -1096,6 +1096,10 @@ export const ExporterPaymentSlipView: React.FC = () => {
             >
               <thead>
                 <tr className="bg-[#98486f] text-white text-xs sm:text-sm font-bold uppercase border-b-2 border-black">
+                  <th className="py-2.5 px-2 border-r-2 border-black w-16">
+                    <div>SL #</div>
+                    <div className="text-xs font-normal mt-0.5">序号</div>
+                  </th>
                   <th className="py-2.5 px-2 border-r-2 border-black w-36">
                     <div>DATE</div>
                     <div className="text-xs font-normal mt-0.5">发货日期</div>
@@ -1133,6 +1137,13 @@ export const ExporterPaymentSlipView: React.FC = () => {
                       key={row.id}
                       className="border-b border-black h-12 text-xs sm:text-sm font-bold hover:bg-[#f5e4b3] transition-colors"
                     >
+                      {/* 0. SL # 序号 */}
+                      <td className="py-1 px-1.5 border-r-2 border-black text-center">
+                        <span className="zsb-sl-badge">
+                          {String(idx + 1).padStart(2, '0')}
+                        </span>
+                      </td>
+
                       {/* 1. DATE 发货日期 */}
                       <td className="py-1 px-1.5 border-r-2 border-black font-mono">
                         <input
@@ -1273,7 +1284,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
               <tfoot>
                 <tr className="bg-[#98486f] text-white border-t-2 border-b-2 border-black text-sm sm:text-base font-black">
                   <td
-                    colSpan={3}
+                    colSpan={4}
                     className="py-2.5 px-4 border-r-2 border-black text-center uppercase tracking-wide"
                   >
                     GRAND TOTAL 累计

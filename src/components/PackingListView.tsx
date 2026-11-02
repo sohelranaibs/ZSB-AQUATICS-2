@@ -1039,8 +1039,10 @@ export const PackingListView: React.FC = () => {
                         }`}
                       >
                         {/* Row Number */}
-                        <td className="px-2 py-1.5 border-r border-slate-200 text-center font-mono tabular-nums text-slate-500 font-semibold">
-                          {String(idx + 1).padStart(2, '0')}
+                        <td className="px-2 py-1.5 border-r border-slate-200 text-center">
+                          <span className="zsb-sl-badge">
+                            {String(idx + 1).padStart(2, '0')}
+                          </span>
                         </td>
 
                         {/* Item Dropdown */}

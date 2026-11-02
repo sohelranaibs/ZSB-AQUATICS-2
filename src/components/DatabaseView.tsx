@@ -1187,6 +1187,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 <table className="w-full text-left border-collapse text-xs font-mono">
                   <thead className="bg-[#1d5ec1] text-white font-bold uppercase text-[11px] tracking-wider border-b border-blue-900">
                     <tr>
+                      <th className="px-2 py-2 border-r border-blue-400/40 w-12 text-center">SL #</th>
                       <th className="px-3 py-2 border-r border-blue-400/40 w-32 text-center">DATE</th>
                       <th className="px-3 py-2 border-r border-blue-400/40 min-w-[160px]">SUPLIER NAME</th>
                       <th className="px-3 py-2 border-r border-blue-400/40 text-right w-36">DEBIT AMOUNT</th>
@@ -1197,7 +1198,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   <tbody className="divide-y divide-slate-200">
                     {syncSupplierLedgerRows.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-4 py-8 text-center text-slate-400 italic bg-slate-50 font-sans">
+                        <td colSpan={6} className="px-4 py-8 text-center text-slate-400 italic bg-slate-50 font-sans">
                           No purchase bills or supplier payment vouchers found for the selected supplier.
                         </td>
                       </tr>
@@ -1211,6 +1212,11 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                               isEven ? 'bg-slate-50/70' : 'bg-white'
                             }`}
                           >
+                            <td className="px-2 py-2 border-r border-slate-200 text-center whitespace-nowrap">
+                              <span className="zsb-sl-badge">
+                                {String(idx + 1).padStart(2, '0')}
+                              </span>
+                            </td>
                             <td className="px-3 py-2 border-r border-slate-200 text-center font-bold text-slate-700 whitespace-nowrap">
                               {formatDateImageStyle(row.date)}
                             </td>
@@ -1234,7 +1240,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   {syncSupplierLedgerRows.length > 0 && (
                     <tfoot className="bg-slate-100 font-bold border-t-2 border-slate-400 text-slate-900 text-xs">
                       <tr>
-                        <td colSpan={2} className="px-3 py-2 border-r border-slate-300 uppercase text-right font-sans font-black">
+                        <td colSpan={3} className="px-3 py-2 border-r border-slate-300 uppercase text-right font-sans font-black">
                           TOTALS ({syncSupplierLedgerRows.length} ENTRIES):
                         </td>
                         <td className="px-3 py-2 border-r border-slate-300 text-right font-black text-slate-950">
@@ -1686,6 +1692,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                       }
                     />
                   </th>
+                  <th className="px-1.5 py-2 w-10 text-center whitespace-nowrap">SL #</th>
                   {renderSortableHeader('invoiceNumber', 'INVOICE NO', 'left', 'whitespace-nowrap')}
                   {renderSortableHeader('date', 'DATE', 'left', 'whitespace-nowrap')}
                   {renderSortableHeader('description', 'SUPPLIER / DESCRIPTION', 'left')}
@@ -1701,7 +1708,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               <tbody className="divide-y divide-slate-200 font-medium">
                 {sortedPurchases.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="p-8 text-center text-slate-400">
+                    <td colSpan={12} className="p-8 text-center text-slate-400">
                       No purchase records found.
                     </td>
                   </tr>
@@ -1732,6 +1739,11 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             checked={isSelected}
                             onChange={() => toggleSelectOne(p.id)}
                           />
+                        </td>
+                        <td className="px-1.5 py-1.5 text-center whitespace-nowrap">
+                          <span className="zsb-sl-badge">
+                            {String(idx + 1).padStart(2, '0')}
+                          </span>
                         </td>
                         <DatabaseValidatedCell
                           recordId={p.id}
@@ -1964,6 +1976,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         }
                       />
                     </th>
+                    <th className="px-1 py-2 w-10 text-center whitespace-nowrap">SL #</th>
                     {renderSortableHeader('invoiceNumber', 'PACKING NO', 'left', 'whitespace-nowrap')}
                     {renderSortableHeader('date', 'DATE', 'left', 'whitespace-nowrap')}
                     {renderSortableHeader('shippingMark', 'SHIPPING MARK', 'left')}
@@ -1982,7 +1995,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 <tbody className="divide-y divide-slate-200 font-medium">
                   {sortedPackings.length === 0 ? (
                     <tr>
-                      <td colSpan={14} className="p-8 text-center text-slate-400">
+                      <td colSpan={15} className="p-8 text-center text-slate-400">
                         No packing list records found.
                       </td>
                     </tr>
@@ -2017,6 +2030,11 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             checked={isSelected}
                             onChange={() => toggleSelectOne(pkg.id)}
                           />
+                        </td>
+                        <td className="px-1 py-1.5 text-center whitespace-nowrap">
+                          <span className="zsb-sl-badge">
+                            {String(idx + 1).padStart(2, '0')}
+                          </span>
                         </td>
                         <DatabaseValidatedCell
                           recordId={pkg.id}
@@ -2266,7 +2284,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               {filteredPackings.length > 0 && (
                 <tfoot>
                   <tr className="bg-teal-50 font-black border-t-2 border-teal-200 text-[11px]">
-                    <td colSpan={8} className="px-1.5 py-2 text-right uppercase text-teal-950">
+                    <td colSpan={9} className="px-1.5 py-2 text-right uppercase text-teal-950">
                       PACKING DB TOTALS:
                     </td>
                     <td className="px-1.5 py-2 text-right font-mono text-slate-900 whitespace-nowrap">
@@ -2383,6 +2401,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         }
                       />
                     </th>
+                    <th className="px-1.5 py-2 w-10 text-center whitespace-nowrap">SL #</th>
                     {renderSortableHeader('invoiceNumber', 'PAYMENT NO', 'left', 'whitespace-nowrap')}
                     {renderSortableHeader('type', 'TYPE', 'left', 'whitespace-nowrap')}
                     {renderSortableHeader('date', 'DATE', 'left', 'whitespace-nowrap')}
@@ -2397,7 +2416,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 <tbody className="divide-y divide-slate-200 font-medium">
                   {sortedPayments.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="p-8 text-center text-slate-400">
+                      <td colSpan={11} className="p-8 text-center text-slate-400">
                         No payment records found.
                       </td>
                     </tr>
@@ -2429,6 +2448,11 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                               checked={isSelected}
                               onChange={() => toggleSelectOne(pm.id)}
                             />
+                          </td>
+                          <td className="px-1.5 py-1.5 text-center whitespace-nowrap">
+                            <span className="zsb-sl-badge">
+                              {String(idx + 1).padStart(2, '0')}
+                            </span>
                           </td>
                           <DatabaseValidatedCell
                             recordId={pm.id}

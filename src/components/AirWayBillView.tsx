@@ -674,20 +674,21 @@ export const AirWayBillView: React.FC = () => {
           className="text-xs font-sans select-none"
         >
           <colgroup>
-            <col style={{ width: '12%' }} />
-            <col style={{ width: '14%' }} />
-            <col style={{ width: '11%' }} />
+            <col style={{ width: '6%' }} />
             <col style={{ width: '11%' }} />
             <col style={{ width: '13%' }} />
-            <col style={{ width: '14%' }} />
-            <col style={{ width: '9%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '13%' }} />
+            <col style={{ width: '8%' }} />
             <col style={{ width: '16%' }} />
           </colgroup>
           <thead>
             {/* Row 1: Deep Blue "AIR WAY BILL" Title Banner */}
             <tr>
               <th
-                colSpan={8}
+                colSpan={9}
                 style={{
                   backgroundColor: '#2f75b5',
                   color: '#ffffff',
@@ -708,6 +709,9 @@ export const AirWayBillView: React.FC = () => {
               }}
               className="text-[10.5px] sm:text-[11px] font-extrabold uppercase text-center leading-tight"
             >
+              <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+                SL #
+              </th>
               <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
                 DATE
               </th>
@@ -747,6 +751,16 @@ export const AirWayBillView: React.FC = () => {
                   style={{ backgroundColor: '#ffffff', color: '#000000' }}
                   className="hover:bg-sky-50/40 transition"
                 >
+                  {/* 0. SL # */}
+                  <td
+                    style={{ border: '1.5px solid #000000', height: '30px' }}
+                    className="p-0.5 text-center"
+                  >
+                    <span className="zsb-sl-badge">
+                      {String(rowNum).padStart(2, '0')}
+                    </span>
+                  </td>
+
                   {/* 1. DATE */}
                   <td
                     style={{ border: '1.5px solid #000000', height: '30px' }}
@@ -903,7 +917,7 @@ export const AirWayBillView: React.FC = () => {
           <tfoot>
             <tr>
               <td
-                colSpan={4}
+                colSpan={5}
                 style={{ border: 'none', backgroundColor: 'transparent' }}
                 className="py-1.5 px-1 text-left text-[11px] text-slate-500 font-mono print:text-transparent"
               >

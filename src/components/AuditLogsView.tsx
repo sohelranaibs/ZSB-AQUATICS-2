@@ -548,6 +548,7 @@ export const AuditLogsView: React.FC = () => {
             >
               <thead>
                 <tr className="bg-slate-900 text-white font-bold uppercase text-[11px] border-b border-slate-800">
+                  <th className="py-2.5 px-2 text-center w-12">SL #</th>
                   <th className="py-2.5 px-3.5">TIMESTAMP</th>
                   <th className="py-2.5 px-3 text-center">ACTION</th>
                   <th className="py-2.5 px-3">MODULE</th>
@@ -560,7 +561,7 @@ export const AuditLogsView: React.FC = () => {
                 {filteredLogs.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       data-testid="audit-logs-empty-state"
                       className="py-10 px-4 text-center text-slate-500 space-y-1"
                     >
@@ -573,7 +574,7 @@ export const AuditLogsView: React.FC = () => {
                     </td>
                   </tr>
                 ) : (
-                  filteredLogs.map((log) => {
+                  filteredLogs.map((log, idx) => {
                     const badge = getActionBadgeStyle(log.action);
                     return (
                       <tr
@@ -581,6 +582,9 @@ export const AuditLogsView: React.FC = () => {
                         data-testid={`audit-log-row-${log.id}`}
                         className="hover:bg-slate-50/90 transition"
                       >
+                        <td className="py-2.5 px-2 text-center whitespace-nowrap">
+                          <span className="zsb-sl-badge">{String(idx + 1).padStart(2, '0')}</span>
+                        </td>
                         <td className="py-2.5 px-3.5 font-mono text-[11px] text-slate-600 whitespace-nowrap tabular-nums">
                           {formatTimestampDisplay(log.timestamp)}
                         </td>

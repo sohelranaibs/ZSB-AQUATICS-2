@@ -786,6 +786,7 @@ export const SearchReportsView: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-100 text-slate-700 uppercase font-bold text-[10px] border-b">
                 <tr>
+                  <th className="p-2.5 w-12 text-center">SL #</th>
                   <th className="p-2.5">DATE</th>
                   <th className="p-2.5">TYPE</th>
                   <th className="p-2.5">REF / INVOICE</th>
@@ -798,9 +799,14 @@ export const SearchReportsView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {unifiedTransactions.map((tx) => {
+                {unifiedTransactions.map((tx, idx) => {
                   return (
                     <tr key={tx.id} className="hover:bg-slate-50/80 transition-colors">
+                      {/* SL # */}
+                      <td className="p-2.5 text-center whitespace-nowrap">
+                        <span className="zsb-sl-badge">{String(idx + 1).padStart(2, '0')}</span>
+                      </td>
+
                       {/* Date */}
                       <td className="p-2.5 font-mono text-slate-600 whitespace-nowrap">
                         {formatDate(tx.date)}

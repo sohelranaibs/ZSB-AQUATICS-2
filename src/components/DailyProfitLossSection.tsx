@@ -453,6 +453,7 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
         >
           <thead className="bg-slate-800 text-white uppercase text-[10px] font-bold tracking-wider border-b border-slate-700 whitespace-nowrap">
             <tr>
+              <th className="py-2.5 px-2 text-center w-12">SL #</th>
               <th className="py-2.5 px-3 text-left">Date &amp; Particulars</th>
               <th className="py-2.5 px-2.5 text-right">Export Revenue (A)</th>
               <th className="py-2.5 px-2.5 text-right">Purchase Cost (B)</th>
@@ -466,12 +467,12 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
           <tbody className="divide-y divide-slate-200 font-mono tabular-nums">
             {dailyReport.entries.length === 0 ? (
               <tr>
-                <td colSpan={8} className="py-8 text-center text-slate-500 font-sans">
+                <td colSpan={9} className="py-8 text-center text-slate-500 font-sans">
                   No daily profit &amp; loss records match the active filter criteria.
                 </td>
               </tr>
             ) : (
-              dailyReport.entries.map((entry) => {
+              dailyReport.entries.map((entry, idx) => {
                 const isSelected = activeDayEntry?.date === entry.date;
                 const isProfit = entry.netProfit > 0;
                 const isLoss = entry.netProfit < 0;
@@ -489,6 +490,11 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
                         : 'hover:bg-slate-50'
                     }`}
                   >
+                    {/* SL # */}
+                    <td className="py-2.5 px-2 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <span className="zsb-sl-badge">{String(idx + 1).padStart(2, '0')}</span>
+                    </td>
+
                     {/* Date & Activity Summary */}
                     <td className="py-2.5 px-3 font-sans whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
@@ -664,6 +670,9 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
           {dailyReport.entries.length > 0 && (
             <tfoot className="bg-slate-900 text-white font-mono text-xs font-black border-t-2 border-amber-500 whitespace-nowrap">
               <tr>
+                <td className="py-3 px-2 text-center text-amber-400 font-mono text-[11px] font-black">
+                  Σ
+                </td>
                 <td className="py-3 px-3 font-sans uppercase">
                   TOTAL ({totals.totalDays} {totals.totalDays === 1 ? 'DAY' : 'DAYS'}):
                 </td>

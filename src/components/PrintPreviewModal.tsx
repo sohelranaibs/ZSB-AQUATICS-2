@@ -448,7 +448,9 @@ export const PrintPreviewModal: React.FC = () => {
                   {items && items.length > 0 ? (
                     items.map((row: any, i: number) => (
                       <tr key={i} className="font-medium">
-                        <td className="p-2 border-r border-slate-200 text-center font-mono">{i + 1}</td>
+                        <td className="p-2 border-r border-slate-200 text-center whitespace-nowrap">
+                          <span className="zsb-sl-badge">{String(i + 1).padStart(2, '0')}</span>
+                        </td>
                         <td className="p-2 border-r border-slate-200 font-bold">{row.item}</td>
                         <td className="p-2 border-r border-slate-200 text-right font-mono tabular-nums">{row.quantity}</td>
                         <td className="p-2 border-r border-slate-200 text-right font-mono tabular-nums">
@@ -552,7 +554,9 @@ export const PrintPreviewModal: React.FC = () => {
                   {items && items.length > 0 ? (
                     items.map((row: any, i: number) => (
                       <tr key={i} className="font-medium">
-                        <td className="p-2 border-r border-slate-200 text-center font-mono">{i + 1}</td>
+                        <td className="p-2 border-r border-slate-200 text-center whitespace-nowrap">
+                          <span className="zsb-sl-badge">{String(i + 1).padStart(2, '0')}</span>
+                        </td>
                         <td className="p-2 border-r border-slate-200 font-bold">{row.item}</td>
                         <td className="p-2 border-r border-slate-200 text-center font-mono">{row.box}</td>
                         <td className="p-2 border-r border-slate-200 text-center font-mono">{row.weight}</td>
@@ -822,7 +826,9 @@ export const PrintPreviewModal: React.FC = () => {
                   {items && items.length > 0 ? (
                     items.map((row: any, i: number) => (
                       <tr key={i} className="font-medium">
-                        <td className="p-2 border-r border-slate-200 text-center font-mono">{i + 1}</td>
+                        <td className="p-2 border-r border-slate-200 text-center whitespace-nowrap">
+                          <span className="zsb-sl-badge">{String(i + 1).padStart(2, '0')}</span>
+                        </td>
                         <td className="p-2 border-r border-slate-200">{row.description}</td>
                         <td className="p-2 border-r border-slate-200 text-right font-mono">
                           {formatCurrency(row.debitAmount, '')}
@@ -917,7 +923,9 @@ export const PrintPreviewModal: React.FC = () => {
                   <tbody className="divide-y divide-slate-200">
                     {data.records.map((rec: any, idx: number) => (
                       <tr key={idx} className="font-medium">
-                        <td className="p-2 border-r border-slate-200 text-center font-mono">{idx + 1}</td>
+                        <td className="p-2 border-r border-slate-200 text-center whitespace-nowrap">
+                          <span className="zsb-sl-badge">{String(idx + 1).padStart(2, '0')}</span>
+                        </td>
                         <td className="p-2 border-r border-slate-200 font-mono font-bold">{rec.invoiceNumber}</td>
                         <td className="p-2 border-r border-slate-200 font-mono">{formatDate(rec.date || rec.packingDate)}</td>
                         <td className="p-2 border-r border-slate-200 font-semibold">{rec.description || rec.shippingMark}</td>
@@ -1211,7 +1219,9 @@ export const PrintPreviewModal: React.FC = () => {
                     ) : (
                       data.speciesBreakdown.map((row: any, idx: number) => (
                         <tr key={row.species} className="hover:bg-slate-50">
-                          <td className="p-2 text-center font-mono text-slate-500">{idx + 1}</td>
+                          <td className="p-2 text-center whitespace-nowrap">
+                            <span className="zsb-sl-badge">{String(idx + 1).padStart(2, '0')}</span>
+                          </td>
                           <td className="p-2 font-mono font-bold text-purple-950">{row.species}</td>
                           <td className="p-2 text-right font-mono font-black text-rose-700">
                             {row.totalLossKg} KG
@@ -1277,7 +1287,9 @@ export const PrintPreviewModal: React.FC = () => {
                     ) : (
                       data.records.map((rec: any, idx: number) => (
                         <tr key={rec.id} className="hover:bg-slate-50">
-                          <td className="p-2 text-center font-mono text-slate-500">{idx + 1}</td>
+                          <td className="p-2 text-center whitespace-nowrap">
+                            <span className="zsb-sl-badge">{String(idx + 1).padStart(2, '0')}</span>
+                          </td>
                           <td className="p-2 font-mono text-slate-700">{formatDate(rec.date)}</td>
                           <td className="p-2 font-mono font-bold text-purple-950">{rec.species}</td>
                           <td className="p-2 text-right font-mono font-black text-rose-700">

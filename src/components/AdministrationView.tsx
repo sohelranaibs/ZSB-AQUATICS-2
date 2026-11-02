@@ -1466,6 +1466,7 @@ export const AdministrationView: React.FC = () => {
               <table className="w-full text-left text-xs">
                 <thead className="bg-[#1b2b44] text-white font-bold uppercase text-[10.5px]">
                   <tr>
+                    <th className="py-2.5 px-3 text-center w-12">SL #</th>
                     <th className="py-2.5 px-3">Timestamp</th>
                     <th className="py-2.5 px-3">Action</th>
                     <th className="py-2.5 px-3">Module</th>
@@ -1477,13 +1478,16 @@ export const AdministrationView: React.FC = () => {
                 <tbody className="divide-y divide-slate-200 font-sans">
                   {filteredAuditLogs.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-slate-400">
+                      <td colSpan={7} className="py-8 text-center text-slate-400">
                         No audit events match your filter criteria.
                       </td>
                     </tr>
                   ) : (
-                    filteredAuditLogs.map((log) => (
+                    filteredAuditLogs.map((log, idx) => (
                       <tr key={log.id} className="hover:bg-slate-50 transition">
+                        <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                          <span className="zsb-sl-badge">{String(idx + 1).padStart(2, '0')}</span>
+                        </td>
                         <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600 whitespace-nowrap">
                           {formatDate(log.timestamp)} {new Date(log.timestamp).toLocaleTimeString()}
                         </td>

@@ -983,6 +983,7 @@ export const DashboardView: React.FC = () => {
                   >
                     <thead className="bg-purple-50/95 text-purple-950 font-bold uppercase text-[10px] border-b border-purple-200">
                       <tr>
+                        <th className="p-2.5 w-12 text-center">SL #</th>
                         <th className="p-2.5">DATE</th>
                         <th className="p-2.5">SPECIES / GRADE</th>
                         <th className="p-2.5 text-right">MORTALITY LOSS</th>
@@ -995,19 +996,22 @@ export const DashboardView: React.FC = () => {
                     <tbody className="divide-y divide-purple-100 font-medium">
                       {mortalities.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="p-6 text-center text-slate-400 text-xs">
+                          <td colSpan={8} className="p-6 text-center text-slate-400 text-xs">
                             No mortality events recorded yet. Use the form on the left to record mortality losses.
                           </td>
                         </tr>
                       ) : (
                         [...mortalities]
                           .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-                          .map((mort) => (
+                          .map((mort, idx) => (
                             <tr
                               key={mort.id}
                               data-testid={`mortality-row-${mort.id}`}
                               className="hover:bg-purple-50/40 transition"
                             >
+                              <td className="p-2.5 text-center whitespace-nowrap">
+                                <span className="zsb-sl-badge">{String(idx + 1).padStart(2, '0')}</span>
+                              </td>
                               <td className="p-2.5 font-mono text-slate-600 whitespace-nowrap">
                                 {formatDate(mort.date)}
                               </td>
@@ -1822,6 +1826,7 @@ export const DashboardView: React.FC = () => {
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
               <tr>
+                <th className="px-3 py-3 w-12 text-center">SL #</th>
                 <th className="px-4 py-3">Ledger Type</th>
                 <th className="px-4 py-3">Voucher / Document No.</th>
                 <th className="px-4 py-3">Supplier / Shipping Mark</th>
@@ -1834,13 +1839,16 @@ export const DashboardView: React.FC = () => {
             <tbody className="divide-y divide-slate-200/80 font-medium">
               {recentActivities.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
                     No matching records found for this filter.
                   </td>
                 </tr>
               ) : (
-                recentActivities.map((act) => (
+                recentActivities.map((act, idx) => (
                   <tr key={act.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="px-3 py-3 text-center whitespace-nowrap">
+                      <span className="zsb-sl-badge">{String(idx + 1).padStart(2, '0')}</span>
+                    </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span
                         className={`font-semibold ${

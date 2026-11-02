@@ -234,7 +234,9 @@ export const PaymentSlipPrintCard: React.FC<PaymentSlipPrintCardProps> = ({
         <tbody className="divide-y divide-slate-200">
           {items.map((row: any, i: number) => (
             <tr key={i} className="font-medium">
-              <td className="p-2 border-r border-slate-200 text-center font-mono">{i + 1}</td>
+              <td className="p-2 border-r border-slate-200 text-center whitespace-nowrap">
+                <span className="zsb-sl-badge">{String(i + 1).padStart(2, '0')}</span>
+              </td>
               <td className="p-2 border-r border-slate-200 font-semibold">{row.description}</td>
               <td className="p-2 border-r border-slate-200 text-right font-mono tabular-nums">
                 {formatCurrency(row.debitAmount, '')}

@@ -93,7 +93,11 @@ export const GlobalViewTablePrintBody: React.FC<GlobalViewTablePrintBodyProps> =
                               : 'text-left font-semibold'
                           }`}
                         >
-                          {val}
+                          {col.key.toLowerCase().includes('sl') || col.label.toLowerCase().includes('sl') ? (
+                            <span className="zsb-sl-badge">{String(val)}</span>
+                          ) : (
+                            val
+                          )}
                         </td>
                       );
                     })}

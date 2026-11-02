@@ -422,6 +422,7 @@ export const DailyFinancialSummaryWidget: React.FC<DailyFinancialSummaryWidgetPr
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-slate-100 text-slate-700 border-b border-slate-200 font-bold">
+                      <th className="p-2 w-10 text-center">SL #</th>
                       <th className="p-2">Invoice #</th>
                       <th className="p-2">Supplier</th>
                       <th className="p-2 text-right">Qty (KG)</th>
@@ -432,13 +433,16 @@ export const DailyFinancialSummaryWidget: React.FC<DailyFinancialSummaryWidgetPr
                   <tbody className="divide-y divide-slate-200/70">
                     {summary.dailyPurchases.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="p-4 text-center text-slate-500">
+                        <td colSpan={6} className="p-4 text-center text-slate-500">
                           No purchase records found for {formatDate(summary.targetDate)}.
                         </td>
                       </tr>
                     ) : (
-                      summary.dailyPurchases.map((pur) => (
+                      summary.dailyPurchases.map((pur, idx) => (
                         <tr key={pur.id} className="hover:bg-white transition">
+                          <td className="p-2 text-center whitespace-nowrap">
+                            <span className="zsb-sl-badge">{String(idx + 1).padStart(2, '0')}</span>
+                          </td>
                           <td className="p-2 font-mono font-bold text-sky-900">
                             {pur.invoiceNumber}
                           </td>
@@ -485,6 +489,7 @@ export const DailyFinancialSummaryWidget: React.FC<DailyFinancialSummaryWidgetPr
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-slate-100 text-slate-700 border-b border-slate-200 font-bold">
+                      <th className="p-2 w-10 text-center">SL #</th>
                       <th className="p-2">Voucher #</th>
                       <th className="p-2">Party / Account</th>
                       <th className="p-2">Category</th>
@@ -495,13 +500,16 @@ export const DailyFinancialSummaryWidget: React.FC<DailyFinancialSummaryWidgetPr
                   <tbody className="divide-y divide-slate-200/70">
                     {summary.dailyPaymentBreakdown.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="p-4 text-center text-slate-500">
+                        <td colSpan={6} className="p-4 text-center text-slate-500">
                           No payment records found for {formatDate(summary.targetDate)}.
                         </td>
                       </tr>
                     ) : (
-                      summary.dailyPaymentBreakdown.map((pm) => (
+                      summary.dailyPaymentBreakdown.map((pm, idx) => (
                         <tr key={pm.id} className="hover:bg-white transition">
+                          <td className="p-2 text-center whitespace-nowrap">
+                            <span className="zsb-sl-badge">{String(idx + 1).padStart(2, '0')}</span>
+                          </td>
                           <td className="p-2 font-mono font-bold text-emerald-900">
                             {pm.invoiceNumber}
                           </td>

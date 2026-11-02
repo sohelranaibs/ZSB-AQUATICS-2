@@ -765,6 +765,7 @@ export const ProfitLossView: React.FC = () => {
                 <table className="w-full text-xs">
                   <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold border-b border-slate-200">
                     <tr>
+                      <th className="py-2 px-2 text-center w-12">SL #</th>
                       <th className="py-2 px-3 text-left">Month</th>
                       <th className="py-2 px-2.5 text-right">Export Rev</th>
                       <th className="py-2 px-2.5 text-right">Supplier Outflow</th>
@@ -772,7 +773,7 @@ export const ProfitLossView: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200/80 font-mono tabular-nums">
-                    {trendsData.points.map((pt) => {
+                    {trendsData.points.map((pt, idx) => {
                       const isPositiveSpread = pt.netCashflowSpread >= 0;
                       return (
                         <tr
@@ -780,6 +781,9 @@ export const ProfitLossView: React.FC = () => {
                           data-testid={`pl-trend-row-${pt.yearMonth}`}
                           className="hover:bg-white transition"
                         >
+                          <td className="py-2.5 px-2 text-center whitespace-nowrap">
+                            <span className="zsb-sl-badge">{String(idx + 1).padStart(2, '0')}</span>
+                          </td>
                           <td className="py-2.5 px-3 font-sans">
                             <div className="font-bold text-slate-900">{pt.shortMonthLabel}</div>
                             <div className="text-[10px] text-slate-500 font-mono">
@@ -1290,7 +1294,7 @@ export const ProfitLossView: React.FC = () => {
                         >
                           <td className="py-2.5 px-3 font-sans">
                             <div className="flex items-center gap-1.5">
-                              <span className="font-mono font-extrabold text-slate-500 text-[11px]">
+                              <span className="zsb-sl-badge">
                                 #{sup.rank}
                               </span>
                               <span className="font-bold text-slate-900 truncate max-w-[130px]">
@@ -1532,6 +1536,7 @@ export const ProfitLossView: React.FC = () => {
                 <table className="w-full text-xs" data-testid="pl-credit-ledger-table">
                   <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold border-b border-slate-200 whitespace-nowrap">
                     <tr>
+                      <th className="py-2 px-2 text-center w-12">SL #</th>
                       <th className="py-2 px-2.5 text-left">Credit Note &amp; Supplier</th>
                       <th className="py-2 px-2 text-left">Reason &amp; Ref</th>
                       <th className="py-2 px-2 text-right">Issued / Applied</th>
@@ -1542,12 +1547,12 @@ export const ProfitLossView: React.FC = () => {
                   <tbody className="divide-y divide-slate-200/80 font-mono tabular-nums">
                     {filteredCredits.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="py-8 text-center text-slate-500 font-sans">
+                        <td colSpan={6} className="py-8 text-center text-slate-500 font-sans">
                           No supplier credit notes match the selected filter.
                         </td>
                       </tr>
                     ) : (
-                      filteredCredits.map((cn) => {
+                      filteredCredits.map((cn, idx) => {
                         const isAvailable = cn.remainingAmount > 0;
                         return (
                           <tr
@@ -1555,6 +1560,9 @@ export const ProfitLossView: React.FC = () => {
                             data-testid={`pl-credit-row-${cn.creditNoteNumber}`}
                             className="hover:bg-slate-50/80 transition"
                           >
+                            <td className="py-2.5 px-2 text-center whitespace-nowrap">
+                              <span className="zsb-sl-badge">{String(idx + 1).padStart(2, '0')}</span>
+                            </td>
                             <td className="py-2.5 px-2.5 font-sans whitespace-nowrap">
                               <div className="flex items-center gap-1.5">
                                 <span className="font-mono font-extrabold text-teal-900 whitespace-nowrap">

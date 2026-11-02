@@ -394,6 +394,7 @@ export const MonthlyReportsExportView: React.FC<MonthlyReportsExportViewProps> =
           <table className="w-full text-xs text-left border-collapse min-w-[950px]">
             <thead>
               <tr className="bg-slate-900 text-white uppercase text-[11px] font-bold border-b border-slate-800">
+                <th className="py-3 px-2 text-center w-12">SL #</th>
                 <th className="py-3 px-4 w-44">Month / Period</th>
                 <th className="py-3 px-3 text-right">
                   Purchases (KG)
@@ -421,12 +422,12 @@ export const MonthlyReportsExportView: React.FC<MonthlyReportsExportViewProps> =
             <tbody className="divide-y divide-slate-200 font-medium">
               {filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-12 text-center text-slate-500 font-medium bg-slate-50/50">
+                  <td colSpan={13} className="py-12 text-center text-slate-500 font-medium bg-slate-50/50">
                     No monthly transactions found matching your criteria.
                   </td>
                 </tr>
               ) : (
-                filteredItems.map((item) => {
+                filteredItems.map((item, idx) => {
                   const isExpanded = Boolean(expandedMonths[item.yearMonth]);
                   const monthPurchases = purchases.filter((p) => (p.date || '').slice(0, 7) === item.yearMonth);
                   const monthPackings = packings.filter((pk) => (pk.packingDate || '').slice(0, 7) === item.yearMonth);
@@ -434,6 +435,11 @@ export const MonthlyReportsExportView: React.FC<MonthlyReportsExportViewProps> =
                   return (
                     <React.Fragment key={item.yearMonth}>
                       <tr className="hover:bg-amber-50/40 transition">
+                        {/* SL # */}
+                        <td className="py-3 px-2 text-center whitespace-nowrap">
+                          <span className="zsb-sl-badge">{String(idx + 1).padStart(2, '0')}</span>
+                        </td>
+
                         {/* Month / Period */}
                         <td className="py-3 px-4 whitespace-nowrap">
                           <button
@@ -562,7 +568,7 @@ export const MonthlyReportsExportView: React.FC<MonthlyReportsExportViewProps> =
                       {/* Expandable Drill-down of Month Transactions */}
                       {isExpanded && (
                         <tr className="bg-slate-50/90 border-b-2 border-slate-300">
-                          <td colSpan={12} className="p-4">
+                          <td colSpan={13} className="p-4">
                             <div className="bg-white rounded-lg border border-slate-200 p-4 space-y-4 shadow-inner">
                               <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
                                 <div className="text-xs font-bold text-slate-800 flex items-center space-x-2">
@@ -710,6 +716,9 @@ export const MonthlyReportsExportView: React.FC<MonthlyReportsExportViewProps> =
             {filteredItems.length > 0 && (
               <tfoot>
                 <tr className="bg-slate-900 text-white font-bold text-xs border-t-2 border-slate-700">
+                  <td className="py-3 px-2 text-center text-amber-400 font-mono text-[11px] font-black">
+                    Σ
+                  </td>
                   <td className="py-3 px-4 uppercase text-amber-400 font-serif font-black tracking-wider whitespace-nowrap">
                     CUMULATIVE TOTAL ({filteredItems.length} M)
                   </td>

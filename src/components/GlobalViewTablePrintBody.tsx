@@ -260,7 +260,7 @@ export const GlobalOffscreenPrintHost: React.FC<GlobalOffscreenPrintHostProps> =
 
             <div style={{ color: '#000000' }} className="text-xs font-bold font-mono">
               Mobile: {companyProfile.mobiles.join(' , ')} | EMAIL:{' '}
-              {companyProfile.email || 'www.zsbaquatics.com'}
+              {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}
             </div>
 
             <div
@@ -343,7 +343,7 @@ export const GlobalOffscreenPrintHost: React.FC<GlobalOffscreenPrintHostProps> =
               <div className="py-1 px-3 text-xs font-bold uppercase">
                 CONTACT NUMBER - +880 18411-65902, +880 1711 331545 | EMAIL:{' '}
                 <span className="normal-case">
-                  {companyProfile.email || 'www.zsbaquatics.com'}
+                  {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}
                 </span>
               </div>
             </div>

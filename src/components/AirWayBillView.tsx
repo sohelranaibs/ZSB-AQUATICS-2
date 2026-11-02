@@ -656,7 +656,7 @@ export const AirWayBillView: React.FC = () => {
 
           <div style={{ color: '#000000' }} className="text-[11px] font-bold font-mono">
             Mobile: {companyProfile.mobiles.join(' , ')} | EMAIL:{' '}
-            {companyProfile.email || 'www.zsbaquatics.com'}
+            {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}
           </div>
         </div>
 

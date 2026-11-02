@@ -19,6 +19,7 @@ import {
   Lock,
   KeyRound,
   Mail,
+  Globe,
   Archive,
   Download,
 } from 'lucide-react';
@@ -46,7 +47,12 @@ export const SettingsView: React.FC = () => {
   const [address, setAddress] = useState(companyProfile.address);
   const [mobile1, setMobile1] = useState(companyProfile.mobiles[0] || '+8801671036114');
   const [mobile2, setMobile2] = useState(companyProfile.mobiles[1] || '+8801841165902');
-  const [email, setEmail] = useState(companyProfile.email || 'www.zsbaquatics.com');
+  const [email, setEmail] = useState(
+    companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com'
+      ? companyProfile.email
+      : 'zsbaquatics@gmail.com'
+  );
+  const [website, setWebsite] = useState(companyProfile.website || 'www.zsbaquatics.com');
   const [managingPartner, setManagingPartner] = useState(companyProfile.managingPartner);
   const [partner, setPartner] = useState(companyProfile.partner);
 
@@ -103,7 +109,8 @@ export const SettingsView: React.FC = () => {
     updateCompanyProfile({
       address,
       mobiles: [mobile1, mobile2].filter(Boolean),
-      email: email.trim() || 'www.zsbaquatics.com',
+      email: email.trim() || 'zsbaquatics@gmail.com',
+      website: website.trim() || 'www.zsbaquatics.com',
       managingPartner,
       partner,
     });
@@ -252,19 +259,34 @@ export const SettingsView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Email / Official Website */}
-              <div>
-                <label className="font-bold text-slate-700 block mb-1 flex items-center space-x-1">
-                  <Mail className="w-3.5 h-3.5 text-slate-600" />
-                  <span>EMAIL (Black Font in Prints)</span>
-                </label>
-                <input
-                  type="text"
-                  aria-label="EMAIL"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono font-bold text-black"
-                />
+              {/* Email & Website */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1 flex items-center space-x-1">
+                    <Mail className="w-3.5 h-3.5 text-slate-600" />
+                    <span>EMAIL (Black Font in Prints)</span>
+                  </label>
+                  <input
+                    type="text"
+                    aria-label="EMAIL"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono font-bold text-black"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1 flex items-center space-x-1">
+                    <Globe className="w-3.5 h-3.5 text-slate-600" />
+                    <span>WEBSITE</span>
+                  </label>
+                  <input
+                    type="text"
+                    aria-label="WEBSITE"
+                    value={website}
+                    onChange={(e) => setWebsite(e.target.value)}
+                    className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono font-bold text-black"
+                  />
+                </div>
               </div>
 
               {/* Signatures: Managing Partner & Partner */}

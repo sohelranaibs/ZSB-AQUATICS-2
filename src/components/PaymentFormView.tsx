@@ -27,12 +27,18 @@ import {
   SupplierCreditRecord,
   ExporterStatus,
 } from '../types/index.ts';
+import { initialSupplierPaymentSheetRows } from '../context/initialData.ts';
 import { validateSupplierPaymentForm } from '../utils/validation.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
 import {
   ZSB_VIEW_SHORTCUT_EVENT,
   ViewShortcutEventDetail,
 } from '../utils/keyboardShortcuts.ts';
+import {
+  ZSB_PAYMENT_ENTRY_CONFIRMED_EVENT,
+  PaymentSyncEventDetail,
+  emitPaymentSyncTrigger,
+} from '../utils/paymentSync.ts';
 import {
   Save,
   FileText,
@@ -66,12 +72,17 @@ export const PaymentFormView: React.FC = () => {
     dropdownOptions,
     addDropdownItem,
     purchases,
+    updatePurchase,
+    deletePurchase,
     payments,
     addPayment,
+    updatePayment,
+    deletePayment,
     supplierCredits,
     addSupplierCredit,
     applySupplierCredit,
     applySupplierCreditsForPayment,
+    deleteSupplierCredit,
     openPrintModal,
     setActiveTab,
     showToast,
@@ -109,8 +120,63 @@ export const PaymentFormView: React.FC = () => {
     status: 'PAID',
   });
 
-  const [customRows, setCustomRows] = useState<PaymentItemRow[]>([]);
+  const getSupplierBgStyle = (name: string): string => {
+    const norm = (name || '').trim().toUpperCase();
+    if (norm.includes('MAMUN') || norm.includes('ABDULLAH')) return 'bg-rose-100 text-rose-900 border-rose-300 font-bold';
+    if (norm.includes('NURUL')) return 'bg-teal-800 text-white border-teal-900 font-extrabold';
+    if (norm.includes('TONMOY')) return 'bg-pink-100 text-pink-900 border-pink-300 font-bold';
+    if (norm.includes('PROTAP')) return 'bg-orange-100 text-orange-900 border-orange-300 font-bold';
+    if (norm.includes('NAPAL')) return 'bg-amber-100 text-amber-900 border-amber-300 font-bold';
+    if (norm.includes('NOZRUL')) return 'bg-emerald-100 text-emerald-900 border-emerald-300 font-bold';
+    return 'bg-purple-50 text-purple-900 border-purple-200 font-bold';
+  };
+
+  const [customRows, setCustomRows] = useState<PaymentItemRow[]>(() => {
+    try {
+      localStorage.removeItem('zsb_supplier_sheet_custom_rows_v3');
+      const saved = localStorage.getItem('zsb_supplier_sheet_custom_rows_v4');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      return initialSupplierPaymentSheetRows;
+    } catch {
+      return initialSupplierPaymentSheetRows;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('zsb_supplier_sheet_custom_rows_v4', JSON.stringify(customRows));
+    } catch {
+      // ignore
+    }
+  }, [customRows]);
+
   const [rowEdits, setRowEdits] = useState<Record<string, Partial<PaymentItemRow>>>({});
+  const [historySyncRevision, setHistorySyncRevision] = useState<number>(0);
+  const [lastSyncEvent, setLastSyncEvent] = useState<PaymentSyncEventDetail | null>(
+    null
+  );
+
+  // Automated synchronization listener: refreshes 'All Supplier Record History' whenever a payment entry is confirmed
+  useEffect(() => {
+    const handlePaymentSync = (event: Event) => {
+      const customEvent = event as CustomEvent<PaymentSyncEventDetail>;
+      const detail = customEvent.detail;
+      setHistorySyncRevision((prev) => prev + 1);
+      if (detail) {
+        setLastSyncEvent(detail);
+      }
+      // Clear any transient row edits that have now been persisted to the database
+      setRowEdits({});
+    };
+
+    window.addEventListener(ZSB_PAYMENT_ENTRY_CONFIRMED_EVENT, handlePaymentSync);
+    return () => {
+      window.removeEventListener(ZSB_PAYMENT_ENTRY_CONFIRMED_EVENT, handlePaymentSync);
+    };
+  }, []);
 
   // Overall footer summary inputs (empty / 0 by default)
   const [overallPreviousAmount, setOverallPreviousAmount] = useState<number>(0);
@@ -183,6 +249,7 @@ export const PaymentFormView: React.FC = () => {
       historyStatusFilter,
       historySearch,
       historyRecordType,
+      historySyncRevision,
     ]
   );
 
@@ -235,10 +302,34 @@ export const PaymentFormView: React.FC = () => {
     // 2. Supplier Payment Vouchers
     for (const pm of supplierPayments) {
       if (!isMatch(pm.description)) continue;
+      if (pm.id.startsWith('pay-sync-')) continue;
       const rowId = `pay-${pm.id}`;
       const edit = rowEdits[rowId];
-      const baseDebit = Math.round((Number(pm.totalAmount) || 0) * 100) / 100;
-      const baseCredit = Math.round((Number(pm.paidAmount) || 0) * 100) / 100;
+      const standaloneItems = Array.isArray(pm.items)
+        ? pm.items.filter(
+            (i) =>
+              !String(i.id || '').startsWith('pur-') &&
+              !String(i.id || '').startsWith('pay-') &&
+              !String(i.id || '').startsWith('cn-')
+          )
+        : [];
+      const standaloneDebit = standaloneItems.reduce(
+        (s, i) => s + (Number(i.debitAmount) || 0),
+        0
+      );
+      const standaloneCredit = standaloneItems.reduce(
+        (s, i) => s + (Number(i.creditAmount) || 0),
+        0
+      );
+      const baseDebit = !pm.exportGoodsRef
+        ? Math.round(
+            (standaloneDebit > 0 ? standaloneDebit : Number(pm.totalAmount) || 0) * 100
+          ) / 100
+        : 0;
+      const baseCredit =
+        Math.round(
+          (Number(pm.paidAmount) || standaloneCredit || 0) * 100
+        ) / 100;
       const debitAmount = edit?.debitAmount !== undefined ? edit.debitAmount : baseDebit;
       const creditAmount = edit?.creditAmount !== undefined ? edit.creditAmount : baseCredit;
       const dueBal = debitAmount - creditAmount;
@@ -252,7 +343,7 @@ export const PaymentFormView: React.FC = () => {
         debitAmount,
         creditAmount,
         balance: dueBal,
-        status: edit?.status !== undefined ? edit.status : dueBal <= 0 && creditAmount > 0 ? 'PAID' : 'UNPAID',
+        status: edit?.status !== undefined ? edit.status : dueBal <= 0 && (creditAmount > 0 || debitAmount > 0) ? 'PAID' : 'UNPAID',
       });
     }
 
@@ -286,7 +377,14 @@ export const PaymentFormView: React.FC = () => {
     });
 
     return collected;
-  }, [purchases, supplierPayments, supplierCredits, supplierName, rowEdits]);
+  }, [
+    purchases,
+    supplierPayments,
+    supplierCredits,
+    supplierName,
+    rowEdits,
+    historySyncRevision,
+  ]);
 
   const rows: PaymentItemRow[] = useMemo(() => {
     const merged = [...customRows, ...dbSupplierRows];
@@ -307,13 +405,29 @@ export const PaymentFormView: React.FC = () => {
     ];
   }, [dbSupplierRows, customRows, supplierName, date]);
 
+  // Per-row Balance Formula: Balance = DEBIT AMOUNT - CREDIT AMOUNT (matching user spreadsheet image)
+  const rowsWithCumulativeBalance = useMemo(() => {
+    return rows.map((r) => {
+      const d = Number(r.debitAmount) || 0;
+      const c = Number(r.creditAmount) || 0;
+      const hasAmounts = d > 0 || c > 0;
+      return {
+        ...r,
+        description: hasAmounts
+          ? r.description?.trim() || supplierName || 'Supplier Payment'
+          : '',
+        balance: Math.round((d - c) * 100) / 100,
+      };
+    });
+  }, [rows, supplierName]);
+
   const validation = validateSupplierPaymentForm({
     invoiceNumber,
     date,
     supplierName,
     overallPreviousAmount,
     overallPaidAmount,
-    rows,
+    rows: rowsWithCumulativeBalance,
   });
 
   // Live Supplier Ledger Stats from Purchases + Supplier Payments
@@ -355,7 +469,7 @@ export const PaymentFormView: React.FC = () => {
     } else {
       setContactNumber('');
     }
-    setOverallPreviousAmount(stats.latestBalance);
+    setOverallPreviousAmount(0);
   };
 
   const handleCreateSupplierCredit = (e: React.FormEvent) => {
@@ -455,6 +569,17 @@ export const PaymentFormView: React.FC = () => {
           [field]: value,
         },
       }));
+      if (id.startsWith('pur-') && field === 'creditAmount') {
+        const purId = id.replace(/^pur-/, '');
+        const foundPur = purchases.find((p) => p.id === purId);
+        if (foundPur) {
+          const nextCredit = Math.max(0, Number(value) || 0);
+          updatePurchase(purId, {
+            paidAmount: nextCredit,
+            balance: Math.round((Number(foundPur.totalAmount || 0) - nextCredit) * 100) / 100,
+          });
+        }
+      }
     } else {
       setCustomRows((prev) => {
         const baseList =
@@ -504,13 +629,54 @@ export const PaymentFormView: React.FC = () => {
     }
   };
 
+  const handleDeleteRow = (id: string) => {
+    if (id.startsWith('pur-') || id.startsWith('purchase-')) {
+      const targetId = id.replace(/^(pur-|purchase-)/, '');
+      deletePurchase(targetId);
+      setRowEdits((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    } else if (id.startsWith('pay-') || id.startsWith('voucher-')) {
+      const targetId = id.replace(/^(pay-|voucher-)/, '');
+      deletePayment(targetId);
+      setRowEdits((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    } else if (id.startsWith('cn-') || id.startsWith('credit-')) {
+      const targetId = id.replace(/^(cn-|credit-)/, '');
+      deleteSupplierCredit(targetId);
+      setRowEdits((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    } else {
+      setCustomRows((prev) => {
+        const baseList =
+          prev.length === 0 && dbSupplierRows.length === 0
+            ? rows
+            : prev;
+        const filtered = baseList.filter((row) => row.id !== id);
+        if (filtered.length === 0 && dbSupplierRows.length === 0) {
+          return [{ ...createEmptyRow(generateRecordId('payrow')), date }];
+        }
+        return filtered;
+      });
+      showToast('Row deleted from Supplier Record History table.');
+    }
+  };
+
   const handleAddRow = () => {
     setCustomRows((prev) => [
       ...prev,
       {
         ...createEmptyRow(generateRecordId('payrow')),
         date,
-        description: supplierName || 'Supplier Purchase / Payment',
+        description: '',
       },
     ]);
   };
@@ -527,7 +693,7 @@ export const PaymentFormView: React.FC = () => {
     setIsRecurring(false);
     setRecurrenceFrequency('monthly');
     setVoucherStatus('PAID');
-    setCustomRows([]);
+    setCustomRows(initialSupplierPaymentSheetRows);
     setRowEdits({});
     setAppliedCreditIdsInVoucher([]);
     setValidationAttempted(false);
@@ -538,26 +704,75 @@ export const PaymentFormView: React.FC = () => {
     showToast('Supplier payment form cleared and all cells reset.');
   };
 
-  const { totalDebit, totalCredit, balance } = calculatePaymentTotals(
-    rows,
-    overallPreviousAmount,
+  const { totalDebit, totalCredit } = calculatePaymentTotals(
+    rowsWithCumulativeBalance,
+    0,
     overallPaidAmount
   );
 
-  const netBalanceAfterCredit = Math.max(0, balance - totalCredit);
+  // Total Voucher Credit (TK) = sum of row Credit Amounts (or overallPaidAmount if entered)
+  const effectivePaidAmount = Math.round((totalCredit > 0 ? totalCredit : overallPaidAmount) * 100) / 100;
+  // Balance (TK) = Total Debit - Total Voucher Credit (TK)
+  const voucherBalance = Math.round((totalDebit - effectivePaidAmount) * 100) / 100;
 
-  const activeRowCount = rows.filter(
-    (r) => r.description.trim() !== '' || r.debitAmount !== 0 || r.creditAmount !== 0
+  const activeRowCount = rowsWithCumulativeBalance.filter(
+    (r) => r.debitAmount !== 0 || r.creditAmount !== 0
   ).length;
 
-  const handleSavePDF = () => {
+  const commitSupplierPaymentEntry = (options?: { openPreview?: boolean }) => {
+    const shouldOpenPreview = options?.openPreview ?? true;
+    const effectiveSupplier = supplierName.trim() || 'GENERAL SUPPLIER';
+
+    // Flush any inline edits made to existing Purchase or Payment rows first
+    for (const [editRowId, editPatch] of Object.entries(rowEdits)) {
+      if (editRowId.startsWith('pur-')) {
+        const purId = editRowId.replace(/^pur-/, '');
+        const foundPur = purchases.find((p) => p.id === purId);
+        if (foundPur) {
+          const nextDebit =
+            editPatch.debitAmount !== undefined
+              ? Math.max(0, Number(editPatch.debitAmount) || 0)
+              : Number(foundPur.totalAmount) || 0;
+          const nextCredit =
+            editPatch.creditAmount !== undefined
+              ? Math.max(0, Number(editPatch.creditAmount) || 0)
+              : Number(foundPur.paidAmount) || 0;
+          updatePurchase(purId, {
+            date: editPatch.date !== undefined ? editPatch.date : foundPur.date,
+            totalAmount: nextDebit,
+            paidAmount: nextCredit,
+            balance: Math.round((nextDebit - nextCredit) * 100) / 100,
+          });
+        }
+      } else if (editRowId.startsWith('pay-')) {
+        const payId = editRowId.replace(/^pay-/, '');
+        const foundPay = payments.find((p) => p.id === payId);
+        if (foundPay) {
+          const nextDebit =
+            editPatch.debitAmount !== undefined
+              ? Math.max(0, Number(editPatch.debitAmount) || 0)
+              : Number(foundPay.totalAmount) || 0;
+          const nextCredit =
+            editPatch.creditAmount !== undefined
+              ? Math.max(0, Number(editPatch.creditAmount) || 0)
+              : Number(foundPay.paidAmount) || 0;
+          updatePayment(payId, {
+            date: editPatch.date !== undefined ? editPatch.date : foundPay.date,
+            totalAmount: nextDebit,
+            paidAmount: nextCredit,
+            balance: Math.round((nextDebit - nextCredit) * 100) / 100,
+          });
+        }
+      }
+    }
+
     const check = validateSupplierPaymentForm({
       invoiceNumber,
       date,
-      supplierName,
-      overallPreviousAmount,
-      overallPaidAmount,
-      rows,
+      supplierName: options?.openPreview === false ? effectiveSupplier : supplierName,
+      overallPreviousAmount: 0,
+      overallPaidAmount: effectivePaidAmount,
+      rows: rowsWithCumulativeBalance,
     });
 
     if (!check.isValid) {
@@ -571,32 +786,66 @@ export const PaymentFormView: React.FC = () => {
     setValidationAttempted(false);
     const validItems = check.validItems;
 
+    // Separate newly entered custom rows from already-persisted DB rows so existing history rows are never double-counted
+    const newCustomItems = validItems.filter(
+      (item) =>
+        !String(item.id || '').startsWith('pur-') &&
+        !String(item.id || '').startsWith('pay-') &&
+        !String(item.id || '').startsWith('cn-')
+    );
+
+    const newCustomDebit =
+      Math.round(
+        newCustomItems.reduce((s, r) => s + (Number(r.debitAmount) || 0), 0) * 100
+      ) / 100;
+    const newCustomCredit =
+      Math.round(
+        newCustomItems.reduce((s, r) => s + (Number(r.creditAmount) || 0), 0) * 100
+      ) / 100;
+
     // If the user manually entered a credit/rebate amount in the voucher rows without already clicking "Apply Credit"
     if (
-      totalCredit > 0 &&
+      newCustomCredit > 0 &&
       appliedCreditIdsInVoucher.length === 0 &&
       selectedSupplierCreditProfile.availableBalance > 0
     ) {
-      applySupplierCreditsForPayment(supplierName, totalCredit, {
+      applySupplierCreditsForPayment(effectiveSupplier, newCustomCredit, {
         date,
         targetPaymentInvoice: invoiceNumber.trim(),
         notes: `Auto-applied via Supplier Payment Voucher ${invoiceNumber.trim()}`,
       });
     }
 
+    // Only create a new PaymentRecord when there are new custom entry rows (or when there were no DB rows yet)
+    const shouldCreateVoucherRecord =
+      newCustomItems.length > 0 || dbSupplierRows.length === 0;
+
+    const recordItems =
+      newCustomItems.length > 0 ? newCustomItems : validItems;
+    const recordDebit =
+      newCustomItems.length > 0 ? newCustomDebit : totalDebit;
+    const recordPaid =
+      newCustomItems.length > 0
+        ? newCustomCredit > 0
+          ? newCustomCredit
+          : overallPaidAmount
+        : effectivePaidAmount;
+    const recordBalance =
+      Math.round((recordDebit - recordPaid) * 100) / 100;
+
     const newRecord = {
       invoiceNumber: invoiceNumber.trim(),
-      date,
+      date: recordItems[0]?.date || date,
       dueDate: dueDate || undefined,
       isRecurring: isRecurring || Boolean(dueDate),
       recurrenceFrequency: isRecurring || dueDate ? recurrenceFrequency : undefined,
-      description: supplierName,
+      description: effectiveSupplier,
       contactNumber,
-      items: validItems,
-      totalAmount: totalDebit,
-      previousAmount: overallPreviousAmount,
-      paidAmount: overallPaidAmount,
-      balance: totalCredit > 0 ? netBalanceAfterCredit : balance,
+      items: recordItems,
+      totalAmount: recordDebit,
+      previousAmount: 0,
+      paidAmount: recordPaid,
+      balance: recordBalance,
       status: voucherStatus,
       returnRMB: 0,
       returnRMBInBDT: 0,
@@ -605,25 +854,70 @@ export const PaymentFormView: React.FC = () => {
       remarks,
     };
 
-    addPayment(newRecord);
+    if (shouldCreateVoucherRecord) {
+      addPayment(newRecord);
+      setInvoiceNumber(generateInvoiceNumber('PAY', supplierPayments.length + 1));
+    } else {
+      emitPaymentSyncTrigger({
+        category: 'supplier',
+        action: 'confirm',
+        invoiceNumber: newRecord.invoiceNumber,
+        partyName: effectiveSupplier,
+        debitAmount: totalDebit,
+        creditAmount: effectivePaidAmount,
+        runningBalance: voucherBalance,
+      });
+    }
 
-    openPrintModal({
-      type: 'payment',
-      title: `Supplier Payment Voucher - ${newRecord.invoiceNumber}`,
-      data: newRecord,
-      items: validItems,
-    });
+    // Clear draft custom rows and rowEdits so 'All Supplier Record History' refreshes directly from the synchronized database
+    setCustomRows([]);
+    setRowEdits({});
+    setOverallPreviousAmount(0);
+    setOverallPaidAmount(0);
+    setAppliedCreditIdsInVoucher([]);
 
-    setInvoiceNumber(generateInvoiceNumber('PAY', supplierPayments.length + 1));
-    resetFormFields();
-    showToast(
-      `Supplier payment voucher ${newRecord.invoiceNumber} saved successfully. All fields cleared and ready for next entry.`
-    );
+    if (shouldOpenPreview) {
+      openPrintModal({
+        type: 'payment',
+        title: `Supplier Payment Voucher - ${newRecord.invoiceNumber}`,
+        data: {
+          ...newRecord,
+          items: validItems,
+          totalAmount: totalDebit,
+          paidAmount: effectivePaidAmount,
+          balance: voucherBalance,
+        },
+        items: validItems,
+      });
+      setSupplierName('');
+      setContactNumber('');
+      setRemarks('');
+      setSearchDescription('');
+      setDueDate('');
+      setIsRecurring(false);
+      setRecurrenceFrequency('monthly');
+      setVoucherStatus('PAID');
+      showToast(
+        `Supplier payment voucher ${newRecord.invoiceNumber} confirmed and synchronized with All Supplier Record History.`
+      );
+    } else {
+      showToast(
+        `Payment entry ${newRecord.invoiceNumber} confirmed! All Supplier Record History and Net Running Balance updated.`
+      );
+    }
+  };
+
+  const handleSavePDF = () => {
+    commitSupplierPaymentEntry({ openPreview: true });
+  };
+
+  const handleConfirmPaymentEntry = () => {
+    commitSupplierPaymentEntry({ openPreview: false });
   };
 
   const handlePrintSelected = () => {
-    const validItems = rows.filter(
-      (r) => r.description.trim() !== '' || r.debitAmount > 0 || r.creditAmount > 0
+    const validItems = rowsWithCumulativeBalance.filter(
+      (r) => r.debitAmount > 0 || r.creditAmount > 0
     );
     openPrintModal({
       type: 'payment',
@@ -633,11 +927,11 @@ export const PaymentFormView: React.FC = () => {
         date,
         description: supplierName,
         contactNumber,
-        items: validItems.length > 0 ? validItems : rows.slice(0, 5),
+        items: validItems.length > 0 ? validItems : rowsWithCumulativeBalance.slice(0, 5),
         totalAmount: totalDebit,
-        previousAmount: overallPreviousAmount,
-        paidAmount: overallPaidAmount,
-        balance: totalCredit > 0 ? netBalanceAfterCredit : balance,
+        previousAmount: 0,
+        paidAmount: effectivePaidAmount,
+        balance: voucherBalance,
         status: voucherStatus,
         returnRMB: 0,
         returnRMBInBDT: 0,
@@ -645,7 +939,7 @@ export const PaymentFormView: React.FC = () => {
         paymentCategory: 'supplier',
         remarks,
       },
-      items: validItems.length > 0 ? validItems : rows.slice(0, 5),
+      items: validItems.length > 0 ? validItems : rowsWithCumulativeBalance.slice(0, 5),
     });
   };
 
@@ -826,7 +1120,7 @@ export const PaymentFormView: React.FC = () => {
                   Mobile: {companyProfile.mobiles.join(', ')}
                 </span>
                 <span className="bg-white/95 text-black px-2.5 py-0.5 rounded text-[11px] font-bold font-mono shadow-xs">
-                  EMAIL: {companyProfile.email || 'www.zsbaquatics.com'}
+                  EMAIL: {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}
                 </span>
               </div>
             </div>
@@ -984,13 +1278,38 @@ export const PaymentFormView: React.FC = () => {
 
             {/* Table Action Bar */}
             <div className="px-3.5 py-2 bg-slate-100 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Wallet className="w-3.5 h-3.5 text-[#8b3858]" />
                 <span className="font-bold text-slate-700 uppercase">
                   All Supplier Record History — Debit, Credit, Balance &amp; Status ({activeRowCount} Active / {rows.length} Rows)
                 </span>
+                <span
+                  data-testid="supplier-history-sync-status"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono text-[10px] font-bold"
+                  title={
+                    lastSyncEvent
+                      ? `Last synchronized at ${new Date(lastSyncEvent.timestamp).toLocaleTimeString()}`
+                      : 'Automated synchronization active'
+                  }
+                >
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                  <span>
+                    Auto-Sync Active
+                    {lastSyncEvent?.invoiceNumber ? ` · ${lastSyncEvent.invoiceNumber}` : ''}
+                  </span>
+                </span>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  data-testid="confirm-supplier-payment-entry-btn"
+                  onClick={handleConfirmPaymentEntry}
+                  className="inline-flex items-center space-x-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-700 rounded font-bold text-[11px] transition cursor-pointer shadow-xs"
+                  title="Confirm current payment entry and synchronize All Supplier Record History running balance"
+                >
+                  <CheckCircle className="w-3 h-3" />
+                  <span>Confirm Entry &amp; Sync</span>
+                </button>
                 <button
                   type="button"
                   onClick={handleAddRow}
@@ -1052,24 +1371,36 @@ export const PaymentFormView: React.FC = () => {
                   className="w-full border-collapse text-xs table-fixed"
                 >
                   <thead>
-                    <tr className="bg-[#8b3858] text-white uppercase text-[11px] font-bold tracking-wider text-center border-b border-pink-900">
-                      <th className="px-2 py-2.5 border-r border-pink-800/60 w-12">SL</th>
-                      <th className="px-3 py-2.5 border-r border-pink-800/60 text-left">
-                        <span>SUPPLIER PURCHASE GOODS (DATE BY DATE)</span>
+                    <tr className="bg-[#1d4ed8] text-white uppercase text-[11px] font-black tracking-wider text-center border-b border-blue-900">
+                      <th className="px-2 py-2.5 border-r border-blue-700/60 w-12">SL</th>
+                      <th className="px-2.5 py-2.5 border-r border-blue-700/60 text-center">
+                        <span className="flex items-center justify-center gap-1">
+                          <span>DATE</span>
+                          <Filter className="w-3 h-3 text-blue-200" />
+                        </span>
                       </th>
-                      <th className="px-2.5 py-2.5 border-r border-pink-800/60 w-32">
-                        PURCHASE GOODS (TK)
+                      <th className="px-2.5 py-2.5 border-r border-blue-700/60 w-36 text-right">
+                        <span className="flex items-center justify-end gap-1">
+                          <span>DEBIT AMOUNT</span>
+                          <Filter className="w-3 h-3 text-blue-200" />
+                        </span>
                       </th>
-                      <th className="px-2.5 py-2.5 border-r border-pink-800/60 w-32">
-                        PAID AMOUNT (TK)
+                      <th className="px-2.5 py-2.5 border-r border-blue-700/60 w-36 text-right bg-blue-800/80">
+                        <span className="flex items-center justify-end gap-1">
+                          <span>CREDIT AMOUNT</span>
+                          <Filter className="w-3 h-3 text-blue-200" />
+                        </span>
                       </th>
-                      <th className="px-2.5 py-2.5 w-32">
-                        BALANCE (TK)
+                      <th className="px-2.5 py-2.5 border-r border-blue-700/60 w-36 bg-blue-900 text-right">
+                        BALANCE
+                      </th>
+                      <th className="px-2 py-2.5 w-16 bg-blue-950 text-center">
+                        DELETE
                       </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {rows.map((row, idx) => {
+                    {rowsWithCumulativeBalance.map((row, idx) => {
                       const rowErr = validationAttempted
                         ? validation.rowErrors[row.id]
                         : undefined;
@@ -1077,7 +1408,6 @@ export const PaymentFormView: React.FC = () => {
                         validationAttempted &&
                         Boolean(validation.fieldErrors.rows) &&
                         idx === 0;
-                      const dueBalance = row.debitAmount - row.creditAmount;
                       return (
                         <tr
                           key={row.id}
@@ -1085,125 +1415,192 @@ export const PaymentFormView: React.FC = () => {
                             rowErr || highlightFirstEmptyRow
                               ? 'bg-rose-50/60 hover:bg-rose-50 h-10'
                               : idx % 2 === 0
-                              ? 'bg-white hover:bg-purple-50/30 h-10'
-                              : 'bg-slate-50/70 hover:bg-purple-50/30 h-10'
+                              ? 'bg-white hover:bg-blue-50/30 h-10'
+                              : 'bg-slate-50/70 hover:bg-blue-50/30 h-10'
                           }
                         >
                           <td className="p-1.5 border-r border-slate-200 text-center font-mono font-bold text-slate-500 w-12">
                             {idx + 1}
                           </td>
 
-                          {/* Supplier Purchase Goods Date by Date (Editable Date) */}
-                          <td className="p-1.5 border-r border-slate-200">
-                            <div className="flex items-center justify-between gap-2 px-1">
-                              <span className="truncate text-xs font-bold text-purple-900">
-                                {row.description || supplierName || 'Supplier Purchase Goods'}
-                              </span>
-                              <input
-                                type="date"
-                                aria-label={`Supplier payment row ${idx + 1} date`}
-                                value={row.date || date}
-                                onChange={(e) =>
-                                  handleRowChange(row.id, 'date', e.target.value)
-                                }
-                                className="font-mono text-[11px] bg-purple-50 hover:bg-white focus:bg-white text-purple-900 px-1.5 py-0.5 rounded border border-purple-300 focus:outline-none focus:ring-1 focus:ring-purple-500 shrink-0"
-                              />
-                            </div>
-                          </td>
-
-                          {/* Purchase Goods Amount (Collected from Purchase Database or Entered) */}
-                          <td className="p-1 border-r border-slate-200 w-32">
+                          {/* Editable Date */}
+                          <td className="p-1 border-r border-slate-200 text-center">
                             <input
-                              type="number"
-                              aria-label={`Supplier payment row ${idx + 1} purchase goods amount`}
-                              aria-invalid={Boolean(
-                                rowErr?.debitAmount || highlightFirstEmptyRow
-                              )}
-                              min="0"
-                              step="0.01"
-                              value={row.debitAmount || ''}
+                              type="text"
+                              aria-label={`Supplier payment row ${idx + 1} date`}
+                              value={row.date || date}
                               onChange={(e) =>
-                                handleRowChange(
-                                  row.id,
-                                  'debitAmount',
-                                  parseFloat(e.target.value) || 0
-                                )
+                                handleRowChange(row.id, 'date', e.target.value)
                               }
-                              className={`w-full bg-white border rounded px-2 py-1.5 text-right font-mono text-slate-900 font-semibold focus:outline-none focus:ring-1 ${
-                                rowErr?.debitAmount || highlightFirstEmptyRow
-                                  ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
-                                  : 'border-slate-200 focus:ring-purple-500'
-                              }`}
-                              placeholder="0.00"
+                              className="w-full font-mono text-xs text-center font-bold text-slate-800 bg-transparent border border-slate-200 hover:border-slate-400 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded px-1.5 py-1"
                             />
                           </td>
 
-                          {/* Paid Amount */}
-                          <td className="p-1 border-r border-slate-200 w-32">
+                          {/* Debit Amount */}
+                          <td className="p-1 border-r border-slate-200 w-36 text-right font-mono font-bold">
+                            {row.paymentId ? (
+                              <span className="text-slate-400 font-normal px-2 block text-center">-</span>
+                            ) : (
+                              <input
+                                type="number"
+                                aria-label={`Supplier payment row ${idx + 1} debit amount`}
+                                aria-invalid={Boolean(
+                                  rowErr?.debitAmount || highlightFirstEmptyRow
+                                )}
+                                min="0"
+                                step="0.01"
+                                value={row.debitAmount || ''}
+                                onChange={(e) =>
+                                  handleRowChange(
+                                    row.id,
+                                    'debitAmount',
+                                    parseFloat(e.target.value) || 0
+                                  )
+                                }
+                                className={`w-full bg-white border rounded px-2 py-1 text-right font-mono text-slate-900 font-bold focus:outline-none focus:ring-1 ${
+                                  rowErr?.debitAmount || highlightFirstEmptyRow
+                                    ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
+                                    : 'border-slate-200 focus:ring-blue-500'
+                                }`}
+                                placeholder="0.00"
+                              />
+                            )}
+                          </td>
+
+                          {/* Credit Amount */}
+                          <td className="p-1 border-r border-slate-200 w-36">
                             <input
                               type="number"
-                              aria-label={`Supplier payment row ${idx + 1} paid amount`}
+                              aria-label={`Supplier payment row ${idx + 1} credit amount`}
                               aria-invalid={Boolean(
                                 rowErr?.creditAmount || highlightFirstEmptyRow
                               )}
                               min="0"
                               step="0.01"
                               value={row.creditAmount || ''}
-                              onChange={(e) =>
+                              onChange={(e) => {
+                                const nextCredit = Math.max(0, parseFloat(e.target.value) || 0);
+                                if (row.paymentId) {
+                                  updatePayment(row.paymentId, {
+                                    paidAmount: nextCredit,
+                                    balance: Math.max(0, row.debitAmount - nextCredit),
+                                  });
+                                }
                                 handleRowChange(
                                   row.id,
                                   'creditAmount',
-                                  parseFloat(e.target.value) || 0
-                                )
-                              }
-                              className={`w-full bg-white border rounded px-2 py-1.5 text-right font-mono text-emerald-800 font-semibold focus:outline-none focus:ring-1 ${
+                                  nextCredit
+                                );
+                              }}
+                              className={`w-full bg-emerald-50/80 hover:bg-white focus:bg-white border rounded px-2 py-1 text-right font-mono text-emerald-900 font-bold focus:outline-none focus:ring-1 ${
                                 rowErr?.creditAmount || highlightFirstEmptyRow
                                   ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
-                                  : 'border-slate-200 focus:ring-purple-500'
+                                  : 'border-emerald-300 focus:ring-emerald-600'
                               }`}
                               placeholder="0.00"
                             />
                           </td>
 
-                          {/* Due Balance (Purchase Goods - Paid Amount) */}
-                          <td
-                            className={`p-1 text-right font-mono font-bold pr-2.5 bg-slate-50 w-32 ${
-                              dueBalance < 0 ? 'text-rose-600' : 'text-slate-900'
-                            }`}
-                          >
-                            {dueBalance.toFixed(2)}
+                          {/* Balance */}
+                          <td className="p-1.5 border-r border-slate-200 text-right font-mono font-bold pr-2.5 bg-slate-50/90 w-36">
+                            <span className={row.balance < 0 ? 'text-rose-600 font-black' : 'text-slate-900 font-bold'}>
+                              {formatCurrency(row.balance, '')}
+                            </span>
+                          </td>
+
+                          {/* Delete Row Column */}
+                          <td className="p-1 text-center w-16">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteRow(row.id)}
+                              aria-label={`Delete supplier payment row ${idx + 1}`}
+                              title="Delete this row"
+                              className="inline-flex items-center justify-center p-1.5 rounded bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border border-rose-200 hover:border-rose-600 transition cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </td>
                         </tr>
                       );
                     })}
                   </tbody>
+                  <tfoot data-testid="supplier-payment-history-footer">
+                    <tr
+                      data-testid="supplier-history-summary-footer-row"
+                      className="bg-[#1d4ed8] text-white font-black border-t-2 border-blue-900"
+                    >
+                      <td
+                        colSpan={2}
+                        className="px-3 py-2.5 text-left uppercase tracking-wider text-xs border-r border-blue-700/60"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-1">
+                          <span>Total Supplier Record History</span>
+                          <span className="text-[10px] font-mono bg-blue-900/80 text-blue-100 px-1.5 py-0.5 rounded">
+                            Net Running Balance = Debit − Credit
+                          </span>
+                        </div>
+                      </td>
+                      <td
+                        data-testid="supplier-history-footer-total-debit"
+                        className="px-2.5 py-2.5 text-right font-mono text-white font-black text-sm w-36 border-r border-blue-700/60"
+                      >
+                        <div className="text-[9px] font-sans uppercase text-blue-200 font-bold leading-none mb-0.5">
+                          Total Debit
+                        </div>
+                        {totalDebit.toLocaleString('en-US', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </td>
+                      <td
+                        data-testid="supplier-history-footer-total-credit"
+                        className="px-2.5 py-2.5 text-right font-mono text-emerald-200 font-black text-sm w-36 border-r border-blue-700/60 bg-blue-800/80"
+                      >
+                        <div className="text-[9px] font-sans uppercase text-emerald-200 font-bold leading-none mb-0.5">
+                          Total Credit
+                        </div>
+                        {effectivePaidAmount.toLocaleString('en-US', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </td>
+                      <td
+                        data-testid="supplier-history-footer-running-balance"
+                        className="px-2.5 py-2.5 text-right font-mono text-amber-200 font-black text-sm w-36 border-r border-blue-700/60 bg-blue-900"
+                      >
+                        <div className="text-[9px] font-sans uppercase text-amber-200 font-bold leading-none mb-0.5">
+                          Net Running Balance
+                        </div>
+                        {voucherBalance.toLocaleString('en-US', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </td>
+                      <td className="w-16 bg-blue-950 text-center font-mono text-[10px] text-blue-200">
+                        {activeRowCount} Rows
+                      </td>
+                    </tr>
+                    <tr className="bg-slate-900 text-white font-black border-t border-slate-700">
+                      <td
+                        colSpan={2}
+                        className="px-3 py-1.5 text-left uppercase tracking-wider text-[11px] text-slate-300 border-r border-slate-800"
+                      >
+                        SUPPLIER PAYMENT VOUCHER SUMMARY
+                      </td>
+                      <td className="px-2.5 py-1.5 text-right font-mono text-slate-200 text-xs w-36 border-r border-slate-800">
+                        Debit: {totalDebit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-2.5 py-1.5 text-right font-mono text-emerald-300 text-xs w-36 border-r border-slate-800">
+                        Total Voucher Credit (TK): {effectivePaidAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-2.5 py-1.5 text-right font-mono text-amber-300 text-xs w-36 border-r border-slate-800">
+                        Balance (TK): {voucherBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="w-16 bg-slate-950" />
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
-            </div>
-
-            {/* Subtotals Footer */}
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-xs table-fixed">
-                <tfoot>
-                  <tr className="bg-[#8b3858] text-white font-bold border-t-2 border-pink-900">
-                    <td
-                      colSpan={2}
-                      className="px-3 py-2 text-right uppercase tracking-wider text-[11px]"
-                    >
-                      TOTAL SUPPLIER RECORD HISTORY ({companyProfile.currency}):
-                    </td>
-                    <td className="px-2.5 py-2 text-right font-mono text-amber-300 font-black text-sm w-32">
-                      {totalDebit.toFixed(2)}
-                    </td>
-                    <td className="px-2.5 py-2 text-right font-mono text-amber-200 font-bold text-xs w-32">
-                      {totalCredit.toFixed(2)}
-                    </td>
-                    <td className="px-2.5 py-2 text-right font-mono text-amber-300 font-black text-sm w-32">
-                      {(totalDebit - totalCredit).toFixed(2)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
             </div>
           </div>
         </div>
@@ -1315,7 +1712,19 @@ export const PaymentFormView: React.FC = () => {
                 </div>
               ) : (
                 matchingSupplierVouchers.map((pm) => {
-                  const pmStatus = pm.status || (pm.balance <= 0 ? 'PAID' : 'REPORT');
+                  const itemsDebit = Array.isArray(pm.items)
+                    ? pm.items.reduce((s, i) => s + (Number(i.debitAmount) || 0), 0)
+                    : 0;
+                  const itemsCredit = Array.isArray(pm.items)
+                    ? pm.items.reduce((s, i) => s + (Number(i.creditAmount) || 0), 0)
+                    : 0;
+                  const pmDebit = Number(pm.totalAmount) || itemsDebit || 0;
+                  const pmCredit = Number(pm.paidAmount) || itemsCredit || 0;
+                  const pmBal =
+                    pm.balance !== 0
+                      ? Number(pm.balance)
+                      : Math.round((pmDebit - pmCredit) * 100) / 100;
+                  const pmStatus = pm.status || (pmBal <= 0 ? 'PAID' : 'REPORT');
                   return (
                     <div
                       key={pm.id}
@@ -1347,19 +1756,19 @@ export const PaymentFormView: React.FC = () => {
                         <div className="bg-white px-1.5 py-1 rounded border border-slate-200">
                           <span className="text-[9px] font-bold text-slate-500 uppercase block">DEBIT</span>
                           <span className="font-bold text-slate-900">
-                            {formatCurrency(pm.totalAmount, companyProfile.currency)}
+                            {formatCurrency(pmDebit, companyProfile.currency)}
                           </span>
                         </div>
                         <div className="bg-white px-1.5 py-1 rounded border border-slate-200">
                           <span className="text-[9px] font-bold text-emerald-700 uppercase block">CREDIT</span>
                           <span className="font-bold text-emerald-700">
-                            {formatCurrency(pm.paidAmount, companyProfile.currency)}
+                            {formatCurrency(pmCredit, companyProfile.currency)}
                           </span>
                         </div>
                         <div className="bg-white px-1.5 py-1 rounded border border-slate-200">
                           <span className="text-[9px] font-bold text-rose-700 uppercase block">BALANCE</span>
-                          <span className={`font-bold ${pm.balance > 0 ? 'text-rose-700' : 'text-slate-600'}`}>
-                            {formatCurrency(pm.balance, companyProfile.currency)}
+                          <span className={`font-bold ${pmBal > 0 ? 'text-rose-700' : 'text-slate-600'}`}>
+                            {formatCurrency(pmBal, companyProfile.currency)}
                           </span>
                         </div>
                       </div>
@@ -1606,8 +2015,8 @@ export const PaymentFormView: React.FC = () => {
                   <th className="px-2.5 py-2 border-r border-indigo-800/60 w-28 text-right">
                     DEBIT (TK)
                   </th>
-                  <th className="px-2.5 py-2 border-r border-indigo-800/60 w-28 text-right">
-                    CREDIT (TK)
+                  <th className="px-2.5 py-2 border-r border-indigo-800/60 w-32 text-right bg-indigo-900/60">
+                    CREDIT (TK) [EDITABLE]
                   </th>
                   <th className="px-2.5 py-2 border-r border-indigo-800/60 w-28 text-right">
                     BALANCE (TK)
@@ -1652,10 +2061,53 @@ export const PaymentFormView: React.FC = () => {
                         <div className="text-[11px] text-slate-500 truncate">{row.description}</div>
                       </td>
                       <td className="p-1.5 border-r border-slate-200 text-right font-mono font-bold text-slate-900">
-                        {row.debitAmount > 0 ? formatCurrency(row.debitAmount, '') : '-'}
+                        {row.recordType === 'PAYMENT_VOUCHER' || row.paymentId ? (
+                          <span className="text-slate-400 font-normal block text-center">-</span>
+                        ) : row.debitAmount > 0 ? (
+                          formatCurrency(row.debitAmount, '')
+                        ) : (
+                          '-'
+                        )}
                       </td>
-                      <td className="p-1.5 border-r border-slate-200 text-right font-mono font-bold text-emerald-800">
-                        {row.creditAmount > 0 ? formatCurrency(row.creditAmount, '') : '-'}
+                      <td className="p-1 border-r border-slate-200 text-right font-mono font-bold text-emerald-800 w-32">
+                        {row.recordType === 'PAYMENT_VOUCHER' || row.paymentId || row.recordType === 'PURCHASE_BILL' ? (
+                          <input
+                            type="number"
+                            aria-label={`Credit amount for ${row.invoiceNumber}`}
+                            min="0"
+                            step="0.01"
+                            value={row.creditAmount || ''}
+                            onChange={(e) => {
+                              const nextCredit = Math.max(0, parseFloat(e.target.value) || 0);
+                              if (row.paymentId) {
+                                updatePayment(row.paymentId, {
+                                  paidAmount: nextCredit,
+                                  balance: Math.round((row.debitAmount - nextCredit) * 100) / 100,
+                                });
+                                showToast(
+                                  `Updated Payment Voucher ${row.invoiceNumber} Credit Amount to ${nextCredit.toLocaleString()}`
+                                );
+                              } else if (row.recordType === 'PURCHASE_BILL') {
+                                const purId = row.id.replace(/^purchase-/, '');
+                                updatePurchase(purId, {
+                                  paidAmount: nextCredit,
+                                  balance: Math.round((row.debitAmount - nextCredit) * 100) / 100,
+                                });
+                                showToast(
+                                  `Updated Purchase ${row.invoiceNumber} Credit (Paid) Amount to ${nextCredit.toLocaleString()}`
+                                );
+                              } else {
+                                handleRowChange(row.id, 'creditAmount', nextCredit);
+                              }
+                            }}
+                            className="w-full bg-emerald-50/80 hover:bg-white focus:bg-white border border-emerald-300 focus:border-emerald-600 rounded px-1.5 py-1 text-right font-mono font-black text-emerald-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            placeholder="0.00"
+                          />
+                        ) : row.creditAmount > 0 ? (
+                          formatCurrency(row.creditAmount, '')
+                        ) : (
+                          '-'
+                        )}
                       </td>
                       <td
                         className={`p-1.5 border-r border-slate-200 text-right font-mono font-bold ${
@@ -1738,6 +2190,15 @@ export const PaymentFormView: React.FC = () => {
                               Apply
                             </button>
                           )}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteRow(row.id)}
+                            className="p-1 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 hover:border-rose-600 rounded transition-colors cursor-pointer"
+                            title="Delete Row"
+                            aria-label={`Delete detail row for ${row.supplierName}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1746,17 +2207,17 @@ export const PaymentFormView: React.FC = () => {
               </tbody>
               <tfoot>
                 <tr className="bg-[#242b58] text-white font-bold border-t-2 border-indigo-900">
-                  <td colSpan={4} className="px-3 py-2 text-right uppercase tracking-wider text-[11px]">
-                    SUPPLIER DETAILS GRAND TOTAL ({supplierRecordHistory.length} RECORDS):
+                  <td colSpan={4} className="px-3 py-2 text-right uppercase tracking-wider text-[11px] border-r border-indigo-800/60">
+                    TOTAL SUPPLIER RECORD HISTORY ({supplierRecordHistory.length} RECORDS) — NET RUNNING BALANCE:
                   </td>
-                  <td className="px-2.5 py-2 text-right font-mono text-amber-300 font-black text-xs">
-                    {supplierHistoryTotals.totalDebit.toFixed(2)}
+                  <td className="px-2.5 py-2 text-right font-mono text-amber-300 font-black text-xs border-r border-indigo-800/60">
+                    {formatCurrency(supplierHistoryTotals.totalDebit, '')}
                   </td>
-                  <td className="px-2.5 py-2 text-right font-mono text-emerald-300 font-bold text-xs">
-                    {supplierHistoryTotals.totalCredit.toFixed(2)}
+                  <td className="px-2.5 py-2 text-right font-mono text-emerald-300 font-bold text-xs border-r border-indigo-800/60">
+                    {formatCurrency(supplierHistoryTotals.totalCredit, '')}
                   </td>
-                  <td className="px-2.5 py-2 text-right font-mono text-rose-300 font-black text-xs">
-                    {supplierHistoryTotals.totalBalance.toFixed(2)}
+                  <td className="px-2.5 py-2 text-right font-mono text-rose-300 font-black text-xs border-r border-indigo-800/60">
+                    {formatCurrency(supplierHistoryTotals.totalBalance, '')}
                   </td>
                   <td colSpan={2} className="px-2.5 py-2 text-center text-[10px] font-mono text-amber-200 font-bold">
                     {supplierHistoryTotals.paidCount} PAID · {supplierHistoryTotals.reportCount} REPORT · {supplierHistoryTotals.noReportCount} NO REPORT

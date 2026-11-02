@@ -504,7 +504,7 @@ export const PackingListView: React.FC = () => {
               </span>
               <span>|</span>
               <span className="font-mono">
-                EMAIL: {companyProfile.email || 'www.zsbaquatics.com'}
+                EMAIL: {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}
               </span>
             </div>
           </div>
@@ -1712,7 +1712,7 @@ export const PackingListView: React.FC = () => {
                 marginTop: '2px',
               }}
             >
-              Mobile: {companyProfile.mobiles.join(' , ')} | EMAIL: {companyProfile.email || 'www.zsbaquatics.com'}
+              Mobile: {companyProfile.mobiles.join(' , ')} | EMAIL: {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}
             </div>
             <div
               style={{

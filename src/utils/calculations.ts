@@ -148,15 +148,16 @@ export function calculatePaymentTotals(
   const totalAmount = totalDebit;
   const prev = Number(previousAmount) || 0;
   const paid = Number(paidAmount) || 0;
-  const balance = prev - paid;
+  const effectivePaid = paid > 0 ? paid : totalCredit;
+  const balance = Math.round((prev + totalDebit - effectivePaid) * 100) / 100;
 
   return {
     totalDebit: Math.round(totalDebit * 100) / 100,
     totalCredit: Math.round(totalCredit * 100) / 100,
     totalAmount: Math.round(totalAmount * 100) / 100,
     previousAmount: prev,
-    paidAmount: paid,
-    balance: Math.round(balance * 100) / 100,
+    paidAmount: effectivePaid,
+    balance,
   };
 }
 
@@ -235,6 +236,24 @@ export function formatDate(dateString: string): string {
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const year = d.getFullYear();
     return `${day}/${month}/${year}`;
+  } catch {
+    return dateString;
+  }
+}
+
+/**
+ * Format date to 11-Jul-2026 format (matching spreadsheet image style)
+ */
+export function formatDateImageStyle(dateString: string): string {
+  if (!dateString) return '-';
+  try {
+    const d = new Date(dateString);
+    if (isNaN(d.getTime())) return dateString;
+    const day = String(d.getDate()).padStart(2, '0');
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[d.getMonth()];
+    const year = d.getFullYear();
+    return `${day}-${month}-${year}`;
   } catch {
     return dateString;
   }

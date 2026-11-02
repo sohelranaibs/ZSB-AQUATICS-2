@@ -97,6 +97,16 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
     auditLogs,
   } = useApp();
 
+  const [nowMs, setNowMs] = React.useState<number>(() => Date.now());
+
+  React.useEffect(() => {
+    setNowMs(Date.now());
+    const interval = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 10000);
+    return () => window.clearInterval(interval);
+  }, [lastSyncedAt, syncStatus, hasUnsyncedChanges]);
+
   const totalRecordsCount = computeTotalPersistedRecords({
     purchases: purchases.length,
     packings: packings.length,
@@ -104,14 +114,17 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
     otherCosts: otherCosts.length,
   });
 
-  const syncDisplay = getSyncStatusDisplay({
-    status: syncStatus,
-    lastSyncedAt,
-    lastSyncedEntity,
-    totalRecordsCount,
-    isLiveSyncEnabled,
-    hasUnsyncedChanges,
-  });
+  const syncDisplay = getSyncStatusDisplay(
+    {
+      status: syncStatus,
+      lastSyncedAt,
+      lastSyncedEntity,
+      totalRecordsCount,
+      isLiveSyncEnabled,
+      hasUnsyncedChanges,
+    },
+    nowMs
+  );
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -331,7 +344,16 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
               <div className="flex items-center space-x-1.5">
                 <span className="text-amber-400 font-bold">EMAIL:</span>
                 <span className="font-mono font-semibold text-amber-300">
-                  {companyProfile.email || 'www.zsbaquatics.com'}
+                  {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com'
+                    ? companyProfile.email
+                    : 'zsbaquatics@gmail.com'}
+                </span>
+              </div>
+              <span className="text-slate-700 hidden sm:inline">•</span>
+              <div className="flex items-center space-x-1.5">
+                <span className="text-amber-400 font-bold">Website:</span>
+                <span className="font-mono font-semibold text-amber-300">
+                  {companyProfile.website || 'www.zsbaquatics.com'}
                 </span>
               </div>
             </div>
@@ -395,42 +417,71 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
           <button
             type="button"
             data-testid="ribbon-sync-status"
-            onClick={() => triggerManualSync('All Ledgers')}
-            aria-label={syncDisplay.ariaLabel}
-            title={`${syncDisplay.ariaLabel}. Click to verify and sync local database now.`}
+            data-sync-freshness={syncDisplay.freshnessTier}
+            data-sync-color={syncDisplay.indicatorColor}
+            onClick={() => {
+              triggerManualSync('All Ledgers');
+              setNowMs(Date.now());
+            }}
+            aria-label={`${syncDisplay.ariaLabel} (${syncDisplay.freshnessLabel} · ${syncDisplay.elapsedText})`}
+            title={`Ledger Database Status: ${syncDisplay.freshnessLabel} (${syncDisplay.elapsedText} at ${syncDisplay.formattedTime}). Click to synchronize all ledger data now.`}
             className={`flex items-center space-x-1.5 px-2.5 py-1.5 text-xs font-bold rounded border transition-all whitespace-nowrap shrink-0 cursor-pointer ${
-              syncStatus === 'saving'
-                ? 'bg-amber-500/20 border-amber-400/60 text-amber-300 shadow-xs'
-                : syncStatus === 'error'
-                ? 'bg-rose-950/90 border-rose-500/60 text-rose-300'
-                : syncStatus === 'paused'
-                ? hasUnsyncedChanges
-                  ? 'bg-amber-950/90 hover:bg-amber-900/90 border-amber-400 text-amber-200 ring-1 ring-amber-400/60'
-                  : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-300'
-                : 'bg-emerald-950/80 hover:bg-emerald-900/80 border-emerald-500/40 text-emerald-300'
+              syncDisplay.indicatorColor === 'rose'
+                ? 'bg-rose-950/90 hover:bg-rose-900/90 border-rose-500/70 text-rose-200 ring-1 ring-rose-500/40'
+                : syncDisplay.indicatorColor === 'amber'
+                ? 'bg-amber-950/85 hover:bg-amber-900/85 border-amber-400/70 text-amber-200 shadow-xs'
+                : syncDisplay.indicatorColor === 'sky'
+                ? 'bg-sky-950/85 hover:bg-sky-900/85 border-sky-400/60 text-sky-200'
+                : 'bg-emerald-950/85 hover:bg-emerald-900/85 border-emerald-500/50 text-emerald-300'
             }`}
           >
             {syncStatus === 'saving' ? (
               <RefreshCw className="w-3.5 h-3.5 text-amber-400 animate-spin shrink-0" />
-            ) : syncStatus === 'error' ? (
+            ) : syncDisplay.indicatorColor === 'rose' ? (
               <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
             ) : syncStatus === 'paused' ? (
               <Pause className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             ) : (
-              <span className="relative flex h-2 w-2 shrink-0">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+              <span
+                data-testid="header-sync-status-dot"
+                className="relative flex h-2.5 w-2.5 shrink-0"
+              >
+                <span
+                  className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                    syncDisplay.indicatorColor === 'emerald'
+                      ? 'bg-emerald-400'
+                      : syncDisplay.indicatorColor === 'sky'
+                      ? 'bg-sky-400'
+                      : 'bg-amber-400'
+                  }`}
+                />
+                <span
+                  className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+                    syncDisplay.indicatorColor === 'emerald'
+                      ? 'bg-emerald-400'
+                      : syncDisplay.indicatorColor === 'sky'
+                      ? 'bg-sky-400'
+                      : 'bg-amber-400'
+                  }`}
+                />
               </span>
             )}
-            <span>
-              {syncStatus === 'paused'
+            <span data-testid="header-sync-freshness-label">
+              {syncStatus === 'saving'
+                ? 'Auto-saving...'
+                : syncStatus === 'paused'
                 ? hasUnsyncedChanges
-                  ? 'Sync Now (Unsaved)'
+                  ? 'Out of Sync (Unsaved)'
                   : 'Sync Paused'
-                : syncDisplay.badgeText}
+                : syncDisplay.freshnessLabel}
             </span>
-            <span className="hidden xl:inline text-[10px] font-mono font-normal opacity-85 border-l border-current/25 pl-1.5">
-              {syncStatus === 'saving' ? lastSyncedEntity : syncDisplay.formattedTime}
+            <span
+              data-testid="header-sync-elapsed-badge"
+              className="text-[10px] font-mono font-semibold opacity-90 border-l border-current/25 pl-1.5"
+            >
+              {syncStatus === 'saving'
+                ? lastSyncedEntity
+                : `${syncDisplay.elapsedText} · ${syncDisplay.formattedTime}`}
             </span>
           </button>
 
@@ -491,6 +542,16 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
           >
             <ShieldCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             <span className="hidden lg:inline">Audit Logs ({auditLogs.length})</span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="ribbon-landing-page-btn"
+            onClick={logout}
+            className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/50 rounded transition cursor-pointer whitespace-nowrap shrink-0"
+            title="Return to ZSB AQUATICS Landing Page"
+          >
+            <span>Landing Page</span>
           </button>
 
           <button

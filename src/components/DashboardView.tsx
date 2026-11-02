@@ -53,6 +53,8 @@ import { MonthlySummaryCard } from './MonthlySummaryCard.tsx';
 import { MonthlyPerformanceSummaryWidget } from './MonthlyPerformanceSummaryWidget.tsx';
 import { TopSuppliersChart } from './TopSuppliersChart.tsx';
 import { MonthlyReportsExportView } from './MonthlyReportsExportView.tsx';
+import { DailyFinancialSummaryWidget } from './DailyFinancialSummaryWidget.tsx';
+import { QuickFinancialPulseSidebar } from './QuickFinancialPulseSidebar.tsx';
 
 export const DashboardView: React.FC = () => {
   const {
@@ -294,7 +296,7 @@ export const DashboardView: React.FC = () => {
                 <div>{companyProfile.address}</div>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                   <span className="text-amber-300 font-semibold whitespace-nowrap">
-                    EMAIL: {companyProfile.email || 'www.zsbaquatics.com'}
+                    EMAIL: {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}
                   </span>
                   <span className="whitespace-nowrap">
                     · Rate: 1 RMB = {companyProfile.rmbExchangeRate} {companyProfile.currency} · Synced {new Date().toLocaleDateString('en-GB')}
@@ -446,6 +448,25 @@ export const DashboardView: React.FC = () => {
           </div>
         </div>
       </section>
+
+      {/* Daily Financial Summary + Quick Financial Pulse Companion Sidebar Grid */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-stretch">
+        <div className="xl:col-span-8">
+          <DailyFinancialSummaryWidget
+            purchases={purchases}
+            payments={payments}
+            currency={companyProfile.currency || 'BDT'}
+            onNavigateTab={(tab) => setActiveTab(tab as any)}
+          />
+        </div>
+        <div className="xl:col-span-4">
+          <QuickFinancialPulseSidebar
+            purchases={purchases}
+            payments={payments}
+            currency={companyProfile.currency || 'BDT'}
+          />
+        </div>
+      </div>
 
       {/* Low-Stock & Minimum Inventory Threshold Notification Panel */}
       <section

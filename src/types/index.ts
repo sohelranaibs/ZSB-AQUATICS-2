@@ -3,6 +3,7 @@ export interface CompanyProfile {
   address: string;
   mobiles: string[];
   email?: string;
+  website?: string;
   managingPartner: string;
   partner: string;
   currency: string;

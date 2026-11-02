@@ -1073,7 +1073,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
               </div>
               <div className="py-1.5 px-4 text-sm sm:text-base font-bold tracking-wide uppercase">
                 CONTACT NUMBER - +880 18411-65902, +880 1711 331545 | EMAIL:{' '}
-                <span className="normal-case">{companyProfile.email || 'www.zsbaquatics.com'}</span>
+                <span className="normal-case">{companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}</span>
               </div>
             </div>
 

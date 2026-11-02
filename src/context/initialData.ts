@@ -6,7 +6,8 @@ export const initialCompanyProfile: CompanyProfile = {
   companyName: 'ZSB AQUATICS',
   address: '29/B, Tarartek, Nolvog, Turag, Dhaka – 1230',
   mobiles: ['+8801671036114', '+8801841165902'],
-  email: 'www.zsbaquatics.com',
+  email: 'zsbaquatics@gmail.com',
+  website: 'www.zsbaquatics.com',
   managingPartner: 'Md. Mizanur Rahman',
   partner: 'Md. Sohel Rana',
   currency: 'TK',
@@ -21,6 +22,12 @@ export const initialDropdownOptions: DropdownOptions = {
     'FF1', 'F1', 'F2', 'F3', 'KS/3', 'XXL', 'XL', 'L', 'SM', 'SSM', 'PCS',
   ],
   suppliers: [
+    'ABDULLAH AL MAMUN',
+    'NURUL VAI',
+    'TONMOY VAI',
+    'PROTAP',
+    'NAPAL',
+    'NOZRUL',
     'ABDULLAH VAI',
     'UZZAL VAI',
     'NAPAL VAI',
@@ -493,3 +500,6 @@ export const initialPayments: PaymentRecord[] = [];
 export const initialOtherCosts: OtherCostRecord[] = [];
 export const initialSupplierCredits: SupplierCreditRecord[] = [];
 export const initialMortalities: MortalityRecord[] = [];
+
+// Initial Data Entry Rows for Supplier Payment Sheet: clean empty ledger
+export const initialSupplierPaymentSheetRows: any[] = [];

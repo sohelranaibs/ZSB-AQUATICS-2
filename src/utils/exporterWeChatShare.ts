@@ -125,7 +125,10 @@ export function normalizeExporterRowForShare(
       options.companyMobiles && options.companyMobiles.length > 0
         ? options.companyMobiles
         : ['+880 18411-65902', '+880 1711 331545'],
-    companyEmail: options.companyEmail || 'www.zsbaquatics.com',
+    companyEmail:
+      options.companyEmail && options.companyEmail !== 'www.zsbaquatics.com'
+        ? options.companyEmail
+        : 'zsbaquatics@gmail.com',
     partnerName: options.partnerName || 'MD. SOHEL RANA',
     remarks: options.remarks,
   };

@@ -119,7 +119,7 @@ export const PaymentSlipPrintCard: React.FC<PaymentSlipPrintCardProps> = ({
 
         <div style={{ color: '#000000' }} className="text-xs sm:text-sm font-bold font-mono">
           Mobile: {companyProfile.mobiles.join(' , ')} | EMAIL:{' '}
-          {companyProfile.email || 'www.zsbaquatics.com'}
+          {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}
         </div>
 
         <div
@@ -258,29 +258,41 @@ export const PaymentSlipPrintCard: React.FC<PaymentSlipPrintCardProps> = ({
           ))}
         </tbody>
         <tfoot>
-          <tr className="bg-slate-100 font-bold border-t-2 border-slate-400">
-            <td colSpan={2} className="p-2 text-right uppercase text-slate-900 border-r border-slate-300">
-              VOUCHER GRAND TOTAL:
-            </td>
-            <td className="p-2 text-right font-mono font-black tabular-nums border-r border-slate-300">
-              {formatCurrency(payment.totalAmount, currency)}
-            </td>
-            <td className="p-2 text-right font-mono font-black tabular-nums text-emerald-800 border-r border-slate-300">
-              {formatCurrency(payment.paidAmount, currency)}
-            </td>
-            <td
-              className={`p-2 text-right font-mono tabular-nums text-sm font-black text-rose-700 ${
-                isExporter ? 'border-r border-slate-300' : ''
-              }`}
-            >
-              {formatCurrency(payment.balance, currency)}
-            </td>
-            {isExporter && (
-              <td className="p-2 text-center font-bold uppercase text-[10px]">
-                {payment.status || 'REPORT'}
-              </td>
-            )}
-          </tr>
+          {(() => {
+            const rowDebitSum = items.reduce((s: number, r: any) => s + (Number(r.debitAmount) || 0), 0);
+            const rowCreditSum = items.reduce((s: number, r: any) => s + (Number(r.creditAmount) || 0), 0);
+            const displayDebit = Number(payment.totalAmount) || rowDebitSum || 0;
+            const displayCredit = Number(payment.paidAmount) || rowCreditSum || 0;
+            const displayBalance =
+              Number(payment.balance) !== 0
+                ? Number(payment.balance)
+                : Math.round((displayDebit - displayCredit) * 100) / 100;
+            return (
+              <tr className="bg-slate-100 font-bold border-t-2 border-slate-400">
+                <td colSpan={2} className="p-2 text-right uppercase text-slate-900 border-r border-slate-300">
+                  VOUCHER GRAND TOTAL:
+                </td>
+                <td className="p-2 text-right font-mono font-black tabular-nums border-r border-slate-300">
+                  {formatCurrency(displayDebit, currency)}
+                </td>
+                <td className="p-2 text-right font-mono font-black tabular-nums text-emerald-800 border-r border-slate-300">
+                  {formatCurrency(displayCredit, currency)}
+                </td>
+                <td
+                  className={`p-2 text-right font-mono tabular-nums text-sm font-black text-rose-700 ${
+                    isExporter ? 'border-r border-slate-300' : ''
+                  }`}
+                >
+                  {formatCurrency(displayBalance, currency)}
+                </td>
+                {isExporter && (
+                  <td className="p-2 text-center font-bold uppercase text-[10px]">
+                    {payment.status || 'REPORT'}
+                  </td>
+                )}
+              </tr>
+            );
+          })()}
         </tfoot>
       </table>
 

@@ -35,6 +35,9 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  ChevronDown,
+  ChevronUp,
+  Calculator,
 } from 'lucide-react';
 import {
   toggleSort,
@@ -61,6 +64,8 @@ import {
   analyzePurchasePaymentReconciliation,
   buildSmartSyncReconciliationPlan,
 } from '../utils/smartDataSync.ts';
+import { buildSupplierRecordHistory } from '../utils/supplierHistory.ts';
+import { formatDateImageStyle } from '../utils/calculations.ts';
 import { exportElementsToCombinedPdf } from '../utils/pdfGenerator.ts';
 import {
   formatBatchPaymentSlipsPdfFilename,
@@ -97,6 +102,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     addPayment,
     updatePayment,
     deletePayment,
+    supplierCredits,
     companyProfile,
     dropdownOptions,
     openPrintModal,
@@ -130,6 +136,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isExportingBatchSlips, setIsExportingBatchSlips] = useState<boolean>(false);
   const [isBatchSidebarOpen, setIsBatchSidebarOpen] = useState<boolean>(false);
+  const [syncLedgerSupplier, setSyncLedgerSupplier] = useState<string>('ALL');
+  const [syncLedgerSortDirection, setSyncLedgerSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [isSyncLedgerExpanded, setIsSyncLedgerExpanded] = useState<boolean>(true);
 
   // Selected payment records for batch export
   const selectedPaymentsForBatch = useMemo(
@@ -299,6 +308,20 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     () => analyzePurchasePaymentReconciliation(purchases, payments),
     [purchases, payments]
   );
+
+  const syncSupplierLedgerRows = useMemo(() => {
+    return buildSupplierRecordHistory(purchases, payments, supplierCredits || [], {
+      supplierName: syncLedgerSupplier,
+      sortDirection: syncLedgerSortDirection,
+    });
+  }, [purchases, payments, supplierCredits, syncLedgerSupplier, syncLedgerSortDirection]);
+
+  const syncSupplierLedgerTotals = useMemo(() => {
+    const totalDebit = syncSupplierLedgerRows.reduce((acc, r) => acc + r.debitAmount, 0);
+    const totalCredit = syncSupplierLedgerRows.reduce((acc, r) => acc + r.creditAmount, 0);
+    const netEndingBalance = totalDebit - totalCredit;
+    return { totalDebit, totalCredit, netEndingBalance };
+  }, [syncSupplierLedgerRows]);
 
   const handleSmartSyncReconcile = (targetRecordId?: string) => {
     const plan = buildSmartSyncReconciliationPlan(purchases, payments, targetRecordId);
@@ -1087,6 +1110,149 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               </button>
             </div>
           )}
+
+          {/* Supplier Account Reconciliation Ledger Table (Matching Image Formula: Balance = Prev + Debit - Credit) */}
+          <div className="mt-4 pt-4 border-t border-slate-200/90" data-testid="smart-sync-supplier-ledger">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSyncLedgerExpanded((prev) => !prev)}
+                  className="flex items-center gap-1.5 text-xs font-black uppercase text-slate-900 hover:text-purple-800 transition cursor-pointer"
+                >
+                  {isSyncLedgerExpanded ? (
+                    <ChevronUp className="w-4 h-4 text-purple-700" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-purple-700" />
+                  )}
+                  <span>SUPPLIER ACCOUNT RECONCILIATION LEDGER</span>
+                </button>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-100 text-blue-900 text-[10px] font-mono font-bold border border-blue-200">
+                  <Calculator className="w-3 h-3 text-blue-700" />
+                  <span>Formula: Balance = Prev Balance + Debit Amount - Credit Amount (Credit Amount = Paid Amount)</span>
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                {/* Supplier Filter Select */}
+                <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-lg border border-slate-300 shadow-xs">
+                  <span className="text-[10px] font-bold uppercase text-slate-500">Supplier:</span>
+                  <select
+                    data-testid="smart-sync-supplier-select"
+                    value={syncLedgerSupplier}
+                    onChange={(e) => setSyncLedgerSupplier(e.target.value)}
+                    className="font-bold text-slate-900 text-xs bg-transparent focus:outline-none cursor-pointer"
+                  >
+                    <option value="ALL">ALL SUPPLIERS</option>
+                    {dropdownOptions.suppliers.map((sup) => (
+                      <option key={sup} value={sup}>
+                        {sup}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Sort Direction Toggle */}
+                <div className="flex items-center bg-white p-0.5 rounded-lg border border-slate-300 shadow-xs">
+                  <button
+                    type="button"
+                    onClick={() => setSyncLedgerSortDirection('asc')}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition cursor-pointer ${
+                      syncLedgerSortDirection === 'asc'
+                        ? 'bg-blue-700 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    title="Chronological Ascending Order (Oldest First - Spreadsheet Formula Order)"
+                  >
+                    Oldest First (Asc)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSyncLedgerSortDirection('desc')}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition cursor-pointer ${
+                      syncLedgerSortDirection === 'desc'
+                        ? 'bg-blue-700 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    title="Newest First (Desc)"
+                  >
+                    Newest First (Desc)
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {isSyncLedgerExpanded && (
+              <div className="overflow-x-auto border-2 border-blue-600 rounded-lg bg-white shadow-xs">
+                <table className="w-full text-left border-collapse text-xs font-mono">
+                  <thead className="bg-[#1d5ec1] text-white font-bold uppercase text-[11px] tracking-wider border-b border-blue-900">
+                    <tr>
+                      <th className="px-3 py-2 border-r border-blue-400/40 w-32 text-center">DATE</th>
+                      <th className="px-3 py-2 border-r border-blue-400/40 min-w-[160px]">SUPLIER NAME</th>
+                      <th className="px-3 py-2 border-r border-blue-400/40 text-right w-36">DEBIT AMOUNT</th>
+                      <th className="px-3 py-2 border-r border-blue-400/40 text-right w-36">CREDIT AMOUNT</th>
+                      <th className="px-3 py-2 text-right w-40 bg-[#16499a]">BALANCE</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {syncSupplierLedgerRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-slate-400 italic bg-slate-50 font-sans">
+                          No purchase bills or supplier payment vouchers found for the selected supplier.
+                        </td>
+                      </tr>
+                    ) : (
+                      syncSupplierLedgerRows.map((row, idx) => {
+                        const isEven = idx % 2 === 1;
+                        return (
+                          <tr
+                            key={row.id}
+                            className={`hover:bg-blue-50/60 transition-colors ${
+                              isEven ? 'bg-slate-50/70' : 'bg-white'
+                            }`}
+                          >
+                            <td className="px-3 py-2 border-r border-slate-200 text-center font-bold text-slate-700 whitespace-nowrap">
+                              {formatDateImageStyle(row.date)}
+                            </td>
+                            <td className="px-3 py-2 border-r border-slate-200 font-sans font-bold text-slate-900 whitespace-nowrap">
+                              {row.supplierName}
+                            </td>
+                            <td className="px-3 py-2 border-r border-slate-200 text-right font-bold text-slate-900 whitespace-nowrap">
+                              {row.debitAmount > 0 ? formatCurrency(row.debitAmount, '') : ''}
+                            </td>
+                            <td className="px-3 py-2 border-r border-slate-200 text-right font-bold text-slate-900 whitespace-nowrap">
+                              {row.creditAmount > 0 ? formatCurrency(row.creditAmount, '') : ''}
+                            </td>
+                            <td className="px-3 py-2 text-right font-black text-slate-950 bg-blue-50/40 whitespace-nowrap">
+                              {formatCurrency(row.balance, '')}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                  {syncSupplierLedgerRows.length > 0 && (
+                    <tfoot className="bg-slate-100 font-bold border-t-2 border-slate-400 text-slate-900 text-xs">
+                      <tr>
+                        <td colSpan={2} className="px-3 py-2 border-r border-slate-300 uppercase text-right font-sans font-black">
+                          TOTALS ({syncSupplierLedgerRows.length} ENTRIES):
+                        </td>
+                        <td className="px-3 py-2 border-r border-slate-300 text-right font-black text-slate-950">
+                          {formatCurrency(syncSupplierLedgerTotals.totalDebit, '')}
+                        </td>
+                        <td className="px-3 py-2 border-r border-slate-300 text-right font-black text-emerald-800">
+                          {formatCurrency(syncSupplierLedgerTotals.totalCredit, '')}
+                        </td>
+                        <td className="px-3 py-2 text-right font-black text-blue-900 bg-blue-100/70">
+                          {formatCurrency(syncSupplierLedgerTotals.netEndingBalance, companyProfile.currency)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

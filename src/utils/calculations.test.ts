@@ -119,7 +119,7 @@ test('calculatePaymentTotals calculates balance correctly', () => {
   const totals = calculatePaymentTotals(rows, 100000, 40000);
   assert.equal(totals.totalDebit, 50000);
   assert.equal(totals.totalCredit, 20000);
-  assert.equal(totals.balance, 60000); // previous 100000 - paid 40000
+  assert.equal(totals.balance, 110000); // previous 100000 + debit 50000 - paid 40000
 });
 
 test('calculateProfitLoss calculates gross profit, net profit and margin', () => {

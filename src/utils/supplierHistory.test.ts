@@ -101,9 +101,9 @@ describe('supplierHistory pure logic tests', () => {
     assert.equal(history[3].invoiceNumber, 'INV-1001');
 
     // Check Debit, Credit, Balance
-    assert.equal(history[1].debitAmount, 20000);
+    assert.equal(history[1].debitAmount, 0);
     assert.equal(history[1].creditAmount, 20000);
-    assert.equal(history[1].balance, 0);
+    assert.equal(history[1].balance, -20000); // 0 - 20000
     assert.equal(history[1].status, 'PAID');
   });
 
@@ -131,9 +131,10 @@ describe('supplierHistory pure logic tests', () => {
     assert.equal(totals.recordCount, 4);
     assert.equal(totals.voucherCount, 1);
     assert.equal(totals.purchaseCount, 2);
-    assert.equal(totals.creditNoteCount, 1);
-    assert.ok(totals.totalDebit > 0);
-    assert.ok(totals.totalCredit > 0);
+    assert.equal(totals.totalDebit, 90000);
+    // Purchase paidAmounts (30000 + 40000) + Voucher (20000) + Credit Note (5000) = 95000
+    assert.equal(totals.totalCredit, 95000);
+    assert.equal(totals.totalBalance, -5000); // 90000 - 95000
     assert.ok(totals.paidCount >= 2);
   });
 });

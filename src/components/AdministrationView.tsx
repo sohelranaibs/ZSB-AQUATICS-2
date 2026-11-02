@@ -157,10 +157,14 @@ export const AdministrationView: React.FC = () => {
   const [profileAddress, setProfileAddress] = useState(companyProfile.address);
   const [profileMobile1, setProfileMobile1] = useState(companyProfile.mobiles[0] || '+8801841165902');
   const [profileMobile2, setProfileMobile2] = useState(companyProfile.mobiles[1] || '+8801671036114');
-  const [profileEmail, setProfileEmail] = useState(companyProfile.email || 'sohelranaibs@gmail.com');
+  const [profileEmail, setProfileEmail] = useState(
+    companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com'
+      ? companyProfile.email
+      : 'zsbaquatics@gmail.com'
+  );
+  const [profileWebsite, setProfileWebsite] = useState(companyProfile.website || 'www.zsbaquatics.com');
   const [profileManagingPartner, setProfileManagingPartner] = useState(companyProfile.managingPartner);
   const [profilePartner, setProfilePartner] = useState(companyProfile.partner);
-  const [profileRmbRate, setProfileRmbRate] = useState(String(companyProfile.rmbExchangeRate || 16.5));
 
   // Password change state
   const [currentPwd, setCurrentPwd] = useState<string>('');
@@ -217,14 +221,13 @@ export const AdministrationView: React.FC = () => {
   // Profile save handler
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
-    const parsedRate = parseFloat(profileRmbRate) || companyProfile.rmbExchangeRate || 16.5;
     updateCompanyProfile({
       address: profileAddress,
       mobiles: [profileMobile1.trim(), profileMobile2.trim()].filter(Boolean),
-      email: profileEmail.trim(),
+      email: profileEmail.trim() || 'zsbaquatics@gmail.com',
+      website: profileWebsite.trim() || 'www.zsbaquatics.com',
       managingPartner: profileManagingPartner.trim(),
       partner: profilePartner.trim(),
-      rmbExchangeRate: parsedRate,
     });
     showToast('Company and executive partner profile updated successfully.');
   };
@@ -976,7 +979,7 @@ export const AdministrationView: React.FC = () => {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="font-bold text-slate-700 block mb-1">
                       Primary Mobile
@@ -1000,31 +1003,31 @@ export const AdministrationView: React.FC = () => {
                       className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 font-mono text-slate-900"
                     />
                   </div>
-
-                  <div>
-                    <label className="font-bold text-slate-700 block mb-1">
-                      RMB Rate (TK)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={profileRmbRate}
-                      onChange={(e) => setProfileRmbRate(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 font-mono text-slate-900 font-bold"
-                    />
-                  </div>
                 </div>
 
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">
-                    Official Email / Portal Contact
-                  </label>
-                  <input
-                    type="email"
-                    value={profileEmail}
-                    onChange={(e) => setProfileEmail(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 font-mono text-slate-900"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">
+                      Official Email
+                    </label>
+                    <input
+                      type="text"
+                      value={profileEmail}
+                      onChange={(e) => setProfileEmail(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 font-mono text-slate-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 block mb-1">
+                      Official Website
+                    </label>
+                    <input
+                      type="text"
+                      value={profileWebsite}
+                      onChange={(e) => setProfileWebsite(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 font-mono text-slate-900"
+                    />
+                  </div>
                 </div>
 
                 <div className="pt-2 flex justify-end">

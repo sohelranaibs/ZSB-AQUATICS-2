@@ -56,6 +56,7 @@ export interface SupplierHistoryFilterOptions {
   status?: string;
   search?: string;
   recordType?: string;
+  sortDirection?: 'asc' | 'desc';
 }
 
 /**
@@ -71,8 +72,7 @@ export function normalizeSupplierStatus(status?: string, fallback: ExporterStatu
 
 /**
  * Builds the comprehensive Supplier Payment Details & Transaction History
- * (Debit, Credit, Balance & Status: Paid, Report, No Report) across
- * all Supplier Payment Vouchers, Purchase Consignment Bills, and Credit Notes.
+ * (Debit = Purchase Bills, Credit = Supplier Payments / Credit Notes, Balance = Running Cumulative)
  */
 export function buildSupplierRecordHistory(
   purchases: PurchaseRecord[] = [],
@@ -85,6 +85,7 @@ export function buildSupplierRecordHistory(
     status = 'ALL',
     search = '',
     recordType = 'ALL',
+    sortDirection = 'desc',
   } = filters;
 
   const targetSupplier = (supplierName || 'ALL').trim().toLowerCase();
@@ -97,86 +98,124 @@ export function buildSupplierRecordHistory(
     return (name || '').trim().toLowerCase() === targetSupplier;
   };
 
-  const rows: SupplierRecordHistoryRow[] = [];
+  const rawRows: Omit<SupplierRecordHistoryRow, 'balance'>[] = [];
 
-  // 1. Process Supplier Payment Vouchers
+  // Track purchases that already have a paidAmount so auto-synced payment vouchers don't double-count credit
+  const purchasesWithPaid = new Set(
+    purchases
+      .filter((p) => (Number(p.paidAmount) || 0) > 0 && p.invoiceNumber)
+      .map((p) => p.invoiceNumber.trim().toUpperCase())
+  );
+
+  // 1. Process Supplier Payment Vouchers (CREDIT: reduces supplier balance)
   const supplierPayments = payments.filter(
     (pm) => classifyPaymentCategory(pm) === 'supplier'
   );
 
   for (const pm of supplierPayments) {
     if (!isSupplierMatch(pm.description)) continue;
+    // Skip auto-synced mirror payment vouchers when the purchase bill itself already carries the paidAmount as Credit Amount
+    if (
+      pm.id.startsWith('pay-sync-') ||
+      (pm.exportGoodsRef && purchasesWithPaid.has(pm.exportGoodsRef.trim().toUpperCase()))
+    ) {
+      continue;
+    }
 
-    const debitAmt = Number(pm.totalAmount) || 0;
-    const creditAmt = Number(pm.paidAmount) || 0;
-    const balAmt = Number(pm.balance) || calculatePaymentRow(debitAmt, creditAmt);
+    const standaloneItemsDebit = Array.isArray(pm.items)
+      ? pm.items
+          .filter(
+            (i) =>
+              !String(i.id || '').startsWith('pur-') &&
+              !String(i.id || '').startsWith('pay-') &&
+              !String(i.id || '').startsWith('cn-')
+          )
+          .reduce((s, i) => s + (Number(i.debitAmount) || 0), 0)
+      : 0;
+    const itemsCredit = Array.isArray(pm.items)
+      ? pm.items
+          .filter(
+            (i) =>
+              !String(i.id || '').startsWith('pur-') &&
+              !String(i.id || '').startsWith('pay-') &&
+              !String(i.id || '').startsWith('cn-')
+          )
+          .reduce((s, i) => s + (Number(i.creditAmount) || 0), 0)
+      : 0;
+    const debitAmt = !pm.exportGoodsRef
+      ? Math.round(
+          (standaloneItemsDebit > 0
+            ? standaloneItemsDebit
+            : Number(pm.totalAmount) || 0) * 100
+        ) / 100
+      : 0;
+    const creditAmt =
+      Math.round((Number(pm.paidAmount) || itemsCredit || 0) * 100) / 100;
+    const pmTotal = Math.round((Number(pm.totalAmount) || debitAmt || 0) * 100) / 100;
+    const pmBalance =
+      Math.round((Number(pm.balance) || pmTotal - creditAmt) * 100) / 100;
 
-    // If voucher balance is 0 or less and paidAmount > 0, it is PAID
     let rowStatus: ExporterStatus = normalizeSupplierStatus(pm.status, 'PAID');
-    if (balAmt <= 0 && creditAmt > 0) {
+    if (pmBalance <= 0 && creditAmt > 0) {
       rowStatus = 'PAID';
-    } else if (balAmt > 0 && creditAmt > 0) {
+    } else if (pmBalance > 0 && (creditAmt > 0 || debitAmt > 0)) {
       rowStatus = 'REPORT';
     }
 
-    rows.push({
+    rawRows.push({
       id: `voucher-${pm.id}`,
       paymentId: pm.id,
       recordType: 'PAYMENT_VOUCHER',
       invoiceNumber: pm.invoiceNumber,
       date: pm.date,
       supplierName: pm.description,
-      description: `Payment Voucher: ${pm.invoiceNumber} (${pm.items?.length || 1} line item${(pm.items?.length || 1) === 1 ? '' : 's'})`,
-      debitAmount: Math.round(debitAmt * 100) / 100,
-      creditAmount: Math.round(creditAmt * 100) / 100,
-      balance: Math.round(balAmt * 100) / 100,
+      description: `Payment Voucher: ${pm.invoiceNumber}${pmTotal > 0 ? ` (Ref Total: ${pmTotal})` : ''}`,
+      debitAmount: debitAmt,
+      creditAmount: creditAmt,
       status: rowStatus,
       refDocument: pm.invoiceNumber,
     });
   }
 
-  // 2. Process Purchase Consignment Bills (Local Fish Suppliers)
+  // 2. Process Purchase Consignment Bills (DEBIT = totalAmount, CREDIT = paidAmount, BALANCE = Debit - Credit)
   for (const pur of purchases) {
     if (!isSupplierMatch(pur.description)) continue;
 
-    const purDebit = Number(pur.totalAmount) || 0;
-    const purCredit = Number(pur.paidAmount) || 0;
-    const purBalance = Number(pur.balance) || calculatePaymentRow(purDebit, purCredit);
+    const purDebit = Math.round((Number(pur.totalAmount) || 0) * 100) / 100;
+    const purPaid = Math.round((Number(pur.paidAmount) || 0) * 100) / 100;
+    const purBalance = Math.round((Number(pur.balance) || (purDebit - purPaid)) * 100) / 100;
 
     let purStatus: ExporterStatus = 'REPORT';
     if (purBalance <= 0 && purDebit > 0) {
       purStatus = 'PAID';
-    } else if (purCredit === 0 && purDebit > 0) {
+    } else if (purPaid === 0 && purDebit > 0) {
       purStatus = 'NO REPORT';
     } else {
       purStatus = 'REPORT';
     }
 
-    rows.push({
+    rawRows.push({
       id: `purchase-${pur.id}`,
       recordType: 'PURCHASE_BILL',
       invoiceNumber: pur.invoiceNumber,
       date: pur.date,
       supplierName: pur.description,
       description: `Purchase Consignment: ${pur.invoiceNumber} · ${pur.totalQty || 0} KG ${pur.remarks ? `· ${pur.remarks}` : ''}`,
-      debitAmount: Math.round(purDebit * 100) / 100,
-      creditAmount: Math.round(purCredit * 100) / 100,
-      balance: Math.round(purBalance * 100) / 100,
+      debitAmount: purDebit,
+      creditAmount: purPaid,
       status: purStatus,
       refDocument: pur.invoiceNumber,
     });
   }
 
-  // 3. Process Supplier Credit Notes & Rebates
+  // 3. Process Supplier Credit Notes & Rebates (CREDIT: reduces supplier balance)
   for (const cn of supplierCredits) {
     if (!isSupplierMatch(cn.supplierName)) continue;
 
-    const cnAmount = Number(cn.amount) || 0;
-    const appliedAmount = cnAmount - (Number(cn.remainingAmount) || 0);
-
+    const cnAmount = Math.round((Number(cn.amount) || 0) * 100) / 100;
     const cnStatus: ExporterStatus = cn.remainingAmount === 0 ? 'PAID' : 'REPORT';
 
-    rows.push({
+    rawRows.push({
       id: `credit-${cn.id}`,
       recordType: 'CREDIT_NOTE',
       invoiceNumber: cn.creditNoteNumber,
@@ -184,22 +223,29 @@ export function buildSupplierRecordHistory(
       supplierName: cn.supplierName,
       description: `Credit Note / Rebate: ${cn.creditNoteNumber} · ${cn.reason}${cn.refPurchaseInvoice ? ` (Ref: ${cn.refPurchaseInvoice})` : ''}`,
       debitAmount: 0,
-      creditAmount: Math.round(cnAmount * 100) / 100,
-      balance: Math.round(-appliedAmount * 100) / 100,
+      creditAmount: cnAmount,
       status: cnStatus,
       refDocument: cn.refPurchaseInvoice,
     });
   }
 
-  // Sort by Date descending (newest first)
-  rows.sort((a, b) => {
-    const dDiff = (b.date || '').localeCompare(a.date || '');
+  // 4. Sort chronologically ASCENDING to calculate cumulative running balance
+  rawRows.sort((a, b) => {
+    const dDiff = (a.date || '').localeCompare(b.date || '');
     if (dDiff !== 0) return dDiff;
-    return (b.invoiceNumber || '').localeCompare(a.invoiceNumber || '');
+    return (a.invoiceNumber || '').localeCompare(b.invoiceNumber || '');
   });
 
-  // Apply Filters
-  return rows.filter((r) => {
+  // 5. Calculate per-row balance: Balance = Debit - Credit (matching user spreadsheet layout)
+  const computedRows: SupplierRecordHistoryRow[] = rawRows.map((r) => {
+    return {
+      ...r,
+      balance: Math.round((r.debitAmount - r.creditAmount) * 100) / 100,
+    };
+  });
+
+  // 6. Apply Filter by record type, status, search
+  const filtered = computedRows.filter((r) => {
     if (targetType !== 'ALL' && r.recordType !== targetType) {
       return false;
     }
@@ -221,6 +267,17 @@ export function buildSupplierRecordHistory(
 
     return true;
   });
+
+  // 7. Sort direction: 'desc' (newest first) or 'asc' (oldest first, like image spreadsheet)
+  if (sortDirection === 'desc') {
+    filtered.sort((a, b) => {
+      const dDiff = (b.date || '').localeCompare(a.date || '');
+      if (dDiff !== 0) return dDiff;
+      return (b.invoiceNumber || '').localeCompare(a.invoiceNumber || '');
+    });
+  }
+
+  return filtered;
 }
 
 /**
@@ -231,7 +288,6 @@ export function calculateSupplierHistoryTotals(
 ): SupplierHistoryTotals {
   let totalDebit = 0;
   let totalCredit = 0;
-  let totalBalance = 0;
   let paidCount = 0;
   let reportCount = 0;
   let noReportCount = 0;
@@ -242,7 +298,6 @@ export function calculateSupplierHistoryTotals(
   for (const r of rows) {
     totalDebit += r.debitAmount;
     totalCredit += r.creditAmount;
-    totalBalance += r.balance;
 
     if (r.recordType === 'PAYMENT_VOUCHER') voucherCount++;
     else if (r.recordType === 'PURCHASE_BILL') purchaseCount++;
@@ -254,8 +309,12 @@ export function calculateSupplierHistoryTotals(
     else reportCount++;
   }
 
+  const roundedDebit = Math.round(totalDebit * 100) / 100;
+  const roundedCredit = Math.round(totalCredit * 100) / 100;
+  const totalBalance = Math.round((roundedDebit - roundedCredit) * 100) / 100;
+
   let computedOverallStatus: ExporterStatus = 'REPORT';
-  if (totalBalance <= 0 && totalCredit > 0) {
+  if (totalBalance <= 0 && roundedCredit > 0) {
     computedOverallStatus = 'PAID';
   } else if (noReportCount > 0 && paidCount === 0 && reportCount === 0) {
     computedOverallStatus = 'NO REPORT';
@@ -268,9 +327,9 @@ export function calculateSupplierHistoryTotals(
     voucherCount,
     purchaseCount,
     creditNoteCount,
-    totalDebit: Math.round(totalDebit * 100) / 100,
-    totalCredit: Math.round(totalCredit * 100) / 100,
-    totalBalance: Math.round(totalBalance * 100) / 100,
+    totalDebit: roundedDebit,
+    totalCredit: roundedCredit,
+    totalBalance,
     paidCount,
     reportCount,
     noReportCount,

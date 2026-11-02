@@ -58,6 +58,7 @@ import {
   validateAndParseSnapshotJSON,
   appendSnapshotWithRetention,
 } from '../utils/snapshotManager.ts';
+import { emitPaymentSyncTrigger } from '../utils/paymentSync.ts';
 import { SyncStatusState } from '../utils/syncStatus.ts';
 import {
   parseShipmentDeepLink,
@@ -325,7 +326,7 @@ const STORAGE_KEYS = {
   MORTALITIES: 'zsb_mortalities_v6',
   SUPER_ADMIN_PASSWORD: 'zsb_super_admin_password_v1',
   SNAPSHOTS: 'zsb_database_snapshots_v2',
-  AUTH_USER: 'zsb_auth_user_v1',
+  AUTH_USER: 'zsb_auth_user_v2',
   AUDIT_LOGS: 'zsb_audit_logs_v2',
   LIVE_SYNC: 'zsb_live_sync_enabled_v1',
 };
@@ -409,7 +410,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const merged: CompanyProfile = {
         ...initialCompanyProfile,
         ...parsed,
-        email: parsed.email || initialCompanyProfile.email,
+        email:
+          parsed.email && parsed.email !== 'www.zsbaquatics.com'
+            ? parsed.email
+            : 'zsbaquatics@gmail.com',
+        website: parsed.website || 'www.zsbaquatics.com',
         logoUrl:
           typeof parsed.logoUrl === 'string' && parsed.logoUrl.startsWith('data:image/')
             ? parsed.logoUrl
@@ -461,46 +466,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [purchases, setPurchases] = useState<PurchaseRecord[]>(() => {
     try {
-      localStorage.removeItem('zsb_purchases_v1');
-      localStorage.removeItem('zsb_purchases_v2');
-      localStorage.removeItem('zsb_purchases_v3');
-      localStorage.removeItem('zsb_purchases_v4');
-      localStorage.removeItem('zsb_purchases_v5');
-      localStorage.removeItem('zsb_purchases_v6');
+      if (!localStorage.getItem('zsb_db_wipe_all_v12')) {
+        localStorage.removeItem(STORAGE_KEYS.PURCHASES);
+        return [];
+      }
       const saved = localStorage.getItem(STORAGE_KEYS.PURCHASES);
-      if (!saved) return initialPurchases;
+      if (!saved) return [];
       const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'pur') : initialPurchases;
+      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'pur') : [];
     } catch {
-      return initialPurchases;
+      return [];
     }
   });
 
   const [packings, setPackings] = useState<PackingRecord[]>(() => {
     try {
-      localStorage.removeItem('zsb_packings_v1');
-      localStorage.removeItem('zsb_packings_v2');
-      localStorage.removeItem('zsb_packings_v3');
-      localStorage.removeItem('zsb_packings_v4');
-      localStorage.removeItem('zsb_packings_v5');
-      localStorage.removeItem('zsb_packings_v6');
+      if (!localStorage.getItem('zsb_db_wipe_all_v12')) {
+        localStorage.removeItem(STORAGE_KEYS.PACKINGS);
+        return [];
+      }
       const saved = localStorage.getItem(STORAGE_KEYS.PACKINGS);
-      if (!saved) return initialPackings;
+      if (!saved) return [];
       const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'pkg') : initialPackings;
+      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'pkg') : [];
     } catch {
-      return initialPackings;
+      return [];
     }
   });
 
   const [packingDraft, setPackingDraft] = useState<PackingFormDraft>(() => {
     try {
-      localStorage.removeItem('zsb_packing_draft_v1');
-      localStorage.removeItem('zsb_packing_draft_v2');
-      localStorage.removeItem('zsb_packing_draft_v3');
-      localStorage.removeItem('zsb_packing_draft_v4');
-      localStorage.removeItem('zsb_packing_draft_v5');
-      localStorage.removeItem('zsb_packing_draft_v6');
+      if (!localStorage.getItem('zsb_db_wipe_all_v12')) {
+        localStorage.removeItem(STORAGE_KEYS.PACKING_DRAFT);
+        return createInitialPackingDraft(0);
+      }
       const saved = localStorage.getItem(STORAGE_KEYS.PACKING_DRAFT);
       if (!saved) return createInitialPackingDraft(0);
       const parsed = JSON.parse(saved);
@@ -523,44 +522,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [payments, setPayments] = useState<PaymentRecord[]>(() => {
     try {
-      localStorage.removeItem('zsb_payments_v1');
-      localStorage.removeItem('zsb_payments_v2');
-      localStorage.removeItem('zsb_payments_v3');
-      localStorage.removeItem('zsb_payments_v4');
-      localStorage.removeItem('zsb_payments_v5');
-      localStorage.removeItem('zsb_payments_v6');
+      if (!localStorage.getItem('zsb_db_wipe_all_v12')) {
+        localStorage.removeItem(STORAGE_KEYS.PAYMENTS);
+        return [];
+      }
       const saved = localStorage.getItem(STORAGE_KEYS.PAYMENTS);
-      if (!saved) return initialPayments;
+      if (!saved) return [];
       const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'pay') : initialPayments;
+      const deduped = Array.isArray(parsed) ? deduplicateRecords(parsed, 'pay') : [];
+      return deduped.map((pm: PaymentRecord) => {
+        if (pm.paymentCategory === 'exporter') return pm;
+        const rowDebit = Array.isArray(pm.items)
+          ? pm.items.reduce((s, r) => s + (Number(r.debitAmount) || 0), 0)
+          : 0;
+        const rowCredit = Array.isArray(pm.items)
+          ? pm.items.reduce((s, r) => s + (Number(r.creditAmount) || 0), 0)
+          : 0;
+        const nextTotal = Math.round((Number(pm.totalAmount) || rowDebit || 0) * 100) / 100;
+        const nextPaid = Math.round((Number(pm.paidAmount) || rowCredit || 0) * 100) / 100;
+        const nextBal =
+          Number(pm.paidAmount) === 0 && (rowCredit > 0 || rowDebit > 0)
+            ? Math.round((nextTotal - nextPaid) * 100) / 100
+            : Number(pm.balance) || Math.round((nextTotal - nextPaid) * 100) / 100;
+        return {
+          ...pm,
+          totalAmount: nextTotal,
+          paidAmount: nextPaid,
+          balance: nextBal,
+        };
+      });
     } catch {
-      return initialPayments;
+      return [];
     }
   });
 
   const [otherCosts, setOtherCosts] = useState<OtherCostRecord[]>(() => {
     try {
-      localStorage.removeItem('zsb_other_costs_v1');
-      localStorage.removeItem('zsb_other_costs_v2');
-      localStorage.removeItem('zsb_other_costs_v3');
-      localStorage.removeItem('zsb_other_costs_v4');
-      localStorage.removeItem('zsb_other_costs_v5');
-      localStorage.removeItem('zsb_other_costs_v6');
+      if (!localStorage.getItem('zsb_db_wipe_all_v12')) {
+        localStorage.removeItem(STORAGE_KEYS.OTHER_COSTS);
+        return [];
+      }
       const saved = localStorage.getItem(STORAGE_KEYS.OTHER_COSTS);
-      if (!saved) return initialOtherCosts;
+      if (!saved) return [];
       const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'cost') : initialOtherCosts;
+      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'cost') : [];
     } catch {
-      return initialOtherCosts;
+      return [];
     }
   });
 
   const [supplierCredits, setSupplierCredits] = useState<SupplierCreditRecord[]>(() => {
     try {
-      localStorage.removeItem('zsb_supplier_credits_v1');
-      localStorage.removeItem('zsb_supplier_credits_v2');
-      localStorage.removeItem('zsb_supplier_credits_v3');
-      localStorage.removeItem('zsb_supplier_credits_v4');
+      if (!localStorage.getItem('zsb_db_wipe_all_v12')) {
+        localStorage.removeItem(STORAGE_KEYS.SUPPLIER_CREDITS);
+        return [];
+      }
       const saved = localStorage.getItem(STORAGE_KEYS.SUPPLIER_CREDITS);
       if (!saved) return [];
       const parsed = JSON.parse(saved);
@@ -572,10 +588,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [mortalities, setMortalities] = useState<MortalityRecord[]>(() => {
     try {
-      localStorage.removeItem('zsb_mortalities_v1');
-      localStorage.removeItem('zsb_mortalities_v2');
-      localStorage.removeItem('zsb_mortalities_v3');
-      localStorage.removeItem('zsb_mortalities_v4');
+      if (!localStorage.getItem('zsb_db_wipe_all_v12')) {
+        localStorage.removeItem(STORAGE_KEYS.MORTALITIES);
+        return [];
+      }
       const saved = localStorage.getItem(STORAGE_KEYS.MORTALITIES);
       if (!saved) return [];
       const parsed = JSON.parse(saved);
@@ -957,9 +973,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         'zsb_exporter_slip_custom_rows_v3',
       ];
       legacyKeys.forEach((k) => localStorage.removeItem(k));
-      if (!localStorage.getItem('zsb_db_wiped_v7')) {
+      sessionStorage.removeItem('zsb_auth_user_v1');
+      if (!localStorage.getItem('zsb_db_wipe_all_v12')) {
         indexedStorageDriver.clearAllStores();
-        localStorage.setItem('zsb_db_wiped_v7', '1');
+        localStorage.setItem('zsb_db_wipe_all_v12', '1');
       }
     } catch {
       // ignore
@@ -1096,6 +1113,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString(),
     };
     setPurchases((prev) => [newRecord, ...prev]);
+    emitPaymentSyncTrigger({
+      category: 'supplier',
+      action: 'confirm',
+      invoiceNumber: newRecord.invoiceNumber,
+      partyName: newRecord.description,
+      debitAmount: newRecord.totalAmount,
+      creditAmount: newRecord.paidAmount,
+      runningBalance: newRecord.balance,
+    });
     addAuditLog({
       action: 'CREATE',
       module: 'Purchase',
@@ -1110,6 +1136,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updatePurchase = (id: string, record: Partial<PurchaseRecord>) => {
     const target = purchases.find((p) => p.id === id);
     setPurchases((prev) => prev.map((p) => (p.id === id ? { ...p, ...record } : p)));
+    emitPaymentSyncTrigger({
+      category: 'supplier',
+      action: 'update',
+      invoiceNumber: record.invoiceNumber || target?.invoiceNumber || id,
+      partyName: record.description || target?.description,
+      debitAmount: record.totalAmount ?? target?.totalAmount,
+      creditAmount: record.paidAmount ?? target?.paidAmount,
+      runningBalance: record.balance ?? target?.balance,
+    });
     addAuditLog({
       action: 'UPDATE',
       module: 'Purchase',
@@ -1123,6 +1158,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deletePurchase = (id: string) => {
     const target = purchases.find((p) => p.id === id);
     setPurchases((prev) => prev.filter((p) => p.id !== id));
+    emitPaymentSyncTrigger({
+      category: 'supplier',
+      action: 'delete',
+      invoiceNumber: target?.invoiceNumber || id,
+      partyName: target?.description,
+    });
     addAuditLog({
       action: 'DELETE',
       module: 'Purchase',
@@ -1405,18 +1446,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Payments CRUD
   const addPayment = (record: Omit<PaymentRecord, 'id' | 'createdAt'>) => {
     const id = generateRecordId('pay');
+    const rowDebit = Array.isArray(record.items)
+      ? record.items.reduce((s, r) => s + (Number(r.debitAmount) || 0), 0)
+      : 0;
+    const rowCredit = Array.isArray(record.items)
+      ? record.items.reduce((s, r) => s + (Number(r.creditAmount) || 0), 0)
+      : 0;
+    const isSupplier = record.paymentCategory !== 'exporter';
+    const normalizedTotal = isSupplier
+      ? Math.round((Number(record.totalAmount) || rowDebit || 0) * 100) / 100
+      : record.totalAmount;
+    const normalizedPaid = isSupplier
+      ? Math.round((Number(record.paidAmount) || rowCredit || 0) * 100) / 100
+      : record.paidAmount;
+    const normalizedBalance =
+      isSupplier && Number(record.paidAmount) === 0 && (rowCredit > 0 || rowDebit > 0)
+        ? Math.round((normalizedTotal - normalizedPaid) * 100) / 100
+        : record.balance;
+
     const newRecord: PaymentRecord = {
       ...record,
+      totalAmount: normalizedTotal,
+      paidAmount: normalizedPaid,
+      balance: normalizedBalance,
       id,
       createdAt: new Date().toISOString(),
     };
     setPayments((prev) => [newRecord, ...prev]);
+    emitPaymentSyncTrigger({
+      category: newRecord.paymentCategory === 'exporter' ? 'exporter' : 'supplier',
+      action: 'confirm',
+      invoiceNumber: newRecord.invoiceNumber,
+      partyName: newRecord.description,
+      debitAmount: newRecord.totalAmount,
+      creditAmount: newRecord.paidAmount,
+      runningBalance: newRecord.balance,
+    });
     addAuditLog({
       action: 'CREATE',
       module: 'Payment',
       entityId: newRecord.invoiceNumber,
       summary: `Recorded ${newRecord.paymentCategory === 'exporter' ? 'exporter' : 'supplier'} payment voucher ${newRecord.invoiceNumber} (${newRecord.description})`,
-      details: `Amount: ${companyProfile.currency} ${newRecord.totalAmount.toLocaleString()} · Status: ${newRecord.status}`,
+      details: `Debit: ${companyProfile.currency} ${newRecord.totalAmount.toLocaleString()} · Credit: ${companyProfile.currency} ${newRecord.paidAmount.toLocaleString()} · Balance: ${companyProfile.currency} ${newRecord.balance.toLocaleString()} · Status: ${newRecord.status}`,
     });
     showToast(`Payment voucher ${newRecord.invoiceNumber} saved to database!`);
     return id;
@@ -1425,6 +1496,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updatePayment = (id: string, record: Partial<PaymentRecord>) => {
     const target = payments.find((p) => p.id === id);
     setPayments((prev) => prev.map((p) => (p.id === id ? { ...p, ...record } : p)));
+    emitPaymentSyncTrigger({
+      category:
+        (record.paymentCategory || target?.paymentCategory) === 'exporter'
+          ? 'exporter'
+          : 'supplier',
+      action: 'update',
+      invoiceNumber: record.invoiceNumber || target?.invoiceNumber || id,
+      partyName: record.description || target?.description,
+      debitAmount: record.totalAmount ?? target?.totalAmount,
+      creditAmount: record.paidAmount ?? target?.paidAmount,
+      runningBalance: record.balance ?? target?.balance,
+    });
     addAuditLog({
       action: 'UPDATE',
       module: 'Payment',
@@ -1438,6 +1521,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deletePayment = (id: string) => {
     const target = payments.find((p) => p.id === id);
     setPayments((prev) => prev.filter((p) => p.id !== id));
+    emitPaymentSyncTrigger({
+      category: target?.paymentCategory === 'exporter' ? 'exporter' : 'supplier',
+      action: 'delete',
+      invoiceNumber: target?.invoiceNumber || id,
+      partyName: target?.description,
+    });
     addAuditLog({
       action: 'DELETE',
       module: 'Payment',

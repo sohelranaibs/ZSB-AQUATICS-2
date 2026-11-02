@@ -377,7 +377,7 @@ export const PrintPreviewModal: React.FC = () => {
                   style={{ color: '#000000' }}
                   className="text-xs sm:text-sm font-bold font-mono"
                 >
-                  Mobile: {companyProfile.mobiles.join(' , ')} | EMAIL: {companyProfile.email || 'www.zsbaquatics.com'}
+                  Mobile: {companyProfile.mobiles.join(' , ')} | EMAIL: {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}
                 </div>
 
                 <div
@@ -847,34 +847,40 @@ export const PrintPreviewModal: React.FC = () => {
                   ) : null}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-slate-100 font-bold border-t-2 border-slate-400">
-                    <td colSpan={2} className="p-2 text-right uppercase">TOTAL VOUCHER:</td>
-                    <td className="p-2 text-right font-mono font-black">
-                      {formatCurrency(
-                        data.totalAmount,
-                        data.paymentCategory === 'exporter' ? 'RMB' : companyProfile.currency
-                      )}
-                    </td>
-                    <td className="p-2 text-right font-mono font-bold">
-                      {data.paidAmount !== undefined
-                        ? formatCurrency(
-                            data.paidAmount,
-                            data.paymentCategory === 'exporter' ? 'RMB' : companyProfile.currency
-                          )
-                        : ''}
-                    </td>
-                    <td className="p-2 text-right font-mono text-purple-900 font-black">
-                      {formatCurrency(
-                        data.balance,
-                        data.paymentCategory === 'exporter' ? 'RMB' : companyProfile.currency
-                      )}
-                    </td>
-                    {data.paymentCategory === 'exporter' && (
-                      <td className="p-2 text-center font-bold uppercase text-[10px]">
-                        {data.status || 'REPORT'}
-                      </td>
-                    )}
-                  </tr>
+                  {(() => {
+                    const rowDebitSum = Array.isArray(items)
+                      ? items.reduce((s: number, r: any) => s + (Number(r.debitAmount) || 0), 0)
+                      : 0;
+                    const rowCreditSum = Array.isArray(items)
+                      ? items.reduce((s: number, r: any) => s + (Number(r.creditAmount) || 0), 0)
+                      : 0;
+                    const displayDebit = Number(data.totalAmount) || rowDebitSum || 0;
+                    const displayCredit = Number(data.paidAmount) || rowCreditSum || 0;
+                    const displayBalance =
+                      Number(data.balance) !== 0
+                        ? Number(data.balance)
+                        : Math.round((displayDebit - displayCredit) * 100) / 100;
+                    const unit = data.paymentCategory === 'exporter' ? 'RMB' : companyProfile.currency;
+                    return (
+                      <tr className="bg-slate-100 font-bold border-t-2 border-slate-400">
+                        <td colSpan={2} className="p-2 text-right uppercase">TOTAL VOUCHER:</td>
+                        <td className="p-2 text-right font-mono font-black">
+                          {formatCurrency(displayDebit, unit)}
+                        </td>
+                        <td className="p-2 text-right font-mono font-bold text-emerald-800">
+                          {formatCurrency(displayCredit, unit)}
+                        </td>
+                        <td className="p-2 text-right font-mono text-purple-900 font-black">
+                          {formatCurrency(displayBalance, unit)}
+                        </td>
+                        {data.paymentCategory === 'exporter' && (
+                          <td className="p-2 text-center font-bold uppercase text-[10px]">
+                            {data.status || 'REPORT'}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })()}
                 </tfoot>
               </table>
             </div>
@@ -1382,7 +1388,7 @@ export const PrintPreviewModal: React.FC = () => {
                 </div>
                 <div className="py-1 px-3 text-xs sm:text-sm font-bold uppercase">
                   CONTACT NUMBER - +880 18411-65902, +880 1711 331545 | EMAIL:{' '}
-                  <span className="normal-case">{companyProfile.email || 'www.zsbaquatics.com'}</span>
+                  <span className="normal-case">{companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}</span>
                 </div>
               </div>
               <div

@@ -52,6 +52,9 @@ export const PrintPreviewModal: React.FC = () => {
   const [isSavingPdf, setIsSavingPdf] = useState(false);
   const [isSavingPng, setIsSavingPng] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [printCurrentPageOnly, setPrintCurrentPageOnly] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
 
   if (!printModalData.isOpen) {
     return (
@@ -63,6 +66,14 @@ export const PrintPreviewModal: React.FC = () => {
   }
 
   const { type, title, data, items, selectedIds } = printModalData;
+
+  const packingItems =
+    type === 'packing' ? (items && items.length > 0 ? items : data?.items || []) : [];
+  const totalPages = Math.max(1, Math.ceil(packingItems.length / ITEMS_PER_PAGE));
+  const displayPackingItems =
+    type === 'packing' && printCurrentPageOnly
+      ? packingItems.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+      : packingItems;
 
   const getCleanFilename = (ext: 'pdf' | 'png' = 'pdf') => {
     if (type === 'exporter_payment_slip') {
@@ -183,41 +194,92 @@ export const PrintPreviewModal: React.FC = () => {
       >
         {/* Modal Top Control Bar (Hidden in Print) */}
         <div className="bg-slate-900 text-white px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 print:hidden">
-          <div className="flex items-center space-x-2.5">
-            <div
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '9999px',
-                overflow: 'hidden',
-                border: '1.5px solid #fbbf24',
-                backgroundColor: '#ffffff',
-                padding: '1.5px',
-                flexShrink: 0,
-              }}
-              className="w-8 h-8 rounded-full overflow-hidden border border-amber-400 bg-white p-0.5 shrink-0 flex items-center justify-center"
-            >
-              <img
-                src={resolvedLogoSrc}
-                alt={companyProfile.companyName}
-                onError={(e) => {
-                  const target = e.currentTarget;
-                  if (!target.src.endsWith(COMPANY_LOGO_URL)) {
-                    target.src = COMPANY_LOGO_URL;
-                  }
-                }}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center space-x-2.5">
+              <div
                 style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'contain',
+                  width: '32px',
+                  height: '32px',
                   borderRadius: '9999px',
-                  display: 'block',
+                  overflow: 'hidden',
+                  border: '1.5px solid #fbbf24',
+                  backgroundColor: '#ffffff',
+                  padding: '1.5px',
+                  flexShrink: 0,
                 }}
-                className="w-full h-full object-contain rounded-full"
-              />
+                className="w-8 h-8 rounded-full overflow-hidden border border-amber-400 bg-white p-0.5 shrink-0 flex items-center justify-center"
+              >
+                <img
+                  src={resolvedLogoSrc}
+                  alt={companyProfile.companyName}
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if (!target.src.endsWith(COMPANY_LOGO_URL)) {
+                      target.src = COMPANY_LOGO_URL;
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    borderRadius: '9999px',
+                    display: 'block',
+                  }}
+                  className="w-full h-full object-contain rounded-full"
+                />
+              </div>
+              <FileSpreadsheet className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="font-bold text-sm tracking-wide truncate max-w-xs sm:max-w-sm">{title}</span>
             </div>
-            <FileSpreadsheet className="w-4 h-4 text-amber-400 shrink-0" />
-            <span className="font-bold text-sm tracking-wide truncate max-w-xs sm:max-w-md">{title}</span>
+
+            {/* Toggle 'Print All Pages' or 'Print Current Page Only' for Packing Lists */}
+            {type === 'packing' && (
+              <div className="flex items-center space-x-2 bg-slate-800/90 px-2.5 py-1.5 rounded-lg border border-slate-700">
+                <label className="flex items-center space-x-2 text-xs font-semibold text-slate-200 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    data-testid="print-page-mode-toggle"
+                    checked={printCurrentPageOnly}
+                    onChange={(e) => {
+                      setPrintCurrentPageOnly(e.target.checked);
+                      setCurrentPage(1);
+                    }}
+                    className="rounded border-slate-600 text-blue-500 focus:ring-blue-500 w-4 h-4 cursor-pointer accent-blue-600"
+                  />
+                  <span className={printCurrentPageOnly ? 'text-amber-300 font-bold' : 'text-slate-300'}>
+                    {printCurrentPageOnly ? 'Print Current Page Only' : 'Print All Pages'}
+                  </span>
+                </label>
+
+                {printCurrentPageOnly && totalPages > 1 && (
+                  <div className="flex items-center space-x-1 pl-2 border-l border-slate-700 text-xs">
+                    <button
+                      type="button"
+                      data-testid="print-prev-page-btn"
+                      disabled={currentPage <= 1}
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      className="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white font-bold cursor-pointer"
+                      title="Previous Page"
+                    >
+                      &larr;
+                    </button>
+                    <span className="font-mono font-bold text-amber-400 px-1">
+                      {currentPage} / {totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      data-testid="print-next-page-btn"
+                      disabled={currentPage >= totalPages}
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      className="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white font-bold cursor-pointer"
+                      title="Next Page"
+                    >
+                      &rarr;
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -555,34 +617,69 @@ export const PrintPreviewModal: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {items && items.length > 0 ? (
-                    items.map((row: any, i: number) => (
-                      <tr key={i} className="font-medium">
-                        <td className="p-2 border-r border-slate-200 text-center whitespace-nowrap">
-                          <span className="zsb-sl-badge">{String(i + 1).padStart(2, '0')}</span>
-                        </td>
-                        <td className="p-2 border-r border-slate-200 font-bold">{row.item}</td>
-                        <td className="p-2 border-r border-slate-200 text-center font-mono">{row.box}</td>
-                        <td className="p-2 border-r border-slate-200 text-center font-mono">{row.weight}</td>
-                        <td className="p-2 border-r border-slate-200 text-right font-mono font-bold text-teal-800">
-                          {row.totalWeight} KG
-                        </td>
-                        <td className="p-2 border-r border-slate-200 text-center font-bold text-[10px]">
-                          {row.unit || 'KG'}
-                        </td>
-                        <td className="p-2 border-r border-slate-200 text-right font-mono">
-                          {formatCurrency(row.rate, '')}
-                        </td>
-                        <td className="p-2 text-right font-mono font-bold text-slate-900">
-                          {formatCurrency(row.amount, '')}
-                        </td>
-                      </tr>
-                    ))
+                  {displayPackingItems && displayPackingItems.length > 0 ? (
+                    displayPackingItems.map((row: any, i: number) => {
+                      const absoluteIndex = printCurrentPageOnly ? (currentPage - 1) * ITEMS_PER_PAGE + i : i;
+                      return (
+                        <tr key={i} className="font-medium">
+                          <td className="p-2 border-r border-slate-200 text-center whitespace-nowrap">
+                            <span className="zsb-sl-badge">{String(absoluteIndex + 1).padStart(2, '0')}</span>
+                          </td>
+                          <td className="p-2 border-r border-slate-200 font-bold">{row.item}</td>
+                          <td className="p-2 border-r border-slate-200 text-center font-mono">{row.box}</td>
+                          <td className="p-2 border-r border-slate-200 text-center font-mono">{row.weight}</td>
+                          <td className="p-2 border-r border-slate-200 text-right font-mono font-bold text-teal-800">
+                            {row.totalWeight} KG
+                          </td>
+                          <td className="p-2 border-r border-slate-200 text-center font-bold text-[10px]">
+                            {row.unit || 'KG'}
+                          </td>
+                          <td className="p-2 border-r border-slate-200 text-right font-mono">
+                            {formatCurrency(row.rate, '')}
+                          </td>
+                          <td className="p-2 text-right font-mono font-bold text-slate-900">
+                            {formatCurrency(row.amount, '')}
+                          </td>
+                        </tr>
+                      );
+                    })
                   ) : null}
                 </tbody>
                 <tfoot>
+                  {printCurrentPageOnly && totalPages > 1 && (
+                    <tr className="bg-blue-50/70 font-bold border-t border-slate-300 text-[11px] text-blue-900">
+                      <td colSpan={2} className="p-2 text-right uppercase">
+                        PAGE {currentPage} SUBTOTAL ({displayPackingItems.length} items):
+                      </td>
+                      <td className="p-2 text-center font-mono">
+                        {displayPackingItems.reduce((s: number, r: any) => s + (Number(r.box) || 0), 0)} Boxes
+                      </td>
+                      <td></td>
+                      <td className="p-2 text-right font-mono text-teal-800 font-bold">
+                        {displayPackingItems
+                          .reduce(
+                            (s: number, r: any) =>
+                              s + (Number(r.totalWeight) || Number(r.weight) * Number(r.box) || 0),
+                            0
+                          )
+                          .toFixed(2)}{' '}
+                        KG
+                      </td>
+                      <td colSpan={2} className="p-2 text-right uppercase">
+                        PAGE SUBTOTAL:
+                      </td>
+                      <td className="p-2 text-right font-mono font-bold text-blue-950">
+                        {formatCurrency(
+                          displayPackingItems.reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0),
+                          'RMB'
+                        )}
+                      </td>
+                    </tr>
+                  )}
                   <tr className="bg-slate-100 font-bold border-t-2 border-slate-400">
-                    <td colSpan={2} className="p-2 text-right uppercase">TOTALS:</td>
+                    <td colSpan={2} className="p-2 text-right uppercase">
+                      {printCurrentPageOnly ? 'GRAND TOTAL:' : 'TOTALS:'}
+                    </td>
                     <td className="p-2 text-center font-mono text-slate-900">{data.totalBox} Boxes</td>
                     <td></td>
                     <td className="p-2 text-right font-mono text-teal-800 font-black">{data.totalWeight} KG</td>
@@ -1583,7 +1680,11 @@ export const PrintPreviewModal: React.FC = () => {
               This is an official computer-generated document from {companyProfile.companyName} System • Validated and archived.
             </span>
             <span className="print-page-number-counter font-mono font-bold text-slate-600">
-              <span className="print:hidden">Page 1 of 1</span>
+              <span className="print:hidden">
+                {type === 'packing' && printCurrentPageOnly
+                  ? `Page ${currentPage} of ${totalPages}`
+                  : 'Page 1 of 1'}
+              </span>
             </span>
           </div>
         </div>

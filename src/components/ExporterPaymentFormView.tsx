@@ -778,7 +778,7 @@ export const ExporterPaymentFormView: React.FC = () => {
 
   return (
     <div className="p-3 sm:p-5 max-w-7xl mx-auto space-y-5">
-      {/* Top Banner (Sheet #5 - Dedicated Exporter Payment) */}
+      {/* Top Banner (Sheet #04 - Dedicated Exporter Payment) */}
       <div className="bg-[#0f3d4c] text-white px-5 py-3 rounded-lg shadow-md flex flex-wrap items-center justify-between gap-3 border-b-2 border-amber-500">
         <div className="flex flex-wrap items-center gap-3">
           <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
@@ -804,7 +804,7 @@ export const ExporterPaymentFormView: React.FC = () => {
             onClick={() => setActiveTab('payment_form')}
             className="text-xs bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 px-3 py-1 rounded border border-purple-400/40 font-bold flex items-center space-x-1.5 transition cursor-pointer"
           >
-            <span>Supplier Payment Sheet (#4)</span>
+            <span>Supplier Payment Sheet (#05)</span>
           </button>
           <button
             type="button"
@@ -812,10 +812,10 @@ export const ExporterPaymentFormView: React.FC = () => {
             className="text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 px-3 py-1 rounded font-black flex items-center space-x-1.5 transition cursor-pointer shadow-xs"
           >
             <Receipt className="w-3.5 h-3.5" />
-            <span>Exporter Payment Slip 付款单 (#6)</span>
+            <span>Exporter Payment Slip 付款单 (#07)</span>
           </button>
-          <span className="text-xs bg-amber-400/20 text-amber-300 px-2.5 py-1 rounded border border-amber-400/40 font-mono">
-            Sheet #5
+          <span className="text-xs bg-amber-400/20 text-amber-300 px-2.5 py-1 rounded border border-amber-400/40 font-mono font-bold">
+            Sheet #04
           </span>
         </div>
       </div>

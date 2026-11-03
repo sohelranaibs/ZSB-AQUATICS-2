@@ -217,10 +217,10 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
       shortLabel: 'Packing List',
     },
     {
-      id: 'air_way_bill',
+      id: 'exporter_payment_form',
       num: '04',
-      label: 'FLIGHT RETURN BILL',
-      shortLabel: 'Flight Return Bill',
+      label: 'Exporter Payment Form',
+      shortLabel: 'Exporter Payment',
     },
     {
       id: 'payment_form',
@@ -229,10 +229,10 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
       shortLabel: 'Supplier Payment',
     },
     {
-      id: 'exporter_payment_form',
+      id: 'air_way_bill',
       num: '06',
-      label: 'Exporter Payment Form',
-      shortLabel: 'Exporter Payment',
+      label: 'FLIGHT RETURN BILL',
+      shortLabel: 'Flight Return Bill',
     },
     {
       id: 'exporter_payment_slip',

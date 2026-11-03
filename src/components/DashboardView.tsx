@@ -1192,7 +1192,7 @@ export const DashboardView: React.FC = () => {
               No upcoming recurring supplier payments match this filter.
             </div>
             <p>
-              Set a future Next Due Date in the Supplier Payment Form (Sheet 04) to automatically track upcoming supplier installments here.
+              Set a future Next Due Date in the Supplier Payment Form (Sheet 05) to automatically track upcoming supplier installments here.
             </p>
           </div>
         ) : (
@@ -1501,28 +1501,7 @@ export const DashboardView: React.FC = () => {
                 </div>
               </button>
 
-              {/* Sheet 04: Supplier Payment Form */}
-              <button
-                type="button"
-                onClick={() => setActiveTab('payment_form')}
-                className="group text-left p-4 rounded-xl border border-slate-200 hover:border-indigo-600/70 bg-white hover:bg-indigo-50/25 transition cursor-pointer flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-center justify-between text-xs text-slate-500 font-mono">
-                    <span>Sheet 04 · Local Ledger</span>
-                    <span className="text-indigo-700 font-semibold">{supplierPaymentCount} Vouchers</span>
-                  </div>
-                  <div className="text-sm font-bold text-slate-900 group-hover:text-indigo-800 mt-1 flex items-center justify-between">
-                    <span>Supplier Payment Form</span>
-                    <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-700 group-hover:translate-x-0.5 transition-transform shrink-0" />
-                  </div>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Disburse cash or bank payments to local suppliers in BDT.
-                  </p>
-                </div>
-              </button>
-
-              {/* Sheet 05: Exporter Payment Form */}
+              {/* Sheet 04: Exporter Payment Form */}
               <button
                 type="button"
                 onClick={() => setActiveTab('exporter_payment_form')}
@@ -1530,7 +1509,7 @@ export const DashboardView: React.FC = () => {
               >
                 <div>
                   <div className="flex items-center justify-between text-xs text-slate-500 font-mono">
-                    <span>Sheet 05 · Foreign Buyers</span>
+                    <span>Sheet 04 · Foreign Buyers</span>
                     <span className="text-teal-800 font-semibold">{exporterPaymentCount} Vouchers</span>
                   </div>
                   <div className="text-sm font-bold text-slate-900 group-hover:text-teal-900 mt-1 flex items-center justify-between">
@@ -1543,7 +1522,49 @@ export const DashboardView: React.FC = () => {
                 </div>
               </button>
 
-              {/* Sheet 06: Exporter Payment Slip (付款单) */}
+              {/* Sheet 05: Supplier Payment Form */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('payment_form')}
+                className="group text-left p-4 rounded-xl border border-slate-200 hover:border-indigo-600/70 bg-white hover:bg-indigo-50/25 transition cursor-pointer flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between text-xs text-slate-500 font-mono">
+                    <span>Sheet 05 · Local Ledger</span>
+                    <span className="text-indigo-700 font-semibold">{supplierPaymentCount} Vouchers</span>
+                  </div>
+                  <div className="text-sm font-bold text-slate-900 group-hover:text-indigo-800 mt-1 flex items-center justify-between">
+                    <span>Supplier Payment Form</span>
+                    <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-700 group-hover:translate-x-0.5 transition-transform shrink-0" />
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Disburse cash or bank payments to local suppliers in BDT.
+                  </p>
+                </div>
+              </button>
+
+              {/* Sheet 06: FLIGHT RETURN BILL */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('air_way_bill')}
+                className="group text-left p-4 rounded-xl border border-slate-200 hover:border-sky-600/70 bg-white hover:bg-sky-50/25 transition cursor-pointer flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between text-xs text-slate-500 font-mono">
+                    <span>Sheet 06 · Air Freight</span>
+                    <span className="text-sky-800 font-semibold">Monthly Statement</span>
+                  </div>
+                  <div className="text-sm font-bold text-slate-900 group-hover:text-sky-900 mt-1 flex items-center justify-between">
+                    <span>FLIGHT RETURN BILL</span>
+                    <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-sky-700 group-hover:translate-x-0.5 transition-transform shrink-0" />
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Air freight return bill calculations with RMB/Per Box, rates, and BDT totals.
+                  </p>
+                </div>
+              </button>
+
+              {/* Sheet 07: Exporter Payment Slip (付款单) */}
               <button
                 type="button"
                 onClick={() => setActiveTab('exporter_payment_slip')}
@@ -1551,7 +1572,7 @@ export const DashboardView: React.FC = () => {
               >
                 <div>
                   <div className="flex items-center justify-between text-xs text-slate-500 font-mono">
-                    <span>Sheet 06 · Bilingual Slip</span>
+                    <span>Sheet 07 · Bilingual Slip</span>
                     <span className="text-amber-800 font-semibold">Auto-Synced</span>
                   </div>
                   <div className="text-sm font-bold text-slate-900 group-hover:text-amber-900 mt-1 flex items-center justify-between">
@@ -1564,7 +1585,7 @@ export const DashboardView: React.FC = () => {
                 </div>
               </button>
 
-              {/* Sheet 12: Settings & Config */}
+              {/* Sheet 13: Settings & Config */}
               <button
                 type="button"
                 onClick={() => setActiveTab('settings')}
@@ -1572,7 +1593,7 @@ export const DashboardView: React.FC = () => {
               >
                 <div>
                   <div className="flex items-center justify-between text-xs text-slate-500 font-mono">
-                    <span>Sheet 12 · Configuration</span>
+                    <span>Sheet 13 · Configuration</span>
                     <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
                   </div>
                   <div className="text-sm font-bold text-slate-900 mt-1 flex items-center justify-between">
@@ -1595,7 +1616,7 @@ export const DashboardView: React.FC = () => {
               className="text-slate-800 hover:text-sky-700 font-semibold inline-flex items-center gap-1 cursor-pointer whitespace-nowrap"
             >
               <Search className="w-3.5 h-3.5" />
-              <span>Open Search &amp; Reports (Sheet 11)</span>
+              <span>Open Search &amp; Reports (Sheet 12)</span>
             </button>
           </div>
         </section>

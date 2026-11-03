@@ -86,6 +86,7 @@ import {
 import { DateRangePicker } from './DateRangePicker.tsx';
 import type { PaymentRecord, ExporterStatus } from '../types/index.ts';
 import { emitPaymentSyncTrigger } from '../utils/paymentSync.ts';
+import { matchesPaymentSearch } from '../utils/paymentFilters.ts';
 
 interface DatabaseViewProps {
   initialType?: 'purchase' | 'packing' | 'payment';
@@ -135,6 +136,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   });
   const [lastSyncLog, setLastSyncLog] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>(() => focusedShipmentInvoice || '');
+  const [paymentSearchQuery, setPaymentSearchQuery] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isExportingBatchSlips, setIsExportingBatchSlips] = useState<boolean>(false);
   const [isBatchSidebarOpen, setIsBatchSidebarOpen] = useState<boolean>(false);
@@ -717,23 +719,36 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   ]);
 
   const filteredPayments = useMemo(() => {
-    const candidateRecords = queryIndexedRecords(payments, paymentIndices, {
-      searchTerm,
-      startDate,
-      endDate,
-    });
+    const activeSearch = (paymentSearchQuery || (activeDbType === 'payment' ? searchTerm : '')).trim();
 
-    return candidateRecords.filter((pm) => {
+    return payments.filter((pm) => {
+      // 1. Date range filter
+      if (startDate || endDate) {
+        if (!isDateInRange(pm.date, startDate, endDate)) {
+          return false;
+        }
+      }
+
+      // 2. Real-time search by supplier name, reference ID, or payment remarks
+      if (activeSearch && !matchesPaymentSearch(pm, activeSearch)) {
+        return false;
+      }
+
+      // 3. Category filter
+      const cat = classifyPaymentCategory(pm);
+      if (paymentCategoryFilter !== 'all' && cat !== paymentCategoryFilter) {
+        return false;
+      }
+
+      // 4. Validation filter
       if (
         validationFilter === 'invalid_only' &&
         !validationSummary.invalidRecordIds.includes(pm.id)
       ) {
         return false;
       }
-      const cat = classifyPaymentCategory(pm);
-      if (paymentCategoryFilter !== 'all' && cat !== paymentCategoryFilter) {
-        return false;
-      }
+
+      // 5. Smart sync reconciliation filter
       const rec = smartSyncAnalysis.paymentReconciliations[pm.id];
       if (reconciliationFilter === 'discrepancies' && !rec?.hasDiscrepancy) {
         return false;
@@ -745,15 +760,16 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     });
   }, [
     payments,
-    paymentIndices,
-    validationFilter,
-    validationSummary.invalidRecordIds,
-    paymentCategoryFilter,
-    smartSyncAnalysis,
-    reconciliationFilter,
+    paymentSearchQuery,
     searchTerm,
+    activeDbType,
     startDate,
     endDate,
+    paymentCategoryFilter,
+    validationFilter,
+    validationSummary.invalidRecordIds,
+    smartSyncAnalysis,
+    reconciliationFilter,
   ]);
 
   // Sorted records based on active sort configuration
@@ -1506,11 +1522,34 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
           <input
             type="text"
-            placeholder={`Search ${activeDbType} records by doc no, party, or mark...`}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-1 focus:ring-blue-500"
+            data-testid="db-general-search-input"
+            placeholder={
+              activeDbType === 'payment'
+                ? 'Search payments by supplier name, reference ID, or remarks...'
+                : `Search ${activeDbType} records by doc no, party, or mark...`
+            }
+            value={activeDbType === 'payment' ? (paymentSearchQuery || searchTerm) : searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              if (activeDbType === 'payment') {
+                setPaymentSearchQuery(e.target.value);
+              }
+            }}
+            className="w-full pl-9 pr-8 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-1 focus:ring-blue-500"
           />
+          {(activeDbType === 'payment' ? (paymentSearchQuery || searchTerm) : searchTerm) && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm('');
+                setPaymentSearchQuery('');
+              }}
+              className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
+              title="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Action Buttons: Import/Export Excel & CSV, Batch Print */}
@@ -2435,11 +2474,14 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
 
         {activeDbType === 'payment' && (
           <div>
-            {/* Payment Category Filter Bar */}
-            <div className="px-4 py-2.5 bg-purple-50/70 border-b border-purple-200 flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div className="flex items-center space-x-2">
-                <span className="font-bold text-purple-950 uppercase">Filter Payment Ledger:</span>
-                <div className="flex items-center space-x-1 bg-white p-1 rounded-lg border border-purple-200">
+            {/* Payment Database Real-Time Search & Category Filter Toolbar */}
+            <div className="px-4 py-3 bg-gradient-to-r from-purple-50 via-indigo-50/40 to-slate-50 border-b border-purple-200 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+              {/* Category Filter Pills */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-bold text-purple-950 uppercase text-[11px] shrink-0">
+                  Ledger:
+                </span>
+                <div className="flex items-center space-x-1 bg-white p-1 rounded-lg border border-purple-200 shadow-2xs">
                   <button
                     type="button"
                     onClick={() => {
@@ -2448,7 +2490,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                     }}
                     className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
                       paymentCategoryFilter === 'all'
-                        ? 'bg-purple-700 text-white'
+                        ? 'bg-purple-700 text-white shadow-xs'
                         : 'text-slate-700 hover:bg-slate-100'
                     }`}
                   >
@@ -2462,7 +2504,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                     }}
                     className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
                       paymentCategoryFilter === 'supplier'
-                        ? 'bg-[#8b3858] text-white'
+                        ? 'bg-[#8b3858] text-white shadow-xs'
                         : 'text-slate-700 hover:bg-slate-100'
                     }`}
                   >
@@ -2477,7 +2519,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                     }}
                     className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
                       paymentCategoryFilter === 'exporter'
-                        ? 'bg-[#126b62] text-white'
+                        ? 'bg-[#126b62] text-white shadow-xs'
                         : 'text-slate-700 hover:bg-slate-100'
                     }`}
                   >
@@ -2485,6 +2527,67 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                     {payments.filter((p) => classifyPaymentCategory(p) === 'exporter').length})
                   </button>
                 </div>
+              </div>
+
+              {/* Dedicated Real-Time Search Bar for Payment Database */}
+              <div className="flex-1 max-w-md w-full relative">
+                <div className="relative flex items-center">
+                  <Search className="w-4 h-4 text-purple-600 absolute left-3 pointer-events-none" />
+                  <input
+                    type="text"
+                    data-testid="payment-db-search-input"
+                    aria-label="Filter payment records in real-time by supplier name, reference ID, or remarks"
+                    placeholder="Search by supplier name, reference ID, or payment remarks..."
+                    value={paymentSearchQuery}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setPaymentSearchQuery(val);
+                      setSearchTerm(val);
+                    }}
+                    className="w-full pl-9 pr-8 py-2 text-xs font-semibold border-2 border-purple-300 rounded-lg bg-white placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-600 shadow-xs transition"
+                  />
+                  {paymentSearchQuery && (
+                    <button
+                      type="button"
+                      data-testid="clear-payment-search-btn"
+                      onClick={() => {
+                        setPaymentSearchQuery('');
+                        setSearchTerm('');
+                      }}
+                      className="absolute right-2.5 text-slate-400 hover:text-slate-700 p-0.5 rounded cursor-pointer"
+                      title="Clear search filter"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Live Count & Search Match Indicator */}
+              <div className="flex items-center space-x-2 text-[11px] shrink-0">
+                {paymentSearchQuery && (
+                  <span
+                    data-testid="payment-search-results-badge"
+                    className="px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-900 font-bold border border-purple-300 flex items-center space-x-1 animate-in fade-in"
+                  >
+                    <span>Found {sortedPayments.length} matches</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentSearchQuery('');
+                        setSearchTerm('');
+                      }}
+                      className="hover:text-purple-950 font-black cursor-pointer text-xs"
+                      title="Clear search"
+                    >
+                      ×
+                    </button>
+                  </span>
+                )}
+                <span className="text-slate-500 font-mono">
+                  Showing <strong className="text-purple-950">{sortedPayments.length}</strong> of{' '}
+                  {payments.length}
+                </span>
               </div>
             </div>
 
@@ -2523,8 +2626,37 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 <tbody className="divide-y divide-slate-200 font-medium">
                   {sortedPayments.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="p-8 text-center text-slate-400">
-                        No payment records found.
+                      <td colSpan={11} className="p-8 text-center bg-slate-50">
+                        <div className="max-w-md mx-auto space-y-2">
+                          <p className="text-slate-700 font-bold text-sm">
+                            {paymentSearchQuery || searchTerm ? (
+                              <>
+                                No payments matching{' '}
+                                <strong className="text-purple-700 font-black">
+                                  "{(paymentSearchQuery || searchTerm)}"
+                                </strong>
+                              </>
+                            ) : (
+                              'No payment records found.'
+                            )}
+                          </p>
+                          <p className="text-slate-500 text-xs">
+                            Search checks supplier/buyer name, voucher &amp; challan reference IDs, and payment remarks in real-time.
+                          </p>
+                          {(paymentSearchQuery || searchTerm) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPaymentSearchQuery('');
+                                setSearchTerm('');
+                              }}
+                              className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition shadow-xs cursor-pointer inline-flex items-center space-x-1"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                              <span>Clear Search Filter</span>
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ) : (
@@ -2612,7 +2744,19 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             recordId={pm.id}
                             fieldKey="description"
                             rawValue={pm.description}
-                            displayNode={pm.description}
+                            displayNode={
+                              <div>
+                                <span className="font-bold text-slate-800">{pm.description}</span>
+                                {pm.remarks && (
+                                  <span
+                                    className="block text-[10px] text-purple-700 font-normal truncate max-w-[220px]"
+                                    title={pm.remarks}
+                                  >
+                                    💬 {pm.remarks}
+                                  </span>
+                                )}
+                              </div>
+                            }
                             validation={
                               rowValidation.description ||
                               validateDatabaseCellValue('payment', 'description', pm.description)

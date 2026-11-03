@@ -368,6 +368,9 @@ export const AirWayBillView: React.FC = () => {
               <span className="text-sm sm:text-base font-bold text-white uppercase tracking-wide">
                 FLIGHT RETURN BILL — Monthly Statement
               </span>
+              <span className="text-xs bg-amber-400/20 text-amber-300 px-2.5 py-0.5 rounded border border-amber-400/40 font-mono font-bold">
+                Sheet #06
+              </span>
             </div>
             <p className="text-xs text-slate-300 mt-0.5">
               Auto-synced from PACKING LIST DATA ENTRY FORM (AIR FREIGHT EXPORT MANIFEST) · Editable RMB/PER BOX &amp; RATE

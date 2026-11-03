@@ -1663,7 +1663,7 @@ export const ProfitLossView: React.FC = () => {
 
             <div className="px-4 py-2.5 bg-slate-100/80 border-t border-slate-200 flex items-center justify-between text-xs">
               <span className="text-slate-600">
-                Open credits can be applied directly here or inside Sheet #4 (Supplier Payment).
+                Open credits can be applied directly here or inside Sheet #05 (Supplier Payment).
               </span>
               <button
                 type="button"

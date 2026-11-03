@@ -61,6 +61,37 @@
   @page {
     size: A4 portrait;
     margin: 10mm;
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 10px;
+      font-weight: 700;
+      color: #334155;
+    }
+  }
+
+  /* Dynamic A4 page number counter for printed vouchers and packing lists */
+  .print-page-number-counter {
+    position: fixed;
+    bottom: 2mm;
+    right: 5mm;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 10px;
+    font-weight: 800;
+    color: #334155;
+    background: #ffffff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    z-index: 9999;
+  }
+
+  .print-page-number-counter * {
+    display: none !important;
+  }
+
+  .print-page-number-counter::after {
+    content: "Page " counter(page) " of " counter(pages);
+    display: inline !important;
   }
 
   html, body {

@@ -370,11 +370,11 @@ export const PaymentSlipPrintCard: React.FC<PaymentSlipPrintCardProps> = ({
           Official computer-generated payment voucher from {companyProfile.companyName} • Voucher{' '}
           {payment.invoiceNumber}
         </span>
-        {pageNumber && totalPages && (
-          <span className="font-mono font-bold text-slate-600">
-            Page {pageNumber} of {totalPages}
+        <span className="print-page-number-counter font-mono font-bold text-slate-600">
+          <span className="print:hidden">
+            Page {pageNumber || 1} of {totalPages || 1}
           </span>
-        )}
+        </span>
       </div>
     </div>
   );

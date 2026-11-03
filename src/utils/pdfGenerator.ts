@@ -420,6 +420,16 @@ export async function exportElementToPdf(
       }
     }
 
+    // Add dynamic page number counter (e.g., 'Page 1 of 2') to bottom-right of PDF pages
+    const totalPages = pdf.getNumberOfPages();
+    for (let p = 1; p <= totalPages; p++) {
+      pdf.setPage(p);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8);
+      pdf.setTextColor(71, 85, 105);
+      pdf.text(`Page ${p} of ${totalPages}`, pageWidth - margin, pageHeight - 5, { align: 'right' });
+    }
+
     const baseName = filename.replace(/\.(pdf|png)$/i, '');
     const cleanFilename = `${baseName}.pdf`;
     const elementId = typeof elementOrId === 'string' ? elementOrId : elementOrId.id;
@@ -523,6 +533,16 @@ export async function exportElementsToCombinedPdf(
 
     if (pagesAdded === 0) return false;
 
+    // Add dynamic page number counter to bottom-right of all PDF pages
+    const totalPages = pdf.getNumberOfPages();
+    for (let p = 1; p <= totalPages; p++) {
+      pdf.setPage(p);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8);
+      pdf.setTextColor(71, 85, 105);
+      pdf.text(`Page ${p} of ${totalPages}`, pageWidth - margin, pageHeight - 5, { align: 'right' });
+    }
+
     const baseName = filename.replace(/\.(pdf|png)$/i, '');
     const cleanFilename = `${baseName}.pdf`;
     if (typeof window !== 'undefined') {
@@ -624,6 +644,13 @@ export function openPrintableDocumentWindow(
     @page {
       size: A4 portrait;
       margin: 10mm;
+      @bottom-right {
+        content: "Page " counter(page) " of " counter(pages);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 10px;
+        font-weight: 700;
+        color: #334155;
+      }
     }
     * { box-sizing: border-box; }
     body {
@@ -713,6 +740,24 @@ export function openPrintableDocumentWindow(
       .print-bar { display: none !important; }
       body { padding: 0 !important; margin: 0 !important; }
       #print-root { max-width: 100% !important; width: 100% !important; }
+      .print-page-number-counter {
+        position: fixed;
+        bottom: 2mm;
+        right: 5mm;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 10px;
+        font-weight: 800;
+        color: #334155;
+        background: #ffffff;
+        padding: 2px 6px;
+        border-radius: 4px;
+        z-index: 9999;
+      }
+      .print-page-number-counter * { display: none !important; }
+      .print-page-number-counter::after {
+        content: "Page " counter(page) " of " counter(pages);
+        display: inline !important;
+      }
     }
   </style>
 </head>

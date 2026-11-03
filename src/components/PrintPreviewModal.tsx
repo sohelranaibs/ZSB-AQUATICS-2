@@ -510,30 +510,34 @@ export const PrintPreviewModal: React.FC = () => {
           {/* Type 2: Packing List */}
           {type === 'packing' && data && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs bg-slate-50 p-3 rounded border border-slate-200">
-                <div>
-                  <span className="text-slate-500 block">PACKING NO:</span>
-                  <span className="font-mono font-black text-slate-900 text-sm">{data.invoiceNumber}</span>
+              {/* Manifest Metadata Box (2 rows: 3 items top row, 2 items bottom row, Shipper removed) */}
+              <div className="space-y-2.5 bg-slate-50 p-3.5 rounded-lg border-2 border-slate-300">
+                {/* Row 1: Packing No, Packing Date, Shipping Mark */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="bg-white p-2.5 rounded border border-slate-200">
+                    <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider block mb-0.5">PACKING NO:</span>
+                    <span className="font-mono font-black text-slate-900 text-lg block">{data.invoiceNumber || '-'}</span>
+                  </div>
+                  <div className="bg-slate-100 p-2.5 rounded border border-slate-300">
+                    <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block mb-0.5">PACKING DATE:</span>
+                    <span className="font-mono font-black text-slate-950 text-2xl tracking-wide block">{formatDate(data.packingDate)}</span>
+                  </div>
+                  <div className="bg-blue-50/80 p-2.5 rounded border border-blue-200">
+                    <span className="text-[11px] font-black text-blue-800 uppercase tracking-wider block mb-0.5">SHIPPING MARK:</span>
+                    <span className="font-black text-blue-950 text-2xl tracking-wide block">{data.shippingMark || '-'}</span>
+                  </div>
                 </div>
-                <div>
-                  <span className="text-slate-500 block">SHIPPING MARK:</span>
-                  <span className="font-black text-blue-900 text-sm">{data.shippingMark}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">PACKING DATE:</span>
-                  <span className="font-mono font-bold text-slate-900">{formatDate(data.packingDate)}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">FLIGHT:</span>
-                  <span className="font-semibold text-slate-900">{data.flight}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">DESTINATION:</span>
-                  <span className="font-bold text-slate-900">{data.destination}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">SHIPPER:</span>
-                  <span className="font-semibold text-slate-800">{data.shipper}</span>
+
+                {/* Row 2: Flight, Destination */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="bg-slate-100 p-2.5 rounded border border-slate-300">
+                    <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block mb-0.5">FLIGHT:</span>
+                    <span className="font-black text-slate-950 text-2xl tracking-wide block">{data.flight || '-'}</span>
+                  </div>
+                  <div className="bg-slate-100 p-2.5 rounded border border-slate-300">
+                    <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block mb-0.5">DESTINATION:</span>
+                    <span className="font-black text-slate-950 text-2xl tracking-wide block">{data.destination || '-'}</span>
+                  </div>
                 </div>
               </div>
 
@@ -1570,12 +1574,17 @@ export const PrintPreviewModal: React.FC = () => {
             </div>
           )}
 
-          {/* Footer certification */}
+          {/* Footer certification & dynamic A4 page counter */}
           <div
             style={{ borderTop: '1px solid #e2e8f0', color: '#94a3b8' }}
-            className="text-center text-[10px] pt-4"
+            className="flex justify-between items-center text-[10px] pt-4 mt-6"
           >
-            This is an official computer-generated document from {companyProfile.companyName} System • Validated and archived.
+            <span>
+              This is an official computer-generated document from {companyProfile.companyName} System • Validated and archived.
+            </span>
+            <span className="print-page-number-counter font-mono font-bold text-slate-600">
+              <span className="print:hidden">Page 1 of 1</span>
+            </span>
           </div>
         </div>
       </div>

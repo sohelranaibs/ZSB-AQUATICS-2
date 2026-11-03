@@ -1752,12 +1752,12 @@ export const PackingListView: React.FC = () => {
             </div>
           </div>
 
-          {/* Manifest Metadata Grid */}
+          {/* Manifest Metadata Grid (2 rows: 3 items top row, 2 items bottom row, Shipper removed) */}
           <div
             style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: '10px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
               backgroundColor: '#f8fafc',
               border: '1px solid #cbd5e1',
               borderRadius: '6px',
@@ -1766,35 +1766,38 @@ export const PackingListView: React.FC = () => {
               fontSize: '12px',
             }}
           >
-            <div>
-              <div style={{ color: '#64748b', fontSize: '10px', fontWeight: 700 }}>PACKING NO:</div>
-              <div style={{ color: '#0f172a', fontWeight: 900, fontFamily: 'monospace', fontSize: '14px' }}>
-                {invoiceNumber || '-'}
+            {/* Row 1: Packing No, Packing Date, Shipping Mark */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', alignItems: 'center' }}>
+              <div style={{ backgroundColor: '#ffffff', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                <div style={{ color: '#64748b', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase' }}>PACKING NO:</div>
+                <div style={{ color: '#0f172a', fontWeight: 900, fontFamily: 'monospace', fontSize: '18px' }}>
+                  {invoiceNumber || '-'}
+                </div>
+              </div>
+              <div style={{ backgroundColor: '#f1f5f9', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                <div style={{ color: '#475569', fontSize: '11px', fontWeight: 900, textTransform: 'uppercase' }}>PACKING DATE:</div>
+                <div style={{ color: '#0f172a', fontWeight: 900, fontFamily: 'monospace', fontSize: '22px' }}>
+                  {formatDate(packingDate)}
+                </div>
+              </div>
+              <div style={{ backgroundColor: '#eff6ff', padding: '8px 10px', borderRadius: '6px', border: '1px solid #bfdbfe' }}>
+                <div style={{ color: '#1e40af', fontSize: '11px', fontWeight: 900, textTransform: 'uppercase' }}>SHIPPING MARK:</div>
+                <div style={{ color: '#1e3a8a', fontWeight: 900, fontSize: '24px', letterSpacing: '0.02em' }}>
+                  {shippingMark || '-'}
+                </div>
               </div>
             </div>
-            <div>
-              <div style={{ color: '#64748b', fontSize: '10px', fontWeight: 700 }}>SHIPPING MARK:</div>
-              <div style={{ color: '#1e3a8a', fontWeight: 900, fontSize: '14px' }}>
-                {shippingMark || '-'}
+
+            {/* Row 2: Flight, Destination */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', alignItems: 'center' }}>
+              <div style={{ backgroundColor: '#f1f5f9', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                <div style={{ color: '#475569', fontSize: '11px', fontWeight: 900, textTransform: 'uppercase' }}>FLIGHT:</div>
+                <div style={{ color: '#0f172a', fontWeight: 900, fontSize: '22px' }}>{flight || '-'}</div>
               </div>
-            </div>
-            <div>
-              <div style={{ color: '#64748b', fontSize: '10px', fontWeight: 700 }}>PACKING DATE:</div>
-              <div style={{ color: '#0f172a', fontWeight: 700, fontFamily: 'monospace' }}>
-                {formatDate(packingDate)}
+              <div style={{ backgroundColor: '#f1f5f9', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                <div style={{ color: '#475569', fontSize: '11px', fontWeight: 900, textTransform: 'uppercase' }}>DESTINATION:</div>
+                <div style={{ color: '#0f172a', fontWeight: 900, fontSize: '22px' }}>{destination || '-'}</div>
               </div>
-            </div>
-            <div>
-              <div style={{ color: '#64748b', fontSize: '10px', fontWeight: 700 }}>FLIGHT:</div>
-              <div style={{ color: '#0f172a', fontWeight: 700 }}>{flight || '-'}</div>
-            </div>
-            <div>
-              <div style={{ color: '#64748b', fontSize: '10px', fontWeight: 700 }}>DESTINATION:</div>
-              <div style={{ color: '#0f172a', fontWeight: 700 }}>{destination || '-'}</div>
-            </div>
-            <div>
-              <div style={{ color: '#64748b', fontSize: '10px', fontWeight: 700 }}>SHIPPER:</div>
-              <div style={{ color: '#0f172a', fontWeight: 700 }}>{shipper || '-'}</div>
             </div>
           </div>
 
@@ -2085,13 +2088,20 @@ export const PackingListView: React.FC = () => {
             style={{
               borderTop: '1px solid #e2e8f0',
               color: '#94a3b8',
-              textAlign: 'center',
               fontSize: '10px',
               paddingTop: '14px',
               marginTop: '24px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
             }}
           >
-            This is an official computer-generated document from {companyProfile.companyName} System • Validated and archived.
+            <span>
+              This is an official computer-generated document from {companyProfile.companyName} System • Validated and archived.
+            </span>
+            <span className="print-page-number-counter" style={{ fontFamily: 'monospace', fontWeight: 700, color: '#475569' }}>
+              <span className="print:hidden">Page 1 of 1</span>
+            </span>
           </div>
         </div>
       </div>

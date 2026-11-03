@@ -738,6 +738,7 @@ export function openPrintableDocumentWindow(
     }
     .btn-close:hover { background: #475569; }
     table { width: 100%; border-collapse: collapse; }
+    th, td { vertical-align: middle !important; }
     @media print {
       .print-bar { display: none !important; }
       body { padding: 0 !important; margin: 0 !important; }

@@ -4,6 +4,10 @@
   body {
     @apply bg-slate-100 text-slate-900 antialiased font-sans selection:bg-amber-400 selection:text-slate-950;
   }
+
+  th, td {
+    vertical-align: middle !important;
+  }
 }
 
 /* 3D Sculpted Gold Font for "ZSB AQUATICS" across all sheets & headers */
@@ -154,6 +158,10 @@
   tr {
     page-break-inside: avoid;
     page-break-after: auto;
+  }
+
+  th, td {
+    vertical-align: middle !important;
   }
 }
 

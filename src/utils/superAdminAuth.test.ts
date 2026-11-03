@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_SUPER_ADMIN_PASSWORD,
   verifySuperAdminPassword,
+  verifySuperAdminForSingleDelete,
+  describeSingleDeleteTarget,
   validateSuperAdminPasswordChange,
   describeClearScope,
 } from './superAdminAuth';
@@ -28,6 +30,53 @@ test('verifySuperAdminPassword rejects wrong password and accepts valid default 
 
   const rightCustom = verifySuperAdminPassword('zsbSuper2026', 'zsbSuper2026');
   assert.equal(rightCustom.valid, true);
+});
+
+test('verifySuperAdminForSingleDelete enforces Super Admin permission before deleting any single data record', () => {
+  const emptyRes = verifySuperAdminForSingleDelete('');
+  assert.equal(emptyRes.valid, false);
+  assert.match(emptyRes.error || '', /Super Admin password is required to delete this data/i);
+
+  const wrongRes = verifySuperAdminForSingleDelete('badpass', 'admin123');
+  assert.equal(wrongRes.valid, false);
+  assert.match(wrongRes.error || '', /Invalid Super Admin password\. Access denied — data was not deleted/i);
+
+  const validRes = verifySuperAdminForSingleDelete('admin123', 'admin123');
+  assert.equal(validRes.valid, true);
+  assert.equal(validRes.error, undefined);
+});
+
+test('describeSingleDeleteTarget returns clear labels and summary text for all single-record types', () => {
+  const purTarget = describeSingleDeleteTarget({
+    recordType: 'purchase',
+    recordId: 'pur-1',
+    title: 'Md. Rahim Enterprise',
+    identifier: 'PUR-2026-0001',
+    details: 'Amount: BDT 45,000',
+  });
+  assert.equal(purTarget.badgeLabel, 'Purchase Challan / Bill');
+  assert.equal(purTarget.identifierLabel, 'Invoice No');
+  assert.match(purTarget.summaryText, /Md\. Rahim Enterprise \(PUR-2026-0001\) · Amount: BDT 45,000/);
+
+  const pkgTarget = describeSingleDeleteTarget({
+    recordType: 'packing',
+    recordId: 'pkg-1',
+    title: 'Mark: HM-105',
+    identifier: 'PKG-2026-0002',
+    details: 'Weight: 250 KG',
+  });
+  assert.equal(pkgTarget.badgeLabel, 'Export Packing List');
+  assert.equal(pkgTarget.identifierLabel, 'Packing No');
+  assert.match(pkgTarget.summaryText, /Mark: HM-105 \(PKG-2026-0002\)/);
+
+  const payTarget = describeSingleDeleteTarget({
+    recordType: 'payment',
+    recordId: 'pay-1',
+    title: 'Karim Traders',
+    identifier: 'PAY-2026-0003',
+  });
+  assert.equal(payTarget.badgeLabel, 'Payment Voucher');
+  assert.equal(payTarget.identifierLabel, 'Voucher No');
 });
 
 test('validateSuperAdminPasswordChange enforces current password, minimum length, and confirmation match', () => {

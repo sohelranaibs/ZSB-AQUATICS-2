@@ -55,6 +55,7 @@ export const PackingListView: React.FC = () => {
     openDataCenterModal,
     setActiveTab,
     showToast,
+    requestSuperAdminSingleDelete,
   } = useApp();
 
   // Manifest Header Fields (From Date & To Date removed per user request)
@@ -185,10 +186,26 @@ export const PackingListView: React.FC = () => {
     );
   };
 
-  // Clear single row
+  // Clear single row (Requires Super Admin Permission)
   const handleClearRow = (id: string) => {
-    setRows((prev) =>
-      prev.map((row) => (row.id === id ? createEmptyRow(row.id) : row))
+    const targetRow = rows.find((r) => r.id === id);
+    requestSuperAdminSingleDelete(
+      {
+        recordType: 'custom_row',
+        recordId: id,
+        recordTitle: targetRow?.item
+          ? `Packing Item Row — ${targetRow.item}`
+          : `Packing Line Item Row`,
+        recordSubtitle: targetRow
+          ? `Box: ${targetRow.box} · Weight: ${targetRow.totalWeight} KG · Amount: RMB ${targetRow.amount}`
+          : undefined,
+      },
+      () => {
+        setRows((prev) =>
+          prev.map((row) => (row.id === id ? createEmptyRow(row.id) : row))
+        );
+        showToast('Super Admin verified: Packing line item row deleted.');
+      }
     );
   };
 
@@ -1657,22 +1674,17 @@ export const PackingListView: React.FC = () => {
         </div>
       </div>
 
-      {/* Offscreen Printable / Exportable Packing Manifest Canvas for Direct .PNG and PDF Export */}
+      {/* Offscreen Printable / Exportable Packing Manifest Canvas for Direct .PNG and PDF Export (Identical to PrintPreviewModal) */}
       <div className="fixed -left-[9999px] top-0 pointer-events-none" aria-hidden="true">
         <div
           id="packing-manifest-export-canvas"
-          style={{
-            width: '800px',
-            backgroundColor: '#ffffff',
-            color: '#000000',
-            padding: '32px',
-            fontFamily: 'sans-serif',
-            position: 'relative',
-            overflow: 'hidden',
-          }}
+          className="relative w-[760px] max-w-[760px] bg-white rounded-sm border border-slate-300 p-7 space-y-5 text-slate-900 overflow-hidden"
+          style={{ width: '760px', backgroundColor: '#ffffff', color: '#000000', position: 'relative' }}
         >
           {/* Centered Watermark Logo */}
           <div
+            aria-hidden="true"
+            className="absolute inset-0 flex items-center justify-center pointer-events-none select-none z-0 overflow-hidden"
             style={{
               position: 'absolute',
               top: 0,
@@ -1692,51 +1704,57 @@ export const PackingListView: React.FC = () => {
               src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
               alt=""
               style={{
-                width: '350px',
-                height: '350px',
+                width: '340px',
+                height: '340px',
                 objectFit: 'contain',
-                borderRadius: '50%',
+                borderRadius: '9999px',
               }}
             />
           </div>
 
-          {/* Official Document Header */}
+          {/* Official Document Header (Logo on Left side of ZSB AQUATICS) */}
           <div
-            style={{ borderBottom: '2px solid #0f172a', paddingBottom: '16px', textAlign: 'center', position: 'relative', zIndex: 10 }}
+            style={{ borderBottom: '2px solid #0f172a', position: 'relative', zIndex: 10 }}
+            className="pb-3.5 text-center space-y-1 relative z-10"
           >
-            {/* Official Company Logo Emblem + Golden 3D Text Header (Logo on Left side of ZSB AQUATICS) */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '14px', marginBottom: '6px' }}>
+            <div className="flex items-center justify-center gap-3.5 mb-1">
               <div
                 style={{
-                  width: '60px',
-                  height: '60px',
-                  borderRadius: '50%',
-                  border: '2px solid #d4af37',
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '9999px',
+                  overflow: 'hidden',
+                  border: '2px solid #fbbf24',
                   backgroundColor: '#ffffff',
                   padding: '2px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  overflow: 'hidden',
                   flexShrink: 0,
                 }}
+                className="w-16 h-16 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shadow-xs flex items-center justify-center shrink-0"
               >
                 <img
                   src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
                   alt={companyProfile.companyName}
-                  style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '50%' }}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    borderRadius: '9999px',
+                    display: 'block',
+                  }}
+                  className="w-full h-full object-contain rounded-full"
                 />
               </div>
 
               <div
-                className="zsb-3d-text-print"
+                className="zsb-3d-text-print text-3xl sm:text-4xl font-black tracking-widest uppercase"
                 style={{
                   color: '#f59e0b',
                   fontFamily: "'Cinzel', Georgia, Cambria, 'Times New Roman', Times, serif",
-                  fontSize: '32px',
                   fontWeight: 900,
                   letterSpacing: '0.09em',
-                  textTransform: 'uppercase',
                   textShadow:
                     '1px 1px 0px #b45309, 2px 2px 0px #92400e, 3px 3px 0px #78350f, 4px 4px 0px #451a03, 5px 5px 7px rgba(15, 23, 42, 0.35)',
                 }}
@@ -1746,395 +1764,164 @@ export const PackingListView: React.FC = () => {
             </div>
 
             <div
-              style={{
-                color: '#000000',
-                fontSize: '13px',
-                fontWeight: 700,
-                marginTop: '4px',
-              }}
+              style={{ color: '#000000' }}
+              className="text-xs sm:text-sm font-bold tracking-wide"
             >
               Address: {companyProfile.address}
             </div>
+
             <div
-              style={{
-                color: '#000000',
-                fontSize: '13px',
-                fontWeight: 700,
-                fontFamily: 'monospace',
-                marginTop: '2px',
-              }}
+              style={{ color: '#000000' }}
+              className="text-xs sm:text-sm font-bold font-mono"
             >
               Mobile: {companyProfile.mobiles.join(' , ')} | EMAIL: {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}
             </div>
+
             <div
-              style={{
-                backgroundColor: '#0f172a',
-                color: '#ffffff',
-                display: 'inline-block',
-                marginTop: '10px',
-                padding: '5px 18px 9px 18px',
-                borderRadius: '4px',
-                fontSize: '11px',
-                fontWeight: 800,
-                lineHeight: '1.2',
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-              }}
+              style={{ backgroundColor: '#0f172a', color: '#ffffff' }}
+              className="inline-block mt-2 px-5 py-1.5 rounded text-xs font-bold tracking-widest uppercase shadow-sm"
             >
               EXPORT AIR PACKING LIST MANIFEST
             </div>
           </div>
 
-          {/* Manifest Metadata Grid (2 rows: 3 items top row, 2 items bottom row, Shipper removed) */}
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '8px',
-              backgroundColor: '#f8fafc',
-              border: '1px solid #cbd5e1',
-              borderRadius: '6px',
-              padding: '12px',
-              marginTop: '16px',
-              fontSize: '12px',
-              position: 'relative',
-              zIndex: 10,
-            }}
-          >
-            {/* Row 1: Packing No, Shipment Date, Shipping Mark */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', alignItems: 'center' }}>
-              <div style={{ backgroundColor: '#ffffff', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                <div style={{ color: '#64748b', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase' }}>PACKING NO:</div>
-                <div style={{ color: '#0f172a', fontWeight: 900, fontFamily: 'monospace', fontSize: '18px' }}>
-                  {invoiceNumber || '-'}
+          {/* Packing List Content matching PrintPreviewModal */}
+          <div className="space-y-4">
+            {/* Manifest Metadata Box (2 rows: 3 items top row, 2 items bottom row, Shipper removed) */}
+            <div className="space-y-2.5 bg-slate-50 p-3.5 rounded-lg border-2 border-slate-300">
+              {/* Row 1: Packing No, Shipment Date, Shipping Mark */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px' }} className="grid grid-cols-3 gap-3">
+                <div className="bg-white p-2.5 rounded border border-slate-200">
+                  <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider block mb-0.5">PACKING NO:</span>
+                  <span className="font-mono font-black text-slate-900 text-lg block">{invoiceNumber || '-'}</span>
+                </div>
+                <div className="bg-slate-100 p-2.5 rounded border border-slate-300">
+                  <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block mb-0.5">SHIPMENT DATE:</span>
+                  <span className="font-mono font-black text-slate-950 text-2xl tracking-wide block">{formatDate(packingDate)}</span>
+                </div>
+                <div className="bg-blue-50/80 p-2.5 rounded border border-blue-200">
+                  <span className="text-[11px] font-black text-blue-800 uppercase tracking-wider block mb-0.5">SHIPPING MARK:</span>
+                  <span className="font-black text-blue-950 text-2xl tracking-wide block">{shippingMark || '-'}</span>
                 </div>
               </div>
-              <div style={{ backgroundColor: '#f1f5f9', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                <div style={{ color: '#475569', fontSize: '11px', fontWeight: 900, textTransform: 'uppercase' }}>SHIPMENT DATE:</div>
-                <div style={{ color: '#0f172a', fontWeight: 900, fontFamily: 'monospace', fontSize: '22px' }}>
-                  {formatDate(packingDate)}
+
+              {/* Row 2: Flight Destination, Destination */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }} className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-100 p-2.5 rounded border border-slate-300">
+                  <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block mb-0.5">FLIGHT DESTINATION:</span>
+                  <span className="font-black text-slate-950 text-2xl tracking-wide block">{flight || '-'}</span>
                 </div>
-              </div>
-              <div style={{ backgroundColor: '#eff6ff', padding: '8px 10px', borderRadius: '6px', border: '1px solid #bfdbfe' }}>
-                <div style={{ color: '#1e40af', fontSize: '11px', fontWeight: 900, textTransform: 'uppercase' }}>SHIPPING MARK:</div>
-                <div style={{ color: '#1e3a8a', fontWeight: 900, fontSize: '24px', letterSpacing: '0.02em' }}>
-                  {shippingMark || '-'}
+                <div className="bg-slate-100 p-2.5 rounded border border-slate-300">
+                  <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block mb-0.5">DESTINATION:</span>
+                  <span className="font-black text-slate-950 text-2xl tracking-wide block">{destination || '-'}</span>
                 </div>
               </div>
             </div>
 
-            {/* Row 2: Flight Destination, Destination */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', alignItems: 'center' }}>
-              <div style={{ backgroundColor: '#f1f5f9', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                <div style={{ color: '#475569', fontSize: '11px', fontWeight: 900, textTransform: 'uppercase' }}>FLIGHT DESTINATION:</div>
-                <div style={{ color: '#0f172a', fontWeight: 900, fontSize: '22px' }}>{flight || '-'}</div>
-              </div>
-              <div style={{ backgroundColor: '#f1f5f9', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                <div style={{ color: '#475569', fontSize: '11px', fontWeight: 900, textTransform: 'uppercase' }}>DESTINATION:</div>
-                <div style={{ color: '#0f172a', fontWeight: 900, fontSize: '22px' }}>{destination || '-'}</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Manifest Line Items Table */}
-          <table
-            style={{
-              width: '100%',
-              borderCollapse: 'collapse',
-              marginTop: '16px',
-              fontSize: '12px',
-              border: '1px solid #cbd5e1',
-            }}
-          >
-            <thead>
-              <tr
-                style={{
-                  backgroundColor: '#f1f5f9',
-                  color: '#1e293b',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                }}
-              >
-                <th style={{ padding: '8px', border: '1px solid #cbd5e1', textAlign: 'center', width: '40px' }}>
-                  SL
-                </th>
-                <th style={{ padding: '8px', border: '1px solid #cbd5e1', textAlign: 'left' }}>
-                  ITEM / SIZE
-                </th>
-                <th style={{ padding: '8px', border: '1px solid #cbd5e1', textAlign: 'center', width: '70px' }}>
-                  BOX
-                </th>
-                <th style={{ padding: '8px', border: '1px solid #cbd5e1', textAlign: 'center', width: '70px' }}>
-                  WEIGHT (KG)
-                </th>
-                <th style={{ padding: '8px', border: '1px solid #cbd5e1', textAlign: 'right', width: '100px' }}>
-                  TOTAL WEIGHT
-                </th>
-                <th style={{ padding: '8px', border: '1px solid #cbd5e1', textAlign: 'center', width: '60px' }}>
-                  UNIT
-                </th>
-                <th style={{ padding: '8px', border: '1px solid #cbd5e1', textAlign: 'right', width: '90px' }}>
-                  RATE (RMB)
-                </th>
-                <th style={{ padding: '8px', border: '1px solid #cbd5e1', textAlign: 'right', width: '110px' }}>
-                  AMOUNT (RMB)
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {exportableRows.map((row, idx) => (
-                <tr key={row.id || idx} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                  <td
-                    style={{
-                      padding: '8px',
-                      border: '1px solid #cbd5e1',
-                      textAlign: 'center',
-                      fontFamily: 'monospace',
-                    }}
-                  >
-                    {idx + 1}
-                  </td>
-                  <td
-                    style={{
-                      padding: '8px',
-                      border: '1px solid #cbd5e1',
-                      fontWeight: 700,
-                      color: '#0f172a',
-                    }}
-                  >
-                    {row.item || '-'}
-                  </td>
-                  <td
-                    style={{
-                      padding: '8px',
-                      border: '1px solid #cbd5e1',
-                      textAlign: 'center',
-                      fontFamily: 'monospace',
-                    }}
-                  >
-                    {row.box || 0}
-                  </td>
-                  <td
-                    style={{
-                      padding: '8px',
-                      border: '1px solid #cbd5e1',
-                      textAlign: 'center',
-                      fontFamily: 'monospace',
-                    }}
-                  >
-                    {row.weight || 0}
-                  </td>
-                  <td
-                    style={{
-                      padding: '8px',
-                      border: '1px solid #cbd5e1',
-                      textAlign: 'right',
-                      fontFamily: 'monospace',
-                      fontWeight: 700,
-                      color: '#115e59',
-                    }}
-                  >
-                    {(row.totalWeight || 0).toFixed(2)} KG
-                  </td>
-                  <td
-                    style={{
-                      padding: '8px',
-                      border: '1px solid #cbd5e1',
-                      textAlign: 'center',
-                      fontSize: '10px',
-                      fontWeight: 700,
-                    }}
-                  >
-                    {row.unit || 'KG'}
-                  </td>
-                  <td
-                    style={{
-                      padding: '8px',
-                      border: '1px solid #cbd5e1',
-                      textAlign: 'right',
-                      fontFamily: 'monospace',
-                    }}
-                  >
-                    {formatCurrency(row.rate || 0, '')}
-                  </td>
-                  <td
-                    style={{
-                      padding: '8px',
-                      border: '1px solid #cbd5e1',
-                      textAlign: 'right',
-                      fontFamily: 'monospace',
-                      fontWeight: 700,
-                    }}
-                  >
-                    {formatCurrency(row.amount || 0, '')}
+            <table className="w-full text-xs border border-slate-300 border-collapse">
+              <thead>
+                <tr className="bg-slate-100 text-slate-800 uppercase font-bold text-[11px] border-b border-slate-300">
+                  <th className="p-2 border-r border-slate-300 text-center w-12">SL</th>
+                  <th className="p-2 border-r border-slate-300 text-left">ITEM / SIZE</th>
+                  <th className="p-2 border-r border-slate-300 text-center w-20">BOX</th>
+                  <th className="p-2 border-r border-slate-300 text-center w-20">WEIGHT (KG)</th>
+                  <th className="p-2 border-r border-slate-300 text-right w-28">TOTAL WEIGHT</th>
+                  <th className="p-2 border-r border-slate-300 text-center w-16">UNIT</th>
+                  <th className="p-2 border-r border-slate-300 text-right w-24">RATE (RMB)</th>
+                  <th className="p-2 text-right w-32">AMOUNT (RMB)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {exportableRows.map((row, idx) => (
+                  <tr key={row.id || idx} className="font-medium">
+                    <td className="p-2 border-r border-slate-200 text-center whitespace-nowrap">
+                      <span className="zsb-sl-badge">{String(idx + 1).padStart(2, '0')}</span>
+                    </td>
+                    <td className="p-2 border-r border-slate-200 font-bold">{row.item || '-'}</td>
+                    <td className="p-2 border-r border-slate-200 text-center font-mono">{row.box || 0}</td>
+                    <td className="p-2 border-r border-slate-200 text-center font-mono">{row.weight || 0}</td>
+                    <td className="p-2 border-r border-slate-200 text-right font-mono font-bold text-teal-800">
+                      {row.totalWeight || 0} KG
+                    </td>
+                    <td className="p-2 border-r border-slate-200 text-center font-bold text-[10px]">
+                      {row.unit || 'KG'}
+                    </td>
+                    <td className="p-2 border-r border-slate-200 text-right font-mono">
+                      {formatCurrency(row.rate || 0, '')}
+                    </td>
+                    <td className="p-2 text-right font-mono font-bold text-slate-900">
+                      {formatCurrency(row.amount || 0, '')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-slate-100 font-bold border-t-2 border-slate-400">
+                  <td colSpan={2} className="p-2 text-right uppercase">TOTALS:</td>
+                  <td className="p-2 text-center font-mono text-slate-900">{totalBox} Boxes</td>
+                  <td></td>
+                  <td className="p-2 text-right font-mono text-teal-800 font-black">{totalWeight} KG</td>
+                  <td colSpan={2} className="p-2 text-right uppercase">TOTAL INVOICE VALUE:</td>
+                  <td className="p-2 text-right font-mono font-black text-slate-900">
+                    {formatCurrency(totalAmount, 'RMB')}
                   </td>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr style={{ backgroundColor: '#f1f5f9', fontWeight: 700, borderTop: '2px solid #64748b' }}>
-                <td colSpan={2} style={{ padding: '8px', border: '1px solid #cbd5e1', textAlign: 'right' }}>
-                  TOTALS:
-                </td>
-                <td
-                  style={{
-                    padding: '8px',
-                    border: '1px solid #cbd5e1',
-                    textAlign: 'center',
-                    fontFamily: 'monospace',
-                    color: '#0f172a',
-                  }}
-                >
-                  {totalBox} Boxes
-                </td>
-                <td style={{ padding: '8px', border: '1px solid #cbd5e1' }}></td>
-                <td
-                  style={{
-                    padding: '8px',
-                    border: '1px solid #cbd5e1',
-                    textAlign: 'right',
-                    fontFamily: 'monospace',
-                    fontWeight: 900,
-                    color: '#115e59',
-                  }}
-                >
-                  {totalWeight.toFixed(2)} KG
-                </td>
-                <td colSpan={2} style={{ padding: '8px', border: '1px solid #cbd5e1', textAlign: 'right' }}>
-                  TOTAL INVOICE VALUE:
-                </td>
-                <td
-                  style={{
-                    padding: '8px',
-                    border: '1px solid #cbd5e1',
-                    textAlign: 'right',
-                    fontFamily: 'monospace',
-                    fontWeight: 900,
-                    color: '#0f172a',
-                  }}
-                >
-                  {formatCurrency(totalAmount, 'RMB')}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
+              </tfoot>
+            </table>
 
-          {remarks && (
-            <div
-              style={{
-                marginTop: '14px',
-                padding: '10px 12px',
-                backgroundColor: '#f8fafc',
-                border: '1px solid #cbd5e1',
-                borderRadius: '6px',
-                fontSize: '12px',
-              }}
-            >
-              <strong style={{ color: '#334155' }}>Flight &amp; Handling Remarks:</strong> {remarks}
-            </div>
-          )}
+            {remarks && (
+              <div className="text-xs p-2.5 bg-slate-50 rounded border border-slate-200">
+                <strong className="text-slate-700">Flight &amp; Handling Remarks:</strong> {remarks}
+              </div>
+            )}
+          </div>
 
           {/* Dual Official Signatures */}
-          <div
-            style={{
-              paddingTop: '48px',
-              display: 'grid',
-              gridTemplateColumns: 'repeat(2, 1fr)',
-              gap: '32px',
-              textAlign: 'center',
-              fontSize: '12px',
-            }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <div
-                style={{
-                  borderBottom: '2px solid #0f172a',
-                  width: '210px',
-                  paddingBottom: '6px',
-                }}
-              >
+          <div className="pt-12 grid grid-cols-2 gap-8 text-center text-xs">
+            <div className="flex flex-col items-center">
+              <div style={{ borderBottom: '2px solid #0f172a' }} className="w-52 pb-1.5">
                 <div
-                  style={{
-                    fontFamily: 'Georgia, serif',
-                    fontStyle: 'italic',
-                    color: '#0f172a',
-                    fontSize: '16px',
-                    fontWeight: 700,
-                  }}
+                  style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', color: '#0f172a' }}
+                  className="text-base font-bold tracking-wider"
                 >
                   {companyProfile.managingPartner}
                 </div>
               </div>
-              <div
-                style={{
-                  color: '#0f172a',
-                  marginTop: '6px',
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                }}
-              >
+              <div style={{ color: '#0f172a' }} className="mt-1.5 font-bold uppercase tracking-wider text-xs">
                 Managing Partner
               </div>
-              <div style={{ color: '#64748b', fontSize: '10px', fontWeight: 600, textTransform: 'uppercase' }}>
+              <div style={{ color: '#64748b' }} className="text-[10px] uppercase font-semibold">
                 {companyProfile.companyName}
               </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <div
-                style={{
-                  borderBottom: '2px solid #0f172a',
-                  width: '210px',
-                  paddingBottom: '6px',
-                }}
-              >
+            <div className="flex flex-col items-center">
+              <div style={{ borderBottom: '2px solid #0f172a' }} className="w-52 pb-1.5">
                 <div
-                  style={{
-                    fontFamily: 'Georgia, serif',
-                    fontStyle: 'italic',
-                    color: '#0f172a',
-                    fontSize: '16px',
-                    fontWeight: 700,
-                  }}
+                  style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', color: '#0f172a' }}
+                  className="text-base font-bold tracking-wider"
                 >
                   {companyProfile.partner}
                 </div>
               </div>
-              <div
-                style={{
-                  color: '#0f172a',
-                  marginTop: '6px',
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                }}
-              >
+              <div style={{ color: '#0f172a' }} className="mt-1.5 font-bold uppercase tracking-wider text-xs">
                 Partner
               </div>
-              <div style={{ color: '#64748b', fontSize: '10px', fontWeight: 600, textTransform: 'uppercase' }}>
+              <div style={{ color: '#64748b' }} className="text-[10px] uppercase font-semibold">
                 {companyProfile.companyName}
               </div>
             </div>
           </div>
 
+          {/* Footer certification & dynamic A4 page counter */}
           <div
-            style={{
-              borderTop: '1px solid #e2e8f0',
-              color: '#94a3b8',
-              fontSize: '10px',
-              paddingTop: '14px',
-              marginTop: '24px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
+            style={{ borderTop: '1px solid #e2e8f0', color: '#94a3b8' }}
+            className="flex justify-between items-center text-[10px] pt-4 mt-6"
           >
             <span>
               This is an official computer-generated document from {companyProfile.companyName} System • Validated and archived.
             </span>
-            <span className="print-page-number-counter" style={{ fontFamily: 'monospace', fontWeight: 700, color: '#475569' }}>
+            <span className="print-page-number-counter font-mono font-bold text-slate-600">
               <span className="print:hidden">Page 1 of 1</span>
             </span>
           </div>

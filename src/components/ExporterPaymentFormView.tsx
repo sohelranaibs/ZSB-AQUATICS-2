@@ -71,6 +71,7 @@ export const ExporterPaymentFormView: React.FC = () => {
     openPrintModal,
     setActiveTab,
     showToast,
+    requestSuperAdminSingleDelete,
   } = useApp();
 
   const exporterPayments = useMemo(
@@ -478,17 +479,25 @@ export const ExporterPaymentFormView: React.FC = () => {
     }
     if (row.packingId) {
       deletePacking(row.packingId);
-      showToast(`Deleted Exporter record row #${idx + 1}.`);
       return;
     }
     if (row.paymentId) {
       deletePayment(row.paymentId);
-      showToast(`Deleted Exporter voucher row #${idx + 1}.`);
       return;
     }
-    setCustomRows((prev) => prev.filter((r) => r.id !== row.id));
-    setDeletedRowIds((prev) => (prev.includes(row.id) ? prev : [...prev, row.id]));
-    showToast(`Deleted Exporter row #${idx + 1}.`);
+    requestSuperAdminSingleDelete(
+      {
+        recordType: 'custom_row',
+        recordId: row.id,
+        recordTitle: `Exporter Ledger Row #${idx + 1}${row.shippingMark ? ` (${row.shippingMark})` : ''}`,
+        recordSubtitle: row.description || `Date: ${row.date || '-'}`,
+      },
+      () => {
+        setCustomRows((prev) => prev.filter((r) => r.id !== row.id));
+        setDeletedRowIds((prev) => (prev.includes(row.id) ? prev : [...prev, row.id]));
+        showToast(`Super Admin verified: Deleted Exporter row #${idx + 1}.`);
+      }
+    );
   };
 
   const resetFormFields = () => {

@@ -97,6 +97,7 @@ export const AdministrationView: React.FC = () => {
     showToast,
     addAuditLog,
     setActiveTab,
+    requestSuperAdminSingleDelete,
   } = useApp();
 
   // Super Admin session gate state
@@ -326,15 +327,28 @@ export const AdministrationView: React.FC = () => {
     showToast('Updated team member access status.');
   };
 
-  // Delete Member
+  // Delete Member (Requires Super Admin Permission)
   const handleDeleteMember = (id: string) => {
+    const targetMember = teamMembers.find((m) => m.id === id);
     const res = deleteTeamMember(teamMembers, id);
     if (!res.success) {
       showToast(res.error || 'Cannot delete member.');
       return;
     }
-    setTeamMembers(res.updatedList);
-    showToast('Removed team member account.');
+    requestSuperAdminSingleDelete(
+      {
+        recordType: 'team_member',
+        recordId: id,
+        recordTitle: targetMember
+          ? `${targetMember.displayName} (${targetMember.role})`
+          : id,
+        recordSubtitle: targetMember ? `Email: ${targetMember.email}` : undefined,
+      },
+      () => {
+        setTeamMembers(res.updatedList);
+        showToast('Super Admin verified: Removed team member account.');
+      }
+    );
   };
 
   // Export Team CSV

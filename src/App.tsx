@@ -79,6 +79,8 @@ const MainContent: React.FC = () => {
     closeSnapshotModal,
     superAdminClearModal,
     closeSuperAdminClearModal,
+    pendingSingleDelete,
+    cancelSingleDelete,
     triggerManualSync,
     createSnapshot,
     exportCurrentViewToPdf,
@@ -237,6 +239,10 @@ const MainContent: React.FC = () => {
             closeSnapshotModal();
             return;
           }
+          if (pendingSingleDelete) {
+            cancelSingleDelete();
+            return;
+          }
           if (superAdminClearModal.isOpen) {
             closeSuperAdminClearModal();
             return;
@@ -352,6 +358,8 @@ const MainContent: React.FC = () => {
       showToast,
       snapshotModalOpen,
       superAdminClearModal.isOpen,
+      pendingSingleDelete,
+      cancelSingleDelete,
       triggerManualSync,
     ]
   );

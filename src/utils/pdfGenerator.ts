@@ -146,13 +146,205 @@ function toLegacyRgbColor(cssValue: string, ctx: CanvasRenderingContext2D | null
 }
 
 /**
- * Shared high-resolution html2canvas renderer that normalizes Tailwind v4 oklch()/oklab() colors,
- * strips interactive toolbar controls marked with [data-export-ignore="true"], and replaces
- * live <input>/<select> controls in the cloned DOM with crisp static text nodes.
+ * Ensures an HTMLImageElement is converted into a self-contained data:image/... URL
+ * so SVG foreignObject and canvas exports never fail or taint on external URLs.
+ */
+async function ensureSelfContainedImageDataUrl(img: HTMLImageElement): Promise<string> {
+  const syncResult = imageElementToDataUrlOrAbsolute(img);
+  if (syncResult.startsWith('data:image/')) {
+    return syncResult;
+  }
+  if (typeof window !== 'undefined' && typeof fetch !== 'undefined' && syncResult) {
+    try {
+      const absUrl = new URL(syncResult, window.location.origin).href;
+      const res = await fetch(absUrl);
+      if (res.ok) {
+        const blob = await res.blob();
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            resolve(typeof reader.result === 'string' ? reader.result : '');
+          };
+          reader.onerror = () => resolve('');
+          reader.readAsDataURL(blob);
+        });
+        if (dataUrl.startsWith('data:image/')) {
+          return dataUrl;
+        }
+      }
+    } catch {
+      // Fall through
+    }
+  }
+  return cachedCompanyLogoDataUrl || syncResult;
+}
+
+/**
+ * Renders a live DOM element to a 2x high-resolution canvas using the browser's native
+ * SVG <foreignObject> engine (with all computed styles and base64 images inlined),
+ * ensuring 100% pixel-for-pixel fidelity with the Print Preview Modal.
+ */
+async function renderElementViaSvgForeignObject(
+  element: HTMLElement,
+  resolvedImgSrcs: string[],
+  targetWidth: number
+): Promise<HTMLCanvasElement | null> {
+  if (typeof window === 'undefined' || typeof XMLSerializer === 'undefined') return null;
+
+  const rect = element.getBoundingClientRect();
+  const width = Math.round(rect.width) || targetWidth || 760;
+  const height = Math.max(Math.round(rect.height), element.scrollHeight);
+  if (width <= 0 || height <= 0) return null;
+
+  const clone = element.cloneNode(true) as HTMLElement;
+  const origNodes = [element, ...Array.from(element.querySelectorAll('*'))];
+  const cloneNodes = [clone, ...Array.from(clone.querySelectorAll('*'))];
+
+  const helperCanvas = document.createElement('canvas');
+  helperCanvas.width = 1;
+  helperCanvas.height = 1;
+  const helperCtx = helperCanvas.getContext('2d', { willReadFrequently: true });
+
+  origNodes.forEach((orig, idx) => {
+    const target = cloneNodes[idx];
+    if (!(orig instanceof HTMLElement || orig instanceof SVGElement)) return;
+    if (!(target instanceof HTMLElement || target instanceof SVGElement)) return;
+
+    const cs = window.getComputedStyle(orig);
+    let cssText = '';
+    for (let i = 0; i < cs.length; i++) {
+      const prop = cs[i];
+      // Skip external url() background images to avoid tainting foreignObject canvas
+      let val = cs.getPropertyValue(prop);
+      if (!val) continue;
+      if (prop === 'background-image' && val.includes('url(') && !val.includes('data:image/')) {
+        continue;
+      }
+      if (
+        val.includes('oklch') ||
+        val.includes('oklab') ||
+        val.includes('color-mix') ||
+        val.includes('color(')
+      ) {
+        val = toLegacyRgbColor(val, helperCtx);
+      }
+      cssText += `${prop}:${val};`;
+    }
+    target.style.cssText = cssText;
+
+    // Unlock rigid sub-pixel width/height on leaf text nodes so labels/badges never wrap or clip inside SVG foreignObject
+    const tagName = orig.tagName.toUpperCase();
+    const isLeafTextElement =
+      orig !== element &&
+      orig.children.length === 0 &&
+      tagName !== 'IMG' &&
+      tagName !== 'SVG' &&
+      tagName !== 'TH' &&
+      tagName !== 'TD' &&
+      tagName !== 'COL' &&
+      tagName !== 'HR' &&
+      tagName !== 'INPUT' &&
+      tagName !== 'SELECT' &&
+      !orig.classList.contains('zsb-sl-badge');
+
+    if (isLeafTextElement && target instanceof HTMLElement) {
+      target.style.width = 'auto';
+      target.style.height = 'auto';
+      target.style.inlineSize = 'auto';
+      target.style.blockSize = 'auto';
+    }
+  });
+
+  // Replace all cloned <img> sources with self-contained base64 data URLs
+  const clonedImages = Array.from(clone.querySelectorAll('img'));
+  clonedImages.forEach((cImg, idx) => {
+    const dataSrc = resolvedImgSrcs[idx] || cachedCompanyLogoDataUrl || '';
+    if (dataSrc) {
+      cImg.setAttribute('src', dataSrc);
+    }
+    cImg.removeAttribute('srcset');
+    cImg.removeAttribute('crossorigin');
+  });
+
+  // Remove interactive toolbar elements marked to be ignored in exports
+  clone.querySelectorAll('[data-export-ignore="true"]').forEach((node) => {
+    node.remove();
+  });
+
+  // Convert <input> and <select> elements into crisp static text nodes
+  clone.querySelectorAll('input, select').forEach((ctrl) => {
+    const el = ctrl as HTMLInputElement | HTMLSelectElement;
+    let displayVal = el.value || '';
+    if (el instanceof HTMLInputElement && el.type === 'date' && displayVal) {
+      displayVal = formatDate(displayVal);
+    }
+    const span = document.createElement('span');
+    span.textContent = displayVal;
+    span.style.cssText = el.style.cssText;
+    span.style.display = 'inline-block';
+    span.style.width = '100%';
+    span.style.textAlign = 'center';
+    span.style.verticalAlign = 'middle';
+    span.style.color = '#000000';
+    span.style.border = 'none';
+    span.style.background = 'transparent';
+    el.replaceWith(span);
+  });
+
+  // Normalize root clone positioning for foreignObject viewport
+  clone.style.margin = '0px';
+  clone.style.position = 'relative';
+  clone.style.left = '0px';
+  clone.style.top = '0px';
+  clone.style.transform = 'none';
+  clone.style.width = `${width}px`;
+  clone.style.minWidth = `${width}px`;
+  clone.style.maxWidth = `${width}px`;
+  clone.style.height = `${height}px`;
+  clone.style.boxSizing = 'border-box';
+  clone.style.backgroundColor = '#ffffff';
+  clone.style.color = '#000000';
+  clone.style.boxShadow = 'none';
+  clone.style.borderRadius = '2px';
+  clone.style.border = '1px solid #cbd5e1';
+  clone.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+
+  const serialized = new XMLSerializer().serializeToString(clone);
+  const svgMarkup = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><foreignObject x="0" y="0" width="100%" height="100%">${serialized}</foreignObject></svg>`;
+  const svgDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`;
+
+  const img = new Image();
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = (err) => reject(err);
+    img.src = svgDataUrl;
+  });
+
+  const scale = 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = width * scale;
+  canvas.height = height * scale;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.scale(scale, scale);
+  ctx.drawImage(img, 0, 0, width, height);
+
+  // Verify the canvas is not tainted before returning
+  canvas.toDataURL('image/png', 1.0);
+  return canvas;
+}
+
+/**
+ * Shared high-resolution renderer that produces pixel-identical output matching Print Preview.
+ * Uses native SVG <foreignObject> rendering first for 100% CSS fidelity, falling back to
+ * html2canvas with pre-inlined RGB colors if needed.
  */
 export async function renderElementToHighResCanvas(
   elementOrId: string | HTMLElement,
-  targetWidth: number = 800
+  targetWidth: number = 760
 ): Promise<HTMLCanvasElement | null> {
   const element =
     typeof elementOrId === 'string' ? document.getElementById(elementOrId) : elementOrId;
@@ -161,9 +353,25 @@ export async function renderElementToHighResCanvas(
     return null;
   }
 
-  // Pre-capture inline data URLs for all images inside the live element
+  // Pre-capture inline base64 data URLs for all images inside the live element
   const liveImages = Array.from(element.querySelectorAll('img'));
-  const resolvedImgSrcs = liveImages.map((img) => imageElementToDataUrlOrAbsolute(img));
+  const resolvedImgSrcs = await Promise.all(
+    liveImages.map((img) => ensureSelfContainedImageDataUrl(img))
+  );
+
+  // Primary renderer: Native SVG <foreignObject> (100% identical to Print Preview in browser)
+  try {
+    const nativeCanvas = await renderElementViaSvgForeignObject(
+      element,
+      resolvedImgSrcs,
+      targetWidth
+    );
+    if (nativeCanvas) {
+      return nativeCanvas;
+    }
+  } catch (svgErr) {
+    console.warn('SVG foreignObject render fallback to html2canvas:', svgErr);
+  }
 
   const elementId = typeof elementOrId === 'string' ? elementOrId : element.id;
   const tempExportAttr = 'data-active-export-root';
@@ -176,10 +384,66 @@ export async function renderElementToHighResCanvas(
       allowTaint: true,
       logging: false,
       backgroundColor: '#ffffff',
+      scrollX: 0,
+      scrollY: 0,
       windowWidth: Math.max(targetWidth + 50, 950),
       width: targetWidth,
       onclone: (clonedDoc) => {
-        // 1. Replace modern oklch(), oklab(), and color-mix() in all <style> tags
+        // 1. FIRST (before altering <style> tags!), read true computed colors and inline them as RGB/RGBA
+        const helperCanvas = clonedDoc.createElement('canvas');
+        helperCanvas.width = 1;
+        helperCanvas.height = 1;
+        const ctx = helperCanvas.getContext('2d', { willReadFrequently: true });
+        const win = clonedDoc.defaultView || window;
+
+        const colorProps = [
+          'color',
+          'backgroundColor',
+          'borderTopColor',
+          'borderRightColor',
+          'borderBottomColor',
+          'borderLeftColor',
+          'outlineColor',
+          'textDecorationColor',
+          'columnRuleColor',
+          'fill',
+          'stroke',
+        ] as const;
+
+        const allElements = [
+          clonedDoc.documentElement,
+          clonedDoc.body,
+          ...Array.from(clonedDoc.querySelectorAll('*')),
+        ];
+
+        allElements.forEach((node) => {
+          if (!(node instanceof HTMLElement || node instanceof SVGElement)) return;
+          const computed = win.getComputedStyle(node);
+          for (const prop of colorProps) {
+            const val = computed[prop];
+            if (val) {
+              (node.style as unknown as Record<string, string>)[prop] = toLegacyRgbColor(val, ctx);
+            }
+          }
+          if (
+            computed.boxShadow &&
+            (computed.boxShadow.includes('oklab') ||
+              computed.boxShadow.includes('oklch') ||
+              computed.boxShadow.includes('color-mix'))
+          ) {
+            node.style.boxShadow = 'none';
+          }
+          if (
+            computed.backgroundImage &&
+            (computed.backgroundImage.includes('oklab') ||
+              computed.backgroundImage.includes('oklch') ||
+              computed.backgroundImage.includes('color-mix'))
+          ) {
+            node.style.backgroundImage = 'none';
+          }
+        });
+
+        // 2. Now sanitize <style> tags so html2canvas CSS parser does not choke on oklch/oklab/color-mix
         const styles = clonedDoc.querySelectorAll('style');
         styles.forEach((styleTag) => {
           if (
@@ -189,9 +453,9 @@ export async function renderElementToHighResCanvas(
               styleTag.textContent.includes('color-mix'))
           ) {
             styleTag.textContent = styleTag.textContent
-              .replace(/color-mix\([^)]+\)/gi, 'rgba(15, 23, 42, 0.15)')
-              .replace(/oklch\([^)]+\)/gi, '#1e293b')
-              .replace(/oklab\([^)]+\)/gi, '#1e293b');
+              .replace(/color-mix\([^;{}]+\)/gi, 'transparent')
+              .replace(/oklch\([^)]+\)/gi, (m) => toLegacyRgbColor(m, ctx))
+              .replace(/oklab\([^)]+\)/gi, (m) => toLegacyRgbColor(m, ctx));
           }
         });
 
@@ -210,12 +474,12 @@ export async function renderElementToHighResCanvas(
             }
           });
 
-          // 2. Remove interactive controls marked to be ignored in exports
+          // Remove interactive controls marked to be ignored in exports
           clonedTarget.querySelectorAll('[data-export-ignore="true"]').forEach((node) => {
             node.remove();
           });
 
-          // 3. Convert <input> and <select> elements inside the cloned slip into clean static text
+          // Convert <input> and <select> elements inside the cloned slip into clean static text
           clonedTarget.querySelectorAll('input, select').forEach((ctrl) => {
             const el = ctrl as HTMLInputElement | HTMLSelectElement;
             let displayVal = el.value || '';
@@ -249,69 +513,13 @@ export async function renderElementToHighResCanvas(
             elementId === 'global-printable-document' ||
             elementId === 'awb-printable-sheet'
           ) {
-            clonedTarget.style.padding = '24px';
+            clonedTarget.style.padding = '28px';
           }
           clonedTarget.style.margin = '0 auto';
-          clonedTarget.style.borderRadius = '0px';
+          clonedTarget.style.borderRadius = '2px';
+          clonedTarget.style.border = '1px solid #cbd5e1';
           clonedTarget.style.boxShadow = 'none';
         }
-
-        // 4. Normalize any remaining computed oklab/oklch values across all elements in clonedDoc
-        const helperCanvas = clonedDoc.createElement('canvas');
-        helperCanvas.width = 1;
-        helperCanvas.height = 1;
-        const ctx = helperCanvas.getContext('2d', { willReadFrequently: true });
-        const win = clonedDoc.defaultView || window;
-
-        const colorProps = [
-          'color',
-          'backgroundColor',
-          'borderTopColor',
-          'borderRightColor',
-          'borderBottomColor',
-          'borderLeftColor',
-          'outlineColor',
-          'textDecorationColor',
-          'columnRuleColor',
-          'fill',
-          'stroke',
-        ] as const;
-
-        const allElements = [
-          clonedDoc.documentElement,
-          clonedDoc.body,
-          ...Array.from(clonedDoc.querySelectorAll('*')),
-        ];
-
-        allElements.forEach((node) => {
-          if (!(node instanceof HTMLElement || node instanceof SVGElement)) return;
-          const computed = win.getComputedStyle(node);
-          for (const prop of colorProps) {
-            const val = computed[prop];
-            if (
-              val &&
-              (val.includes('oklab') ||
-                val.includes('oklch') ||
-                val.includes('color-mix') ||
-                val.includes('color('))
-            ) {
-              (node.style as unknown as Record<string, string>)[prop] = toLegacyRgbColor(val, ctx);
-            }
-          }
-          if (
-            computed.boxShadow &&
-            (computed.boxShadow.includes('oklab') || computed.boxShadow.includes('oklch'))
-          ) {
-            node.style.boxShadow = 'none';
-          }
-          if (
-            computed.backgroundImage &&
-            (computed.backgroundImage.includes('oklab') ||
-              computed.backgroundImage.includes('oklch'))
-          ) {
-            node.style.backgroundImage = 'none';
-          }
-        });
       },
     });
   } finally {
@@ -350,7 +558,7 @@ export async function exportElementToPng(
 
 /**
  * Exports a DOM element as a downloadable PDF file
- * Handles Tailwind v4 modern oklch color parsing for html2canvas
+ * Handles Tailwind v4 modern oklch color parsing and preserves exact Print Preview appearance
  */
 export async function exportElementToPdf(
   elementOrId: string | HTMLElement,
@@ -422,14 +630,16 @@ export async function exportElementToPdf(
       }
     }
 
-    // Add dynamic page number counter (e.g., 'Page 1 of 2') to bottom-right of PDF pages
+    // Add dynamic page number counter (e.g., 'Page 1 of 2') to bottom-right of multi-page PDFs
     const totalPages = pdf.getNumberOfPages();
-    for (let p = 1; p <= totalPages; p++) {
-      pdf.setPage(p);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(8);
-      pdf.setTextColor(71, 85, 105);
-      pdf.text(`Page ${p} of ${totalPages}`, pageWidth - margin, pageHeight - 5, { align: 'right' });
+    if (totalPages > 1) {
+      for (let p = 1; p <= totalPages; p++) {
+        pdf.setPage(p);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8);
+        pdf.setTextColor(71, 85, 105);
+        pdf.text(`Page ${p} of ${totalPages}`, pageWidth - margin, pageHeight - 5, { align: 'right' });
+      }
     }
 
     const baseName = filename.replace(/\.(pdf|png)$/i, '');

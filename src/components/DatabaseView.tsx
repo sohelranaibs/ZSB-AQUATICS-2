@@ -2074,9 +2074,11 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             </button>
                             <button
                               type="button"
+                              data-testid={`delete-purchase-btn-${p.id}`}
+                              aria-label={`Delete purchase invoice ${p.invoiceNumber}`}
                               onClick={() => deletePurchase(p.id)}
                               className="p-0.5 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
-                              title={`Delete purchase invoice ${p.invoiceNumber}`}
+                              title={`Delete purchase invoice ${p.invoiceNumber} (Super Admin Required)`}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -2414,9 +2416,11 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             </button>
                             <button
                               type="button"
+                              data-testid={`delete-packing-btn-${pkg.id}`}
+                              aria-label={`Delete packing list ${pkg.invoiceNumber}`}
                               onClick={() => deletePacking(pkg.id)}
                               className="p-0.5 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
-                              title={`Delete packing list ${pkg.invoiceNumber}`}
+                              title={`Delete packing list ${pkg.invoiceNumber} (Super Admin Required)`}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -2876,9 +2880,11 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                               </button>
                               <button
                                 type="button"
+                                data-testid={`delete-payment-btn-${pm.id}`}
+                                aria-label={`Delete payment voucher ${pm.invoiceNumber}`}
                                 onClick={() => deletePayment(pm.id)}
                                 className="p-0.5 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
-                                title={`Delete payment voucher ${pm.invoiceNumber}`}
+                                title={`Delete payment voucher ${pm.invoiceNumber} (Super Admin Required)`}
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>

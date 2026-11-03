@@ -66,6 +66,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
     openPrintModal,
     setActiveTab,
     showToast,
+    requestSuperAdminSingleDelete,
   } = useApp();
 
   const allPackingRecords = useMemo(
@@ -330,19 +331,34 @@ export const ExporterPaymentSlipView: React.FC = () => {
     showToast('Added new row to Exporter Payment Slip (付款单).');
   };
 
-  // Delete or clear a custom row in the Payment Slip form
+  // Delete or clear a custom row in the Payment Slip form (Requires Super Admin Permission)
   const handleRemoveCustomRow = (rowId: string) => {
-    setCustomRows((prev) => {
-      if (prev.length <= 1) {
-        return [
-          createEmptyExporterSlipRow(generateRecordId('sliprow'), {
-            date: new Date().toISOString().slice(0, 10),
-          }),
-        ];
+    const targetRow = customRows.find((r) => r.id === rowId);
+    requestSuperAdminSingleDelete(
+      {
+        recordType: 'custom_row',
+        recordId: rowId,
+        recordTitle: targetRow?.mark
+          ? `Payment Slip Row (${targetRow.mark})`
+          : `Payment Slip Row`,
+        recordSubtitle: targetRow
+          ? `Date: ${targetRow.date || '-'} · Flight: ${targetRow.flight || '-'}`
+          : undefined,
+      },
+      () => {
+        setCustomRows((prev) => {
+          if (prev.length <= 1) {
+            return [
+              createEmptyExporterSlipRow(generateRecordId('sliprow'), {
+                date: new Date().toISOString().slice(0, 10),
+              }),
+            ];
+          }
+          return prev.filter((r) => r.id !== rowId);
+        });
+        showToast('Super Admin verified: Removed row from Payment Slip.');
       }
-      return prev.filter((r) => r.id !== rowId);
-    });
-    showToast('Removed row from Payment Slip.');
+    );
   };
 
   // Reset all custom rows in the Payment Slip form

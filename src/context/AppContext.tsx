@@ -46,7 +46,9 @@ import {
 import {
   DEFAULT_SUPER_ADMIN_PASSWORD,
   ClearRecordsScope,
+  PendingSingleDeleteRequest,
   verifySuperAdminPassword,
+  verifySuperAdminForSingleDelete,
   validateSuperAdminPasswordChange,
 } from '../utils/superAdminAuth.ts';
 import {
@@ -254,7 +256,7 @@ interface AppContextType {
   ) => void;
   closeDataCenterModal: () => void;
 
-  // Super Admin Password & Clear Modal
+  // Super Admin Password & Clear / Single Delete Modals
   superAdminPassword: string;
   updateSuperAdminPassword: (
     currentPasswordInput: string,
@@ -268,6 +270,15 @@ interface AppContextType {
     passwordInput: string,
     scope?: ClearRecordsScope
   ) => { valid: boolean; error?: string };
+  pendingSingleDelete: PendingSingleDeleteRequest | null;
+  requestSuperAdminSingleDelete: (
+    request: PendingSingleDeleteRequest,
+    onConfirm: () => void
+  ) => void;
+  confirmSingleDeleteWithSuperAdmin: (
+    passwordInput: string
+  ) => { valid: boolean; error?: string };
+  cancelSingleDelete: () => void;
 
   // Database management & Snapshots
   clearAllDatabaseRecords: (scope?: ClearRecordsScope) => void;
@@ -636,6 +647,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     initialScope: 'all',
   });
 
+  const [pendingSingleDeleteState, setPendingSingleDeleteState] = useState<
+    (PendingSingleDeleteRequest & { onConfirm: () => void }) | null
+  >(null);
+
   const openSuperAdminClearModal = (scope: ClearRecordsScope = 'all') => {
     setSuperAdminClearModal({
       isOpen: true,
@@ -645,6 +660,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const closeSuperAdminClearModal = () => {
     setSuperAdminClearModal((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  const requestSuperAdminSingleDelete = (
+    request: PendingSingleDeleteRequest,
+    onConfirm: () => void
+  ) => {
+    setPendingSingleDeleteState({
+      ...request,
+      onConfirm,
+    });
+  };
+
+  const cancelSingleDelete = () => {
+    setPendingSingleDeleteState(null);
+  };
+
+  const confirmSingleDeleteWithSuperAdmin = (
+    passwordInput: string
+  ): { valid: boolean; error?: string } => {
+    const verification = verifySuperAdminForSingleDelete(
+      passwordInput,
+      superAdminPassword
+    );
+    if (!verification.valid) {
+      return { valid: false, error: verification.error };
+    }
+    if (pendingSingleDeleteState) {
+      const action = pendingSingleDeleteState.onConfirm;
+      setPendingSingleDeleteState(null);
+      action();
+    }
+    return { valid: true };
   };
 
   const openDataCenterModal = (
@@ -1007,13 +1054,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const clearAuditLogs = () => {
-    setAuditLogs([]);
-    try {
-      localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify([]));
-    } catch (e) {
-      console.error(e);
-    }
-    showToast('System audit trail cleared.');
+    requestSuperAdminSingleDelete(
+      {
+        recordType: 'audit_log',
+        recordId: 'AUDIT-TRAIL',
+        recordTitle: 'System Audit Logs',
+        recordSubtitle: `${auditLogs.length} audit entry record(s)`,
+      },
+      () => {
+        setAuditLogs([]);
+        try {
+          localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify([]));
+        } catch (e) {
+          console.error(e);
+        }
+        showToast('Super Admin verified: System audit trail cleared.');
+      }
+    );
   };
 
   const login = (usernameOrEmail: string, password: string): AuthVerificationResult => {
@@ -1095,11 +1152,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteDropdownItem = (category: keyof DropdownOptions, item: string) => {
-    setDropdownOptions((prev) => ({
-      ...prev,
-      [category]: prev[category].filter((it) => it !== item),
-    }));
-    showToast(`Removed "${item}" from ${category}.`);
+    requestSuperAdminSingleDelete(
+      {
+        recordType: 'dropdown_item',
+        recordId: `${String(category)}:${item}`,
+        recordTitle: `${item} (${String(category)})`,
+        recordSubtitle: `Master list option in ${String(category)}`,
+      },
+      () => {
+        setDropdownOptions((prev) => ({
+          ...prev,
+          [category]: prev[category].filter((it) => it !== item),
+        }));
+        addAuditLog({
+          action: 'DELETE',
+          module: 'Settings',
+          entityId: `${String(category)}:${item}`,
+          summary: `Super Admin verified & deleted master option "${item}" from ${String(category)}`,
+        });
+        showToast(`Super Admin verified: Removed "${item}" from ${category}.`);
+      }
+    );
   };
 
   const resetDropdowns = () => {
@@ -1160,21 +1233,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deletePurchase = (id: string) => {
     const target = purchases.find((p) => p.id === id);
-    setPurchases((prev) => prev.filter((p) => p.id !== id));
-    emitPaymentSyncTrigger({
-      category: 'supplier',
-      action: 'delete',
-      invoiceNumber: target?.invoiceNumber || id,
-      partyName: target?.description,
-    });
-    addAuditLog({
-      action: 'DELETE',
-      module: 'Purchase',
-      entityId: target?.invoiceNumber || id,
-      summary: `Deleted purchase challan ${target?.invoiceNumber || id} (${target?.description || 'Unknown Supplier'})`,
-      details: `Deleted Amount: ${companyProfile.currency} ${(target?.totalAmount ?? 0).toLocaleString()}`,
-    });
-    showToast(`Purchase record deleted from database.`);
+    requestSuperAdminSingleDelete(
+      {
+        recordType: 'purchase',
+        recordId: id,
+        recordTitle: target
+          ? `${target.invoiceNumber} — ${target.description}`
+          : id,
+        recordSubtitle: target
+          ? `Date: ${target.date} · Total: ${companyProfile.currency} ${(target.totalAmount ?? 0).toLocaleString()}`
+          : undefined,
+      },
+      () => {
+        setPurchases((prev) => prev.filter((p) => p.id !== id));
+        if (editingPurchaseId === id) {
+          setEditingPurchaseId(null);
+        }
+        emitPaymentSyncTrigger({
+          category: 'supplier',
+          action: 'delete',
+          invoiceNumber: target?.invoiceNumber || id,
+          partyName: target?.description,
+        });
+        addAuditLog({
+          action: 'DELETE',
+          module: 'Purchase',
+          entityId: target?.invoiceNumber || id,
+          summary: `Super Admin verified & deleted purchase challan ${target?.invoiceNumber || id} (${target?.description || 'Unknown Supplier'})`,
+          details: `Deleted Amount: ${companyProfile.currency} ${(target?.totalAmount ?? 0).toLocaleString()}`,
+        });
+        showToast(`Super Admin verified: Purchase record ${target?.invoiceNumber || ''} deleted from database.`);
+      }
+    );
   };
 
   const bulkImportPurchases = (
@@ -1318,15 +1408,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deletePacking = (id: string) => {
     const target = packings.find((p) => p.id === id);
-    setPackings((prev) => prev.filter((p) => p.id !== id));
-    addAuditLog({
-      action: 'DELETE',
-      module: 'Packing',
-      entityId: target?.invoiceNumber || id,
-      summary: `Deleted export packing list ${target?.invoiceNumber || id} (${target?.shippingMark || 'Unknown Mark'})`,
-      details: `Weight: ${target?.totalWeight ?? 0} KG · Value: RMB ${(target?.totalAmount ?? 0).toLocaleString()}`,
-    });
-    showToast(`Packing record deleted from database.`);
+    requestSuperAdminSingleDelete(
+      {
+        recordType: 'packing',
+        recordId: id,
+        recordTitle: target
+          ? `${target.invoiceNumber} (${target.shippingMark})`
+          : id,
+        recordSubtitle: target
+          ? `Shipment Date: ${target.packingDate} · ${target.totalBox} Box · ${target.totalWeight} KG · RMB ${(target.totalAmount ?? 0).toLocaleString()}`
+          : undefined,
+      },
+      () => {
+        setPackings((prev) => prev.filter((p) => p.id !== id));
+        if (editingPackingId === id) {
+          setEditingPackingId(null);
+        }
+        addAuditLog({
+          action: 'DELETE',
+          module: 'Packing',
+          entityId: target?.invoiceNumber || id,
+          summary: `Super Admin verified & deleted export packing list ${target?.invoiceNumber || id} (${target?.shippingMark || 'Unknown Mark'})`,
+          details: `Weight: ${target?.totalWeight ?? 0} KG · Value: RMB ${(target?.totalAmount ?? 0).toLocaleString()}`,
+        });
+        showToast(`Super Admin verified: Packing record ${target?.invoiceNumber || ''} deleted from database.`);
+      }
+    );
   };
 
   const bulkImportPackings = (
@@ -1523,21 +1630,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deletePayment = (id: string) => {
     const target = payments.find((p) => p.id === id);
-    setPayments((prev) => prev.filter((p) => p.id !== id));
-    emitPaymentSyncTrigger({
-      category: target?.paymentCategory === 'exporter' ? 'exporter' : 'supplier',
-      action: 'delete',
-      invoiceNumber: target?.invoiceNumber || id,
-      partyName: target?.description,
-    });
-    addAuditLog({
-      action: 'DELETE',
-      module: 'Payment',
-      entityId: target?.invoiceNumber || id,
-      summary: `Deleted payment voucher ${target?.invoiceNumber || id} (${target?.description || 'Unknown Party'})`,
-      details: `Amount: ${companyProfile.currency} ${(target?.totalAmount ?? 0).toLocaleString()}`,
-    });
-    showToast(`Payment record deleted from database.`);
+    requestSuperAdminSingleDelete(
+      {
+        recordType: 'payment',
+        recordId: id,
+        recordTitle: target
+          ? `${target.invoiceNumber} — ${target.description}`
+          : id,
+        recordSubtitle: target
+          ? `Date: ${target.date} · Paid: ${companyProfile.currency} ${(target.paidAmount ?? 0).toLocaleString()}`
+          : undefined,
+      },
+      () => {
+        setPayments((prev) => prev.filter((p) => p.id !== id));
+        if (editingPaymentId === id) {
+          setEditingPaymentId(null);
+        }
+        emitPaymentSyncTrigger({
+          category: target?.paymentCategory === 'exporter' ? 'exporter' : 'supplier',
+          action: 'delete',
+          invoiceNumber: target?.invoiceNumber || id,
+          partyName: target?.description,
+        });
+        addAuditLog({
+          action: 'DELETE',
+          module: 'Payment',
+          entityId: target?.invoiceNumber || id,
+          summary: `Super Admin verified & deleted payment voucher ${target?.invoiceNumber || id} (${target?.description || 'Unknown Party'})`,
+          details: `Amount: ${companyProfile.currency} ${(target?.totalAmount ?? 0).toLocaleString()}`,
+        });
+        showToast(`Super Admin verified: Payment record ${target?.invoiceNumber || ''} deleted from database.`);
+      }
+    );
   };
 
   const bulkImportPayments = (
@@ -1583,15 +1707,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteOtherCost = (id: string) => {
     const target = otherCosts.find((c) => c.id === id);
-    setOtherCosts((prev) => prev.filter((c) => c.id !== id));
-    addAuditLog({
-      action: 'DELETE',
-      module: 'OtherCost',
-      entityId: id,
-      summary: `Deleted operating expense "${target?.category || id}"`,
-      details: `Amount: ${companyProfile.currency} ${(target?.amount ?? 0).toLocaleString()}`,
-    });
-    showToast(`Expense deleted.`);
+    requestSuperAdminSingleDelete(
+      {
+        recordType: 'other_cost',
+        recordId: id,
+        recordTitle: target
+          ? `${target.category}${target.description ? ` — ${target.description}` : ''}`
+          : id,
+        recordSubtitle: target
+          ? `Date: ${target.date} · Amount: ${companyProfile.currency} ${(target.amount ?? 0).toLocaleString()}`
+          : undefined,
+      },
+      () => {
+        setOtherCosts((prev) => prev.filter((c) => c.id !== id));
+        addAuditLog({
+          action: 'DELETE',
+          module: 'OtherCost',
+          entityId: id,
+          summary: `Super Admin verified & deleted operating expense "${target?.category || id}"`,
+          details: `Amount: ${companyProfile.currency} ${(target?.amount ?? 0).toLocaleString()}`,
+        });
+        showToast(`Super Admin verified: Expense deleted.`);
+      }
+    );
   };
 
   const bulkImportOtherCosts = (
@@ -1710,15 +1848,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteSupplierCredit = (id: string) => {
     const target = supplierCredits.find((cn) => cn.id === id);
-    setSupplierCredits((prev) => prev.filter((cn) => cn.id !== id));
-    addAuditLog({
-      action: 'DELETE',
-      module: 'SupplierCredit',
-      entityId: target?.creditNoteNumber || id,
-      summary: `Deleted supplier credit note ${target?.creditNoteNumber || id}`,
-      details: `Supplier: ${target?.supplierName || '-'} · Amount: ${companyProfile.currency} ${(target?.amount ?? 0).toLocaleString()}`,
-    });
-    showToast('Supplier credit note deleted.');
+    requestSuperAdminSingleDelete(
+      {
+        recordType: 'supplier_credit',
+        recordId: id,
+        recordTitle: target
+          ? `${target.creditNoteNumber} — ${target.supplierName}`
+          : id,
+        recordSubtitle: target
+          ? `Date: ${target.date} · Credit: ${companyProfile.currency} ${(target.amount ?? 0).toLocaleString()}`
+          : undefined,
+      },
+      () => {
+        setSupplierCredits((prev) => prev.filter((cn) => cn.id !== id));
+        addAuditLog({
+          action: 'DELETE',
+          module: 'SupplierCredit',
+          entityId: target?.creditNoteNumber || id,
+          summary: `Super Admin verified & deleted supplier credit note ${target?.creditNoteNumber || id}`,
+          details: `Supplier: ${target?.supplierName || '-'} · Amount: ${companyProfile.currency} ${(target?.amount ?? 0).toLocaleString()}`,
+        });
+        showToast('Super Admin verified: Supplier credit note deleted.');
+      }
+    );
   };
 
   const addMortality = (record: Omit<MortalityRecord, 'id' | 'createdAt'>): string => {
@@ -1759,14 +1911,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteMortality = (id: string) => {
     const target = mortalities.find((m) => m.id === id);
-    setMortalities((prev) => prev.filter((m) => m.id !== id));
-    addAuditLog({
-      action: 'DELETE',
-      module: 'Mortality',
-      entityId: id,
-      summary: `Deleted mortality record (${target?.quantityKg || 0} KG · ${target?.species || id})`,
-    });
-    showToast('Deleted mortality record. Stock adjustment restored.');
+    requestSuperAdminSingleDelete(
+      {
+        recordType: 'mortality',
+        recordId: id,
+        recordTitle: target
+          ? `${target.species} (${target.quantityKg} KG)`
+          : id,
+        recordSubtitle: target
+          ? `Date: ${target.date} · Cause: ${target.cause || 'Unspecified'}`
+          : undefined,
+      },
+      () => {
+        setMortalities((prev) => prev.filter((m) => m.id !== id));
+        addAuditLog({
+          action: 'DELETE',
+          module: 'Mortality',
+          entityId: id,
+          summary: `Super Admin verified & deleted mortality record (${target?.quantityKg || 0} KG · ${target?.species || id})`,
+        });
+        showToast('Super Admin verified: Deleted mortality record. Stock adjustment restored.');
+      }
+    );
   };
 
   // Print modal & Global View Table PDF Export
@@ -2095,16 +2261,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteSnapshot = (snapshotId: string) => {
-    setSnapshots((prev) => {
-      const updated = prev.filter((s) => s.id !== snapshotId);
-      try {
-        localStorage.setItem(STORAGE_KEYS.SNAPSHOTS, JSON.stringify(updated));
-      } catch (e) {
-        console.error(e);
+    const target = snapshots.find((s) => s.id === snapshotId);
+    requestSuperAdminSingleDelete(
+      {
+        recordType: 'snapshot',
+        recordId: snapshotId,
+        recordTitle: target ? target.label : snapshotId,
+        recordSubtitle: target
+          ? `Created: ${target.createdAt.slice(0, 10)} · ${target.recordCounts.totalRecords} records`
+          : undefined,
+      },
+      () => {
+        setSnapshots((prev) => {
+          const updated = prev.filter((s) => s.id !== snapshotId);
+          try {
+            localStorage.setItem(STORAGE_KEYS.SNAPSHOTS, JSON.stringify(updated));
+          } catch (e) {
+            console.error(e);
+          }
+          return updated;
+        });
+        showToast('Super Admin verified: Snapshot removed from local archive.');
       }
-      return updated;
-    });
-    showToast('Snapshot removed from local archive.');
+    );
   };
 
   const downloadSnapshotJSON = (snapshotId?: string) => {
@@ -2372,6 +2551,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         openSuperAdminClearModal,
         closeSuperAdminClearModal,
         clearRecordsWithSuperAdmin,
+        pendingSingleDelete: pendingSingleDeleteState
+          ? {
+              recordType: pendingSingleDeleteState.recordType,
+              recordId: pendingSingleDeleteState.recordId,
+              recordTitle: pendingSingleDeleteState.recordTitle,
+              recordSubtitle: pendingSingleDeleteState.recordSubtitle,
+            }
+          : null,
+        requestSuperAdminSingleDelete,
+        confirmSingleDeleteWithSuperAdmin,
+        cancelSingleDelete,
         clearAllDatabaseRecords,
         resetAllData,
         exportDatabaseJSON,

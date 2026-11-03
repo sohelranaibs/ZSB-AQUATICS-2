@@ -7,6 +7,31 @@ export const DEFAULT_SUPER_ADMIN_PASSWORD = 'admin123';
 
 export type ClearRecordsScope = 'all' | 'purchase' | 'packing' | 'payment' | 'other_cost';
 
+export type SingleDeleteRecordType =
+  | 'purchase'
+  | 'packing'
+  | 'payment'
+  | 'other_cost'
+  | 'supplier_credit'
+  | 'mortality'
+  | 'dropdown_item'
+  | 'snapshot'
+  | 'audit_logs'
+  | 'audit_log'
+  | 'team_member'
+  | 'custom_row';
+
+export interface PendingSingleDeleteRequest {
+  recordType: SingleDeleteRecordType;
+  recordId: string;
+  title?: string;
+  recordTitle?: string;
+  identifier?: string;
+  details?: string;
+  recordSubtitle?: string;
+  category?: string;
+}
+
 export interface SuperAdminVerifyResult {
   valid: boolean;
   error?: string;
@@ -52,6 +77,168 @@ export function verifySuperAdminPassword(
   }
 
   return { valid: true };
+}
+
+/**
+ * Verifies Super Admin password specifically for deleting any single data record.
+ */
+export function verifySuperAdminForSingleDelete(
+  inputPassword: string,
+  storedPassword: string = DEFAULT_SUPER_ADMIN_PASSWORD
+): SuperAdminVerifyResult {
+  const effectiveStored =
+    typeof storedPassword === 'string' && storedPassword.trim().length > 0
+      ? storedPassword.trim()
+      : DEFAULT_SUPER_ADMIN_PASSWORD;
+
+  if (typeof inputPassword !== 'string' || inputPassword.trim().length === 0) {
+    return {
+      valid: false,
+      error: 'Super Admin password is required to delete this data.',
+    };
+  }
+
+  if (inputPassword.trim() !== effectiveStored) {
+    return {
+      valid: false,
+      error: 'Invalid Super Admin password. Access denied — data was not deleted.',
+    };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Computes human-readable metadata for the single-record Super Admin deletion gate.
+ */
+export function describeSingleDeleteTarget(request: PendingSingleDeleteRequest): {
+  badgeLabel: string;
+  heading: string;
+  identifierLabel: string;
+  identifier: string;
+  summaryText: string;
+} {
+  const safeId = (request.identifier || request.recordId || '-').trim();
+  const safeTitle = (request.title || request.recordTitle || 'Data Record').trim();
+  const safeDetails = (request.details || request.recordSubtitle || '').trim();
+  const displayIdentifier =
+    request.recordTitle ||
+    (request.identifier ? `${safeTitle} (${safeId})` : safeTitle);
+
+  switch (request.recordType) {
+    case 'purchase':
+      return {
+        badgeLabel: 'Purchase Challan / Bill',
+        heading: 'Super Admin Permission Required to Delete Purchase Data',
+        identifierLabel: 'Invoice No',
+        identifier: displayIdentifier,
+        summaryText: request.recordTitle
+          ? safeDetails || `Record ID: ${safeId}`
+          : `${safeTitle} (${safeId})${safeDetails ? ` · ${safeDetails}` : ''}`,
+      };
+    case 'packing':
+      return {
+        badgeLabel: 'Export Packing List',
+        heading: 'Super Admin Permission Required to Delete Packing Data',
+        identifierLabel: 'Packing No',
+        identifier: displayIdentifier,
+        summaryText: request.recordTitle
+          ? safeDetails || `Record ID: ${safeId}`
+          : `${safeTitle} (${safeId})${safeDetails ? ` · ${safeDetails}` : ''}`,
+      };
+    case 'payment':
+      return {
+        badgeLabel: 'Payment Voucher',
+        heading: 'Super Admin Permission Required to Delete Payment Data',
+        identifierLabel: 'Voucher No',
+        identifier: displayIdentifier,
+        summaryText: request.recordTitle
+          ? safeDetails || `Record ID: ${safeId}`
+          : `${safeTitle} (${safeId})${safeDetails ? ` · ${safeDetails}` : ''}`,
+      };
+    case 'other_cost':
+      return {
+        badgeLabel: 'Operating Expense / Costing',
+        heading: 'Super Admin Permission Required to Delete Expense Data',
+        identifierLabel: 'Expense Category',
+        identifier: displayIdentifier,
+        summaryText: request.recordTitle
+          ? safeDetails || `Record ID: ${safeId}`
+          : `${safeTitle}${safeDetails ? ` · ${safeDetails}` : ''}`,
+      };
+    case 'supplier_credit':
+      return {
+        badgeLabel: 'Supplier Credit Note',
+        heading: 'Super Admin Permission Required to Delete Credit Note',
+        identifierLabel: 'Credit Note No',
+        identifier: displayIdentifier,
+        summaryText: request.recordTitle
+          ? safeDetails || `Record ID: ${safeId}`
+          : `${safeTitle} (${safeId})${safeDetails ? ` · ${safeDetails}` : ''}`,
+      };
+    case 'mortality':
+      return {
+        badgeLabel: 'Mortality Log Record',
+        heading: 'Super Admin Permission Required to Delete Mortality Data',
+        identifierLabel: 'Species / Grade',
+        identifier: displayIdentifier,
+        summaryText: request.recordTitle
+          ? safeDetails || `Record ID: ${safeId}`
+          : `${safeTitle}${safeDetails ? ` · ${safeDetails}` : ''}`,
+      };
+    case 'dropdown_item':
+      return {
+        badgeLabel: 'Master Dropdown Option',
+        heading: 'Super Admin Permission Required to Delete Preset Option',
+        identifierLabel: 'Option Value',
+        identifier: displayIdentifier,
+        summaryText: request.recordTitle
+          ? safeDetails || `Record ID: ${safeId}`
+          : `${safeTitle}${safeDetails ? ` · ${safeDetails}` : ''}`,
+      };
+    case 'snapshot':
+      return {
+        badgeLabel: 'Database Snapshot Archive',
+        heading: 'Super Admin Permission Required to Delete Snapshot',
+        identifierLabel: 'Snapshot Label',
+        identifier: displayIdentifier,
+        summaryText: request.recordTitle
+          ? safeDetails || `Record ID: ${safeId}`
+          : `${safeTitle}${safeDetails ? ` · ${safeDetails}` : ''}`,
+      };
+    case 'audit_logs':
+    case 'audit_log':
+      return {
+        badgeLabel: 'System Audit Trail',
+        heading: 'Super Admin Permission Required to Delete Audit Logs',
+        identifierLabel: 'Audit Scope',
+        identifier: displayIdentifier,
+        summaryText: request.recordTitle
+          ? safeDetails || `Record ID: ${safeId}`
+          : `${safeTitle}${safeDetails ? ` · ${safeDetails}` : ''}`,
+      };
+    case 'team_member':
+      return {
+        badgeLabel: 'Team / Admin Account',
+        heading: 'Super Admin Permission Required to Delete Team Account',
+        identifierLabel: 'Username / Role',
+        identifier: displayIdentifier,
+        summaryText: request.recordTitle
+          ? safeDetails || `Record ID: ${safeId}`
+          : `${safeTitle}${safeDetails ? ` · ${safeDetails}` : ''}`,
+      };
+    case 'custom_row':
+    default:
+      return {
+        badgeLabel: 'Sheet Data Row',
+        heading: 'Super Admin Permission Required to Delete Row Data',
+        identifierLabel: 'Row Reference',
+        identifier: displayIdentifier,
+        summaryText: request.recordTitle
+          ? safeDetails || `Record ID: ${safeId}`
+          : `${safeTitle}${safeDetails ? ` · ${safeDetails}` : ''}`,
+      };
+  }
 }
 
 /**

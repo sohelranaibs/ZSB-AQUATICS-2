@@ -362,32 +362,63 @@ export const PrintPreviewModal: React.FC = () => {
           {/* Printable Voucher Paper Content (A4 Portrait Printable Width: 760px / 190mm) */}
           <div
             id="printable-document"
-            className="w-full max-w-[760px] bg-white shadow-2xl rounded-sm border border-slate-300 p-5 sm:p-7 space-y-5 text-slate-900 print:shadow-none print:border-none print:p-0 print:max-w-none"
-            style={{ backgroundColor: '#ffffff', color: '#000000' }}
+            className="relative w-full max-w-[760px] bg-white shadow-2xl rounded-sm border border-slate-300 p-5 sm:p-7 space-y-5 text-slate-900 print:shadow-none print:border-none print:p-0 print:max-w-none overflow-hidden"
+            style={{ backgroundColor: '#ffffff', color: '#000000', position: 'relative' }}
           >
+            {/* Centered Watermark Logo */}
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 flex items-center justify-center pointer-events-none select-none z-0 overflow-hidden"
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                pointerEvents: 'none',
+                userSelect: 'none',
+                zIndex: 0,
+                opacity: 0.07,
+              }}
+            >
+              <img
+                src={resolvedLogoSrc}
+                alt=""
+                style={{
+                  width: '340px',
+                  height: '340px',
+                  objectFit: 'contain',
+                  borderRadius: '9999px',
+                }}
+              />
+            </div>
+
             {/* Official Document Header (Hidden for exporter_payment_slip and batch_payment_slips which have their own headers) */}
             {type !== 'exporter_payment_slip' && type !== 'batch_payment_slips' && (
               <div
-                style={{ borderBottom: '2px solid #0f172a' }}
-                className="pb-3.5 text-center space-y-1"
+                style={{ borderBottom: '2px solid #0f172a', position: 'relative', zIndex: 10 }}
+                className="pb-3.5 text-center space-y-1 relative z-10"
               >
-                {/* Official Company Logo Emblem */}
-                <div className="flex justify-center mb-1">
+                {/* Official Company Logo Emblem + Golden 3D Text Header (Logo on Left Side of ZSB AQUATICS) */}
+                <div className="flex items-center justify-center gap-3.5 mb-1">
                   <div
                     style={{
-                      width: '68px',
-                      height: '68px',
+                      width: '64px',
+                      height: '64px',
                       borderRadius: '9999px',
                       overflow: 'hidden',
                       border: '2px solid #fbbf24',
                       backgroundColor: '#ffffff',
                       padding: '2px',
-                      margin: '0 auto',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
+                      flexShrink: 0,
                     }}
-                    className="w-16 h-16 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shadow-xs flex items-center justify-center"
+                    className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shadow-xs flex items-center justify-center shrink-0"
                   >
                     <img
                       data-testid="print-preview-company-logo"
@@ -409,22 +440,24 @@ export const PrintPreviewModal: React.FC = () => {
                       className="w-full h-full object-contain rounded-full"
                     />
                   </div>
+
+                  {/* Golden 3D Company Name */}
+                  <div
+                    className="zsb-3d-text-print text-3xl sm:text-4xl font-black tracking-widest uppercase"
+                    style={{
+                      color: '#f59e0b',
+                      fontFamily: "'Cinzel', Georgia, Cambria, 'Times New Roman', Times, serif",
+                      fontWeight: 900,
+                      letterSpacing: '0.09em',
+                      textShadow:
+                        '1px 1px 0px #b45309, 2px 2px 0px #92400e, 3px 3px 0px #78350f, 4px 4px 0px #451a03, 5px 5px 7px rgba(15, 23, 42, 0.35)',
+                    }}
+                  >
+                    {companyProfile.companyName}
+                  </div>
                 </div>
 
-                {/* Golden 3D Company Name */}
-                <div
-                  className="zsb-3d-text-print text-3xl sm:text-4xl font-black tracking-widest uppercase"
-                  style={{
-                    color: '#f59e0b',
-                    fontFamily: "'Cinzel', Georgia, Cambria, 'Times New Roman', Times, serif",
-                    fontWeight: 900,
-                    letterSpacing: '0.09em',
-                    textShadow:
-                      '1px 1px 0px #b45309, 2px 2px 0px #92400e, 3px 3px 0px #78350f, 4px 4px 0px #451a03, 5px 5px 7px rgba(15, 23, 42, 0.35)',
-                  }}
-                >
-                  {companyProfile.companyName}
-                </div>
+                {/* Address strictly in font BLACK color */}
 
                 {/* Address strictly in font BLACK color */}
                 <div
@@ -574,14 +607,14 @@ export const PrintPreviewModal: React.FC = () => {
             <div className="space-y-4">
               {/* Manifest Metadata Box (2 rows: 3 items top row, 2 items bottom row, Shipper removed) */}
               <div className="space-y-2.5 bg-slate-50 p-3.5 rounded-lg border-2 border-slate-300">
-                {/* Row 1: Packing No, Packing Date, Shipping Mark */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Row 1: Packing No, Shipment Date, Shipping Mark */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px' }} className="grid grid-cols-3 gap-3">
                   <div className="bg-white p-2.5 rounded border border-slate-200">
                     <span className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider block mb-0.5">PACKING NO:</span>
                     <span className="font-mono font-black text-slate-900 text-lg block">{data.invoiceNumber || '-'}</span>
                   </div>
                   <div className="bg-slate-100 p-2.5 rounded border border-slate-300">
-                    <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block mb-0.5">PACKING DATE:</span>
+                    <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block mb-0.5">SHIPMENT DATE:</span>
                     <span className="font-mono font-black text-slate-950 text-2xl tracking-wide block">{formatDate(data.packingDate)}</span>
                   </div>
                   <div className="bg-blue-50/80 p-2.5 rounded border border-blue-200">
@@ -590,10 +623,10 @@ export const PrintPreviewModal: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Row 2: Flight, Destination */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Row 2: Flight Destination, Destination */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }} className="grid grid-cols-2 gap-3">
                   <div className="bg-slate-100 p-2.5 rounded border border-slate-300">
-                    <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block mb-0.5">FLIGHT:</span>
+                    <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block mb-0.5">FLIGHT DESTINATION:</span>
                     <span className="font-black text-slate-950 text-2xl tracking-wide block">{data.flight || '-'}</span>
                   </div>
                   <div className="bg-slate-100 p-2.5 rounded border border-slate-300">

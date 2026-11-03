@@ -1667,18 +1667,49 @@ export const PackingListView: React.FC = () => {
             color: '#000000',
             padding: '32px',
             fontFamily: 'sans-serif',
+            position: 'relative',
+            overflow: 'hidden',
           }}
         >
+          {/* Centered Watermark Logo */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+              userSelect: 'none',
+              zIndex: 0,
+              opacity: 0.07,
+            }}
+          >
+            <img
+              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
+              alt=""
+              style={{
+                width: '350px',
+                height: '350px',
+                objectFit: 'contain',
+                borderRadius: '50%',
+              }}
+            />
+          </div>
+
           {/* Official Document Header */}
           <div
-            style={{ borderBottom: '2px solid #0f172a', paddingBottom: '16px', textAlign: 'center' }}
+            style={{ borderBottom: '2px solid #0f172a', paddingBottom: '16px', textAlign: 'center', position: 'relative', zIndex: 10 }}
           >
-            {/* Official Company Logo Emblem */}
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
+            {/* Official Company Logo Emblem + Golden 3D Text Header (Logo on Left side of ZSB AQUATICS) */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '14px', marginBottom: '6px' }}>
               <div
                 style={{
-                  width: '64px',
-                  height: '64px',
+                  width: '60px',
+                  height: '60px',
                   borderRadius: '50%',
                   border: '2px solid #d4af37',
                   backgroundColor: '#ffffff',
@@ -1687,6 +1718,7 @@ export const PackingListView: React.FC = () => {
                   alignItems: 'center',
                   justifyContent: 'center',
                   overflow: 'hidden',
+                  flexShrink: 0,
                 }}
               >
                 <img
@@ -1695,23 +1727,24 @@ export const PackingListView: React.FC = () => {
                   style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '50%' }}
                 />
               </div>
+
+              <div
+                className="zsb-3d-text-print"
+                style={{
+                  color: '#f59e0b',
+                  fontFamily: "'Cinzel', Georgia, Cambria, 'Times New Roman', Times, serif",
+                  fontSize: '32px',
+                  fontWeight: 900,
+                  letterSpacing: '0.09em',
+                  textTransform: 'uppercase',
+                  textShadow:
+                    '1px 1px 0px #b45309, 2px 2px 0px #92400e, 3px 3px 0px #78350f, 4px 4px 0px #451a03, 5px 5px 7px rgba(15, 23, 42, 0.35)',
+                }}
+              >
+                {companyProfile.companyName}
+              </div>
             </div>
 
-            <div
-              className="zsb-3d-text-print"
-              style={{
-                color: '#f59e0b',
-                fontFamily: "'Cinzel', Georgia, Cambria, 'Times New Roman', Times, serif",
-                fontSize: '32px',
-                fontWeight: 900,
-                letterSpacing: '0.09em',
-                textTransform: 'uppercase',
-                textShadow:
-                  '1px 1px 0px #b45309, 2px 2px 0px #92400e, 3px 3px 0px #78350f, 4px 4px 0px #451a03, 5px 5px 7px rgba(15, 23, 42, 0.35)',
-              }}
-            >
-              {companyProfile.companyName}
-            </div>
             <div
               style={{
                 color: '#000000',
@@ -1764,9 +1797,11 @@ export const PackingListView: React.FC = () => {
               padding: '12px',
               marginTop: '16px',
               fontSize: '12px',
+              position: 'relative',
+              zIndex: 10,
             }}
           >
-            {/* Row 1: Packing No, Packing Date, Shipping Mark */}
+            {/* Row 1: Packing No, Shipment Date, Shipping Mark */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', alignItems: 'center' }}>
               <div style={{ backgroundColor: '#ffffff', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
                 <div style={{ color: '#64748b', fontSize: '11px', fontWeight: 800, textTransform: 'uppercase' }}>PACKING NO:</div>
@@ -1775,7 +1810,7 @@ export const PackingListView: React.FC = () => {
                 </div>
               </div>
               <div style={{ backgroundColor: '#f1f5f9', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                <div style={{ color: '#475569', fontSize: '11px', fontWeight: 900, textTransform: 'uppercase' }}>PACKING DATE:</div>
+                <div style={{ color: '#475569', fontSize: '11px', fontWeight: 900, textTransform: 'uppercase' }}>SHIPMENT DATE:</div>
                 <div style={{ color: '#0f172a', fontWeight: 900, fontFamily: 'monospace', fontSize: '22px' }}>
                   {formatDate(packingDate)}
                 </div>
@@ -1788,10 +1823,10 @@ export const PackingListView: React.FC = () => {
               </div>
             </div>
 
-            {/* Row 2: Flight, Destination */}
+            {/* Row 2: Flight Destination, Destination */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', alignItems: 'center' }}>
               <div style={{ backgroundColor: '#f1f5f9', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                <div style={{ color: '#475569', fontSize: '11px', fontWeight: 900, textTransform: 'uppercase' }}>FLIGHT:</div>
+                <div style={{ color: '#475569', fontSize: '11px', fontWeight: 900, textTransform: 'uppercase' }}>FLIGHT DESTINATION:</div>
                 <div style={{ color: '#0f172a', fontWeight: 900, fontSize: '22px' }}>{flight || '-'}</div>
               </div>
               <div style={{ backgroundColor: '#f1f5f9', padding: '8px 10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>

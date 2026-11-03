@@ -46,36 +46,68 @@ export const PaymentSlipPrintCard: React.FC<PaymentSlipPrintCardProps> = ({
     <div
       id={id}
       data-testid={id ? `payment-slip-card-${payment.id}` : undefined}
-      className="batch-payment-slip-page bg-white p-6 sm:p-8 space-y-5 text-slate-900 border border-slate-300 rounded-sm shadow-sm print:border-none print:shadow-none print:p-0"
+      className="relative batch-payment-slip-page bg-white p-6 sm:p-8 space-y-5 text-slate-900 border border-slate-300 rounded-sm shadow-sm print:border-none print:shadow-none print:p-0 overflow-hidden"
       style={{
         backgroundColor: '#ffffff',
         color: '#000000',
         pageBreakAfter: 'always',
         breakAfter: 'page',
+        position: 'relative',
       }}
     >
+      {/* Centered Watermark Logo */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 flex items-center justify-center pointer-events-none select-none z-0 overflow-hidden"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          pointerEvents: 'none',
+          userSelect: 'none',
+          zIndex: 0,
+          opacity: 0.07,
+        }}
+      >
+        <img
+          src={resolveCompanyLogoSrc(companyProfile.logoUrl)}
+          alt=""
+          style={{
+            width: '320px',
+            height: '320px',
+            objectFit: 'contain',
+            borderRadius: '9999px',
+          }}
+        />
+      </div>
+
       {/* 1. Official Header */}
       <div
-        style={{ borderBottom: '2px solid #0f172a' }}
-        className="pb-4 text-center space-y-1.5"
+        style={{ borderBottom: '2px solid #0f172a', position: 'relative', zIndex: 10 }}
+        className="pb-4 text-center space-y-1.5 relative z-10"
       >
-        {/* Company Logo Emblem */}
-        <div className="flex justify-center mb-1">
+        {/* Company Logo Emblem on Left side of ZSB AQUATICS */}
+        <div className="flex items-center justify-center gap-3.5 mb-1">
           <div
             style={{
-              width: '68px',
-              height: '68px',
+              width: '64px',
+              height: '64px',
               borderRadius: '9999px',
               overflow: 'hidden',
               border: '2px solid #fbbf24',
               backgroundColor: '#ffffff',
               padding: '2px',
-              margin: '0 auto',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              flexShrink: 0,
             }}
-            className="w-16 h-16 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shadow-xs flex items-center justify-center"
+            className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shadow-xs flex items-center justify-center shrink-0"
           >
             <img
               src={resolveCompanyLogoSrc(companyProfile.logoUrl)}
@@ -96,21 +128,21 @@ export const PaymentSlipPrintCard: React.FC<PaymentSlipPrintCardProps> = ({
               className="w-full h-full object-contain rounded-full"
             />
           </div>
-        </div>
 
-        {/* Golden 3D Company Name */}
-        <div
-          className="zsb-3d-text-print text-3xl sm:text-4xl font-black tracking-widest uppercase"
-          style={{
-            color: '#f59e0b',
-            fontFamily: "'Cinzel', Georgia, Cambria, 'Times New Roman', Times, serif",
-            fontWeight: 900,
-            letterSpacing: '0.09em',
-            textShadow:
-              '1px 1px 0px #b45309, 2px 2px 0px #92400e, 3px 3px 0px #78350f, 4px 4px 0px #451a03, 5px 5px 7px rgba(15, 23, 42, 0.35)',
-          }}
-        >
-          {companyProfile.companyName}
+          {/* Golden 3D Company Name */}
+          <div
+            className="zsb-3d-text-print text-3xl sm:text-4xl font-black tracking-widest uppercase"
+            style={{
+              color: '#f59e0b',
+              fontFamily: "'Cinzel', Georgia, Cambria, 'Times New Roman', Times, serif",
+              fontWeight: 900,
+              letterSpacing: '0.09em',
+              textShadow:
+                '1px 1px 0px #b45309, 2px 2px 0px #92400e, 3px 3px 0px #78350f, 4px 4px 0px #451a03, 5px 5px 7px rgba(15, 23, 42, 0.35)',
+            }}
+          >
+            {companyProfile.companyName}
+          </div>
         </div>
 
         <div style={{ color: '#000000' }} className="text-xs sm:text-sm font-bold tracking-wide">

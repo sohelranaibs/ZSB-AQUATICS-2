@@ -242,6 +242,8 @@ export async function renderElementToHighResCanvas(
           clonedTarget.style.boxSizing = 'border-box';
           clonedTarget.style.backgroundColor = '#ffffff';
           clonedTarget.style.color = '#000000';
+          clonedTarget.style.position = 'relative';
+          clonedTarget.style.overflow = 'hidden';
           if (
             elementId === 'printable-document' ||
             elementId === 'global-printable-document' ||

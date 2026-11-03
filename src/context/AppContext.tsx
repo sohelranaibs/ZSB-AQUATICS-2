@@ -188,6 +188,8 @@ interface AppContextType {
     records: Omit<PaymentRecord, 'id' | 'createdAt'>[],
     mode?: 'append' | 'replace'
   ) => number;
+  editingPaymentId: string | null;
+  setEditingPaymentId: (id: string | null) => void;
 
   otherCosts: OtherCostRecord[];
   addOtherCost: (record: Omit<OtherCostRecord, 'id' | 'createdAt'>) => string;
@@ -401,6 +403,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const [editingPackingId, setEditingPackingId] = useState<string | null>(null);
   const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
 
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(() => {
     try {
@@ -2338,6 +2341,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatePayment,
         deletePayment,
         bulkImportPayments,
+        editingPaymentId,
+        setEditingPaymentId,
         otherCosts,
         addOtherCost,
         deleteOtherCost,

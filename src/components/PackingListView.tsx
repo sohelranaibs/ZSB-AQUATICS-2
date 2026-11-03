@@ -12,7 +12,6 @@ import {
 import { PackingItemRow } from '../types/index.ts';
 import { validatePackingForm } from '../utils/validation.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
-import { exportElementToPng } from '../utils/pdfGenerator.ts';
 import {
   ZSB_VIEW_SHORTCUT_EVENT,
   ViewShortcutEventDetail,
@@ -35,8 +34,6 @@ import {
   Edit2,
   Edit3,
   CheckCircle2,
-  ImageDown,
-  Loader2,
   UploadCloud,
 } from 'lucide-react';
 import {
@@ -105,7 +102,6 @@ export const PackingListView: React.FC = () => {
   const [addingCategory, setAddingCategory] = useState<string | null>(null);
   const [newOptionValue, setNewOptionValue] = useState<string>('');
   const [validationAttempted, setValidationAttempted] = useState<boolean>(false);
-  const [isExportingPng, setIsExportingPng] = useState<boolean>(false);
 
   const validation = validatePackingForm({
     invoiceNumber,
@@ -422,24 +418,7 @@ export const PackingListView: React.FC = () => {
     return () => window.removeEventListener(ZSB_VIEW_SHORTCUT_EVENT, onShortcut);
   });
 
-  const handleDirectSavePng = async () => {
-    setIsExportingPng(true);
-    const filename = formatPackingExportFilename(invoiceNumber, shippingMark, packingDate, 'png');
-    try {
-      const success = await exportElementToPng('packing-manifest-export-canvas', filename, 800);
-      if (success) {
-        showToast(`PNG image downloaded: ${filename}`);
-      } else {
-        showToast('Opening Document Print Preview...');
-        handlePrintSelected();
-      }
-    } catch (err) {
-      console.error('Packing PNG export error:', err);
-      showToast('Error generating PNG image.');
-    } finally {
-      setIsExportingPng(false);
-    }
-  };
+
 
   const handleMonthlyStatement = () => {
     const matched = packings.filter((p) => p.shippingMark === shippingMark);
@@ -553,38 +532,8 @@ export const PackingListView: React.FC = () => {
                   </div>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2.5">
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={handlePrintSelected}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-xs transition cursor-pointer whitespace-nowrap"
-                    title="Open Document Print Preview (Save as PDF & Save as .PNG)"
-                  >
-                    <Printer className="w-3.5 h-3.5 shrink-0" />
-                    <span>PRINT / SAVE PDF</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDirectSavePng}
-                    disabled={isExportingPng}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black shadow-xs transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
-                    title="Download Export Packing List Manifest as .PNG image"
-                  >
-                    {isExportingPng ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-                        <span>SAVING .PNG...</span>
-                      </>
-                    ) : (
-                      <>
-                        <ImageDown className="w-3.5 h-3.5 shrink-0" />
-                        <span>SAVE .PNG</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-                <div className="text-right font-mono text-xs text-pink-100 tabular-nums pl-2 border-l border-pink-900/80">
+              <div className="flex items-center gap-2.5">
+                <div className="text-right font-mono text-xs text-pink-100 tabular-nums">
                   <div className="text-[11px] text-pink-200 uppercase">Manifest Ref</div>
                   <div className="font-bold text-amber-300 text-sm">{invoiceNumber}</div>
                 </div>
@@ -1091,6 +1040,9 @@ export const PackingListView: React.FC = () => {
                             }`}
                           >
                             <option value="0">-</option>
+                            {row.box > 0 && !dropdownOptions.boxes.includes(String(row.box)) && (
+                              <option value={row.box}>{row.box}</option>
+                            )}
                             {dropdownOptions.boxes.map((b) => (
                               <option key={b} value={b}>
                                 {b}
@@ -1119,6 +1071,9 @@ export const PackingListView: React.FC = () => {
                             }`}
                           >
                             <option value="0">-</option>
+                            {row.weight > 0 && !dropdownOptions.weights.includes(String(row.weight)) && (
+                              <option value={row.weight}>{row.weight} KG</option>
+                            )}
                             {dropdownOptions.weights.map((w) => (
                               <option key={w} value={w}>
                                 {w} KG
@@ -1207,39 +1162,122 @@ export const PackingListView: React.FC = () => {
                   })}
                 </tbody>
 
-                {/* Subtotals Row */}
+                {/* Subtotals & Instant Automatic Summation Rows */}
                 <tfoot>
-                  <tr className="bg-[#e67327] text-white font-bold border-t-2 border-amber-800">
+                  {/* Row 1: Direct Column-Aligned Subtotals */}
+                  <tr className="bg-[#e67327] text-white font-bold border-t-2 border-amber-800 text-xs">
                     <td
                       colSpan={2}
-                      className="px-3 py-2.5 text-right uppercase tracking-wider text-xs border-r border-amber-600/60"
+                      className="px-3 py-2.5 text-right uppercase tracking-wider border-r border-amber-600/60"
                     >
-                      MANIFEST SUBTOTALS:
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono font-semibold text-amber-200 bg-amber-950/40 px-1.5 py-0.5 rounded">
+                          {populatedRowCount} {populatedRowCount === 1 ? 'Item' : 'Items'}
+                        </span>
+                        <span className="font-extrabold">TOTAL QUANTITY:</span>
+                      </div>
                     </td>
-                    <td className="px-2 py-2.5 text-center font-mono tabular-nums text-amber-100 text-sm font-black border-r border-amber-600/60">
+                    <td
+                      data-testid="packing-footer-box"
+                      className="px-2 py-2.5 text-center font-mono tabular-nums text-amber-100 text-sm font-black border-r border-amber-600/60 bg-amber-900/40 whitespace-nowrap"
+                    >
                       {totalBox} Boxes
                     </td>
-                    <td className="px-2 py-2.5 text-right uppercase text-[11px] border-r border-amber-600/60">
+                    <td className="px-2 py-2.5 text-right uppercase text-[11px] font-bold border-r border-amber-600/60 whitespace-nowrap">
                       TOTAL WT:
                     </td>
                     <td
                       data-testid="packing-footer-weight"
-                      className="px-2.5 py-2.5 text-right font-mono tabular-nums text-amber-100 text-sm font-black border-r border-amber-600/60"
+                      className="px-2.5 py-2.5 text-right font-mono tabular-nums text-amber-100 text-sm font-black border-r border-amber-600/60 bg-amber-900/40 whitespace-nowrap"
                     >
-                      {totalWeight.toFixed(2)} KG
+                      {totalWeight.toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}{' '}
+                      KG
                     </td>
                     <td
                       colSpan={2}
-                      className="px-2.5 py-2.5 text-right uppercase text-[11px] border-r border-amber-600/60"
+                      className="px-2.5 py-2.5 text-right uppercase text-[11px] font-bold border-r border-amber-600/60 whitespace-nowrap"
                     >
                       TOTAL VALUE:
                     </td>
                     <td
                       colSpan={2}
                       data-testid="packing-footer-total"
-                      className="px-2.5 py-2.5 text-right font-mono tabular-nums text-white text-sm font-black pr-3"
+                      className="px-2.5 py-2.5 text-right font-mono tabular-nums text-white text-sm font-black pr-3 bg-amber-950/40 whitespace-nowrap"
                     >
                       {formatCurrency(totalAmount, 'RMB')}
+                    </td>
+                  </tr>
+
+                  {/* Row 2: Prominent Shipment Totals Live Summation Banner */}
+                  <tr className="bg-slate-900 text-white border-t border-amber-500/80">
+                    <td colSpan={9} className="p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-1 rounded bg-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-xs">
+                            SHIPMENT TOTALS
+                          </span>
+                          <span className="text-slate-300 text-xs font-medium hidden sm:inline">
+                            Live automatic summation of cartons and net cargo weight
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 sm:gap-5 font-mono text-xs">
+                          {/* Total Quantity */}
+                          <div className="flex items-center gap-1.5 bg-slate-800/90 px-3 py-1.5 rounded-lg border border-slate-700">
+                            <span className="text-slate-400 font-bold uppercase text-[10.5px]">
+                              Total Quantity:
+                            </span>
+                            <span
+                              data-testid="packing-shipment-total-qty"
+                              className="font-black text-amber-300 text-sm tabular-nums"
+                            >
+                              {totalBox} Cartons / Boxes
+                            </span>
+                          </div>
+
+                          {/* Total Net Weight */}
+                          <div className="flex items-center gap-1.5 bg-slate-800/90 px-3 py-1.5 rounded-lg border border-slate-700">
+                            <span className="text-slate-400 font-bold uppercase text-[10.5px]">
+                              Total Weight:
+                            </span>
+                            <span
+                              data-testid="packing-shipment-total-weight"
+                              className="font-black text-teal-300 text-sm tabular-nums"
+                            >
+                              {totalWeight.toLocaleString('en-US', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}{' '}
+                              KG
+                            </span>
+                          </div>
+
+                          {/* Total Value */}
+                          <div className="flex items-center gap-1.5 bg-slate-800/90 px-3 py-1.5 rounded-lg border border-slate-700">
+                            <span className="text-slate-400 font-bold uppercase text-[10.5px]">
+                              Shipment Value:
+                            </span>
+                            <span
+                              data-testid="packing-shipment-total-val"
+                              className="font-black text-emerald-300 text-sm tabular-nums"
+                            >
+                              {formatCurrency(totalAmount, 'RMB')}
+                            </span>
+                            {companyProfile.rmbExchangeRate > 0 && (
+                              <span className="text-[11px] text-amber-200/90">
+                                (≈{' '}
+                                {formatCurrency(
+                                  Math.round(totalAmount * companyProfile.rmbExchangeRate),
+                                  companyProfile.currency
+                                )}
+                                )
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 </tfoot>
@@ -1272,20 +1310,31 @@ export const PackingListView: React.FC = () => {
             <div className="p-4 bg-slate-50 border-t border-slate-200 space-y-3">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
-                  <div className="text-[10px] font-bold uppercase text-slate-500">
-                    TOTAL CARTONS / BOXES
+                  <div className="text-[10px] font-bold uppercase text-slate-500 flex items-center justify-between">
+                    <span>TOTAL QUANTITY</span>
+                    <span className="text-[9px] text-amber-700 bg-amber-50 px-1 rounded font-mono">Auto-Sum</span>
                   </div>
-                  <div className="text-base font-black font-mono tabular-nums text-slate-900 mt-0.5">
+                  <div
+                    data-testid="packing-kpi-total-box"
+                    className="text-base font-black font-mono tabular-nums text-slate-900 mt-0.5"
+                  >
                     {totalBox} <span className="text-xs font-semibold text-slate-500">Boxes</span>
                   </div>
                 </div>
 
                 <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
-                  <div className="text-[10px] font-bold uppercase text-slate-500">
-                    TOTAL NET WEIGHT
+                  <div className="text-[10px] font-bold uppercase text-slate-500 flex items-center justify-between">
+                    <span>TOTAL SHIPMENT WEIGHT</span>
+                    <span className="text-[9px] text-teal-700 bg-teal-50 px-1 rounded font-mono">Auto-Sum</span>
                   </div>
-                  <div className="text-base font-black font-mono tabular-nums text-teal-800 mt-0.5">
-                    {totalWeight.toFixed(2)}{' '}
+                  <div
+                    data-testid="packing-kpi-total-weight"
+                    className="text-base font-black font-mono tabular-nums text-teal-800 mt-0.5"
+                  >
+                    {totalWeight.toLocaleString('en-US', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}{' '}
                     <span className="text-xs font-semibold text-teal-600">KG</span>
                   </div>
                 </div>
@@ -1300,8 +1349,9 @@ export const PackingListView: React.FC = () => {
                 </div>
 
                 <div className="bg-amber-50/80 p-3 rounded-lg border border-amber-300 shadow-2xs">
-                  <div className="text-[10px] font-bold uppercase text-amber-900">
-                    TOTAL MANIFEST VALUE
+                  <div className="text-[10px] font-bold uppercase text-amber-900 flex items-center justify-between">
+                    <span>TOTAL MANIFEST VALUE</span>
+                    <span className="text-[9px] text-amber-800 bg-amber-100 px-1 rounded font-mono">RMB</span>
                   </div>
                   <div
                     data-testid="packing-summary-total"
@@ -1367,48 +1417,15 @@ export const PackingListView: React.FC = () => {
                 type="button"
                 onClick={handleSavePDF}
                 className="w-full text-white py-2.5 px-4 rounded-lg font-bold text-sm shadow-xs flex items-center justify-center space-x-2 transition transform active:scale-95 cursor-pointer bg-[#129c54] hover:bg-[#0e8346] whitespace-nowrap"
-                title="Save Manifest and open Document Print Preview (Shortcut: Ctrl+S)"
+                title="Save Manifest (Shortcut: Ctrl+S)"
               >
                 <Save className="w-5 h-5 shrink-0" />
-                <span>SAVE (PDF / .PNG)</span>
+                <span>SAVE MANIFEST</span>
                 <span className="text-[10px] font-mono bg-emerald-950/60 px-1.5 py-0.5 rounded text-amber-200">
                   Ctrl+S
                 </span>
               </button>
             )}
-
-            {/* Direct Save .PNG & Document Print Preview Buttons */}
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={handleDirectSavePng}
-                disabled={isExportingPng}
-                className="w-full bg-amber-600 hover:bg-amber-700 text-white py-2.5 px-3 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-1.5 transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
-                title="Download Export Packing List Manifest directly as a .PNG image"
-              >
-                {isExportingPng ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-                    <span>PNG...</span>
-                  </>
-                ) : (
-                  <>
-                    <ImageDown className="w-3.5 h-3.5 shrink-0" />
-                    <span>SAVE .PNG</span>
-                  </>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={handlePrintSelected}
-                className="w-full bg-[#0891b2] hover:bg-[#0e7490] text-white py-2.5 px-3 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-1.5 transition cursor-pointer whitespace-nowrap"
-                title="Open Document Print Preview"
-              >
-                <Printer className="w-3.5 h-3.5 shrink-0" />
-                <span>PRINT / PDF</span>
-              </button>
-            </div>
 
             {/* Share via WeChat (.PNG) */}
             <button

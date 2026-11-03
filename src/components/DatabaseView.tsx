@@ -84,6 +84,8 @@ import {
   queryIndexedRecords,
 } from '../utils/indexedStorage.ts';
 import { DateRangePicker } from './DateRangePicker.tsx';
+import type { PaymentRecord, ExporterStatus } from '../types/index.ts';
+import { emitPaymentSyncTrigger } from '../utils/paymentSync.ts';
 
 interface DatabaseViewProps {
   initialType?: 'purchase' | 'packing' | 'payment';
@@ -355,6 +357,111 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     showToast(
       `Smart Data Sync reconciled ${plan.resolvedCount} discrepancy record(s) automatically.`
     );
+  };
+
+  // Editing payment modal state for maintenance & corrections
+  const [editingPaymentRecord, setEditingPaymentRecord] = useState<PaymentRecord | null>(null);
+  const [paymentEditForm, setPaymentEditForm] = useState<{
+    invoiceNumber: string;
+    date: string;
+    description: string;
+    paidAmount: string;
+    totalAmount: string;
+    balance: string;
+    status: ExporterStatus;
+    exportGoodsRef: string;
+    remarks: string;
+  }>({
+    invoiceNumber: '',
+    date: '',
+    description: '',
+    paidAmount: '',
+    totalAmount: '',
+    balance: '',
+    status: 'PAID',
+    exportGoodsRef: '',
+    remarks: '',
+  });
+
+  useEffect(() => {
+    if (editingPaymentRecord) {
+      setPaymentEditForm({
+        invoiceNumber: editingPaymentRecord.invoiceNumber || '',
+        date: editingPaymentRecord.date || new Date().toISOString().slice(0, 10),
+        description: editingPaymentRecord.description || '',
+        paidAmount: String(editingPaymentRecord.paidAmount || 0),
+        totalAmount: String(editingPaymentRecord.totalAmount || 0),
+        balance: String(editingPaymentRecord.balance || 0),
+        status: (editingPaymentRecord.status as ExporterStatus) || 'PAID',
+        exportGoodsRef: editingPaymentRecord.exportGoodsRef || '',
+        remarks: editingPaymentRecord.remarks || '',
+      });
+    }
+  }, [editingPaymentRecord]);
+
+  const handleSavePaymentEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPaymentRecord) return;
+    const paidAmt = Math.round((parseFloat(paymentEditForm.paidAmount) || 0) * 100) / 100;
+    const totalAmt = Math.round((parseFloat(paymentEditForm.totalAmount) || 0) * 100) / 100;
+    const balAmt =
+      paymentEditForm.balance !== ''
+        ? Math.round((parseFloat(paymentEditForm.balance) || 0) * 100) / 100
+        : Math.round(Math.max(0, totalAmt - paidAmt) * 100) / 100;
+
+    const updatedItems =
+      Array.isArray(editingPaymentRecord.items) && editingPaymentRecord.items.length > 0
+        ? editingPaymentRecord.items.map((it, idx) =>
+            idx === 0
+              ? {
+                  ...it,
+                  date: paymentEditForm.date,
+                  creditAmount: paidAmt,
+                  debitAmount: it.debitAmount || 0,
+                  balance: balAmt,
+                  status: paymentEditForm.status,
+                  description: paymentEditForm.remarks.trim() || it.description,
+                }
+              : it
+          )
+        : [
+            {
+              id: '1',
+              date: paymentEditForm.date,
+              creditAmount: paidAmt,
+              debitAmount: 0,
+              balance: balAmt,
+              status: paymentEditForm.status,
+              description:
+                paymentEditForm.remarks.trim() ||
+                `Payment to ${paymentEditForm.description}`,
+            },
+          ];
+
+    updatePayment(editingPaymentRecord.id, {
+      invoiceNumber: paymentEditForm.invoiceNumber.trim(),
+      date: paymentEditForm.date,
+      description: paymentEditForm.description.trim(),
+      paidAmount: paidAmt,
+      totalAmount: totalAmt,
+      balance: balAmt,
+      status: paymentEditForm.status,
+      exportGoodsRef: paymentEditForm.exportGoodsRef.trim(),
+      remarks: paymentEditForm.remarks.trim(),
+      items: updatedItems,
+    });
+
+    emitPaymentSyncTrigger({
+      category: classifyPaymentCategory(editingPaymentRecord),
+      action: 'update',
+      invoiceNumber: paymentEditForm.invoiceNumber.trim(),
+      partyName: paymentEditForm.description.trim(),
+      creditAmount: paidAmt,
+      runningBalance: balAmt,
+    });
+
+    showToast(`Payment voucher ${paymentEditForm.invoiceNumber.trim()} updated successfully!`);
+    setEditingPaymentRecord(null);
   };
 
   useEffect(() => {
@@ -2595,6 +2702,16 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                           <td className="px-1.5 py-1.5 text-center whitespace-nowrap">
                             <div className="flex items-center justify-center space-x-1">
                               <button
+                                type="button"
+                                data-testid={`edit-payment-btn-${pm.id}`}
+                                onClick={() => setEditingPaymentRecord(pm)}
+                                className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 rounded transition flex items-center space-x-0.5 cursor-pointer"
+                                title={`Edit payment voucher ${pm.invoiceNumber} (correct amount, date, supplier)`}
+                              >
+                                <Edit2 className="w-2.5 h-2.5" />
+                                <span>EDIT</span>
+                              </button>
+                              <button
                                 onClick={() =>
                                   openPrintModal({
                                     type: 'payment',
@@ -2678,6 +2795,273 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               totalPages={selectedPaymentsForBatch.length}
             />
           ))}
+        </div>
+      )}
+      {/* Edit Payment Voucher Modal for Fast Maintenance & Corrections */}
+      {editingPaymentRecord && (
+        <div
+          data-testid="edit-payment-modal"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto"
+        >
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-8">
+            <div className="bg-gradient-to-r from-purple-950 via-purple-900 to-indigo-950 text-white px-5 py-4 flex items-center justify-between border-b border-purple-800">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-400/20 border border-amber-400/40 flex items-center justify-center">
+                  <Edit2 className="w-4 h-4 text-amber-300" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base tracking-wide text-white">
+                    Edit Payment Voucher — {editingPaymentRecord.invoiceNumber}
+                  </h3>
+                  <p className="text-[11px] text-purple-200">
+                    Correct credit amount, date, supplier, or notes. Balance recalculates automatically.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingPaymentRecord(null)}
+                className="p-1.5 text-slate-300 hover:text-white rounded-lg hover:bg-white/10 transition cursor-pointer"
+                title="Close edit modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePaymentEdit} className="p-5 space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Voucher Number *
+                  </label>
+                  <input
+                    type="text"
+                    data-testid="edit-payment-invoice-number-input"
+                    value={paymentEditForm.invoiceNumber}
+                    onChange={(e) =>
+                      setPaymentEditForm((prev) => ({
+                        ...prev,
+                        invoiceNumber: e.target.value,
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-purple-900 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Payment Date *
+                  </label>
+                  <input
+                    type="date"
+                    data-testid="edit-payment-date-input"
+                    value={paymentEditForm.date}
+                    onChange={(e) =>
+                      setPaymentEditForm((prev) => ({
+                        ...prev,
+                        date: e.target.value,
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-purple-500 focus:outline-none cursor-pointer"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Supplier / Party Name *
+                </label>
+                <input
+                  type="text"
+                  data-testid="edit-payment-supplier-input"
+                  list="payment-edit-suppliers-datalist"
+                  value={paymentEditForm.description}
+                  onChange={(e) =>
+                    setPaymentEditForm((prev) => ({
+                      ...prev,
+                      description: e.target.value,
+                    }))
+                  }
+                  placeholder="Select or enter supplier name"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                  required
+                />
+                <datalist id="payment-edit-suppliers-datalist">
+                  {dropdownOptions.suppliers.map((s) => (
+                    <option key={s} value={s} />
+                  ))}
+                </datalist>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-200">
+                  <label className="block font-black text-emerald-900 mb-1 text-[11px] uppercase tracking-wide">
+                    Credit / Paid Amount ({companyProfile.currency}) *
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    data-testid="edit-payment-paid-amount-input"
+                    value={paymentEditForm.paidAmount}
+                    onChange={(e) => {
+                      const p = parseFloat(e.target.value) || 0;
+                      setPaymentEditForm((prev) => {
+                        const tot = parseFloat(prev.totalAmount) || 0;
+                        return {
+                          ...prev,
+                          paidAmount: e.target.value,
+                          balance:
+                            tot > 0
+                              ? String(Math.max(0, tot - p))
+                              : prev.balance,
+                        };
+                      });
+                    }}
+                    className="w-full px-3 py-1.5 border-2 border-emerald-400 rounded-lg font-mono font-black text-emerald-800 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
+                    required
+                  />
+                  <p className="text-[10px] text-emerald-700 mt-1 font-medium">
+                    Actual cash / bank disbursement
+                  </p>
+                </div>
+
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                  <label className="block font-bold text-slate-700 mb-1 text-[11px] uppercase tracking-wide">
+                    Total Billed ({companyProfile.currency})
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    data-testid="edit-payment-total-amount-input"
+                    value={paymentEditForm.totalAmount}
+                    onChange={(e) => {
+                      const tot = parseFloat(e.target.value) || 0;
+                      setPaymentEditForm((prev) => {
+                        const p = parseFloat(prev.paidAmount) || 0;
+                        return {
+                          ...prev,
+                          totalAmount: e.target.value,
+                          balance: String(Math.max(0, tot - p)),
+                        };
+                      });
+                    }}
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold text-slate-800 text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none bg-white"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1 font-medium">
+                    Bill or Challan total
+                  </p>
+                </div>
+
+                <div className="bg-rose-50/70 p-2.5 rounded-xl border border-rose-200">
+                  <label className="block font-black text-rose-900 mb-1 text-[11px] uppercase tracking-wide">
+                    Due Balance ({companyProfile.currency})
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    data-testid="edit-payment-balance-input"
+                    value={paymentEditForm.balance}
+                    onChange={(e) =>
+                      setPaymentEditForm((prev) => ({
+                        ...prev,
+                        balance: e.target.value,
+                      }))
+                    }
+                    className="w-full px-3 py-1.5 border border-rose-300 rounded-lg font-mono font-bold text-rose-800 text-sm focus:ring-2 focus:ring-rose-500 focus:outline-none bg-white"
+                  />
+                  <p className="text-[10px] text-rose-700 mt-1 font-medium">
+                    Remaining after disbursement
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Voucher Status
+                  </label>
+                  <select
+                    value={paymentEditForm.status}
+                    onChange={(e) =>
+                      setPaymentEditForm((prev) => ({
+                        ...prev,
+                        status: e.target.value as ExporterStatus,
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold text-slate-800 focus:ring-2 focus:ring-purple-500 focus:outline-none cursor-pointer"
+                  >
+                    <option value="PAID">PAID</option>
+                    <option value="PENDING">PENDING</option>
+                    <option value="REPORT">REPORT</option>
+                    <option value="NO REPORT">NO REPORT</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Challan / Export Reference
+                  </label>
+                  <input
+                    type="text"
+                    value={paymentEditForm.exportGoodsRef}
+                    onChange={(e) =>
+                      setPaymentEditForm((prev) => ({
+                        ...prev,
+                        exportGoodsRef: e.target.value,
+                      }))
+                    }
+                    placeholder="e.g. INV-2026-001 or shipping mark"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Remarks / Transaction Note
+                </label>
+                <input
+                  type="text"
+                  value={paymentEditForm.remarks}
+                  onChange={(e) =>
+                    setPaymentEditForm((prev) => ({
+                      ...prev,
+                      remarks: e.target.value,
+                    }))
+                  }
+                  placeholder="Cash payout at Turag depot, cheque no, bKash TrxID, etc."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-slate-200">
+                <span className="text-[11px] font-mono text-slate-400">
+                  Voucher ID: {editingPaymentRecord.id}
+                </span>
+
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingPaymentRecord(null)}
+                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    data-testid="save-payment-edit-btn"
+                    className="px-5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm transition flex items-center space-x-1.5 cursor-pointer active:scale-95"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>SAVE CHANGES</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

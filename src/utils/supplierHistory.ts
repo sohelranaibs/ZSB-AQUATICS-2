@@ -143,11 +143,7 @@ export function buildSupplierRecordHistory(
           .reduce((s, i) => s + (Number(i.creditAmount) || 0), 0)
       : 0;
     const debitAmt = !pm.exportGoodsRef
-      ? Math.round(
-          (standaloneItemsDebit > 0
-            ? standaloneItemsDebit
-            : Number(pm.totalAmount) || 0) * 100
-        ) / 100
+      ? Math.round(standaloneItemsDebit * 100) / 100
       : 0;
     const creditAmt =
       Math.round((Number(pm.paidAmount) || itemsCredit || 0) * 100) / 100;

@@ -270,7 +270,7 @@ export function validateDatabaseCellValue(
         return {
           ...baseResult,
           isValid: false,
-          errorMessage: `${schema.label} cannot be negative (${strValue}).`,
+          errorMessage: `${schema.label} cannot be negative.`,
         };
       }
       return {
@@ -297,11 +297,18 @@ export function validateDatabaseCellValue(
         };
       }
       const num = Number(normalized);
-      if (!Number.isFinite(num) || num < 0) {
+      if (!Number.isFinite(num)) {
         return {
           ...baseResult,
           isValid: false,
-          errorMessage: `${schema.label} must be a non-negative number.`,
+          errorMessage: `${schema.label} must be a valid number.`,
+        };
+      }
+      if (num < 0) {
+        return {
+          ...baseResult,
+          isValid: false,
+          errorMessage: `${schema.label} cannot be negative.`,
         };
       }
       return {
@@ -359,11 +366,18 @@ export function validateDatabaseCellValue(
         };
       }
       const num = Number(normalized);
-      if (!Number.isSafeInteger(num) || num < 0) {
+      if (!Number.isSafeInteger(num)) {
         return {
           ...baseResult,
           isValid: false,
-          errorMessage: `${schema.label} must be a whole integer >= 0.`,
+          errorMessage: `${schema.label} must be a whole integer.`,
+        };
+      }
+      if (num < 0) {
+        return {
+          ...baseResult,
+          isValid: false,
+          errorMessage: `${schema.label} cannot be negative.`,
         };
       }
       return {
@@ -439,17 +453,50 @@ export function validateDatabaseCellValue(
 export function validateDatabaseRecord(
   dbType: DatabaseTableType,
   record: Record<string, unknown>,
-  draftOverrides?: Record<string, string>
+  draftOverrides?: Record<string, string>,
+  options?: { acceptSavedNegatives?: boolean; acceptSavedImportValues?: boolean }
 ): Record<string, FieldValidationResult> {
   const schemaMap = getDatabaseTableSchema(dbType);
   const results: Record<string, FieldValidationResult> = {};
+  const savedRawValues =
+    record.rawValues && typeof record.rawValues === 'object'
+      ? (record.rawValues as Record<string, unknown>)
+      : undefined;
 
   for (const fieldKey of Object.keys(schemaMap)) {
     const hasDraft =
       draftOverrides !== undefined &&
       Object.prototype.hasOwnProperty.call(draftOverrides, fieldKey);
     const valueToValidate = hasDraft ? draftOverrides[fieldKey] : record[fieldKey];
-    results[fieldKey] = validateDatabaseCellValue(dbType, fieldKey, valueToValidate);
+    const baseValidation = validateDatabaseCellValue(dbType, fieldKey, valueToValidate);
+    if (!baseValidation.isValid && !hasDraft) {
+      const strVal =
+        valueToValidate === null || valueToValidate === undefined
+          ? ''
+          : String(valueToValidate).trim();
+      const isSavedNegative =
+        Boolean(options?.acceptSavedNegatives || options?.acceptSavedImportValues) &&
+        typeof valueToValidate === 'number' &&
+        Number.isFinite(valueToValidate) &&
+        valueToValidate < 0;
+      const isSavedImportBlankOrFormula =
+        Boolean(options?.acceptSavedImportValues) &&
+        (strVal === '' ||
+          strVal.startsWith('=') ||
+          Boolean(savedRawValues && Object.prototype.hasOwnProperty.call(savedRawValues, fieldKey)) ||
+          (fieldKey === 'date' && Boolean(record.calculationPending)));
+
+      if (isSavedNegative || isSavedImportBlankOrFormula) {
+        results[fieldKey] = {
+          ...baseValidation,
+          isValid: true,
+          parsedValue: isSavedNegative ? valueToValidate : strVal,
+          errorMessage: undefined,
+        };
+        continue;
+      }
+    }
+    results[fieldKey] = baseValidation;
   }
 
   return results;
@@ -458,7 +505,8 @@ export function validateDatabaseRecord(
 export function summarizeTableValidation(
   dbType: DatabaseTableType,
   records: Array<{ id: string } & Record<string, unknown>>,
-  cellDraftsByRecordId: Record<string, Record<string, string>> = {}
+  cellDraftsByRecordId: Record<string, Record<string, string>> = {},
+  options?: { acceptSavedNegatives?: boolean; acceptSavedImportValues?: boolean }
 ): TableValidationSummary {
   const resultsByRecordId: Record<string, Record<string, FieldValidationResult>> = {};
   const invalidRecordIds: string[] = [];
@@ -466,7 +514,7 @@ export function summarizeTableValidation(
 
   for (const rec of records) {
     const drafts = cellDraftsByRecordId[rec.id];
-    const fieldResults = validateDatabaseRecord(dbType, rec, drafts);
+    const fieldResults = validateDatabaseRecord(dbType, rec, drafts, options);
     resultsByRecordId[rec.id] = fieldResults;
 
     let recordHasInvalid = false;

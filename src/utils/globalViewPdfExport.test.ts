@@ -108,7 +108,7 @@ test('buildGlobalViewTableReport builds valid structured table reports for all 1
   }
 });
 
-test('buildGlobalViewTableReport for exporter_payment_form includes DEBIT, CREDIT, BALANCE & STATUS columns', () => {
+test('buildGlobalViewTableReport for exporter_payment_form includes DEBIT, REPORT (right of DEBIT), CREDIT, BALANCE & STATUS columns', () => {
   const report = buildGlobalViewTableReport({
     activeTab: 'exporter_payment_form',
     companyProfile: initialCompanyProfile,
@@ -120,7 +120,10 @@ test('buildGlobalViewTableReport for exporter_payment_form includes DEBIT, CREDI
   });
 
   const colLabels = report.sections[0].columns.map((c) => c.label);
-  assert.ok(colLabels.includes('DEBIT (RMB)'));
+  const debitIdx = colLabels.indexOf('DEBIT (RMB)');
+  const reportIdx = colLabels.indexOf('REPORT (RMB)');
+  assert.ok(debitIdx >= 0);
+  assert.equal(reportIdx, debitIdx + 1);
   assert.ok(colLabels.includes('CREDIT (RMB)'));
   assert.ok(colLabels.includes('BALANCE (RMB)'));
   assert.ok(colLabels.includes('STATUS'));

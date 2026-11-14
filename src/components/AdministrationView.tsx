@@ -530,20 +530,20 @@ export const AdministrationView: React.FC = () => {
         className="min-h-[80vh] flex items-center justify-center p-4 sm:p-6"
         data-testid="admin-access-denied-barrier"
       >
-        <div className="w-full max-w-lg bg-slate-900 border-2 border-rose-500/80 rounded-2xl shadow-2xl p-6 sm:p-8 text-center space-y-5">
-          <div className="w-16 h-16 rounded-full bg-rose-500/20 border-2 border-rose-500 mx-auto flex items-center justify-center">
-            <Lock className="w-8 h-8 text-rose-400" />
+        <div className="w-full max-w-lg bg-white border border-rose-200 rounded-2xl shadow-lg p-6 sm:p-8 text-center space-y-5">
+          <div className="w-16 h-16 rounded-full bg-rose-50 border-2 border-rose-300 mx-auto flex items-center justify-center">
+            <Lock className="w-8 h-8 text-rose-600" />
           </div>
           <div>
-            <h2 className="text-xl font-black text-rose-300 uppercase tracking-wide">
+            <h2 className="text-xl font-black text-rose-700 uppercase tracking-wide">
               Access Restricted · Super Admin Only
             </h2>
-            <p className="text-xs text-slate-300 mt-2 leading-relaxed">
+            <p className="text-xs text-slate-600 mt-2 leading-relaxed">
               You are currently signed in as{' '}
-              <strong className="text-white">{currentUser?.displayName || 'User'}</strong>{' '}
-              with the role <span className="px-2 py-0.5 rounded bg-slate-800 text-amber-300 font-mono text-[11px]">{currentUser?.role || 'Staff'}</span>.
+              <strong className="text-slate-900">{currentUser?.displayName || 'User'}</strong>{' '}
+              with the role <span className="px-2 py-0.5 rounded bg-slate-100 text-[#263843] border border-slate-200 font-mono text-[11px]">{currentUser?.role || 'Staff'}</span>.
             </p>
-            <p className="text-xs text-rose-300 mt-2 font-medium">
+            <p className="text-xs text-rose-700 mt-2 font-medium">
               Only verified Super Administrators have authorization to enter the Administration sheet and control database records.
             </p>
           </div>
@@ -551,7 +551,7 @@ export const AdministrationView: React.FC = () => {
             type="button"
             data-testid="admin-return-dashboard-btn"
             onClick={() => setActiveTab('dashboard')}
-            className="w-full bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 font-bold py-2.5 px-4 rounded-xl text-xs transition cursor-pointer"
+            className="w-full bg-[#263843] hover:bg-[#1c2a33] text-white font-bold py-2.5 px-4 rounded-xl text-xs transition cursor-pointer"
           >
             Return to Executive Overview (Sheet 01)
           </button>
@@ -566,11 +566,11 @@ export const AdministrationView: React.FC = () => {
         className="min-h-[80vh] flex items-center justify-center p-4 sm:p-6"
         data-testid="admin-auth-barrier"
       >
-        <div className="w-full max-w-xl bg-slate-900 border-2 border-amber-500/60 rounded-2xl shadow-2xl overflow-hidden">
-          {/* Header Bar with Golden Branding */}
-          <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 px-6 py-5 border-b border-amber-500/30 flex items-center justify-between">
+        <div className="w-full max-w-xl bg-white border border-slate-200 rounded-2xl shadow-lg overflow-hidden">
+          {/* Header Bar with Slate-Teal Branding */}
+          <div className="bg-[#263843] px-6 py-5 border-b-2 border-[#00897b] flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 flex items-center justify-center shadow-md">
+              <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 flex items-center justify-center shadow-sm">
                 <img
                   src={resolvedLogoSrc}
                   alt={companyProfile.companyName}
@@ -584,29 +584,32 @@ export const AdministrationView: React.FC = () => {
                 />
               </div>
               <div>
-                <h1 className="zsb-3d-text text-xl font-black text-amber-300">
+                <h1 className="text-xl font-black tracking-tight text-white">
                   Accounts &amp; Administration
                 </h1>
-                <p className="text-xs font-mono text-amber-200/80">
-                  ZSB AQUATICS · Super Admin Security Vault
+                <p className="text-xs font-mono text-[#80cbc4]">
+                  <span className="font-black text-amber-400 zsb-golden-brand">
+                    {companyProfile.companyName}
+                  </span>{' '}
+                  · Super Admin Security Vault
                 </p>
               </div>
             </div>
-            <div className="w-9 h-9 rounded-full bg-amber-500/10 border border-amber-400/40 flex items-center justify-center">
-              <Lock className="w-5 h-5 text-amber-400" />
+            <div className="w-9 h-9 rounded-full bg-[#00897b]/20 border border-[#5eead4]/40 flex items-center justify-center">
+              <Lock className="w-5 h-5 text-[#5eead4]" />
             </div>
           </div>
 
           {/* Form Body */}
           <div className="p-6 sm:p-8 space-y-6">
             {/* Core User Requirement Notice */}
-            <div className="bg-amber-950/40 border border-amber-500/40 rounded-xl p-4 flex items-start space-x-3">
-              <ShieldAlert className="w-6 h-6 text-amber-400 shrink-0 mt-0.5" />
+            <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 flex items-start space-x-3">
+              <ShieldAlert className="w-6 h-6 text-[#00897b] shrink-0 mt-0.5" />
               <div className="text-xs space-y-1">
-                <div className="font-black text-amber-300 uppercase tracking-wider text-[11px]">
+                <div className="font-black text-[#263843] uppercase tracking-wider text-[11px]">
                   Super Admin Authorization Required
                 </div>
-                <p className="text-amber-100 font-medium leading-relaxed">
+                <p className="text-slate-700 font-medium leading-relaxed">
                   Only Super Admin can manage your account, team access, audit history and database records clearance.
                 </p>
               </div>
@@ -615,9 +618,9 @@ export const AdministrationView: React.FC = () => {
             {authError && (
               <div
                 role="alert"
-                className="bg-rose-950/80 border border-rose-500/60 rounded-xl p-3.5 flex items-center space-x-2.5 text-xs text-rose-200 font-semibold"
+                className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 flex items-center space-x-2.5 text-xs text-rose-800 font-semibold"
               >
-                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                 <span>{authError}</span>
               </div>
             )}
@@ -626,7 +629,7 @@ export const AdministrationView: React.FC = () => {
               <div>
                 <label
                   htmlFor="admin-password-gate-input"
-                  className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2"
+                  className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2"
                 >
                   Super Admin Master Password
                 </label>
@@ -642,12 +645,12 @@ export const AdministrationView: React.FC = () => {
                       if (authError) setAuthError(null);
                     }}
                     placeholder="Enter Super Admin password"
-                    className="w-full bg-slate-950 border border-slate-700 focus:border-amber-400 focus:ring-1 focus:ring-amber-400 text-white rounded-xl px-4 py-3 text-sm font-mono placeholder:text-slate-600 outline-hidden transition"
+                    className="w-full bg-slate-50 border border-slate-300 focus:border-[#00897b] focus:ring-1 focus:ring-[#00897b] text-slate-900 rounded-xl px-4 py-3 text-sm font-mono placeholder:text-slate-400 outline-hidden transition"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 cursor-pointer"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
                     title={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? (
@@ -663,7 +666,7 @@ export const AdministrationView: React.FC = () => {
                 <button
                   type="submit"
                   data-testid="admin-unlock-btn"
-                  className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black py-3 px-5 rounded-xl shadow-lg transition flex items-center justify-center space-x-2 cursor-pointer"
+                  className="w-full bg-[#00897b] hover:bg-[#00796b] text-white font-black py-3 px-5 rounded-xl shadow-sm transition flex items-center justify-center space-x-2 cursor-pointer"
                 >
                   <Unlock className="w-4 h-4 stroke-[2.5]" />
                   <span>Verify &amp; Unlock Console</span>
@@ -671,10 +674,10 @@ export const AdministrationView: React.FC = () => {
               </div>
             </form>
 
-            <div className="pt-4 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+            <div className="pt-4 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-500">
               <div className="flex items-center space-x-1.5">
-                <KeyRound className="w-3.5 h-3.5 text-amber-400" />
-                <span>Super Admin: <strong>Md. Sohel Rana</strong></span>
+                <KeyRound className="w-3.5 h-3.5 text-[#00897b]" />
+                <span>Super Admin: <strong className="text-slate-800">Md. Sohel Rana</strong></span>
               </div>
               <span>Session: Encrypted</span>
             </div>
@@ -693,12 +696,10 @@ export const AdministrationView: React.FC = () => {
       data-testid="administration-view"
     >
       {/* Executive Command Banner */}
-      <div className="bg-gradient-to-r from-[#111c2e] via-[#1a2d4b] to-[#111c2e] text-white p-5 sm:p-6 rounded-2xl shadow-xl border-2 border-amber-500/60 relative overflow-hidden">
-        <div className="absolute right-0 top-0 bottom-0 w-96 bg-gradient-to-l from-amber-500/10 to-transparent pointer-events-none" />
-
+      <div className="bg-[#263843] text-white p-5 sm:p-6 rounded-xl shadow-sm border-b-2 border-[#00897b] relative overflow-hidden">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 relative z-10">
           <div className="flex items-center space-x-4">
-            <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-lg flex items-center justify-center">
+            <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
               <img
                 src={resolvedLogoSrc}
                 alt={companyProfile.companyName}
@@ -713,15 +714,19 @@ export const AdministrationView: React.FC = () => {
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="zsb-3d-text text-2xl sm:text-3xl font-black text-amber-300">
+                <span className="text-2xl sm:text-3xl font-black tracking-tight text-amber-400 zsb-golden-brand">
+                  {companyProfile.companyName}
+                </span>
+                <span className="text-slate-400">·</span>
+                <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
                   Accounts &amp; Administration
                 </h1>
-                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center space-x-1">
+                <span className="bg-[#00897b]/25 text-[#5eead4] border border-[#00897b]/50 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center space-x-1">
                   <ShieldCheck className="w-3 h-3" />
                   <span>Super Admin Verified</span>
                 </span>
               </div>
-              <p className="text-xs sm:text-sm text-slate-200 mt-1 font-medium">
+              <p className="text-xs sm:text-sm text-slate-300 mt-1 font-medium">
                 Only Super Admin can manage your account, team access, audit history and data backups.
               </p>
             </div>
@@ -732,7 +737,7 @@ export const AdministrationView: React.FC = () => {
               <div className="font-bold text-white">
                 {currentUser?.displayName || 'Md. Sohel Rana'}
               </div>
-              <div className="text-[11px] text-amber-400 font-mono">
+              <div className="text-[11px] text-[#5eead4] font-mono">
                 Partner &amp; Super Admin
               </div>
             </div>
@@ -741,7 +746,7 @@ export const AdministrationView: React.FC = () => {
               type="button"
               data-testid="admin-add-new-admin-btn"
               onClick={handleOpenAddNewAdmin}
-              className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl shadow-md transition cursor-pointer"
+              className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-[#00897b] hover:bg-[#00796b] text-white rounded-xl shadow-xs transition cursor-pointer"
               title="Register a new administrator with role-based access permissions"
             >
               <UserPlus className="w-3.5 h-3.5" />
@@ -752,7 +757,7 @@ export const AdministrationView: React.FC = () => {
               type="button"
               data-testid="admin-lock-session-btn"
               onClick={handleLockSession}
-              className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/40 rounded-xl shadow transition cursor-pointer"
+              className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-[#1c2a33] hover:bg-[#152028] text-[#5eead4] border border-[#334b59] rounded-xl shadow-xs transition cursor-pointer"
               title="Lock administration session immediately"
             >
               <LogOut className="w-3.5 h-3.5" />
@@ -762,17 +767,17 @@ export const AdministrationView: React.FC = () => {
         </div>
 
         {/* 5 Core Pillars KPI Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-6 pt-5 border-t border-slate-700/80">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-6 pt-5 border-t border-[#334b59]">
           {/* Pillar 1: Account */}
           <div
             onClick={() => setActiveAdminTab('account')}
             className={`p-3 rounded-xl border transition cursor-pointer ${
               activeAdminTab === 'account'
-                ? 'bg-amber-500/20 border-amber-400 text-white shadow-sm'
-                : 'bg-slate-900/60 border-slate-700/80 hover:border-slate-600 text-slate-300'
+                ? 'bg-[#00897b]/25 border-[#5eead4] text-white shadow-sm'
+                : 'bg-[#1c2a33] border-[#334b59] hover:border-slate-500 text-slate-300'
             }`}
           >
-            <div className="flex items-center justify-between text-xs font-bold text-amber-400 mb-1">
+            <div className="flex items-center justify-between text-xs font-bold text-[#5eead4] mb-1">
               <span>01. ACCOUNT</span>
               <UserCheck className="w-3.5 h-3.5" />
             </div>
@@ -785,11 +790,11 @@ export const AdministrationView: React.FC = () => {
             onClick={() => setActiveAdminTab('team')}
             className={`p-3 rounded-xl border transition cursor-pointer ${
               activeAdminTab === 'team'
-                ? 'bg-amber-500/20 border-amber-400 text-white shadow-sm'
-                : 'bg-slate-900/60 border-slate-700/80 hover:border-slate-600 text-slate-300'
+                ? 'bg-[#00897b]/25 border-[#5eead4] text-white shadow-sm'
+                : 'bg-[#1c2a33] border-[#334b59] hover:border-slate-500 text-slate-300'
             }`}
           >
-            <div className="flex items-center justify-between text-xs font-bold text-amber-400 mb-1">
+            <div className="flex items-center justify-between text-xs font-bold text-[#5eead4] mb-1">
               <span>02. TEAM ACCESS</span>
               <Users className="w-3.5 h-3.5" />
             </div>
@@ -804,11 +809,11 @@ export const AdministrationView: React.FC = () => {
             onClick={() => setActiveAdminTab('audit')}
             className={`p-3 rounded-xl border transition cursor-pointer ${
               activeAdminTab === 'audit'
-                ? 'bg-amber-500/20 border-amber-400 text-white shadow-sm'
-                : 'bg-slate-900/60 border-slate-700/80 hover:border-slate-600 text-slate-300'
+                ? 'bg-[#00897b]/25 border-[#5eead4] text-white shadow-sm'
+                : 'bg-[#1c2a33] border-[#334b59] hover:border-slate-500 text-slate-300'
             }`}
           >
-            <div className="flex items-center justify-between text-xs font-bold text-amber-400 mb-1">
+            <div className="flex items-center justify-between text-xs font-bold text-[#5eead4] mb-1">
               <span>03. AUDIT HISTORY</span>
               <Clock className="w-3.5 h-3.5" />
             </div>
@@ -821,11 +826,11 @@ export const AdministrationView: React.FC = () => {
             onClick={() => setActiveAdminTab('backups')}
             className={`p-3 rounded-xl border transition cursor-pointer ${
               activeAdminTab === 'backups'
-                ? 'bg-amber-500/20 border-amber-400 text-white shadow-sm'
-                : 'bg-slate-900/60 border-slate-700/80 hover:border-slate-600 text-slate-300'
+                ? 'bg-[#00897b]/25 border-[#5eead4] text-white shadow-sm'
+                : 'bg-[#1c2a33] border-[#334b59] hover:border-slate-500 text-slate-300'
             }`}
           >
-            <div className="flex items-center justify-between text-xs font-bold text-amber-400 mb-1">
+            <div className="flex items-center justify-between text-xs font-bold text-[#5eead4] mb-1">
               <span>04. DATA BACKUPS</span>
               <Archive className="w-3.5 h-3.5" />
             </div>
@@ -839,7 +844,7 @@ export const AdministrationView: React.FC = () => {
             className={`p-3 rounded-xl border transition cursor-pointer ${
               activeAdminTab === 'database_clear'
                 ? 'bg-rose-950/80 border-rose-400 text-white shadow-sm'
-                : 'bg-slate-900/60 border-slate-700/80 hover:border-slate-600 text-slate-300'
+                : 'bg-[#1c2a33] border-[#334b59] hover:border-slate-500 text-slate-300'
             }`}
           >
             <div className="flex items-center justify-between text-xs font-bold text-rose-400 mb-1">
@@ -862,7 +867,7 @@ export const AdministrationView: React.FC = () => {
           onClick={() => setActiveAdminTab('account')}
           className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
             activeAdminTab === 'account'
-              ? 'bg-[#1b2b44] text-amber-300 shadow-md border border-amber-500/40'
+              ? 'bg-[#00897b] text-white shadow-xs border border-[#00796b]'
               : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
           }`}
         >
@@ -876,7 +881,7 @@ export const AdministrationView: React.FC = () => {
           onClick={() => setActiveAdminTab('team')}
           className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
             activeAdminTab === 'team'
-              ? 'bg-[#1b2b44] text-amber-300 shadow-md border border-amber-500/40'
+              ? 'bg-[#00897b] text-white shadow-xs border border-[#00796b]'
               : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
           }`}
         >
@@ -890,7 +895,7 @@ export const AdministrationView: React.FC = () => {
           onClick={() => setActiveAdminTab('audit')}
           className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
             activeAdminTab === 'audit'
-              ? 'bg-[#1b2b44] text-amber-300 shadow-md border border-amber-500/40'
+              ? 'bg-[#00897b] text-white shadow-xs border border-[#00796b]'
               : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
           }`}
         >
@@ -904,7 +909,7 @@ export const AdministrationView: React.FC = () => {
           onClick={() => setActiveAdminTab('backups')}
           className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
             activeAdminTab === 'backups'
-              ? 'bg-[#1b2b44] text-amber-300 shadow-md border border-amber-500/40'
+              ? 'bg-[#00897b] text-white shadow-xs border border-[#00796b]'
               : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
           }`}
         >
@@ -918,11 +923,11 @@ export const AdministrationView: React.FC = () => {
           onClick={() => setActiveAdminTab('database_clear')}
           className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
             activeAdminTab === 'database_clear'
-              ? 'bg-rose-950 text-rose-300 shadow-md border border-rose-500/60'
+              ? 'bg-rose-700 text-white shadow-xs border border-rose-800'
               : 'bg-white text-rose-700 hover:bg-rose-50 border border-rose-200'
           }`}
         >
-          <Database className="w-4 h-4 text-rose-600" />
+          <Database className="w-4 h-4" />
           <span>Database Clearance &amp; Deletion</span>
         </button>
       </div>
@@ -1747,19 +1752,18 @@ export const AdministrationView: React.FC = () => {
       {activeAdminTab === 'database_clear' && (
         <div className="space-y-6" data-testid="admin-database-clear-panel">
           {/* Header Banner */}
-          <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-rose-950 border-2 border-rose-500/60 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden">
-            <div className="absolute right-0 top-0 bottom-0 w-80 bg-gradient-to-l from-rose-500/10 to-transparent pointer-events-none" />
+          <div className="bg-[#263843] border-b-2 border-rose-500 rounded-xl p-6 text-white shadow-sm relative overflow-hidden">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 relative z-10">
               <div className="flex items-center space-x-3.5">
-                <div className="p-3 bg-rose-500/20 border-2 border-rose-500 rounded-xl text-rose-400 shrink-0">
+                <div className="p-3 bg-rose-500/20 border border-rose-400/60 rounded-xl text-rose-300 shrink-0">
                   <Database className="w-6 h-6" />
                 </div>
                 <div>
                   <div className="flex items-center space-x-2">
-                    <h2 className="text-lg sm:text-xl font-black text-rose-300 uppercase tracking-wide">
+                    <h2 className="text-lg sm:text-xl font-black text-white uppercase tracking-wide">
                       Granular Database Records Deletion &amp; Control
                     </h2>
-                    <span className="bg-rose-500/20 text-rose-300 border border-rose-400/40 text-[10px] font-black px-2 py-0.5 rounded uppercase">
+                    <span className="bg-rose-500/25 text-rose-200 border border-rose-400/40 text-[10px] font-black px-2 py-0.5 rounded uppercase">
                       Super Admin Exclusive
                     </span>
                   </div>
@@ -1771,33 +1775,33 @@ export const AdministrationView: React.FC = () => {
 
               {/* Safety Badges */}
               <div className="flex flex-wrap lg:flex-col gap-2 shrink-0 text-[11px] font-mono">
-                <div className="bg-slate-900/80 border border-emerald-500/40 text-emerald-300 px-3 py-1.5 rounded-lg flex items-center space-x-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <div className="bg-[#1c2a33] border border-[#00897b]/50 text-[#5eead4] px-3 py-1.5 rounded-lg flex items-center space-x-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-[#5eead4]" />
                   <span>Auto Pre-Clear Backup: ENABLED</span>
                 </div>
-                <div className="bg-slate-900/80 border border-amber-500/40 text-amber-300 px-3 py-1.5 rounded-lg flex items-center space-x-1.5">
-                  <Clock className="w-3.5 h-3.5 text-amber-400" />
+                <div className="bg-[#1c2a33] border border-[#334b59] text-[#80cbc4] px-3 py-1.5 rounded-lg flex items-center space-x-1.5">
+                  <Clock className="w-3.5 h-3.5 text-[#5eead4]" />
                   <span>Audit Trail Logging: IMMUTABLE</span>
                 </div>
               </div>
             </div>
 
             {/* Live Database Ledger Counters */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-5 pt-4 border-t border-slate-800">
-              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
-                <div className="text-[10px] font-bold text-amber-400 uppercase">Purchase DB</div>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-5 pt-4 border-t border-[#334b59]">
+              <div className="bg-[#1c2a33] p-2.5 rounded-lg border border-[#334b59]">
+                <div className="text-[10px] font-bold text-[#5eead4] uppercase">Purchase DB</div>
                 <div className="text-lg font-black text-white">{purchases.length} Records</div>
               </div>
-              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
-                <div className="text-[10px] font-bold text-blue-400 uppercase">Packing List DB</div>
+              <div className="bg-[#1c2a33] p-2.5 rounded-lg border border-[#334b59]">
+                <div className="text-[10px] font-bold text-[#60a5fa] uppercase">Packing List DB</div>
                 <div className="text-lg font-black text-white">{packings.length} Records</div>
               </div>
-              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
-                <div className="text-[10px] font-bold text-emerald-400 uppercase">Payment Vouchers</div>
+              <div className="bg-[#1c2a33] p-2.5 rounded-lg border border-[#334b59]">
+                <div className="text-[10px] font-bold text-[#80cbc4] uppercase">Payment Vouchers</div>
                 <div className="text-lg font-black text-white">{payments.length} Records</div>
               </div>
-              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
-                <div className="text-[10px] font-bold text-purple-400 uppercase">Operating Costs</div>
+              <div className="bg-[#1c2a33] p-2.5 rounded-lg border border-[#334b59]">
+                <div className="text-[10px] font-bold text-slate-300 uppercase">Operating Costs</div>
                 <div className="text-lg font-black text-white">{otherCosts.length} Records</div>
               </div>
               <div className="bg-rose-950/80 p-2.5 rounded-lg border border-rose-700/60 col-span-2 sm:col-span-1">
@@ -2061,15 +2065,15 @@ export const AdministrationView: React.FC = () => {
           aria-modal="true"
         >
           <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-300 overflow-hidden">
-            <div className="bg-[#1b2b44] text-white px-5 py-4 flex items-center justify-between">
-              <h3 className="font-bold text-sm text-amber-300 flex items-center space-x-2">
-                <UserPlus className="w-4 h-4" />
+            <div className="bg-[#263843] text-white px-5 py-4 flex items-center justify-between border-b-2 border-[#00897b]">
+              <h3 className="font-bold text-sm text-white flex items-center space-x-2">
+                <UserPlus className="w-4 h-4 text-[#5eead4]" />
                 <span>{editingMemberId ? 'Edit Team Member' : 'Add New Team Member'}</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setIsTeamModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 cursor-pointer"
+                className="text-slate-300 hover:text-white p-1 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -2156,7 +2160,7 @@ export const AdministrationView: React.FC = () => {
                 <button
                   type="submit"
                   data-testid="admin-save-member-btn"
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded shadow transition cursor-pointer"
+                  className="px-4 py-2 bg-[#00897b] hover:bg-[#00796b] text-white font-bold rounded shadow-xs transition cursor-pointer"
                 >
                   {editingMemberId ? 'Save Changes' : 'Create Account'}
                 </button>
@@ -2177,15 +2181,15 @@ export const AdministrationView: React.FC = () => {
         >
           <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-300 overflow-hidden my-auto max-h-[92vh] flex flex-col">
             {/* Modal Header */}
-            <div className="bg-[#1b2b44] text-white px-5 py-4 flex items-center justify-between border-b border-amber-500/40 shrink-0">
+            <div className="bg-[#263843] text-white px-5 py-4 flex items-center justify-between border-b-2 border-[#00897b] shrink-0">
               <div className="flex items-center space-x-3">
-                <div className="p-2 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-300">
+                <div className="p-2 rounded-lg bg-[#00897b]/25 border border-[#5eead4]/40 text-[#5eead4]">
                   <ShieldCheck className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-amber-300 flex items-center space-x-2">
+                  <h3 className="font-bold text-base text-white flex items-center space-x-2">
                     <span>Register New Administrator</span>
-                    <span className="text-[10px] bg-amber-500/20 text-amber-200 border border-amber-400/30 px-2 py-0.5 rounded-full uppercase tracking-wider font-mono">
+                    <span className="text-[10px] bg-[#00897b]/25 text-[#5eead4] border border-[#00897b]/50 px-2 py-0.5 rounded-full uppercase tracking-wider font-mono">
                       Super Admin Only
                     </span>
                   </h3>
@@ -2197,7 +2201,7 @@ export const AdministrationView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsAddAdminModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+                className="text-slate-300 hover:text-white p-1 rounded-lg hover:bg-[#1c2a33] transition cursor-pointer"
                 title="Close modal"
               >
                 <X className="w-5 h-5" />

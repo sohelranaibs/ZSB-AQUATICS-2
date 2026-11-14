@@ -10,6 +10,9 @@ import {
   generateMasterWorkbookBuffer,
   downloadExcelBuffer,
   downloadSampleExcelTemplate,
+  validateImportLimits,
+  MAX_POPULATED_ROWS_PRIMARY,
+  MAX_POPULATED_ROWS_COMPACT,
 } from '../utils/excelDataHandler.ts';
 import {
   downloadCsvFile,
@@ -76,6 +79,9 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
   const {
     dataCenterModal,
     closeDataCenterModal,
+    privateImportDraft,
+    savePrivateImportDraft,
+    clearPrivateImportDraft,
     bulkImportPurchases,
     bulkImportPackings,
     bulkImportPayments,
@@ -101,6 +107,8 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [fileParseResult, setFileParseResult] = useState<ParseResult<any> | null>(null);
   const [multiSheetResult, setMultiSheetResult] = useState<MultiSheetImportResult | null>(null);
+  const [lastCheckSummary, setLastCheckSummary] = useState<string | null>(null);
+  const [limitError, setLimitError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -146,6 +154,8 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
     setUploadedFileName(null);
     setFileParseResult(null);
     setMultiSheetResult(null);
+    setLastCheckSummary(null);
+    setLimitError(null);
     if (type !== 'all') {
       setCsvText(SAMPLE_TEMPLATES[type]);
     }
@@ -155,6 +165,8 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
     setUploadedFileName(null);
     setFileParseResult(null);
     setMultiSheetResult(null);
+    setLastCheckSummary(null);
+    setLimitError(null);
     setCsvText(SAMPLE_TEMPLATES[singleDatasetKey]);
   };
 
@@ -162,6 +174,8 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
     setUploadedFileName(null);
     setFileParseResult(null);
     setMultiSheetResult(null);
+    setLastCheckSummary(null);
+    setLimitError(null);
     setCsvText('');
   };
 
@@ -169,6 +183,20 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setLastCheckSummary(null);
+    const sizeCheck = validateImportLimits({
+      dataset: activeType,
+      populatedRows: 0,
+      fileSizeBytes: file.size,
+    });
+    if (!sizeCheck.valid) {
+      setLimitError(sizeCheck.error || 'File exceeds size limit.');
+      showToast(sizeCheck.error || 'File exceeds size limit.');
+      e.target.value = '';
+      return;
+    }
+
+    setLimitError(null);
     setUploadedFileName(file.name);
     const lowerName = file.name.toLowerCase();
 
@@ -180,11 +208,13 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
         setMultiSheetResult(null);
         const parsed = parseSmartTextData(singleDatasetKey, text, startCount);
         setFileParseResult(parsed);
+        if (!parsed.success && parsed.errors.length > 0) {
+          setLimitError(parsed.errors[0]);
+        }
         showToast(`Loaded ${parsed.records.length} row(s) from ${file.name}`);
       };
       reader.readAsText(file);
     } else {
-      // Excel (.xlsx / .xls) binary workbook
       const reader = new FileReader();
       reader.onload = (ev) => {
         const arrayBuf = ev.target?.result as ArrayBuffer;
@@ -210,6 +240,9 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
           setMultiSheetResult(null);
           const parsed = parseExcelOrCsvBuffer(arrayBuf, singleDatasetKey, startCount);
           setFileParseResult(parsed);
+          if (!parsed.success && parsed.errors.length > 0) {
+            setLimitError(parsed.errors[0]);
+          }
           showToast(`Parsed ${parsed.records.length} ${singleDatasetKey} row(s) from ${file.name}`);
         }
       };
@@ -217,6 +250,139 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
     }
 
     e.target.value = '';
+  };
+
+  const handleCheckSavePrivateDraft = () => {
+    setLimitError(null);
+    if (activeType === 'all' && multiSheetResult) {
+      const populatedRows =
+        multiSheetResult.purchases.totalParsedRows +
+        multiSheetResult.packings.totalParsedRows +
+        multiSheetResult.payments.totalParsedRows +
+        multiSheetResult.otherCosts.totalParsedRows;
+      const pendingCount =
+        (multiSheetResult.purchases.pendingCount || 0) +
+        (multiSheetResult.packings.pendingCount || 0) +
+        (multiSheetResult.payments.pendingCount || 0) +
+        (multiSheetResult.otherCosts.pendingCount || 0);
+      const saved = savePrivateImportDraft({
+        dataset: 'all',
+        importMode: importMethod,
+        sourceLabel: uploadedFileName || 'Master Workbook Check',
+        populatedRows,
+        pendingCount,
+        records: {
+          purchases: multiSheetResult.purchases.records,
+          packings: multiSheetResult.packings.records,
+          payments: multiSheetResult.payments.records,
+          otherCosts: multiSheetResult.otherCosts.records,
+        },
+        errors: [
+          ...multiSheetResult.purchases.errors,
+          ...multiSheetResult.packings.errors,
+          ...multiSheetResult.payments.errors,
+          ...multiSheetResult.otherCosts.errors,
+        ],
+      });
+      const msg = `Private Draft Saved (${populatedRows} rows · ${pendingCount} Pending Calc). Live databases remain unchanged.`;
+      setLastCheckSummary(msg);
+      showToast(`Checked "${saved.sourceLabel}": Private draft saved only.`);
+      return;
+    }
+
+    const parsed = currentParseResult;
+    const limitCheck = validateImportLimits({
+      dataset: singleDatasetKey,
+      populatedRows: parsed.totalParsedRows,
+    });
+    if (!limitCheck.valid) {
+      setLimitError(limitCheck.error || 'Row limit exceeded.');
+      showToast(limitCheck.error || 'Row limit exceeded.');
+      return;
+    }
+    if (parsed.records.length === 0) {
+      showToast('No populated rows found to check.');
+      return;
+    }
+    const pendingCount = parsed.records.filter((r: any) => Boolean(r.calculationPending)).length;
+    savePrivateImportDraft({
+      dataset: singleDatasetKey,
+      importMode: importMethod,
+      sourceLabel: uploadedFileName || `${singleDatasetKey.toUpperCase()} Paste / Draft`,
+      populatedRows: parsed.totalParsedRows,
+      pendingCount,
+      records: {
+        purchases: singleDatasetKey === 'purchase' ? parsed.records : [],
+        packings: singleDatasetKey === 'packing' ? parsed.records : [],
+        payments: singleDatasetKey === 'payment' ? parsed.records : [],
+        otherCosts: singleDatasetKey === 'other_cost' ? parsed.records : [],
+      },
+      errors: parsed.errors,
+    });
+    const msg = `Private Draft Saved (${parsed.records.length} invoice(s) from ${parsed.totalParsedRows} row(s) · ${pendingCount} Pending Calc). Live database unchanged.`;
+    setLastCheckSummary(msg);
+    showToast('Checked: Saved private draft only. Live database unchanged.');
+  };
+
+  const handleLoadPrivateDraft = () => {
+    if (!privateImportDraft) return;
+    setActiveType(privateImportDraft.dataset);
+    setImportMethod(privateImportDraft.importMode);
+    setUploadedFileName(privateImportDraft.sourceLabel);
+    setLastCheckSummary(
+      `Loaded private draft (${privateImportDraft.populatedRows} rows · saved ${new Date(
+        privateImportDraft.savedAt
+      ).toLocaleString()}).`
+    );
+    if (privateImportDraft.dataset === 'all') {
+      setMultiSheetResult({
+        purchases: {
+          success: privateImportDraft.records.purchases.length > 0,
+          records: privateImportDraft.records.purchases,
+          errors: [],
+          totalParsedRows: privateImportDraft.records.purchases.length,
+        },
+        packings: {
+          success: privateImportDraft.records.packings.length > 0,
+          records: privateImportDraft.records.packings,
+          errors: [],
+          totalParsedRows: privateImportDraft.records.packings.length,
+        },
+        payments: {
+          success: privateImportDraft.records.payments.length > 0,
+          records: privateImportDraft.records.payments,
+          errors: [],
+          totalParsedRows: privateImportDraft.records.payments.length,
+        },
+        otherCosts: {
+          success: privateImportDraft.records.otherCosts.length > 0,
+          records: privateImportDraft.records.otherCosts,
+          errors: [],
+          totalParsedRows: privateImportDraft.records.otherCosts.length,
+        },
+        detectedSheets: ['Private Draft'],
+      });
+      setFileParseResult(null);
+    } else {
+      const ds = privateImportDraft.dataset;
+      const list =
+        ds === 'purchase'
+          ? privateImportDraft.records.purchases
+          : ds === 'packing'
+          ? privateImportDraft.records.packings
+          : ds === 'payment'
+          ? privateImportDraft.records.payments
+          : privateImportDraft.records.otherCosts;
+      setFileParseResult({
+        success: list.length > 0,
+        records: list,
+        errors: privateImportDraft.errors || [],
+        totalParsedRows: privateImportDraft.populatedRows,
+        pendingCount: privateImportDraft.pendingCount,
+      });
+      setMultiSheetResult(null);
+    }
+    showToast('Loaded your saved private import draft.');
   };
 
   const handleDownloadSampleCSV = () => {
@@ -242,6 +408,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
       const pkCount = bulkImportPackings(multiSheetResult.packings.records, importMethod);
       const pmCount = bulkImportPayments(multiSheetResult.payments.records, importMethod);
       const cCount = bulkImportOtherCosts(multiSheetResult.otherCosts.records, importMethod);
+      clearPrivateImportDraft();
       showToast(
         `Imported Master Workbook: ${pCount} Purchases, ${pkCount} Packings, ${pmCount} Payments, ${cCount} Costs!`
       );
@@ -256,19 +423,28 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
 
     const count = currentParseResult.records.length;
     if (singleDatasetKey === 'purchase') {
-      bulkImportPurchases(currentParseResult.records, importMethod);
-      showToast(`Successfully imported ${count} purchase record(s) (${importMethod.toUpperCase()})!`);
+      const affected = bulkImportPurchases(currentParseResult.records, importMethod);
+      showToast(
+        `Processed ${count} purchase invoice(s): ${affected} inserted/updated in place!`
+      );
     } else if (singleDatasetKey === 'packing') {
-      bulkImportPackings(currentParseResult.records, importMethod);
-      showToast(`Successfully imported ${count} packing list record(s) (${importMethod.toUpperCase()})!`);
+      const affected = bulkImportPackings(currentParseResult.records, importMethod);
+      showToast(
+        `Processed ${count} packing manifest(s): ${affected} inserted/updated in place!`
+      );
     } else if (singleDatasetKey === 'payment') {
-      bulkImportPayments(currentParseResult.records, importMethod);
-      showToast(`Successfully imported ${count} payment voucher record(s) (${importMethod.toUpperCase()})!`);
+      const affected = bulkImportPayments(currentParseResult.records, importMethod);
+      showToast(
+        `Processed ${count} payment voucher(s): ${affected} inserted/updated in place!`
+      );
     } else {
-      bulkImportOtherCosts(currentParseResult.records, importMethod);
-      showToast(`Successfully imported ${count} expense record(s) (${importMethod.toUpperCase()})!`);
+      const affected = bulkImportOtherCosts(currentParseResult.records, importMethod);
+      showToast(
+        `Processed ${count} expense record(s): ${affected} inserted/updated in place!`
+      );
     }
 
+    clearPrivateImportDraft();
     handleClose();
   };
 
@@ -326,39 +502,42 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
       aria-label="Excel and CSV Data Import and Export Center"
       className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5"
     >
-      <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full border border-slate-300 overflow-hidden flex flex-col max-h-[92vh]">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
-        <div className="bg-slate-900 text-white px-6 py-4 flex flex-wrap items-center justify-between gap-4 border-b border-slate-800">
+        <div className="bg-[#273E56] text-white px-6 py-4 flex flex-wrap items-center justify-between gap-4 border-b border-white/15">
           <div className="flex items-center space-x-3">
-            <div className="w-11 h-11 rounded-xl bg-emerald-500 text-slate-950 flex items-center justify-center shadow-lg font-black shrink-0">
+            <div className="w-11 h-11 rounded-xl bg-[#1D6CE0] text-white flex items-center justify-center shadow-lg font-black shrink-0">
               <FileSpreadsheet className="w-6 h-6 stroke-[2.2]" />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="zsb-3d-text text-lg sm:text-xl font-black">
+                <span className="text-amber-400 zsb-golden-brand text-lg sm:text-xl font-black tracking-tight">
                   {companyProfile.companyName}
                 </span>
-                <span className="text-slate-600">|</span>
-                <h2 className="text-base sm:text-lg font-extrabold tracking-wide text-amber-400">
+                <span className="text-slate-400">|</span>
+                <h2 className="text-base sm:text-lg font-extrabold tracking-wide text-blue-200">
                   Excel (.XLSX) &amp; CSV Import / Export Center
                 </h2>
               </div>
               <p className="text-xs text-slate-300 mt-0.5">
-                Import or export Purchases, Packing Lists, Payments &amp; Expenses in Microsoft Excel (.xlsx) or CSV (.csv) format
+                Import or export Purchases, Packing Lists, Payments &amp; Expenses · Literal formula preservation · Max{' '}
+                {singleDatasetKey === 'other_cost'
+                  ? `${MAX_POPULATED_ROWS_COMPACT.toLocaleString()} rows / 5 MB`
+                  : `${MAX_POPULATED_ROWS_PRIMARY.toLocaleString()} populated rows`}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
             {/* Mode Switcher: Import vs Export */}
-            <div className="flex items-center bg-slate-800 p-1 rounded-xl border border-slate-700">
+            <div className="flex items-center bg-[#1c2f43] p-1 rounded-xl border border-white/15">
               <button
                 type="button"
                 data-testid="datacenter-tab-import"
                 onClick={() => setActiveMode('import')}
                 className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                   activeMode === 'import'
-                    ? 'bg-amber-400 text-slate-950 shadow-sm'
+                    ? 'bg-[#00B14F] text-white shadow-sm'
                     : 'text-slate-300 hover:text-white'
                 }`}
               >
@@ -371,7 +550,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                 onClick={() => setActiveMode('export')}
                 className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                   activeMode === 'export'
-                    ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                    ? 'bg-[#1D6CE0] text-white shadow-sm'
                     : 'text-slate-300 hover:text-white'
                 }`}
               >
@@ -383,7 +562,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
             <button
               type="button"
               onClick={handleClose}
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
+              className="p-1.5 text-slate-300 hover:text-white rounded-lg hover:bg-white/10 transition cursor-pointer"
               title="Close Excel & CSV Data Center"
               aria-label="Close Excel & CSV Data Center"
             >
@@ -399,13 +578,13 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-bold text-slate-700 uppercase">1. Target Sheet:</span>
-                <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-lg">
+                <div className="flex flex-wrap items-center gap-1.5 bg-[#f3f6f9] p-1 rounded-lg border border-slate-200">
                   <button
                     type="button"
                     onClick={() => handleTypeChange('purchase')}
                     className={`px-3 py-1.5 rounded text-xs font-bold transition cursor-pointer ${
                       activeType === 'purchase'
-                        ? 'bg-blue-600 text-white shadow'
+                        ? 'bg-[#1877d2] text-white shadow'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
@@ -416,7 +595,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                     onClick={() => handleTypeChange('packing')}
                     className={`px-3 py-1.5 rounded text-xs font-bold transition cursor-pointer ${
                       activeType === 'packing'
-                        ? 'bg-teal-600 text-white shadow'
+                        ? 'bg-[#00897b] text-white shadow'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
@@ -427,7 +606,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                     onClick={() => handleTypeChange('payment')}
                     className={`px-3 py-1.5 rounded text-xs font-bold transition cursor-pointer ${
                       activeType === 'payment'
-                        ? 'bg-purple-600 text-white shadow'
+                        ? 'bg-[#089bc4] text-white shadow'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
@@ -438,7 +617,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                     onClick={() => handleTypeChange('other_cost')}
                     className={`px-3 py-1.5 rounded text-xs font-bold transition cursor-pointer ${
                       activeType === 'other_cost'
-                        ? 'bg-amber-600 text-white shadow'
+                        ? 'bg-[#5685bd] text-white shadow'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
@@ -449,7 +628,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                     onClick={() => handleTypeChange('all')}
                     className={`px-3 py-1.5 rounded text-xs font-bold transition cursor-pointer ${
                       activeType === 'all'
-                        ? 'bg-slate-900 text-amber-400 shadow'
+                        ? 'bg-[#263843] text-[#5eead4] shadow'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
@@ -486,6 +665,62 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                   </button>
                 </div>
               </div>
+              {/* Private Draft Notification Banner if saved */}
+              {privateImportDraft && (
+                <div
+                  data-testid="private-import-draft-banner"
+                  className="w-full bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-indigo-950"
+                >
+                  <div>
+                    <strong className="font-black uppercase text-indigo-700">Saved Private Draft:</strong>{' '}
+                    <span>
+                      {privateImportDraft.sourceLabel} ({privateImportDraft.populatedRows} rows ·{' '}
+                      {privateImportDraft.pendingCount} pending calculations) — Visible only to{' '}
+                      <span className="font-mono font-bold">{privateImportDraft.ownerUsername}</span>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      data-testid="load-private-draft-btn"
+                      onClick={handleLoadPrivateDraft}
+                      className="px-2.5 py-1 rounded bg-[#1D6CE0] hover:bg-blue-700 text-white font-bold text-[11px] cursor-pointer"
+                    >
+                      Load Private Draft
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearPrivateImportDraft();
+                        setLastCheckSummary(null);
+                      }}
+                      className="px-2.5 py-1 rounded border border-indigo-300 bg-white hover:bg-indigo-100 text-indigo-800 font-bold text-[11px] cursor-pointer"
+                    >
+                      Discard Draft
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {lastCheckSummary && (
+                <div
+                  data-testid="private-draft-check-status"
+                  className="w-full bg-emerald-50 border border-emerald-300 text-emerald-950 rounded-xl px-4 py-2 text-xs font-semibold flex items-center gap-2"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{lastCheckSummary}</span>
+                </div>
+              )}
+
+              {limitError && (
+                <div
+                  data-testid="import-limit-error-banner"
+                  className="w-full bg-rose-50 border border-rose-300 text-rose-900 rounded-xl px-4 py-2 text-xs font-bold flex items-center gap-2"
+                >
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{limitError}</span>
+                </div>
+              )}
             </div>
 
             {/* Step 2: File Upload Box (.xlsx, .xls, .csv) + Sample Template Downloads */}
@@ -500,7 +735,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                       Upload Excel (.XLSX / .XLS) or CSV (.CSV) File
                     </h3>
                     <p className="text-xs text-slate-600">
-                      Select an Excel workbook or CSV spreadsheet from your device. Exported files from ZSB AQUATICS can be re-imported directly.
+                      Select an Excel workbook or CSV spreadsheet from your device. Exported files from <strong className="font-extrabold text-amber-600 zsb-golden-brand-light">ZSB AQUATICS</strong> can be re-imported directly.
                     </p>
                     {uploadedFileName && (
                       <div className="inline-flex items-center space-x-1.5 text-xs font-bold text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded mt-1">
@@ -542,10 +777,10 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
               </div>
 
               {/* Template Download Box */}
-              <div className="lg:col-span-5 bg-amber-50/60 border border-amber-200 rounded-xl p-4 flex flex-col justify-between">
+              <div className="lg:col-span-5 bg-teal-50/60 border border-teal-200 rounded-xl p-4 flex flex-col justify-between">
                 <div className="space-y-1">
-                  <div className="text-xs font-extrabold uppercase text-amber-950 flex items-center space-x-1.5">
-                    <Sparkles className="w-4 h-4 text-amber-600" />
+                  <div className="text-xs font-extrabold uppercase text-[#263843] flex items-center space-x-1.5">
+                    <Sparkles className="w-4 h-4 text-[#00897b]" />
                     <span>Download Ready-to-Fill Templates</span>
                   </div>
                   <p className="text-xs text-slate-600">
@@ -553,11 +788,11 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                   </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-amber-200/70">
+                <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-teal-200/70">
                   <button
                     type="button"
                     onClick={handleDownloadSampleXLSX}
-                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-amber-300 rounded-lg text-xs font-bold transition cursor-pointer"
+                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-[#263843] hover:bg-[#1c2a33] text-[#5eead4] rounded-lg text-xs font-bold transition cursor-pointer"
                   >
                     <FileSpreadsheet className="w-3.5 h-3.5" />
                     <span>Template (.XLSX)</span>
@@ -566,9 +801,9 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                     <button
                       type="button"
                       onClick={handleDownloadSampleCSV}
-                      className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-amber-100 text-slate-800 border border-amber-300 rounded-lg text-xs font-bold transition cursor-pointer"
+                      className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-teal-100 text-[#263843] border border-teal-300 rounded-lg text-xs font-bold transition cursor-pointer"
                     >
-                      <FileText className="w-3.5 h-3.5 text-emerald-700" />
+                      <FileText className="w-3.5 h-3.5 text-[#00897b]" />
                       <span>Template (.CSV)</span>
                     </button>
                   )}
@@ -773,11 +1008,16 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium">
-                      {currentParseResult.records.map((rec: any, idx: number) => (
+                      {currentParseResult.records.slice(0, 100).map((rec: any, idx: number) => (
                         <tr key={idx} className="hover:bg-slate-50">
                           <td className="p-2 text-center font-mono text-slate-400">{idx + 1}</td>
                           <td className="p-2 font-mono font-bold text-blue-900 whitespace-nowrap">
-                            {rec.invoiceNumber || rec.refInvoice || '-'}
+                            <div>{rec.invoiceNumber || rec.refInvoice || '-'}</div>
+                            {rec.calculationPending && (
+                              <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-black uppercase">
+                                Pending Calc
+                              </span>
+                            )}
                           </td>
                           <td className="p-2 font-mono text-slate-600 whitespace-nowrap">
                             {formatDate(rec.date || rec.packingDate)}
@@ -786,16 +1026,16 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                             {singleDatasetKey === 'packing' ? (
                               <div>
                                 <div>
-                                  {rec.shippingMark} · {rec.flight} · {rec.destination}
+                                  {rec.shippingMark || '(Blank)'} · {rec.flight || '-'} · {rec.destination || '-'}
                                 </div>
                                 <div className="text-[11px] font-normal text-slate-500">
-                                  Shipper: {rec.shipper}
+                                  Shipper: {rec.shipper || '(Blank)'}
                                 </div>
                               </div>
                             ) : singleDatasetKey === 'other_cost' ? (
                               rec.category
                             ) : (
-                              rec.description
+                              rec.description || '(Blank)'
                             )}
                           </td>
                           <td className="p-2 text-slate-600">
@@ -806,14 +1046,14 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                                     {rec.items.length} {rec.items.length === 1 ? 'Item' : 'Items Merged'}
                                   </span>
                                   <span className="font-mono font-bold text-slate-800">
-                                    Total: {rec.totalQty} KG
+                                    Total: {rec.rawValues?.totalQty || `${rec.totalQty} KG`}
                                   </span>
                                 </div>
                                 <div className="text-[11px] text-slate-600 font-mono">
                                   {rec.items
                                     .map(
                                       (it: any) =>
-                                        `${it.item} (${it.quantity} KG @ ${it.rate})`
+                                        `${it.item || '-'} (${it.quantity} KG @ ${it.rate})`
                                     )
                                     .join(' + ')}
                                 </div>
@@ -826,14 +1066,14 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                                     {rec.items.length} {rec.items.length === 1 ? 'Item' : 'Items Merged'}
                                   </span>
                                   <span className="font-mono font-bold text-slate-800">
-                                    Total: {rec.totalBox} Boxes ({rec.totalWeight} KG)
+                                    Total: {rec.rawValues?.totalBox || rec.totalBox} Boxes ({rec.rawValues?.totalWeight || `${rec.totalWeight} KG`})
                                   </span>
                                 </div>
                                 <div className="text-[11px] text-slate-600 font-mono">
                                   {rec.items
                                     .map(
                                       (it: any) =>
-                                        `${it.item} (${it.box} Box × ${it.weight} KG @ ¥${it.rate})`
+                                        `${it.item || '-'} (${it.box} Box × ${it.weight} KG @ ¥${it.rate})`
                                     )
                                     .join(' + ')}
                                 </div>
@@ -846,17 +1086,36 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                               </span>
                             )}
                             {singleDatasetKey === 'other_cost' && <span>{rec.description}</span>}
+                            {rec.rawValues && Object.keys(rec.rawValues).length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {Object.entries(rec.rawValues).map(([k, v]) => (
+                                  <span
+                                    key={k}
+                                    className="inline-block px-1.5 py-0.5 rounded bg-slate-100 border border-slate-300 font-mono text-[10px] text-slate-800"
+                                  >
+                                    {k}: {String(v)}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </td>
                           <td className="p-2 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
-                            {formatCurrency(
-                              rec.totalAmount ?? rec.amount ?? 0,
-                              singleDatasetKey === 'packing' ? 'RMB' : companyProfile.currency
-                            )}
+                            {rec.calculationPending
+                              ? rec.rawValues?.totalAmount || rec.rawValues?.amount || 'Pending Calc'
+                              : formatCurrency(
+                                  rec.totalAmount ?? rec.amount ?? 0,
+                                  singleDatasetKey === 'packing' ? 'RMB' : companyProfile.currency
+                                )}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                  {currentParseResult.records.length > 100 && (
+                    <div className="px-3 py-2 text-[11px] font-semibold text-slate-600 bg-slate-50 border-t border-slate-200">
+                      Showing first 100 preview invoices of {currentParseResult.records.length.toLocaleString()} parsed invoices.
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -865,17 +1124,17 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
           /* EXPORT DATA TAB */
           <div className="p-5 sm:p-6 overflow-y-auto space-y-5">
             {/* Master Multi-Sheet Excel Workbook Card */}
-            <div className="bg-slate-900 text-white rounded-xl p-5 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="bg-[#263843] text-white rounded-xl p-5 border-b-2 border-[#00897b] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="space-y-1">
-                <div className="flex items-center space-x-2 text-amber-400 text-xs font-bold uppercase tracking-wide">
+                <div className="flex items-center space-x-2 text-[#5eead4] text-xs font-bold uppercase tracking-wide">
                   <Layers className="w-4 h-4" />
                   <span>Full Multi-Sheet Microsoft Excel Workbook (.XLSX)</span>
                 </div>
                 <h3 className="text-base sm:text-lg font-extrabold text-white">
-                  Export Complete ZSB AQUATICS Master Workbook
+                  Export Complete <span className="font-black text-amber-400 zsb-golden-brand">ZSB AQUATICS</span> Master Workbook
                 </h3>
                 <p className="text-xs text-slate-300">
-                  Downloads a single native <code className="text-amber-300">.xlsx</code> Excel file with separate worksheet tabs for Purchases ({purchases.length}), Packing Lists ({packings.length}), Payments ({payments.length}), and Other Costs ({otherCosts.length}).
+                  Downloads a single native <code className="text-[#5eead4]">.xlsx</code> Excel file with separate worksheet tabs for Purchases ({purchases.length}), Packing Lists ({packings.length}), Payments ({payments.length}), and Other Costs ({otherCosts.length}).
                 </p>
               </div>
 
@@ -883,7 +1142,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                 type="button"
                 data-testid="export-master-xlsx-btn"
                 onClick={handleExportMasterWorkbook}
-                className="inline-flex items-center space-x-2 px-5 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs uppercase rounded-xl shadow-lg transition cursor-pointer shrink-0"
+                className="inline-flex items-center space-x-2 px-5 py-3 bg-[#00897b] hover:bg-[#00796b] text-white font-extrabold text-xs uppercase rounded-xl shadow-lg transition cursor-pointer shrink-0"
               >
                 <FileSpreadsheet className="w-4 h-4 stroke-[2.3]" />
                 <span>Download Master Excel (.XLSX)</span>
@@ -1073,26 +1332,42 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
               Close
             </button>
             {activeMode === 'import' && (
-              <button
-                type="button"
-                data-testid="commit-excel-csv-import-btn"
-                onClick={handleCommitImport}
-                disabled={!canCommitImport}
-                className={`flex items-center space-x-2 px-5 py-2 rounded-lg text-xs font-extrabold uppercase shadow transition ${
-                  canCommitImport
-                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer active:scale-95'
-                    : 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                }`}
-              >
-                <UploadCloud className="w-4 h-4" />
-                <span>
-                  Import &amp; Save (
-                  {activeType === 'all'
-                    ? `${totalMultiSheetCount} Multi-Sheet`
-                    : `${currentParseResult.records.length}`}{' '}
-                  Records)
-                </span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  data-testid="check-save-private-draft-btn"
+                  onClick={handleCheckSavePrivateDraft}
+                  disabled={!canCommitImport}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-extrabold uppercase border transition ${
+                    canCommitImport
+                      ? 'bg-[#1D6CE0] hover:bg-blue-700 text-white border-blue-600 cursor-pointer shadow-xs'
+                      : 'bg-slate-200 text-slate-400 border-slate-300 cursor-not-allowed'
+                  }`}
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Check (Save Private Draft)</span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="commit-excel-csv-import-btn"
+                  onClick={handleCommitImport}
+                  disabled={!canCommitImport}
+                  className={`flex items-center space-x-2 px-5 py-2 rounded-lg text-xs font-extrabold uppercase shadow transition ${
+                    canCommitImport
+                      ? 'bg-[#00B14F] hover:bg-emerald-600 text-white cursor-pointer active:scale-95'
+                      : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                  }`}
+                >
+                  <UploadCloud className="w-4 h-4" />
+                  <span>
+                    Import &amp; Save (
+                    {activeType === 'all'
+                      ? `${totalMultiSheetCount} Multi-Sheet`
+                      : `${currentParseResult.records.length}`}{' '}
+                    Records)
+                  </span>
+                </button>
+              </>
             )}
           </div>
         </div>

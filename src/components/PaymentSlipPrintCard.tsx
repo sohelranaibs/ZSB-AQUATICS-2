@@ -46,7 +46,7 @@ export const PaymentSlipPrintCard: React.FC<PaymentSlipPrintCardProps> = ({
     <div
       id={id}
       data-testid={id ? `payment-slip-card-${payment.id}` : undefined}
-      className="relative batch-payment-slip-page bg-white p-6 sm:p-8 space-y-5 text-slate-900 border border-slate-300 rounded-sm shadow-sm print:border-none print:shadow-none print:p-0 overflow-hidden"
+      className="zsb-print-paper relative batch-payment-slip-page bg-white p-6 sm:p-8 space-y-5 text-slate-900 border border-slate-300 rounded-sm shadow-sm print:border-none print:shadow-none print:p-0 overflow-hidden"
       style={{
         backgroundColor: '#ffffff',
         color: '#000000',
@@ -360,7 +360,7 @@ export const PaymentSlipPrintCard: React.FC<PaymentSlipPrintCardProps> = ({
           >
             Managing Partner
           </div>
-          <div style={{ color: '#64748b' }} className="text-[10px] uppercase font-semibold">
+          <div style={{ color: '#d97706', fontWeight: 800 }} className="text-[10px] uppercase font-extrabold text-amber-500 zsb-golden-brand-light">
             {companyProfile.companyName}
           </div>
         </div>
@@ -386,7 +386,7 @@ export const PaymentSlipPrintCard: React.FC<PaymentSlipPrintCardProps> = ({
             <div className="text-[11px] font-bold text-black uppercase tracking-widest mt-1">
               PARTNER
             </div>
-            <div style={{ color: '#64748b' }} className="text-[10px] uppercase font-semibold">
+            <div style={{ color: '#d97706', fontWeight: 800 }} className="text-[10px] uppercase font-extrabold text-amber-500 zsb-golden-brand-light">
               {companyProfile.companyName}
             </div>
           </div>
@@ -399,7 +399,7 @@ export const PaymentSlipPrintCard: React.FC<PaymentSlipPrintCardProps> = ({
         className="text-center text-[10px] pt-3 flex flex-wrap items-center justify-between"
       >
         <span>
-          Official computer-generated payment voucher from {companyProfile.companyName} • Voucher{' '}
+          Official computer-generated payment voucher from <strong style={{ color: '#d97706', fontWeight: 800 }} className="font-extrabold text-amber-500 zsb-golden-brand-light">{companyProfile.companyName}</strong> • Voucher{' '}
           {payment.invoiceNumber}
         </span>
         <span className="print-page-number-counter font-mono font-bold text-slate-600">

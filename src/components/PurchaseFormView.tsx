@@ -108,15 +108,40 @@ export const PurchaseFormView: React.FC = () => {
     rows,
   });
 
-  // Supplier historical ledger stats
-  const supplierStats = getSupplierLedgerStats(purchases, description);
+  // Supplier historical ledger stats (exclude active bill when editing)
+  const supplierStats = getSupplierLedgerStats(
+    purchases,
+    description,
+    editingPurchaseId || undefined
+  );
 
-  // Handle supplier selection and auto-fill contact number if known
+  // Handle supplier selection and automatically populate contact number & previous invoice balance
   const handleSupplierChange = (newSupplier: string) => {
     setDescription(newSupplier);
-    const stats = getSupplierLedgerStats(purchases, newSupplier);
+    const trimmed = newSupplier.trim();
+    if (!trimmed) {
+      if (!editingPurchaseId) {
+        setOverallPreviousAmount(0);
+      }
+      return;
+    }
+
+    const stats = getSupplierLedgerStats(
+      purchases,
+      trimmed,
+      editingPurchaseId || undefined
+    );
     if (stats.latestContactNumber) {
       setContactNumber(stats.latestContactNumber);
+    }
+    if (!editingPurchaseId) {
+      const autoPrev = stats.invoiceCount > 0 ? stats.latestClosingBalance : 0;
+      setOverallPreviousAmount(autoPrev);
+      if (stats.invoiceCount > 0 && autoPrev !== 0) {
+        showToast(
+          `Previous balance ${formatCurrency(autoPrev, companyProfile.currency)} auto-filled for ${trimmed}.`
+        );
+      }
     }
   };
 
@@ -284,6 +309,9 @@ export const PurchaseFormView: React.FC = () => {
         paidAmount: overallPaidAmount,
         balance,
         remarks,
+        calculationPending: false,
+        pendingFields: undefined,
+        rawValues: undefined,
       };
 
       updatePurchase(editingPurchaseId, updatedFields);
@@ -449,9 +477,9 @@ export const PurchaseFormView: React.FC = () => {
   return (
     <div className="p-3 sm:p-5 max-w-[1440px] mx-auto space-y-5">
       {/* Top Banner */}
-      <div className="bg-[#1e2548] text-white px-5 py-3.5 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-amber-500">
+      <div className="bg-[#263843] text-white px-5 py-3.5 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#00897b]">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
+          <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
               src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
               alt={companyProfile.companyName}
@@ -460,21 +488,21 @@ export const PurchaseFormView: React.FC = () => {
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2.5">
-              <span className="zsb-3d-text text-xl sm:text-2xl font-black">
+              <span className="text-xl sm:text-2xl font-black tracking-tight text-amber-400 zsb-golden-brand">
                 {companyProfile.companyName}
               </span>
               <span className="text-slate-400 hidden sm:inline">·</span>
-              <span className="text-sm sm:text-base font-semibold text-slate-100 tracking-wide">
+              <span className="text-sm sm:text-base font-semibold text-[#80cbc4] tracking-wide">
                 Purchase Challan / Bill — Data Entry Voucher
               </span>
             </div>
-            <div className="mt-1 inline-flex flex-wrap items-center gap-2 bg-amber-50/95 px-2.5 py-0.5 rounded text-[11px] font-semibold text-black">
+            <div className="mt-1 inline-flex flex-wrap items-center gap-2 bg-[#1c2a33] border border-[#334b59] px-2.5 py-0.5 rounded text-[11px] font-medium text-slate-200">
               <span>{companyProfile.address}</span>
-              <span>|</span>
+              <span className="text-slate-500">|</span>
               <span className="font-mono">
                 Mob: {companyProfile.mobiles.join(', ')}
               </span>
-              <span>|</span>
+              <span className="text-slate-500">|</span>
               <span className="font-mono">
                 EMAIL: {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}
               </span>
@@ -484,7 +512,7 @@ export const PurchaseFormView: React.FC = () => {
         <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300 font-mono tabular-nums">
           <span>Active Rows: {populatedRowCount}/{rows.length}</span>
           <span aria-hidden="true">·</span>
-          <span className="text-slate-200">Sheet #2</span>
+          <span className="bg-[#00897b]/25 text-[#5eead4] px-2.5 py-0.5 rounded border border-[#00897b]/50 font-bold">Sheet #02</span>
         </div>
       </div>
 
@@ -492,11 +520,11 @@ export const PurchaseFormView: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* Left: Purchase Data Entry Voucher (9 Cols) */}
         <div className="lg:col-span-9 space-y-4">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             {/* Sheet Title Header */}
-            <div className="bg-[#7c2d4d] text-white py-3 px-5 flex flex-wrap items-center justify-between gap-3 border-b border-pink-950">
+            <div className="bg-[#263843] text-white py-3 px-5 flex flex-wrap items-center justify-between gap-3 border-b border-[#1d2c35]">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-amber-300 bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
+                <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
                   <img
                     src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
                     alt={companyProfile.companyName}
@@ -504,10 +532,10 @@ export const PurchaseFormView: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <div className="zsb-3d-text text-lg sm:text-xl font-black">
+                  <div className="text-lg sm:text-xl font-black tracking-tight text-amber-400 zsb-golden-brand">
                     {companyProfile.companyName}
                   </div>
-                  <div className="text-xs font-semibold tracking-wider uppercase text-pink-100">
+                  <div className="text-xs font-semibold tracking-wider uppercase text-[#80cbc4]">
                     PURCHASE DATA ENTRY FORM (LIVE CRABS, EEL FISH &amp; CHILLED FISH GRADES)
                   </div>
                 </div>
@@ -517,7 +545,7 @@ export const PurchaseFormView: React.FC = () => {
                   <button
                     type="button"
                     onClick={handlePrintSelected}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-xs transition cursor-pointer whitespace-nowrap"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#00897b] hover:bg-[#00796b] text-white text-xs font-bold shadow-xs transition cursor-pointer whitespace-nowrap"
                     title="Open Print / Save PDF & .PNG Preview"
                   >
                     <Printer className="w-3.5 h-3.5 shrink-0" />
@@ -527,7 +555,7 @@ export const PurchaseFormView: React.FC = () => {
                     type="button"
                     onClick={handleDirectSavePng}
                     disabled={isExportingPng}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black shadow-xs transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#1877d2] hover:bg-[#1465b5] text-white text-xs font-bold shadow-xs transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
                     title="Download Purchase Challan / Data Entry Form as .PNG image"
                   >
                     {isExportingPng ? (
@@ -543,9 +571,9 @@ export const PurchaseFormView: React.FC = () => {
                     )}
                   </button>
                 </div>
-                <div className="text-right font-mono text-xs text-pink-100 tabular-nums pl-2 border-l border-pink-900/80">
-                  <div className="text-[11px] text-pink-200 uppercase">Voucher Ref</div>
-                  <div className="font-bold text-amber-300 text-sm">{invoiceNumber}</div>
+                <div className="text-right font-mono text-xs text-slate-300 tabular-nums pl-2 border-l border-[#334b59]">
+                  <div className="text-[11px] text-[#80cbc4] uppercase">Voucher Ref</div>
+                  <div className="font-bold text-white text-sm">{invoiceNumber}</div>
                 </div>
               </div>
             </div>
@@ -789,9 +817,10 @@ export const PurchaseFormView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    if (newSupplierValue.trim()) {
-                      addDropdownItem('suppliers', newSupplierValue.trim());
-                      setDescription(newSupplierValue.trim());
+                    const trimmedSupplier = newSupplierValue.trim();
+                    if (trimmedSupplier) {
+                      addDropdownItem('suppliers', trimmedSupplier);
+                      handleSupplierChange(trimmedSupplier);
                       setNewSupplierValue('');
                       setIsAddingNewSupplier(false);
                     }
@@ -814,37 +843,37 @@ export const PurchaseFormView: React.FC = () => {
             <div className="p-2.5 bg-slate-50/70">
               <div
                 data-testid="purchase-entry-scroll-box"
-                className="overflow-x-auto border-2 border-pink-200 rounded-lg bg-white"
+                className="overflow-x-auto border border-slate-200 rounded-lg bg-white"
               >
               <table
                 className="w-full border-collapse text-xs"
                 data-testid="purchase-entry-table"
               >
                 <thead>
-                  <tr className="bg-[#7c2d4d] text-white uppercase text-[11px] font-bold tracking-wider border-b border-pink-950">
-                    <th className="px-2.5 py-2.5 border-r border-pink-900/60 w-12 text-center whitespace-nowrap">
+                  <tr className="bg-[#263843] text-white uppercase text-[11px] font-bold tracking-wider border-b border-[#1d2c35]">
+                    <th className="px-2.5 py-2.5 border-r border-[#334b59] w-12 text-center whitespace-nowrap">
                       SL #
                     </th>
-                    <th className="px-3 py-2.5 border-r border-pink-900/60 text-left min-w-[160px]">
+                    <th className="px-3 py-2.5 border-r border-[#334b59] text-left min-w-[160px]">
                       <div className="flex items-center justify-between gap-2">
                         <span className="whitespace-nowrap">ITEM / GRADE</span>
                         <button
                           type="button"
                           onClick={() => setIsAddingNewItem(true)}
-                          className="text-[10px] bg-pink-950/90 hover:bg-pink-900 px-1.5 py-0.5 rounded text-amber-300 font-bold cursor-pointer whitespace-nowrap shrink-0"
+                          className="text-[10px] bg-[#00897b] hover:bg-[#00796b] px-1.5 py-0.5 rounded text-white font-bold cursor-pointer whitespace-nowrap shrink-0"
                           title="Add new purchase item grade"
                         >
                           + Grade
                         </button>
                       </div>
                     </th>
-                    <th className="px-3 py-2.5 border-r border-pink-900/60 w-36 text-right whitespace-nowrap">
+                    <th className="px-3 py-2.5 border-r border-[#334b59] w-36 text-right whitespace-nowrap">
                       QUANTITY (KG)
                     </th>
-                    <th className="px-3 py-2.5 border-r border-pink-900/60 w-36 text-right whitespace-nowrap">
+                    <th className="px-3 py-2.5 border-r border-[#334b59] w-36 text-right whitespace-nowrap">
                       RATE ({companyProfile.currency})
                     </th>
-                    <th className="px-3 py-2.5 border-r border-pink-900/60 w-44 text-right whitespace-nowrap">
+                    <th className="px-3 py-2.5 border-r border-[#334b59] w-44 text-right whitespace-nowrap">
                       TOTAL AMOUNT ({companyProfile.currency})
                     </th>
                     <th className="px-2 py-2.5 w-14 text-center whitespace-nowrap">
@@ -996,41 +1025,41 @@ export const PurchaseFormView: React.FC = () => {
 
                 {/* Clean 6-Column Aligned Subtotal Footer */}
                 <tfoot>
-                  <tr className="bg-[#7c2d4d] text-white font-bold border-t-2 border-pink-950">
+                  <tr className="bg-[#263843] text-white font-bold border-t-2 border-[#00897b]">
                     <td colSpan={2} className="px-3 py-2.5">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <button
                           type="button"
                           onClick={handleAddRow}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-white/15 hover:bg-white/25 text-white text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#00897b] hover:bg-[#00796b] text-white text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0"
                         >
-                          <Plus className="w-3.5 h-3.5 text-amber-300" />
+                          <Plus className="w-3.5 h-3.5 text-white" />
                           <span>Add Item Row</span>
                         </button>
-                        <span className="text-[11px] uppercase tracking-wider text-pink-100">
+                        <span className="text-[11px] uppercase tracking-wider text-slate-300">
                           TOTAL QTY:
                         </span>
                       </div>
                     </td>
                     <td
                       data-testid="purchase-footer-qty"
-                      className="px-3 py-2.5 text-right font-mono tabular-nums text-amber-300 text-sm font-black border-l border-pink-900/60 whitespace-nowrap"
+                      className="px-3 py-2.5 text-right font-mono tabular-nums text-[#5eead4] text-sm font-black border-l border-[#334b59] whitespace-nowrap"
                     >
                       {totalQty}
                     </td>
-                    <td className="px-3 py-2.5 text-right uppercase tracking-wider text-[11px] text-pink-100 border-l border-pink-900/60 whitespace-nowrap">
+                    <td className="px-3 py-2.5 text-right uppercase tracking-wider text-[11px] text-slate-300 border-l border-[#334b59] whitespace-nowrap">
                       SUBTOTAL:
                     </td>
                     <td
                       data-testid="purchase-footer-total"
-                      className="px-3 py-2.5 text-right font-mono tabular-nums text-amber-300 text-sm font-black border-l border-pink-900/60 whitespace-nowrap"
+                      className="px-3 py-2.5 text-right font-mono tabular-nums text-white text-sm font-black border-l border-[#334b59] whitespace-nowrap"
                     >
                       {totalAmount.toLocaleString('en-US', {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                       })}
                     </td>
-                    <td className="px-2 py-2.5 border-l border-pink-900/60"></td>
+                    <td className="px-2 py-2.5 border-l border-[#334b59]"></td>
                   </tr>
                 </tfoot>
               </table>
@@ -1110,11 +1139,11 @@ export const PurchaseFormView: React.FC = () => {
               </div>
 
               {/* Right 6 Cols: Invoice Review & Balance Summary Box */}
-              <div className="md:col-span-6 bg-amber-50/70 rounded-xl border border-amber-300/90 p-4 space-y-3 flex flex-col justify-between">
-                <div className="flex items-center justify-between gap-2 border-b border-amber-200 pb-2">
+              <div className="md:col-span-6 bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-3 flex flex-col justify-between">
+                <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-2">
                   <div className="flex items-center gap-1.5 whitespace-nowrap">
-                    <Receipt className="w-4 h-4 text-[#7c2d4d] shrink-0" />
-                    <span className="text-xs font-black uppercase tracking-wider text-[#7c2d4d]">
+                    <Receipt className="w-4 h-4 text-[#00897b] shrink-0" />
+                    <span className="text-xs font-black uppercase tracking-wider text-[#263843]">
                       REVIEW &amp; SETTLEMENT
                     </span>
                   </div>
@@ -1125,7 +1154,7 @@ export const PurchaseFormView: React.FC = () => {
 
                 <div className="space-y-2.5 text-xs">
                   {/* Current Bill Subtotal */}
-                  <div className="flex items-center justify-between py-1 border-b border-amber-200/80">
+                  <div className="flex items-center justify-between py-1 border-b border-slate-200">
                     <span className="font-bold text-slate-700 uppercase">
                       CURRENT BILL SUBTOTAL ({companyProfile.currency}):
                     </span>
@@ -1148,7 +1177,9 @@ export const PurchaseFormView: React.FC = () => {
                     >
                       PREVIOUS AMOUNT:
                       <span className="block text-[10px] font-normal text-slate-500 normal-case">
-                        Supplier balance brought forward
+                        {!editingPurchaseId && supplierStats.invoiceCount > 0
+                          ? `Auto-filled from ${description}'s last invoice`
+                          : 'Supplier balance brought forward'}
                       </span>
                     </label>
                     <div className="col-span-5">
@@ -1226,9 +1257,9 @@ export const PurchaseFormView: React.FC = () => {
                 </div>
 
                 {/* Net Closing Balance Banner */}
-                <div className="pt-2.5 border-t-2 border-amber-300 flex items-center justify-between">
+                <div className="pt-2.5 border-t-2 border-slate-200 flex items-center justify-between">
                   <div>
-                    <span className="text-xs font-black uppercase tracking-wider text-[#7c2d4d] block">
+                    <span className="text-xs font-black uppercase tracking-wider text-[#263843] block">
                       BALANCE ({companyProfile.currency}):
                     </span>
                     <span className="text-[11px] font-medium text-slate-600">
@@ -1271,7 +1302,7 @@ export const PurchaseFormView: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleSavePDF}
-                  className="w-full bg-[#d97706] hover:bg-[#b45309] text-white py-2.5 px-4 rounded-lg font-bold text-sm shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer active:scale-95 whitespace-nowrap"
+                  className="w-full bg-[#00897b] hover:bg-[#00796b] text-white py-2.5 px-4 rounded-lg font-bold text-sm shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer active:scale-95 whitespace-nowrap"
                 >
                   <Edit2 className="w-4 h-4 shrink-0" />
                   <span>UPDATE INVOICE (SAVE)</span>
@@ -1280,7 +1311,7 @@ export const PurchaseFormView: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleCancelEdit}
-                  className="w-full bg-slate-700 hover:bg-slate-800 text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer whitespace-nowrap"
+                  className="w-full bg-[#263843] hover:bg-[#1c2a33] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer whitespace-nowrap"
                 >
                   <RotateCcw className="w-4 h-4 shrink-0" />
                   <span>CANCEL EDIT (NEW BILL)</span>
@@ -1293,11 +1324,11 @@ export const PurchaseFormView: React.FC = () => {
               type="button"
               onClick={handlePrintOrSaveAction}
               title="Save Purchase Challan or open Print / PDF Preview (Shortcuts: Ctrl+S to Save, Ctrl+P to Print)"
-              className="w-full bg-[#0891b2] hover:bg-[#0e7490] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer whitespace-nowrap"
+              className="w-full bg-[#00897b] hover:bg-[#00796b] text-white py-2.5 px-2.5 rounded-lg font-bold text-[11px] uppercase shadow-xs flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 transition cursor-pointer"
             >
-              <Printer className="w-4 h-4 shrink-0" />
+              <Printer className="w-3.5 h-3.5 shrink-0" />
               <span>PRINT / SAVE PDF &amp; .PNG</span>
-              <span className="text-[10px] font-mono bg-cyan-950/60 px-1.5 py-0.5 rounded text-amber-300">
+              <span className="text-[9.5px] font-mono bg-black/25 px-1.5 py-0.5 rounded text-[#80cbc4]">
                 Ctrl+S / Ctrl+P
               </span>
             </button>
@@ -1318,9 +1349,9 @@ export const PurchaseFormView: React.FC = () => {
             <button
               type="button"
               onClick={handleMonthlyStatement}
-              className="w-full bg-[#6d28d9] hover:bg-[#5b21b6] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer whitespace-nowrap"
+              className="w-full bg-[#263843] hover:bg-[#1c2a33] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer whitespace-nowrap"
             >
-              <FileText className="w-4 h-4 shrink-0" />
+              <FileText className="w-4 h-4 shrink-0 text-[#5eead4]" />
               <span>MONTHLY STATEMENT (PDF)</span>
             </button>
 
@@ -1328,7 +1359,7 @@ export const PurchaseFormView: React.FC = () => {
             <button
               type="button"
               onClick={() => setActiveTab('purchase_db')}
-              className="w-full bg-[#1b73b4] hover:bg-[#165f95] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer whitespace-nowrap"
+              className="w-full bg-[#1877d2] hover:bg-[#1465b5] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer whitespace-nowrap"
             >
               <Search className="w-4 h-4 shrink-0" />
               <span>SEARCH DATABASE</span>
@@ -1582,7 +1613,7 @@ export const PurchaseFormView: React.FC = () => {
       <div className="fixed -left-[9999px] top-0 pointer-events-none" aria-hidden="true">
         <div
           id="purchase-voucher-export-canvas"
-          className="relative w-[760px] max-w-[760px] bg-white rounded-sm border border-slate-300 p-7 space-y-5 text-slate-900 overflow-hidden"
+          className="zsb-print-paper relative w-[760px] max-w-[760px] bg-white rounded-sm border border-slate-300 p-7 space-y-5 text-slate-900 overflow-hidden"
           style={{ width: '760px', backgroundColor: '#ffffff', color: '#000000', position: 'relative' }}
         >
           {/* Centered Watermark Logo */}
@@ -1791,7 +1822,7 @@ export const PurchaseFormView: React.FC = () => {
               <div style={{ color: '#0f172a' }} className="mt-1.5 font-bold uppercase tracking-wider text-xs">
                 Managing Partner
               </div>
-              <div style={{ color: '#64748b' }} className="text-[10px] uppercase font-semibold">
+              <div style={{ color: '#d97706', fontWeight: 800 }} className="text-[10px] uppercase font-extrabold text-amber-500 zsb-golden-brand-light">
                 {companyProfile.companyName}
               </div>
             </div>
@@ -1808,7 +1839,7 @@ export const PurchaseFormView: React.FC = () => {
               <div style={{ color: '#0f172a' }} className="mt-1.5 font-bold uppercase tracking-wider text-xs">
                 Partner
               </div>
-              <div style={{ color: '#64748b' }} className="text-[10px] uppercase font-semibold">
+              <div style={{ color: '#d97706', fontWeight: 800 }} className="text-[10px] uppercase font-extrabold text-amber-500 zsb-golden-brand-light">
                 {companyProfile.companyName}
               </div>
             </div>
@@ -1820,7 +1851,7 @@ export const PurchaseFormView: React.FC = () => {
             className="flex justify-between items-center text-[10px] pt-4 mt-6"
           >
             <span>
-              This is an official computer-generated document from {companyProfile.companyName} System • Validated and archived.
+              This is an official computer-generated document from <strong style={{ color: '#d97706', fontWeight: 800 }} className="font-extrabold text-amber-500 zsb-golden-brand-light">{companyProfile.companyName}</strong> System • Validated and archived.
             </span>
             <span className="print-page-number-counter font-mono font-bold text-slate-600">
               <span className="print:hidden">Page 1 of 1</span>

@@ -193,7 +193,7 @@ export const PrintPreviewModal: React.FC = () => {
         className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[96vh] print:max-h-none print:border-none print:shadow-none print:rounded-none"
       >
         {/* Modal Top Control Bar (Hidden in Print) */}
-        <div className="bg-slate-900 text-white px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 print:hidden">
+        <div className="bg-[#273E56] text-white px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#1D6CE0] print:hidden">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center space-x-2.5">
               <div
@@ -202,12 +202,12 @@ export const PrintPreviewModal: React.FC = () => {
                   height: '32px',
                   borderRadius: '9999px',
                   overflow: 'hidden',
-                  border: '1.5px solid #fbbf24',
+                  border: '1.5px solid #CBD8E6',
                   backgroundColor: '#ffffff',
                   padding: '1.5px',
                   flexShrink: 0,
                 }}
-                className="w-8 h-8 rounded-full overflow-hidden border border-amber-400 bg-white p-0.5 shrink-0 flex items-center justify-center"
+                className="w-8 h-8 rounded-full overflow-hidden border border-[#CBD8E6] bg-white p-0.5 shrink-0 flex items-center justify-center"
               >
                 <img
                   src={resolvedLogoSrc}
@@ -228,13 +228,13 @@ export const PrintPreviewModal: React.FC = () => {
                   className="w-full h-full object-contain rounded-full"
                 />
               </div>
-              <FileSpreadsheet className="w-4 h-4 text-amber-400 shrink-0" />
+              <FileSpreadsheet className="w-4 h-4 text-sky-300 shrink-0" />
               <span className="font-bold text-sm tracking-wide truncate max-w-xs sm:max-w-sm">{title}</span>
             </div>
 
             {/* Toggle 'Print All Pages' or 'Print Current Page Only' for Packing Lists */}
             {type === 'packing' && (
-              <div className="flex items-center space-x-2 bg-slate-800/90 px-2.5 py-1.5 rounded-lg border border-slate-700">
+              <div className="flex items-center space-x-2 bg-[#1c2a33] px-2.5 py-1.5 rounded-lg border border-[#334b59]">
                 <label className="flex items-center space-x-2 text-xs font-semibold text-slate-200 cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -244,26 +244,26 @@ export const PrintPreviewModal: React.FC = () => {
                       setPrintCurrentPageOnly(e.target.checked);
                       setCurrentPage(1);
                     }}
-                    className="rounded border-slate-600 text-blue-500 focus:ring-blue-500 w-4 h-4 cursor-pointer accent-blue-600"
+                    className="rounded border-[#334b59] text-[#00897b] focus:ring-[#00897b] w-4 h-4 cursor-pointer accent-[#00897b]"
                   />
-                  <span className={printCurrentPageOnly ? 'text-amber-300 font-bold' : 'text-slate-300'}>
+                  <span className={printCurrentPageOnly ? 'text-[#5eead4] font-bold' : 'text-slate-200'}>
                     {printCurrentPageOnly ? 'Print Current Page Only' : 'Print All Pages'}
                   </span>
                 </label>
 
                 {printCurrentPageOnly && totalPages > 1 && (
-                  <div className="flex items-center space-x-1 pl-2 border-l border-slate-700 text-xs">
+                  <div className="flex items-center space-x-1 pl-2 border-l border-[#334b59] text-xs">
                     <button
                       type="button"
                       data-testid="print-prev-page-btn"
                       disabled={currentPage <= 1}
                       onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                      className="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white font-bold cursor-pointer"
+                      className="px-2 py-0.5 rounded bg-[#263843] hover:bg-[#334b59] disabled:opacity-40 text-white font-bold cursor-pointer"
                       title="Previous Page"
                     >
                       &larr;
                     </button>
-                    <span className="font-mono font-bold text-amber-400 px-1">
+                    <span className="font-mono font-bold text-[#5eead4] px-1">
                       {currentPage} / {totalPages}
                     </span>
                     <button
@@ -271,7 +271,7 @@ export const PrintPreviewModal: React.FC = () => {
                       data-testid="print-next-page-btn"
                       disabled={currentPage >= totalPages}
                       onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                      className="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white font-bold cursor-pointer"
+                      className="px-2 py-0.5 rounded bg-[#263843] hover:bg-[#334b59] disabled:opacity-40 text-white font-bold cursor-pointer"
                       title="Next Page"
                     >
                       &rarr;
@@ -287,7 +287,7 @@ export const PrintPreviewModal: React.FC = () => {
             <button
               onClick={handleDirectSavePdf}
               disabled={isSavingPdf || isSavingPng}
-              className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold shadow transition cursor-pointer disabled:opacity-50"
+              className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-[#00897b] hover:bg-[#00796b] text-white rounded text-xs font-bold shadow transition cursor-pointer disabled:opacity-50"
               title="Download high-resolution PDF file directly"
             >
               {isSavingPdf ? (
@@ -307,7 +307,7 @@ export const PrintPreviewModal: React.FC = () => {
             <button
               onClick={handleDirectSavePng}
               disabled={isSavingPng || isSavingPdf}
-              className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded text-xs font-bold shadow transition cursor-pointer disabled:opacity-50"
+              className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-[#1877d2] hover:bg-[#1465b5] text-white rounded text-xs font-bold shadow transition cursor-pointer disabled:opacity-50"
               title="Download high-resolution .PNG image file directly"
             >
               {isSavingPng ? (
@@ -339,7 +339,7 @@ export const PrintPreviewModal: React.FC = () => {
             {/* Print Document Button */}
             <button
               onClick={handleBrowserPrint}
-              className="flex items-center space-x-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs font-bold shadow transition cursor-pointer"
+              className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#1c2a33] hover:bg-[#152028] text-white rounded border border-[#334b59] text-xs font-bold shadow transition cursor-pointer"
               title="Open browser print dialogue"
             >
               <Printer className="w-4 h-4" />
@@ -349,7 +349,7 @@ export const PrintPreviewModal: React.FC = () => {
             <button
               onClick={closePrintModal}
               aria-label="Close Preview"
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
+              className="p-1.5 text-slate-300 hover:text-white rounded-lg hover:bg-[#1c2a33] transition cursor-pointer"
               title="Close Preview"
             >
               <X className="w-5 h-5" />
@@ -358,11 +358,11 @@ export const PrintPreviewModal: React.FC = () => {
         </div>
 
         {/* Preview Paper Desk Workspace */}
-        <div className="bg-slate-200/80 p-3 sm:p-6 overflow-y-auto flex justify-center items-start flex-1 min-h-0 print:p-0 print:bg-white">
+        <div className="bg-slate-200/95 p-3 sm:p-6 overflow-y-auto flex justify-center items-start flex-1 min-h-0 print:p-0 print:bg-white">
           {/* Printable Voucher Paper Content (A4 Portrait Printable Width: 760px / 190mm) */}
           <div
             id="printable-document"
-            className="relative w-full max-w-[760px] bg-white shadow-2xl rounded-sm border border-slate-300 p-5 sm:p-7 space-y-5 text-slate-900 print:shadow-none print:border-none print:p-0 print:max-w-none overflow-hidden"
+            className="zsb-print-paper relative w-full max-w-[760px] bg-white shadow-2xl rounded-sm border border-slate-300 p-5 sm:p-7 space-y-5 text-slate-900 print:shadow-none print:border-none print:p-0 print:max-w-none overflow-hidden"
             style={{ backgroundColor: '#ffffff', color: '#000000', position: 'relative' }}
           >
             {/* Centered Watermark Logo */}
@@ -1453,13 +1453,17 @@ export const PrintPreviewModal: React.FC = () => {
                   <div className="border-b border-slate-400 pb-8 font-bold text-slate-800">
                     {companyProfile.partner || 'Md. Sohel Rana'}
                   </div>
-                  <div className="text-[10px] text-slate-500 mt-1 uppercase font-semibold">Partner • ZSB AQUATICS</div>
+                  <div className="text-[10px] text-slate-500 mt-1 uppercase font-semibold">
+                    Partner • <span style={{ color: '#d97706', fontWeight: 800 }} className="font-extrabold text-amber-500 zsb-golden-brand-light">ZSB AQUATICS</span>
+                  </div>
                 </div>
                 <div>
                   <div className="border-b border-slate-400 pb-8 font-bold text-slate-800">
                     {companyProfile.managingPartner || 'Md. Mizanur Rahman'}
                   </div>
-                  <div className="text-[10px] text-slate-500 mt-1 uppercase font-semibold">Managing Partner • ZSB AQUATICS</div>
+                  <div className="text-[10px] text-slate-500 mt-1 uppercase font-semibold">
+                    Managing Partner • <span style={{ color: '#d97706', fontWeight: 800 }} className="font-extrabold text-amber-500 zsb-golden-brand-light">ZSB AQUATICS</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1667,8 +1671,8 @@ export const PrintPreviewModal: React.FC = () => {
                   Managing Partner
                 </div>
                 <div
-                  style={{ color: '#64748b' }}
-                  className="text-[10px] uppercase font-semibold"
+                  style={{ color: '#d97706', fontWeight: 800 }}
+                  className="text-[10px] uppercase font-extrabold text-amber-500 zsb-golden-brand-light"
                 >
                   {companyProfile.companyName}
                 </div>
@@ -1695,8 +1699,8 @@ export const PrintPreviewModal: React.FC = () => {
                   Partner
                 </div>
                 <div
-                  style={{ color: '#64748b' }}
-                  className="text-[10px] uppercase font-semibold"
+                  style={{ color: '#d97706', fontWeight: 800 }}
+                  className="text-[10px] uppercase font-extrabold text-amber-500 zsb-golden-brand-light"
                 >
                   {companyProfile.companyName}
                 </div>
@@ -1710,7 +1714,7 @@ export const PrintPreviewModal: React.FC = () => {
             className="flex justify-between items-center text-[10px] pt-4 mt-6"
           >
             <span>
-              This is an official computer-generated document from {companyProfile.companyName} System • Validated and archived.
+              This is an official computer-generated document from <strong style={{ color: '#d97706', fontWeight: 800 }} className="font-extrabold text-amber-500 zsb-golden-brand-light">{companyProfile.companyName}</strong> System • Validated and archived.
             </span>
             <span className="print-page-number-counter font-mono font-bold text-slate-600">
               <span className="print:hidden">

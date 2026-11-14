@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as XLSX from 'xlsx';
 import {
   generateSingleSheetWorkbookBuffer,
   generateMasterWorkbookBuffer,
@@ -8,6 +9,12 @@ import {
   parseSmartTextData,
   generateOtherCostsCSV,
 } from './excelDataHandler.ts';
+import {
+  MAX_POPULATED_ROWS_PRIMARY,
+  MAX_POPULATED_ROWS_COMPACT,
+  MAX_IMPORT_FILE_BYTES,
+  validateImportLimits,
+} from './csvParser.ts';
 import {
   generatePurchasesCSV,
   generatePackingsCSV,
@@ -303,7 +310,7 @@ test('Excel and CSV import merges purchase rows with same Purchasing Supplier Na
   assert.equal(parsedQuick.records.length, 3);
 
   const mergedAbdullahOct21 = parsedQuick.records[0];
-  assert.equal(mergedAbdullahOct21.invoiceNumber, 'PUR-2026-0006');
+  assert.equal(mergedAbdullahOct21.invoiceNumber, 'INV-2026-0006');
   assert.equal(mergedAbdullahOct21.description, 'ABDULLAH VAI');
   assert.equal(mergedAbdullahOct21.date, '2026-10-21');
   assert.equal(mergedAbdullahOct21.items.length, 3);
@@ -319,12 +326,12 @@ test('Excel and CSV import merges purchase rows with same Purchasing Supplier Na
   assert.equal(mergedAbdullahOct21.balance, 31400);
 
   const uzzalOct21 = parsedQuick.records[1];
-  assert.equal(uzzalOct21.invoiceNumber, 'PUR-2026-0007');
+  assert.equal(uzzalOct21.invoiceNumber, 'INV-2026-0007');
   assert.equal(uzzalOct21.description, 'UZZAL VAI');
   assert.equal(uzzalOct21.items.length, 1);
 
   const abdullahOct22 = parsedQuick.records[2];
-  assert.equal(abdullahOct22.invoiceNumber, 'PUR-2026-0008');
+  assert.equal(abdullahOct22.invoiceNumber, 'INV-2026-0008');
   assert.equal(abdullahOct22.description, 'ABDULLAH VAI');
   assert.equal(abdullahOct22.date, '2026-10-22');
   assert.equal(abdullahOct22.items.length, 1);
@@ -340,12 +347,104 @@ test('Excel and CSV import merges purchase rows with same Purchasing Supplier Na
   const reimportedPur = parseExcelOrCsvBuffer(exportedPurXlsx, 'purchase', 0);
   assert.equal(reimportedPur.success, true);
   assert.equal(reimportedPur.records.length, 1);
-  assert.equal(reimportedPur.records[0].invoiceNumber, 'PUR-2026-0006');
+  assert.equal(reimportedPur.records[0].invoiceNumber, 'INV-2026-0006');
   assert.equal(reimportedPur.records[0].description, 'ABDULLAH VAI');
   assert.equal(reimportedPur.records[0].items.length, 3);
   assert.equal(reimportedPur.records[0].totalQty, 250);
   assert.equal(reimportedPur.records[0].totalAmount, 101400);
   assert.equal(reimportedPur.records[0].balance, 31400);
 });
+
+test('Excel import preserves literal formula strings (=...) and flags unreadable/text amounts as calculationPending while accepting numeric names, blanks, and negatives', () => {
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['ShippingMark', 'Flight', 'Destination', 'Shipper', 'Date', 'Item', 'Box', 'Weight', 'Rate'],
+    ['1042', 'BG366', 'GUANGZHOU', '9988', '2026-10-28', 'F1', 5, 15, 'TBD'],
+  ]);
+  // Inject a real Excel formula on Rate cell I2
+  ws['I2'] = { t: 'n', f: 'SUM(B2:B5)', v: 420 };
+  // Add a second row with an unreadable amount string and negative box adjustment
+  XLSX.utils.sheet_add_aoa(
+    ws,
+    [['1042', 'BG366', 'GUANGZHOU', '9988', '2026-10-28', '2F', -2, '', 'pending quote']],
+    { origin: -1 }
+  );
+  XLSX.utils.book_append_sheet(wb, ws, 'Packing');
+  const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+
+  const res = parseExcelOrCsvBuffer(buf, 'packing', 0);
+  assert.equal(res.success, true);
+  assert.equal(res.records.length, 1);
+
+  const rec = res.records[0];
+  assert.equal(rec.shippingMark, '1042');
+  assert.equal(rec.shipper, '9988');
+  assert.equal(rec.calculationPending, true);
+  assert.ok(rec.pendingFields && rec.pendingFields.length >= 1);
+  assert.equal(rec.rawValues?.['item0_rate'], '=SUM(B2:B5)');
+  assert.equal(rec.rawValues?.['item1_rate'], 'pending quote');
+  assert.equal(rec.items[1].box, -2);
+});
+
+test('validateImportLimits enforces 500,000 rows for primary ledgers and 5,000 rows / 5 MB for compact sheets', () => {
+  assert.equal(MAX_POPULATED_ROWS_PRIMARY, 500_000);
+  assert.equal(MAX_POPULATED_ROWS_COMPACT, 5_000);
+  assert.equal(MAX_IMPORT_FILE_BYTES, 5 * 1024 * 1024);
+
+  const okPrimary = validateImportLimits({ dataset: 'purchase', populatedRows: 500_000 });
+  assert.equal(okPrimary.valid, true);
+
+  const overPrimary = validateImportLimits({ dataset: 'packing', populatedRows: 500_001 });
+  assert.equal(overPrimary.valid, false);
+
+  const okCompact = validateImportLimits({
+    dataset: 'other_cost',
+    populatedRows: 5_000,
+    fileSizeBytes: MAX_IMPORT_FILE_BYTES,
+  });
+  assert.equal(okCompact.valid, true);
+
+  const overRowsCompact = validateImportLimits({
+    dataset: 'other_cost',
+    populatedRows: 5_001,
+    fileSizeBytes: 1024,
+  });
+  assert.equal(overRowsCompact.valid, false);
+
+  const overBytesCompact = validateImportLimits({
+    dataset: 'other_cost',
+    populatedRows: 10,
+    fileSizeBytes: MAX_IMPORT_FILE_BYTES + 1,
+  });
+  assert.equal(overBytesCompact.valid, false);
+
+  assert.equal(validateImportLimits({ dataset: 'payment', populatedRows: 500_000 }).valid, true);
+  assert.equal(validateImportLimits({ dataset: 'payment', populatedRows: 500_001 }).valid, false);
+});
+
+test('Excel Payment import preserves ShippingMark, InvoiceNumber, negatives, text amounts, and literal Excel formulas', () => {
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['InvoiceNumber', 'Party', 'ShippingMark', 'Date', 'DebitAmount', 'CreditAmount', 'Status', 'ReturnRMB', 'PreviousAmount'],
+    ['PAY-2026-0701', 1042, 9988, '2026-11-01', 15000, -500, 'PAID', 'TBD', 2500],
+  ]);
+  ws['E2'] = { t: 'n', f: 'SUM(B2:B4)', v: 15000 };
+  XLSX.utils.book_append_sheet(wb, ws, 'Payments');
+  const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+
+  const res = parseExcelOrCsvBuffer(buf, 'payment', 0);
+  assert.equal(res.success, true);
+  assert.equal(res.records.length, 1);
+  const pm = res.records[0];
+  assert.equal(pm.invoiceNumber, 'PAY-2026-0701');
+  assert.equal(pm.description, '1042');
+  assert.equal(pm.shippingMark, '9988');
+  assert.equal(pm.previousAmount, 2500);
+  assert.equal(pm.balance, -500);
+  assert.equal(pm.calculationPending, true);
+  assert.equal(pm.rawValues?.debitAmount, '=SUM(B2:B4)');
+  assert.equal(pm.rawValues?.returnRMB, 'TBD');
+});
+
 
 

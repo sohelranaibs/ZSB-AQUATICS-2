@@ -100,4 +100,38 @@ test('summarizeTableValidation aggregates invalid cells and draft overrides acro
   });
   assert.equal(p1Results.totalAmount.isValid, false);
   assert.equal(p1Results.invoiceNumber.isValid, true);
+
+  const savedNegativeSummary = summarizeTableValidation(
+    'purchase',
+    [{ ...samplePurchases[0], paidAmount: -500 }],
+    {},
+    { acceptSavedNegatives: true }
+  );
+  assert.equal(savedNegativeSummary.invalidCellCount, 0);
+
+  const savedImportedBlankAndFormulaSummary = summarizeTableValidation(
+    'packing',
+    [
+      {
+        id: 'pkg-imp-1',
+        invoiceNumber: 'PKG-2026-0099',
+        packingDate: '=TODAY()',
+        shippingMark: '',
+        flight: '',
+        destination: '',
+        shipper: '',
+        totalBox: -2,
+        totalWeight: 0,
+        totalAmount: 0,
+        calculationPending: true,
+        rawValues: {
+          packingDate: '=TODAY()',
+          totalAmount: '=SUM(B2:B5)',
+        },
+      },
+    ],
+    {},
+    { acceptSavedNegatives: true, acceptSavedImportValues: true }
+  );
+  assert.equal(savedImportedBlankAndFormulaSummary.invalidCellCount, 0);
 });

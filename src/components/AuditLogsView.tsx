@@ -167,10 +167,10 @@ export const AuditLogsView: React.FC = () => {
       {/* Top Executive Header */}
       <section
         aria-label="System Audit Logs Header"
-        className="bg-slate-900 text-white rounded-xl p-5 border border-slate-800 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+        className="bg-[#263843] text-white rounded-xl p-5 border-b-2 border-[#00897b] shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4"
       >
         <div className="flex items-start sm:items-center gap-3.5">
-          <div className="w-12 h-12 rounded-full bg-white p-0.5 border-2 border-amber-400 shadow-md flex items-center justify-center overflow-hidden shrink-0">
+          <div className="w-12 h-12 rounded-full bg-white p-0.5 border-2 border-[#5eead4] shadow-md flex items-center justify-center overflow-hidden shrink-0">
             <img
               src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
               alt={companyProfile.companyName}
@@ -180,11 +180,15 @@ export const AuditLogsView: React.FC = () => {
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2">
+              <span className="text-lg sm:text-xl font-black tracking-tight text-amber-400 zsb-golden-brand">
+                {companyProfile.companyName}
+              </span>
+              <span className="text-slate-400" aria-hidden="true">|</span>
               <h1 className="text-base sm:text-lg font-black tracking-tight text-white">
                 System Audit Logs &amp; Activity Monitor
               </h1>
-              <span className="text-slate-600" aria-hidden="true">·</span>
-              <span className="text-xs font-mono text-amber-300 font-semibold tabular-nums">
+              <span className="text-slate-500" aria-hidden="true">·</span>
+              <span className="text-xs font-mono text-[#5eead4] font-semibold tabular-nums">
                 Sheet 13 · Administrator Trail
               </span>
             </div>
@@ -195,8 +199,8 @@ export const AuditLogsView: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs font-mono text-slate-200 flex items-center gap-1.5">
-            <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          <div className="px-3 py-1.5 rounded-lg bg-[#1c2a33] border border-[#334b59] text-xs font-mono text-slate-200 flex items-center gap-1.5">
+            <UserCheck className="w-3.5 h-3.5 text-[#5eead4] shrink-0" />
             <span>
               Admin: <strong>{currentUser?.displayName || 'Md. Sohel Rana'}</strong>
             </span>
@@ -206,7 +210,7 @@ export const AuditLogsView: React.FC = () => {
             type="button"
             data-testid="audit-export-csv-btn"
             onClick={handleExportCSV}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-xs transition cursor-pointer whitespace-nowrap"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[#00897b] hover:bg-[#00796b] text-white text-xs font-bold shadow-xs transition cursor-pointer whitespace-nowrap"
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export Audit CSV</span>
@@ -301,8 +305,8 @@ export const AuditLogsView: React.FC = () => {
           aria-label="Record Administrator Audit Entry"
           className="lg:col-span-4 bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden"
         >
-          <div className="bg-slate-900 text-white px-4 py-3 border-b border-slate-800 flex items-center gap-2">
-            <PlusCircle className="w-4 h-4 text-amber-400 shrink-0" />
+          <div className="bg-[#263843] text-white px-4 py-3 border-b border-[#1d2c35] flex items-center gap-2">
+            <PlusCircle className="w-4 h-4 text-[#5eead4] shrink-0" />
             <h2 className="text-xs font-bold uppercase tracking-wide">
               Log Manual Audit Event
             </h2>
@@ -419,7 +423,7 @@ export const AuditLogsView: React.FC = () => {
             <button
               type="submit"
               data-testid="audit-manual-submit-btn"
-              className="w-full py-2.5 px-4 rounded-lg bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold text-xs transition cursor-pointer flex items-center justify-center gap-1.5"
+              className="w-full py-2.5 px-4 rounded-lg bg-[#00897b] hover:bg-[#00796b] text-white font-bold text-xs transition cursor-pointer flex items-center justify-center gap-1.5"
             >
               <PlusCircle className="w-3.5 h-3.5" />
               <span>Record Audit Log Event</span>
@@ -457,7 +461,7 @@ export const AuditLogsView: React.FC = () => {
                     onClick={() => setActionFilter(tab.id)}
                     className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
                       actionFilter === tab.id
-                        ? 'bg-slate-900 text-amber-400 font-bold shadow-2xs'
+                        ? 'bg-[#00897b] text-white font-bold shadow-2xs'
                         : 'text-slate-700 hover:text-slate-900'
                     }`}
                   >
@@ -540,14 +544,14 @@ export const AuditLogsView: React.FC = () => {
           <div className="p-3 bg-slate-50/70">
             <div
               data-testid="audit-logs-scroll-box"
-              className="overflow-x-auto border-2 border-slate-300 rounded-lg bg-white"
+              className="overflow-x-auto border border-slate-200 rounded-lg bg-white"
             >
             <table
               data-testid="audit-logs-table"
               className="w-full text-left text-xs border-collapse"
             >
               <thead>
-                <tr className="bg-slate-900 text-white font-bold uppercase text-[11px] border-b border-slate-800">
+                <tr className="bg-[#263843] text-white font-bold uppercase text-[11px] border-b border-[#1d2c35]">
                   <th className="py-2.5 px-2 text-center w-12">SL #</th>
                   <th className="py-2.5 px-3.5">TIMESTAMP</th>
                   <th className="py-2.5 px-3 text-center">ACTION</th>

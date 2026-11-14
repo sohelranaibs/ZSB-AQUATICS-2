@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
   Activity,
-  Calendar,
   TrendingUp,
   TrendingDown,
   ArrowUpRight,
@@ -155,15 +154,15 @@ export const QuickFinancialPulseSidebar: React.FC<QuickFinancialPulseSidebarProp
     <aside
       aria-label="Quick Financial Pulse"
       data-testid="quick-financial-pulse-sidebar"
-      className="bg-white rounded-xl shadow-xs border-2 border-indigo-400/80 overflow-hidden flex flex-col justify-between h-full"
+      className="bg-white rounded-xl shadow-xs border border-[#CBD8E6] overflow-hidden flex flex-col justify-between h-full"
     >
       <div>
         {/* Sidebar Header */}
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-4 py-3.5 border-b border-slate-800">
+        <div className="bg-[#273E56] text-white px-4 py-3.5 border-b border-[#1E3247]">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-400/40 flex items-center justify-center shrink-0">
-                <Activity className="w-4 h-4 text-indigo-300" />
+              <div className="w-8 h-8 rounded-lg bg-[#1D6CE0]/25 border border-[#1D6CE0]/50 flex items-center justify-center shrink-0">
+                <Activity className="w-4 h-4 text-sky-300" />
               </div>
               <div>
                 <h2 className="text-sm sm:text-base font-black tracking-tight text-white">
@@ -177,7 +176,7 @@ export const QuickFinancialPulseSidebar: React.FC<QuickFinancialPulseSidebarProp
 
             <span
               data-testid="pulse-active-days-badge"
-              className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/30 text-indigo-200 border border-indigo-400/40 whitespace-nowrap"
+              className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#1D6CE0]/25 text-sky-200 border border-[#1D6CE0]/50 whitespace-nowrap"
             >
               {summary.activeDaysCount} Active {summary.activeDaysCount === 1 ? 'Day' : 'Days'}
             </span>
@@ -195,8 +194,8 @@ export const QuickFinancialPulseSidebar: React.FC<QuickFinancialPulseSidebarProp
                   onClick={() => handleSelectPreset(opt.key)}
                   className={`px-2 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
                     isSelected
-                      ? 'bg-amber-400 text-slate-950 shadow-2xs'
-                      : 'bg-slate-800/90 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                      ? 'bg-[#1D6CE0] text-white shadow-2xs'
+                      : 'bg-[#1E3247] hover:bg-white/15 text-slate-200 border border-white/15'
                   }`}
                   title={opt.label}
                 >
@@ -209,7 +208,7 @@ export const QuickFinancialPulseSidebar: React.FC<QuickFinancialPulseSidebarProp
                 type="button"
                 data-testid="pulse-reset-range-btn"
                 onClick={() => handleSelectPreset('all_time')}
-                className="px-2 py-1 rounded text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition cursor-pointer inline-flex items-center gap-1 ml-auto"
+                className="px-2 py-1 rounded text-[11px] font-bold bg-[#1E3247] hover:bg-white/15 text-sky-300 border border-white/15 transition cursor-pointer inline-flex items-center gap-1 ml-auto"
                 title="Reset to All Time"
               >
                 <RotateCcw className="w-3 h-3" />
@@ -220,13 +219,12 @@ export const QuickFinancialPulseSidebar: React.FC<QuickFinancialPulseSidebarProp
 
           {/* Custom Start & End Date Inputs */}
           <div className="mt-2.5 grid grid-cols-2 gap-2">
-            <div className="flex items-center bg-slate-950/80 border border-slate-700 rounded-lg px-2 py-1 gap-1.5">
-              <Calendar className="w-3 h-3 text-indigo-400 shrink-0" />
+            <div className="bg-[#1E3247] border border-white/15 rounded-lg px-2.5 py-1.5 min-w-0">
               <label
                 htmlFor="pulse-start-date"
-                className="text-[10px] font-bold text-slate-400 uppercase shrink-0"
+                className="block text-[9px] font-bold text-sky-300 uppercase tracking-wider mb-0.5"
               >
-                From:
+                From Date
               </label>
               <input
                 id="pulse-start-date"
@@ -237,17 +235,16 @@ export const QuickFinancialPulseSidebar: React.FC<QuickFinancialPulseSidebarProp
                   setStartDate(e.target.value);
                   setActivePreset('custom');
                 }}
-                className="bg-transparent text-[11px] font-mono font-bold text-white focus:outline-none w-full cursor-pointer"
+                className="bg-transparent text-[11px] font-mono font-bold text-white focus:outline-none w-full min-w-0 cursor-pointer [color-scheme:dark]"
               />
             </div>
 
-            <div className="flex items-center bg-slate-950/80 border border-slate-700 rounded-lg px-2 py-1 gap-1.5">
-              <Calendar className="w-3 h-3 text-indigo-400 shrink-0" />
+            <div className="bg-[#1E3247] border border-white/15 rounded-lg px-2.5 py-1.5 min-w-0">
               <label
                 htmlFor="pulse-end-date"
-                className="text-[10px] font-bold text-slate-400 uppercase shrink-0"
+                className="block text-[9px] font-bold text-sky-300 uppercase tracking-wider mb-0.5"
               >
-                To:
+                To Date
               </label>
               <input
                 id="pulse-end-date"
@@ -258,7 +255,7 @@ export const QuickFinancialPulseSidebar: React.FC<QuickFinancialPulseSidebarProp
                   setEndDate(e.target.value);
                   setActivePreset('custom');
                 }}
-                className="bg-transparent text-[11px] font-mono font-bold text-white focus:outline-none w-full cursor-pointer"
+                className="bg-transparent text-[11px] font-mono font-bold text-white focus:outline-none w-full min-w-0 cursor-pointer [color-scheme:dark]"
               />
             </div>
           </div>
@@ -408,18 +405,18 @@ export const QuickFinancialPulseSidebar: React.FC<QuickFinancialPulseSidebarProp
 
           {/* Daily Trend Spark-Bars */}
           <div className="border border-slate-200 rounded-xl overflow-hidden">
-            <div className="bg-slate-900 text-white px-3 py-2 flex items-center justify-between text-[11px]">
+            <div className="bg-[#263843] text-white px-3 py-2 flex items-center justify-between text-[11px]">
               <span className="inline-flex items-center gap-1.5 font-bold uppercase tracking-wide">
-                <BarChart3 className="w-3.5 h-3.5 text-indigo-400" />
+                <BarChart3 className="w-3.5 h-3.5 text-[#5eead4]" />
                 <span>Daily Volume Trend</span>
               </span>
               <div className="flex items-center gap-2 font-mono text-[10px]">
                 <span className="inline-flex items-center gap-1 text-sky-300">
-                  <span className="w-2 h-2 rounded-xs bg-sky-400 inline-block" />
+                  <span className="w-2 h-2 rounded-xs bg-[#1877d2] inline-block" />
                   Purchase
                 </span>
-                <span className="inline-flex items-center gap-1 text-emerald-300">
-                  <span className="w-2 h-2 rounded-xs bg-emerald-400 inline-block" />
+                <span className="inline-flex items-center gap-1 text-[#80cbc4]">
+                  <span className="w-2 h-2 rounded-xs bg-[#00897b] inline-block" />
                   Payment
                 </span>
               </div>

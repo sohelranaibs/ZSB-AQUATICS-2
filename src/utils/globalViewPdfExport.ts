@@ -879,15 +879,16 @@ export function buildGlobalViewTableReport(
 
       metadataGrid = [
         { label: 'TOTAL HISTORY RECORDS', value: `${historyTotals.recordCount} Shipments` },
-        { label: 'TOTAL DEBIT (RMB)', value: formatRMB(historyTotals.totalDebit) },
+        { label: 'TOTAL DEBIT (SHOW ONLY)', value: formatRMB(historyTotals.totalDebit) },
+        { label: 'TOTAL REPORT (RMB)', value: formatRMB(historyTotals.totalReport) },
         { label: 'TOTAL CREDIT (RMB)', value: formatRMB(historyTotals.totalCredit) },
-        { label: 'NET BALANCE (RMB)', value: formatRMB(historyTotals.totalBalance) },
+        { label: 'NET BALANCE (REPORT - CREDIT)', value: formatRMB(historyTotals.totalBalance) },
       ];
 
       stateSections = [
         {
           id: 'exporter-record-history',
-          title: 'Exporter Payment Data Entry & Record History (Debit, Credit, Balance & Status)',
+          title: 'Exporter Payment Data Entry & Record History (Debit, Report, Credit, Balance & Status)',
           subtitle: `Complete Shipment & Settlement History (${historyTotals.recordCount} Records)`,
           columns: [
             { key: 'sl', label: 'SL', align: 'center' },
@@ -898,6 +899,7 @@ export function buildGlobalViewTableReport(
             { key: 'weightKg', label: 'WEIGHT (KG)', align: 'right' },
             { key: 'description', label: 'PARTICULARS / REF', align: 'left' },
             { key: 'debitAmount', label: 'DEBIT (RMB)', align: 'right' },
+            { key: 'reportAmount', label: 'REPORT (RMB)', align: 'right' },
             { key: 'creditAmount', label: 'CREDIT (RMB)', align: 'right' },
             { key: 'balance', label: 'BALANCE (RMB)', align: 'right' },
             { key: 'status', label: 'STATUS', align: 'center' },
@@ -911,6 +913,7 @@ export function buildGlobalViewTableReport(
             weightKg: `${r.weightKg} KG`,
             description: r.description,
             debitAmount: formatRMB(r.debitAmount),
+            reportAmount: formatRMB(r.reportAmount),
             creditAmount: formatRMB(r.creditAmount),
             balance: formatRMB(r.balance),
             status: r.status || 'REPORT',
@@ -930,6 +933,11 @@ export function buildGlobalViewTableReport(
                   value: formatRMB(historyTotals.totalDebit),
                   align: 'right',
                   tone: 'default',
+                },
+                {
+                  value: formatRMB(historyTotals.totalReport),
+                  align: 'right',
+                  tone: 'blue',
                 },
                 {
                   value: formatRMB(historyTotals.totalCredit),

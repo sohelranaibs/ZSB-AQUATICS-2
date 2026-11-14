@@ -47,6 +47,9 @@ import {
   Calendar,
   History,
   Printer,
+  Users,
+  Percent,
+  Wallet,
 } from 'lucide-react';
 import { buildMonthlyMortalityReport } from '../utils/mortalityReport.ts';
 import { MonthlySummaryCard } from './MonthlySummaryCard.tsx';
@@ -184,6 +187,25 @@ export const DashboardView: React.FC = () => {
   const totalPaymentsMade = payments.reduce((acc, p) => acc + (Number(p.paidAmount) || 0), 0);
   const totalRmbSettled = calculateForeignRmbRemittanceValue(packings);
 
+  const activePartiesCount = useMemo(() => {
+    const set = new Set<string>();
+    purchases.forEach((p) => {
+      const name = String(p.description || '').trim().toLowerCase();
+      if (name) set.add(`s:${name}`);
+    });
+    packings.forEach((pk) => {
+      const mark = String(pk.shippingMark || '').trim().toLowerCase();
+      if (mark) set.add(`m:${mark}`);
+    });
+    return set.size;
+  }, [purchases, packings]);
+
+  const executiveMarginPercent = useMemo(() => {
+    if (totalExportValue <= 0) return '0.00';
+    const spread = ((totalExportValue - totalPurchaseValue) / totalExportValue) * 100;
+    return spread.toFixed(2);
+  }, [totalExportValue, totalPurchaseValue]);
+
   // Latest dates
   const latestPurchaseDate = purchases[0]?.date ? formatDate(purchases[0].date) : 'No records';
   const latestPaymentDate = payments[0]?.date ? formatDate(payments[0].date) : 'No records';
@@ -259,55 +281,196 @@ export const DashboardView: React.FC = () => {
   }
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
+      {/* Top 5-Card BI Executive Overview Strip — Decorated in 1 Single Horizontal Row */}
+      <section
+        aria-label="Executive BI KPI Overview Strip"
+        data-testid="dashboard-bi-kpi-strip"
+        className="bg-white rounded-2xl border border-[#CBD8E6] shadow-xs overflow-x-auto"
+      >
+        <div
+          data-testid="dashboard-bi-kpi-row"
+          className="grid grid-cols-5 min-w-[760px] divide-x divide-[#E2E8F0] items-stretch"
+        >
+          {/* KPI 1: Total Export Revenue */}
+          <div className="relative p-3.5 sm:p-4 pb-2.5 flex flex-col justify-between bg-gradient-to-b from-sky-50/40 via-white to-white border-t-3 border-t-[#1D6CE0] min-w-0">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-9 h-9 xl:w-10 xl:h-10 rounded-full bg-[#1D6CE0] text-white flex items-center justify-center shrink-0 shadow-xs ring-4 ring-[#1D6CE0]/10">
+                <Package className="w-4 h-4 xl:w-5 xl:h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 truncate">
+                  TOTAL EXPORT REVENUE
+                </div>
+                <div className="text-sm xl:text-base 2xl:text-lg font-black text-slate-900 font-mono tabular-nums truncate mt-0.5">
+                  {formatCurrency(totalExportValue, 'BDT')}
+                </div>
+              </div>
+            </div>
+            <svg viewBox="0 0 160 28" className="w-full h-6 mt-2 overflow-visible" aria-hidden="true">
+              <defs>
+                <linearGradient id="kpiGradBlue" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#1D6CE0" stopOpacity="0.28" />
+                  <stop offset="100%" stopColor="#1D6CE0" stopOpacity="0.02" />
+                </linearGradient>
+              </defs>
+              <path d="M0,22 C24,18 40,21 62,14 C88,7 110,16 132,10 C145,7 152,5 160,6 L160,28 L0,28 Z" fill="url(#kpiGradBlue)" />
+              <path d="M0,22 C24,18 40,21 62,14 C88,7 110,16 132,10 C145,7 152,5 160,6" fill="none" stroke="#1D6CE0" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </div>
+
+          {/* KPI 2: Total Procurement Spend */}
+          <div className="relative p-3.5 sm:p-4 pb-2.5 flex flex-col justify-between bg-gradient-to-b from-emerald-50/40 via-white to-white border-t-3 border-t-[#00B14F] min-w-0">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-9 h-9 xl:w-10 xl:h-10 rounded-full bg-[#00B14F] text-white flex items-center justify-center shrink-0 shadow-xs ring-4 ring-[#00B14F]/10">
+                <Wallet className="w-4 h-4 xl:w-5 xl:h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 truncate">
+                  TOTAL PROCUREMENT
+                </div>
+                <div className="text-sm xl:text-base 2xl:text-lg font-black text-slate-900 font-mono tabular-nums truncate mt-0.5">
+                  {formatCurrency(totalPurchaseValue, companyProfile.currency)}
+                </div>
+              </div>
+            </div>
+            <svg viewBox="0 0 160 28" className="w-full h-6 mt-2 overflow-visible" aria-hidden="true">
+              <defs>
+                <linearGradient id="kpiGradGreen" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#00B14F" stopOpacity="0.28" />
+                  <stop offset="100%" stopColor="#00B14F" stopOpacity="0.02" />
+                </linearGradient>
+              </defs>
+              <path d="M0,20 C22,12 42,24 66,13 C90,5 112,17 136,11 C148,8 154,12 160,9 L160,28 L0,28 Z" fill="url(#kpiGradGreen)" />
+              <path d="M0,20 C22,12 42,24 66,13 C90,5 112,17 136,11 C148,8 154,12 160,9" fill="none" stroke="#00B14F" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </div>
+
+          {/* KPI 3: Total Orders & Manifests */}
+          <div className="relative p-3.5 sm:p-4 pb-2.5 flex flex-col justify-between bg-gradient-to-b from-violet-50/40 via-white to-white border-t-3 border-t-[#7C3AED] min-w-0">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-9 h-9 xl:w-10 xl:h-10 rounded-full bg-[#7C3AED] text-white flex items-center justify-center shrink-0 shadow-xs ring-4 ring-[#7C3AED]/10">
+                <ShoppingCart className="w-4 h-4 xl:w-5 xl:h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 truncate">
+                  TOTAL ORDERS &amp; BILLS
+                </div>
+                <div className="text-sm xl:text-base 2xl:text-lg font-black text-slate-900 font-mono tabular-nums truncate mt-0.5">
+                  {(totalPurchaseCount + totalPackingCount).toLocaleString()}
+                </div>
+              </div>
+            </div>
+            <svg viewBox="0 0 160 28" className="w-full h-6 mt-2 overflow-visible" aria-hidden="true">
+              <defs>
+                <linearGradient id="kpiGradPurple" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#7C3AED" stopOpacity="0.28" />
+                  <stop offset="100%" stopColor="#7C3AED" stopOpacity="0.02" />
+                </linearGradient>
+              </defs>
+              <path d="M0,18 C25,22 48,14 72,11 C96,8 122,13 142,8 C150,7 155,10 160,12 L160,28 L0,28 Z" fill="url(#kpiGradPurple)" />
+              <path d="M0,18 C25,22 48,14 72,11 C96,8 122,13 142,8 C150,7 155,10 160,12" fill="none" stroke="#7C3AED" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </div>
+
+          {/* KPI 4: Suppliers & Marks */}
+          <div className="relative p-3.5 sm:p-4 pb-2.5 flex flex-col justify-between bg-gradient-to-b from-orange-50/40 via-white to-white border-t-3 border-t-[#F97316] min-w-0">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-9 h-9 xl:w-10 xl:h-10 rounded-full bg-[#F97316] text-white flex items-center justify-center shrink-0 shadow-xs ring-4 ring-[#F97316]/10">
+                <Users className="w-4 h-4 xl:w-5 xl:h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 truncate">
+                  SUPPLIERS &amp; MARKS
+                </div>
+                <div className="text-sm xl:text-base 2xl:text-lg font-black text-slate-900 font-mono tabular-nums truncate mt-0.5">
+                  {activePartiesCount.toLocaleString()}
+                </div>
+              </div>
+            </div>
+            <svg viewBox="0 0 160 28" className="w-full h-6 mt-2 overflow-visible" aria-hidden="true">
+              <defs>
+                <linearGradient id="kpiGradOrange" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#F97316" stopOpacity="0.28" />
+                  <stop offset="100%" stopColor="#F97316" stopOpacity="0.02" />
+                </linearGradient>
+              </defs>
+              <path d="M0,21 C26,15 52,8 78,16 C104,22 128,10 148,15 C154,17 157,19 160,21 L160,28 L0,28 Z" fill="url(#kpiGradOrange)" />
+              <path d="M0,21 C26,15 52,8 78,16 C104,22 128,10 148,15 C154,17 157,19 160,21" fill="none" stroke="#F97316" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </div>
+
+          {/* KPI 5: Operating Margin % */}
+          <div className="relative p-3.5 sm:p-4 pb-2.5 flex flex-col justify-between bg-gradient-to-b from-rose-50/40 via-white to-white border-t-3 border-t-[#E11D48] min-w-0">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="w-9 h-9 xl:w-10 xl:h-10 rounded-full bg-[#E11D48] text-white flex items-center justify-center shrink-0 shadow-xs ring-4 ring-[#E11D48]/10">
+                <Percent className="w-4 h-4 xl:w-5 xl:h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 truncate">
+                  GROSS MARGIN
+                </div>
+                <div className="text-sm xl:text-base 2xl:text-lg font-black text-slate-900 font-mono tabular-nums truncate mt-0.5">
+                  {executiveMarginPercent}%
+                </div>
+              </div>
+            </div>
+            <svg viewBox="0 0 160 28" className="w-full h-6 mt-2 overflow-visible" aria-hidden="true">
+              <defs>
+                <linearGradient id="kpiGradRose" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#E11D48" stopOpacity="0.28" />
+                  <stop offset="100%" stopColor="#E11D48" stopOpacity="0.02" />
+                </linearGradient>
+              </defs>
+              <path d="M0,20 C24,9 46,21 70,12 C94,6 118,19 140,12 C150,9 155,14 160,18 L160,28 L0,28 Z" fill="url(#kpiGradRose)" />
+              <path d="M0,20 C24,9 46,21 70,12 C94,6 118,19 140,12 C150,9 155,14 160,18" fill="none" stroke="#E11D48" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </div>
+        </div>
+      </section>
+
       {/* Executive Command Header */}
       <section
         aria-label="Executive Command Header"
-        className="bg-slate-900 rounded-xl p-5 sm:p-6 border border-slate-800 text-white shadow-sm space-y-4"
+        className="bg-[#273E56] rounded-xl p-5 sm:p-6 border border-[#1E3247] text-white shadow-sm space-y-4"
       >
         <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
           <div className="flex items-start sm:items-center gap-3.5">
-            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white p-0.5 border-2 border-amber-400 shadow-md flex items-center justify-center overflow-hidden shrink-0">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white p-0.5 border-2 border-[#CBD8E6] shadow-md flex items-center justify-center overflow-hidden shrink-0">
               <img
                 src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
                 alt={companyProfile.companyName}
                 className="w-full h-full object-contain rounded-full"
               />
             </div>
-            <div className="space-y-1">
-              <div className="text-xs text-amber-400/90 font-semibold tracking-wide leading-snug">
-                <span className="whitespace-nowrap font-bold">Sheet 01 · Executive Overview</span>
+            <div className="space-y-1 min-w-0 flex-1">
+              <div className="text-xs text-sky-300 font-semibold tracking-wide leading-snug">
+                <span className="font-bold">Sheet 01 · Executive Overview</span>
                 <span className="block text-slate-300 font-normal mt-0.5">
                   Live Seafood Procurement, Air-Freight Export &amp; RMB Settlement Ledger
                 </span>
               </div>
               <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
-                <span className="inline-flex items-baseline gap-2.5 whitespace-nowrap">
-                  <h1 className="zsb-3d-text-lg text-2xl sm:text-3xl font-black tracking-tight text-white whitespace-nowrap leading-tight">
+                <span className="inline-flex items-baseline gap-2.5 flex-wrap sm:flex-nowrap">
+                  <h1 className="text-xl sm:text-3xl font-black tracking-tight text-amber-400 zsb-golden-brand leading-tight">
                     {companyProfile.companyName}
                   </h1>
-                  <span className="text-slate-500 hidden sm:inline" aria-hidden="true">/</span>
+                  <span className="text-slate-400 hidden sm:inline" aria-hidden="true">/</span>
                 </span>
-                <span className="text-base sm:text-lg font-semibold text-amber-400 whitespace-nowrap leading-tight">
+                <span className="text-sm sm:text-lg font-semibold text-emerald-300 leading-tight">
                   Business Control Center
                 </span>
               </div>
-              <div className="text-xs text-slate-300 pt-0.5 font-mono tabular-nums space-y-0.5 leading-snug">
-                <div>{companyProfile.address}</div>
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                  <span className="text-amber-300 font-semibold whitespace-nowrap">
-                    EMAIL: {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}
-                  </span>
-                  <span className="whitespace-nowrap">
-                    · Rate: 1 RMB = {companyProfile.rmbExchangeRate} {companyProfile.currency} · Synced {new Date().toLocaleDateString('en-GB')}
-                  </span>
-                </div>
+              <div className="text-xs text-slate-300 pt-0.5 font-mono tabular-nums leading-snug break-words">
+                <span className="sm:whitespace-nowrap">
+                  Rate: 1 RMB = {companyProfile.rmbExchangeRate} {companyProfile.currency} · Synced {new Date().toLocaleDateString('en-GB')}
+                </span>
               </div>
             </div>
           </div>
 
           {/* Quick Actions Row */}
-          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+          <div className="flex flex-wrap items-center gap-1.5 xl:justify-end">
             {/* Low-Stock Notification Badge */}
             <button
               type="button"
@@ -318,12 +481,12 @@ export const DashboardView: React.FC = () => {
                   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
               }}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border shadow-xs transition cursor-pointer whitespace-nowrap shrink-0 ${
+              className={`inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] font-bold border shadow-xs transition cursor-pointer whitespace-nowrap shrink-0 ${
                 lowStockSummary.totalStockStatus === 'critical_low'
                   ? 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border-rose-400/50'
                   : lowStockSummary.totalStockStatus === 'approaching_low'
                   ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border-amber-400/50'
-                  : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border-emerald-400/50'
+                  : 'bg-[#00B14F]/20 hover:bg-[#00B14F]/30 text-emerald-200 border-[#00B14F]/50'
               }`}
               title={`Total Available Stock: ${lowStockSummary.totalAvailableStockKg.toLocaleString()} KG (Minimum Threshold: ${lowStockSummary.minThresholdKg} KG)`}
             >
@@ -333,10 +496,10 @@ export const DashboardView: React.FC = () => {
                     ? 'text-rose-400'
                     : lowStockSummary.totalStockStatus === 'approaching_low'
                     ? 'text-amber-400'
-                    : 'text-emerald-400'
+                    : 'text-[#00B14F]'
                 }`}
               />
-              <span>Available Stock</span>
+              <span>Stock</span>
               <span
                 data-testid="dashboard-low-stock-badge-count"
                 className={`px-1.5 py-0.5 rounded font-mono text-[11px] font-black ${
@@ -344,7 +507,7 @@ export const DashboardView: React.FC = () => {
                     ? 'bg-rose-500 text-white'
                     : lowStockSummary.totalStockStatus === 'approaching_low'
                     ? 'bg-amber-400 text-slate-950'
-                    : 'bg-emerald-500 text-slate-950'
+                    : 'bg-[#00B14F] text-white'
                 }`}
               >
                 {lowStockSummary.totalAvailableStockKg.toLocaleString()} KG
@@ -352,11 +515,11 @@ export const DashboardView: React.FC = () => {
             </button>
 
             {/* View Switcher: Overview vs Monthly Reports */}
-            <div className="flex items-center bg-slate-800/90 p-1 rounded-lg border border-slate-700">
+            <div className="flex items-center bg-[#1E3247] p-0.5 rounded-lg border border-white/15">
               <button
                 type="button"
                 onClick={() => setDashboardSubView('overview')}
-                className="px-2.5 py-1.5 rounded-md text-xs font-bold transition cursor-pointer flex items-center space-x-1 bg-amber-500 text-slate-950 shadow-xs whitespace-nowrap"
+                className="px-2 py-1.5 rounded-md text-[11px] font-bold transition cursor-pointer flex items-center space-x-1 bg-[#1D6CE0] text-white shadow-xs whitespace-nowrap"
               >
                 <BarChart3 className="w-3.5 h-3.5 shrink-0" />
                 <span>Overview</span>
@@ -365,10 +528,10 @@ export const DashboardView: React.FC = () => {
                 type="button"
                 data-testid="dashboard-subview-monthly-reports-btn"
                 onClick={() => setDashboardSubView('monthly_reports')}
-                className="px-2.5 py-1.5 rounded-md text-xs font-bold transition cursor-pointer flex items-center space-x-1 text-slate-300 hover:text-white whitespace-nowrap"
+                className="px-2 py-1.5 rounded-md text-[11px] font-bold transition cursor-pointer flex items-center space-x-1 text-slate-200 hover:text-white whitespace-nowrap"
                 title="Open Monthly Summary Reports of All Exports and Purchases in CSV"
               >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <FileSpreadsheet className="w-3.5 h-3.5 text-sky-300 shrink-0" />
                 <span>Monthly CSV</span>
               </button>
             </div>
@@ -376,14 +539,14 @@ export const DashboardView: React.FC = () => {
             <button
               type="button"
               onClick={() => setActiveTab('purchase_form')}
-              className="px-2.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0"
+              className="px-2.5 py-1.5 rounded-lg bg-[#1E3247] hover:bg-white/15 text-slate-100 border border-white/15 text-[11px] font-semibold transition cursor-pointer whitespace-nowrap shrink-0"
             >
               + Purchase
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('packing_form')}
-              className="px-2.5 py-2 rounded-lg bg-teal-700 hover:bg-teal-600 text-white text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0"
+              className="px-2.5 py-1.5 rounded-lg bg-[#1D6CE0] hover:bg-[#1558BD] text-white text-[11px] font-semibold transition cursor-pointer whitespace-nowrap shrink-0"
             >
               + Packing
             </button>
@@ -391,58 +554,58 @@ export const DashboardView: React.FC = () => {
               type="button"
               data-testid="dashboard-open-excel-csv-btn"
               onClick={() => openDataCenterModal('import', 'purchase')}
-              className="inline-flex items-center space-x-1.5 px-2.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg text-xs font-bold shadow-xs transition cursor-pointer whitespace-nowrap shrink-0"
+              className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-[#00B14F] hover:bg-[#009944] text-white rounded-lg text-[11px] font-bold shadow-xs transition cursor-pointer whitespace-nowrap shrink-0"
               title="Open Excel (.xlsx) & CSV Import / Export Center"
             >
-              <Upload className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
+              <Upload className="w-3.5 h-3.5 stroke-[2.25] shrink-0" />
               <span>Import / Export</span>
             </button>
           </div>
         </div>
 
         {/* Cumulative Executive Ledger Strip inside Hero */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mt-5 pt-5 border-t border-slate-800/90">
-          <div className="bg-slate-800/60 rounded-lg p-3.5 border border-slate-700/70">
-            <div className="flex items-center justify-between text-xs text-slate-400">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mt-5 pt-5 border-t border-white/15">
+          <div className="bg-[#1E3247]/90 rounded-lg p-3.5 border border-white/10">
+            <div className="flex items-center justify-between text-xs text-slate-300">
               <span>Cumulative Procurement</span>
-              <ShoppingCart className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+              <ShoppingCart className="w-3.5 h-3.5 text-sky-300 shrink-0" />
             </div>
             <div className="text-lg sm:text-xl font-bold text-white font-mono tabular-nums mt-1 whitespace-nowrap">
               {formatCurrency(totalPurchaseValue, companyProfile.currency)}
             </div>
-            <div className="text-[11px] text-slate-400 font-mono tabular-nums mt-1">
+            <div className="text-[11px] text-slate-300 font-mono tabular-nums mt-1">
               {totalPurchaseCount} Bills · {totalPurchaseQty.toLocaleString()} KG
             </div>
           </div>
 
-          <div className="bg-slate-800/60 rounded-lg p-3.5 border border-slate-700/70">
-            <div className="flex items-center justify-between text-xs text-slate-400">
+          <div className="bg-[#1E3247]/90 rounded-lg p-3.5 border border-white/10">
+            <div className="flex items-center justify-between text-xs text-slate-300">
               <span>Cumulative Export Value</span>
-              <Package className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+              <Package className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
             </div>
             <div
               data-testid="dashboard-cumulative-export-value"
-              className="text-lg sm:text-xl font-bold text-teal-300 font-mono tabular-nums mt-1 whitespace-nowrap"
+              className="text-lg sm:text-xl font-bold text-emerald-300 font-mono tabular-nums mt-1 whitespace-nowrap"
             >
               {formatCurrency(totalExportValue, 'BDT')}
             </div>
-            <div className="text-[11px] text-slate-400 font-mono tabular-nums mt-1">
+            <div className="text-[11px] text-slate-300 font-mono tabular-nums mt-1">
               Total Amount (BDT) · {totalPackingCount} Manifests · {totalWeight.toLocaleString()} KG ({totalBoxes} Box)
             </div>
           </div>
 
-          <div className="bg-slate-800/60 rounded-lg p-3.5 border border-slate-700/70">
-            <div className="flex items-center justify-between text-xs text-slate-400">
+          <div className="bg-[#1E3247]/90 rounded-lg p-3.5 border border-white/10">
+            <div className="flex items-center justify-between text-xs text-slate-300">
               <span>Foreign RMB Remittance</span>
-              <TrendingUp className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <TrendingUp className="w-3.5 h-3.5 text-sky-300 shrink-0" />
             </div>
             <div
               data-testid="dashboard-foreign-rmb-remittance"
-              className="text-lg sm:text-xl font-bold text-amber-300 font-mono tabular-nums mt-1 whitespace-nowrap"
+              className="text-lg sm:text-xl font-bold text-white font-mono tabular-nums mt-1 whitespace-nowrap"
             >
               {formatRMB(totalRmbSettled)}
             </div>
-            <div className="text-[11px] text-slate-400 font-mono tabular-nums mt-1">
+            <div className="text-[11px] text-slate-300 font-mono tabular-nums mt-1">
               Total Value ({formatCurrency(totalRmbSettled, 'RMB')}) · Latest: {latestPackingDate}
             </div>
           </div>
@@ -473,17 +636,17 @@ export const DashboardView: React.FC = () => {
         id="dashboard-low-stock-monitor"
         aria-label="Low-Stock Inventory Threshold Alerts"
         data-testid="dashboard-low-stock-section"
-        className="bg-white rounded-xl shadow-xs border-2 border-rose-300/80 overflow-hidden"
+        className="bg-white rounded-xl shadow-xs border border-[#CBD8E6] overflow-hidden"
       >
-        <div className="bg-gradient-to-r from-slate-900 via-rose-950 to-slate-900 text-white px-5 py-3.5 border-b border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="bg-[#273E56] text-white px-5 py-3.5 border-b border-[#1E3247] flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div className="flex items-start sm:items-center gap-3 min-w-0">
             <span
               className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${
                 lowStockSummary.totalStockStatus === 'critical_low'
-                  ? 'bg-rose-500/20 border-rose-400/40 text-rose-400'
+                  ? 'bg-rose-500/20 border-rose-400/40 text-rose-300'
                   : lowStockSummary.totalStockStatus === 'approaching_low'
-                  ? 'bg-amber-500/20 border-amber-400/40 text-amber-400'
-                  : 'bg-emerald-500/20 border-emerald-400/40 text-emerald-400'
+                  ? 'bg-amber-500/20 border-amber-400/40 text-amber-300'
+                  : 'bg-[#00897b]/25 border-[#00897b]/50 text-[#80cbc4]'
               }`}
             >
               <AlertTriangle className="w-4 h-4" />
@@ -495,20 +658,20 @@ export const DashboardView: React.FC = () => {
                 </h2>
                 <span
                   data-testid="low-stock-total-available-pill"
-                  className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-slate-800 text-cyan-300 border border-cyan-500/30 whitespace-nowrap"
+                  className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-[#1c2a33] text-[#5eead4] border border-[#00897b]/40 whitespace-nowrap"
                 >
                   Total Available: {lowStockSummary.totalAvailableStockKg.toLocaleString()} KG
                 </span>
                 <span
                   data-testid="low-stock-mortality-pill"
-                  className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-purple-600 text-white whitespace-nowrap flex items-center gap-1"
+                  className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-rose-600 text-white whitespace-nowrap flex items-center gap-1"
                 >
-                  <HeartCrack className="w-3 h-3 text-purple-200" />
+                  <HeartCrack className="w-3 h-3 text-rose-200" />
                   <span>Mortality Loss: -{lowStockSummary.totalMortalityKg} KG</span>
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-0.5">
-                Live total available inventory across all species: <strong className="font-mono text-emerald-300">{lowStockSummary.totalPurchasedKg} KG Procured</strong> − <strong className="font-mono text-teal-300">{lowStockSummary.totalExportedKg} KG Exported</strong> − <strong className="font-mono text-purple-300">{lowStockSummary.totalMortalityKg} KG Mortality</strong> = <strong className="font-mono text-amber-300">{lowStockSummary.totalAvailableStockKg} KG Available</strong>
+                Live total available inventory across all species: <strong className="font-mono text-[#5eead4]">{lowStockSummary.totalPurchasedKg} KG Procured</strong> − <strong className="font-mono text-[#7dd3fc]">{lowStockSummary.totalExportedKg} KG Exported</strong> − <strong className="font-mono text-rose-300">{lowStockSummary.totalMortalityKg} KG Mortality</strong> = <strong className="font-mono text-white">{lowStockSummary.totalAvailableStockKg} KG Available</strong>
               </p>
             </div>
           </div>
@@ -520,8 +683,8 @@ export const DashboardView: React.FC = () => {
               onClick={() => setShowMortalityLog((prev) => !prev)}
               className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
                 showMortalityLog
-                  ? 'bg-purple-600 border-purple-500 text-white shadow-xs'
-                  : 'bg-slate-800 hover:bg-slate-700 text-purple-300 border-slate-700'
+                  ? 'bg-[#00897b] border-[#00897b] text-white shadow-xs'
+                  : 'bg-[#1c2a33] hover:bg-white/15 text-slate-200 border-white/15'
               }`}
               title="Toggle dedicated Mortality Log section"
             >
@@ -533,7 +696,7 @@ export const DashboardView: React.FC = () => {
               type="button"
               data-testid="print-monthly-mortality-report-btn"
               onClick={handleOpenMonthlyMortalityReport}
-              className="px-2.5 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-600 text-white border border-purple-500 text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5 shadow-xs"
+              className="px-2.5 py-1.5 rounded-lg bg-[#1c2a33] hover:bg-white/15 text-white border border-white/15 text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5 shadow-xs"
               title="Generate printable summary of all mortality events recorded in the current month"
             >
               <Printer className="w-3.5 h-3.5" />
@@ -544,7 +707,7 @@ export const DashboardView: React.FC = () => {
               type="button"
               data-testid="low-stock-restock-btn"
               onClick={() => setActiveTab('purchase_form')}
-              className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0"
+              className="px-2.5 py-1.5 rounded-lg bg-[#1877d2] hover:bg-[#1565c0] text-white text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0"
             >
               + Restock
             </button>
@@ -714,16 +877,16 @@ export const DashboardView: React.FC = () => {
           </div>
 
           {/* Formula calculation banner */}
-          <div className="bg-slate-900 text-white rounded-lg px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono">
+          <div className="bg-[#263843] text-white rounded-lg px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono">
             <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-slate-800 text-amber-300 font-bold uppercase text-[10px]">
+              <span className="px-2 py-0.5 rounded bg-[#1c2a33] text-[#5eead4] font-bold uppercase text-[10px]">
                 Inventory Formula
               </span>
-              <span className="text-slate-300">
+              <span className="text-slate-200">
                 Total Available Stock = Total Procured ({lowStockSummary.totalPurchasedKg} KG) − Total Exported ({lowStockSummary.totalExportedKg} KG) − Total Mortality ({lowStockSummary.totalMortalityKg} KG)
               </span>
             </div>
-            <div className="text-right text-emerald-400 font-bold whitespace-nowrap">
+            <div className="text-right text-[#5eead4] font-bold whitespace-nowrap">
               = {lowStockSummary.totalAvailableStockKg.toLocaleString()} KG
             </div>
           </div>
@@ -1062,19 +1225,19 @@ export const DashboardView: React.FC = () => {
       <section
         aria-label="Upcoming Recurring Supplier Payments"
         data-testid="upcoming-recurring-payments-section"
-        className="bg-white rounded-xl shadow-xs border-2 border-amber-300/80 overflow-hidden"
+        className="bg-white rounded-xl shadow-xs border border-slate-200 overflow-hidden"
       >
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-5 py-3.5 border-b border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="bg-[#263843] text-white px-5 py-3.5 border-b border-[#1d2c35] flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5">
-            <span className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-400/40 flex items-center justify-center shrink-0">
-              <Repeat className="w-4 h-4 text-amber-400" />
+            <span className="w-7 h-7 rounded-lg bg-[#00897b]/25 border border-[#00897b]/50 flex items-center justify-center shrink-0">
+              <Repeat className="w-4 h-4 text-[#5eead4]" />
             </span>
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-sm font-bold tracking-wide text-white">
                   Upcoming Recurring Supplier Payments
                 </h2>
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-amber-500 text-slate-950">
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-[#00897b] text-white">
                   {recurringSummary.totalScheduledCount} Scheduled
                 </span>
                 {recurringSummary.urgentCount > 0 && (
@@ -1094,7 +1257,7 @@ export const DashboardView: React.FC = () => {
             <div
               role="group"
               aria-label="Filter upcoming recurring payments"
-              className="flex items-center gap-1 bg-slate-800/90 p-1 rounded-lg border border-slate-700"
+              className="flex items-center gap-1 bg-[#1c2a33] p-1 rounded-lg border border-white/15"
             >
               {(
                 [
@@ -1110,8 +1273,8 @@ export const DashboardView: React.FC = () => {
                   onClick={() => setRecurringFilter(tab.id)}
                   className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
                     recurringFilter === tab.id
-                      ? 'bg-amber-500 text-slate-950 font-bold'
-                      : 'text-slate-300 hover:text-white'
+                      ? 'bg-[#00897b] text-white font-bold'
+                      : 'text-slate-200 hover:text-white'
                   }`}
                 >
                   {tab.label}
@@ -1122,7 +1285,7 @@ export const DashboardView: React.FC = () => {
             <button
               type="button"
               onClick={() => setActiveTab('payment_form')}
-              className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0"
+              className="px-3 py-1.5 rounded-lg bg-[#1877d2] hover:bg-[#1565c0] text-white text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0"
             >
               + Schedule Payment
             </button>
@@ -1313,13 +1476,13 @@ export const DashboardView: React.FC = () => {
         data-testid="dashboard-export-consignments-summary"
         className="bg-white rounded-xl shadow-xs border border-slate-200/90 overflow-hidden"
       >
-        <div className="bg-slate-900 text-white px-5 py-3.5 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="bg-[#263843] text-white px-5 py-3.5 border-b border-[#1d2c35] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5">
-            <Scale className="w-4 h-4 text-teal-400 shrink-0" />
+            <Scale className="w-4 h-4 text-[#5eead4] shrink-0" />
             <h2 className="text-sm font-bold tracking-wide text-white">
               Packing List Export Consignments &amp; Weight Summary
             </h2>
-            <span className="text-slate-600" aria-hidden="true">·</span>
+            <span className="text-slate-400" aria-hidden="true">·</span>
             <span className="text-xs text-slate-300 font-mono tabular-nums">
               Synced from Sheet 09 (Packing List Database)
             </span>
@@ -1329,17 +1492,17 @@ export const DashboardView: React.FC = () => {
             <button
               type="button"
               onClick={() => setActiveTab('packing_form')}
-              className="px-3 py-1.5 rounded-md bg-teal-700 hover:bg-teal-600 text-white text-xs font-semibold transition cursor-pointer whitespace-nowrap"
+              className="px-3 py-1.5 rounded-md bg-[#00897b] hover:bg-[#00796b] text-white text-xs font-semibold transition cursor-pointer whitespace-nowrap"
             >
               + New Consignment Manifest
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('packing_db')}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer whitespace-nowrap"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-[#1c2a33] hover:bg-white/15 text-slate-200 border border-white/15 text-xs font-semibold transition cursor-pointer whitespace-nowrap"
             >
               <span>Open Packing List DB</span>
-              <ArrowUpRight className="w-3.5 h-3.5 text-teal-400" />
+              <ArrowUpRight className="w-3.5 h-3.5 text-[#5eead4]" />
             </button>
           </div>
         </div>
@@ -1805,13 +1968,13 @@ export const DashboardView: React.FC = () => {
         aria-label="Recent System Activities"
         className="bg-white rounded-xl shadow-xs border border-slate-200/90 overflow-hidden"
       >
-        <div className="px-5 py-3.5 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="px-5 py-3.5 bg-[#263843] text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-sm font-bold tracking-wide text-white">
               Recent System Activities
             </h2>
-            <span className="text-slate-600" aria-hidden="true">·</span>
-            <span className="text-xs text-slate-400">
+            <span className="text-slate-400" aria-hidden="true">·</span>
+            <span className="text-xs text-slate-300">
               Latest archived vouchers and manifests across all ledgers
             </span>
           </div>
@@ -1820,7 +1983,7 @@ export const DashboardView: React.FC = () => {
           <div
             role="group"
             aria-label="Filter recent activities"
-            className="flex items-center gap-1 bg-slate-800 p-1 rounded-lg border border-slate-700"
+            className="flex items-center gap-1 bg-[#1c2a33] p-1 rounded-lg border border-white/15"
           >
             {(['ALL', 'Purchase', 'Packing', 'Payment'] as const).map((tab) => (
               <button
@@ -1829,8 +1992,8 @@ export const DashboardView: React.FC = () => {
                 onClick={() => setActivityFilter(tab)}
                 className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0 ${
                   activityFilter === tab
-                    ? 'bg-amber-500 text-slate-950 font-bold'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-[#00897b] text-white font-bold'
+                    : 'text-slate-200 hover:text-white'
                 }`}
               >
                 {tab === 'ALL' ? 'All Records' : `${tab}s`}

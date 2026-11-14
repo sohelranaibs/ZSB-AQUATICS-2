@@ -5,6 +5,8 @@ import {
   formatDate,
   formatYearMonthLabel,
 } from '../utils/calculations.ts';
+import { useRowScrollViewport } from '../hooks/useRowScrollViewport.ts';
+import { MAX_VISIBLE_TABLE_ROWS } from '../utils/tableScroll.ts';
 import {
   AirWayBillRow,
   AirWayBillRowOverride,
@@ -84,6 +86,7 @@ export const AirWayBillView: React.FC = () => {
 
   const [isExporting, setIsExporting] = useState<'pdf' | 'png' | null>(null);
   const sheetCaptureRef = useRef<HTMLDivElement>(null);
+  const awbScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
@@ -125,6 +128,14 @@ export const AirWayBillView: React.FC = () => {
   );
 
   const totals = useMemo(() => calculateAirWayBillTotals(displayRows), [displayRows]);
+
+  const { maxHeight: awbScrollMaxHeight, isCapped: isAwbScrollCapped } =
+    useRowScrollViewport(awbScrollRef, displayRows.length, {
+      maxVisibleRows: MAX_VISIBLE_TABLE_ROWS,
+      enabled: isExporting === null,
+      includeFooter: true,
+      depsKey: `${selectedMonth}|${selectedShipper}|${selectedFlight}`,
+    });
 
   const handleRowEditableChange = (
     row: AirWayBillRow,
@@ -344,9 +355,9 @@ export const AirWayBillView: React.FC = () => {
       data-testid="air-way-bill-view"
     >
       {/* Top Executive Banner */}
-      <div className="bg-[#1b2b44] text-white px-5 py-3 rounded-lg shadow-md flex flex-wrap items-center justify-between gap-3 border-b-2 border-amber-500">
+      <div className="bg-[#263843] text-white px-5 py-3 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#00897b]">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
+          <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
               src={resolvedLogoSrc}
               alt={companyProfile.companyName}
@@ -361,14 +372,14 @@ export const AirWayBillView: React.FC = () => {
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="zsb-3d-text text-xl sm:text-2xl font-black">
+              <span className="text-xl sm:text-2xl font-black tracking-tight text-amber-400 zsb-golden-brand">
                 {companyProfile.companyName}
               </span>
               <span className="text-slate-400">•</span>
-              <span className="text-sm sm:text-base font-bold text-white uppercase tracking-wide">
+              <span className="text-sm sm:text-base font-bold text-[#80cbc4] uppercase tracking-wide">
                 FLIGHT RETURN BILL — Monthly Statement
               </span>
-              <span className="text-xs bg-amber-400/20 text-amber-300 px-2.5 py-0.5 rounded border border-amber-400/40 font-mono font-bold">
+              <span className="text-xs bg-[#00897b]/25 text-[#5eead4] px-2.5 py-0.5 rounded border border-[#00897b]/50 font-mono font-bold">
                 Sheet #06
               </span>
             </div>
@@ -384,7 +395,7 @@ export const AirWayBillView: React.FC = () => {
             data-testid="awb-save-pdf-btn"
             disabled={isExporting !== null}
             onClick={() => void handleDirectExport('pdf')}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded shadow transition cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-[#00897b] hover:bg-[#00796b] text-white rounded-lg shadow-xs transition cursor-pointer"
           >
             {isExporting === 'pdf' ? (
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -399,7 +410,7 @@ export const AirWayBillView: React.FC = () => {
             data-testid="awb-save-png-btn"
             disabled={isExporting !== null}
             onClick={() => void handleDirectExport('png')}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded shadow transition cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-[#1877d2] hover:bg-[#1465b5] text-white rounded-lg shadow-xs transition cursor-pointer"
           >
             {isExporting === 'png' ? (
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -414,7 +425,7 @@ export const AirWayBillView: React.FC = () => {
             type="button"
             data-testid="awb-share-wechat-btn"
             onClick={() => setIsShareModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-[#07C160] hover:bg-[#06a853] text-white rounded shadow transition cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-[#07C160] hover:bg-[#06a853] text-white rounded-lg shadow-xs transition cursor-pointer"
             title="Share Flight Return Bill .PNG via WeChat (微信)"
           >
             <WeChatIcon className="w-3.5 h-3.5 text-white" />
@@ -425,9 +436,9 @@ export const AirWayBillView: React.FC = () => {
             type="button"
             data-testid="awb-print-preview-btn"
             onClick={handleOpenPrintPreview}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-[#2f75b5] hover:bg-[#255e92] text-white rounded shadow transition cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-[#1c2a33] hover:bg-[#152028] text-white border border-[#334b59] rounded-lg shadow-xs transition cursor-pointer"
           >
-            <Printer className="w-3.5 h-3.5" />
+            <Printer className="w-3.5 h-3.5 text-[#5eead4]" />
             <span>PRINT / PREVIEW</span>
           </button>
         </div>
@@ -558,7 +569,7 @@ export const AirWayBillView: React.FC = () => {
             type="button"
             data-testid="awb-apply-bulk-btn"
             onClick={handleApplyBulkRates}
-            className="px-3 py-1.5 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded shadow-2xs transition inline-flex items-center gap-1 cursor-pointer"
+            className="px-3 py-1.5 bg-[#00897b] hover:bg-[#00796b] text-white font-bold rounded-lg shadow-2xs transition inline-flex items-center gap-1 cursor-pointer"
             title="Apply RMB/Per Box and Rate to all active Packing List rows"
           >
             <Check className="w-3.5 h-3.5" />
@@ -569,7 +580,7 @@ export const AirWayBillView: React.FC = () => {
             type="button"
             data-testid="awb-add-row-btn"
             onClick={handleAddRow}
-            className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded shadow-2xs transition inline-flex items-center gap-1 cursor-pointer"
+            className="px-2.5 py-1.5 bg-[#263843] hover:bg-[#1c2a33] text-white font-bold rounded-lg shadow-2xs transition inline-flex items-center gap-1 cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>+ Row</span>
@@ -579,7 +590,7 @@ export const AirWayBillView: React.FC = () => {
             type="button"
             data-testid="awb-reset-btn"
             onClick={handleResetFiltersAndOverrides}
-            className="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded transition inline-flex items-center gap-1 cursor-pointer"
+            className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition inline-flex items-center gap-1 cursor-pointer border border-slate-200"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Reset</span>
@@ -587,15 +598,15 @@ export const AirWayBillView: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Printable AIR WAY BILL Sheet Card (A4 Portrait Print Area & Compact Column Widths) */}
+      {/* Main Printable FLIGHT RETURN BILL Sheet Card (Full Actual Size with Print Compatibility) */}
       <div
         id="awb-printable-sheet"
         ref={sheetCaptureRef}
         data-testid="awb-sheet-card"
         style={{ backgroundColor: '#ffffff', color: '#000000' }}
-        className="w-full max-w-[760px] mx-auto bg-white rounded-lg shadow-lg border border-slate-300 p-4 sm:p-6 space-y-4 overflow-x-auto"
+        className="zsb-print-paper w-full bg-white rounded-lg shadow-lg border border-slate-300 p-4 sm:p-6 space-y-4 overflow-x-auto print:max-w-[760px] print:mx-auto print:border-none print:shadow-none print:p-0"
       >
-        {/* Official Company Header with Logo Emblem for A4 Sheet & Direct PDF/PNG Exports */}
+        {/* Official Company Header with Logo Emblem for Sheet & Direct PDF/PNG Exports */}
         <div
           style={{ borderBottom: '2px solid #0f172a' }}
           className="pb-3 text-center space-y-1"
@@ -653,42 +664,40 @@ export const AirWayBillView: React.FC = () => {
             {companyProfile.companyName}
           </div>
 
-          <div style={{ color: '#000000' }} className="text-[11px] font-bold tracking-wide">
+          <div style={{ color: '#000000' }} className="text-xs sm:text-sm font-bold tracking-wide">
             Address: {companyProfile.address}
           </div>
 
-          <div style={{ color: '#000000' }} className="text-[11px] font-bold font-mono">
+          <div style={{ color: '#000000' }} className="text-xs sm:text-sm font-bold font-mono">
             Mobile: {companyProfile.mobiles.join(' , ')} | EMAIL:{' '}
             {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}
           </div>
         </div>
 
+        {isAwbScrollCapped && (
+          <div className="text-[11px] font-mono text-slate-600 flex items-center justify-between px-1">
+            <span>
+              Viewport: <strong>31 Rows</strong> visible ({displayRows.length} total rows — scroll vertically to view more)
+            </span>
+          </div>
+        )}
         <div
+          ref={awbScrollRef}
           data-testid="awb-statement-scroll-box"
-          className="overflow-x-auto border-2 border-slate-800 rounded-lg bg-white my-1"
+          data-visible-row-limit="31"
+          style={awbScrollMaxHeight ? { maxHeight: `${awbScrollMaxHeight}px` } : undefined}
+          className="overflow-auto border-2 border-slate-800 rounded-lg bg-white my-1 print:!max-h-none print:!overflow-visible"
         >
         <table
           data-testid="awb-statement-table"
           style={{
             borderCollapse: 'collapse',
             width: '100%',
-            tableLayout: 'fixed',
           }}
-          className="text-xs font-sans select-none"
+          className="min-w-[860px] w-full text-xs sm:text-sm font-sans select-none"
         >
-          <colgroup>
-            <col style={{ width: '6%' }} />
-            <col style={{ width: '11%' }} />
-            <col style={{ width: '13%' }} />
-            <col style={{ width: '11%' }} />
-            <col style={{ width: '10%' }} />
-            <col style={{ width: '12%' }} />
-            <col style={{ width: '13%' }} />
-            <col style={{ width: '8%' }} />
-            <col style={{ width: '16%' }} />
-          </colgroup>
-          <thead>
-            {/* Row 1: Deep Blue "AIR WAY BILL" Title Banner */}
+          <thead className="sticky top-0 z-10">
+            {/* Row 1: Deep Blue "FLIGHT RETURN BILL" Title Banner */}
             <tr>
               <th
                 colSpan={9}
@@ -698,45 +707,45 @@ export const AirWayBillView: React.FC = () => {
                   border: '1.5px solid #000000',
                   letterSpacing: '0.04em',
                 }}
-                className="py-1.5 px-3 text-center text-base sm:text-lg font-extrabold uppercase"
+                className="py-2 px-4 text-center text-lg sm:text-xl font-extrabold uppercase"
               >
                 FLIGHT RETURN BILL
               </th>
             </tr>
 
-            {/* Row 2: Light Blue Column Headers (Compact A4 Sizing) */}
+            {/* Row 2: Light Blue Column Headers (Full Actual Sizing) */}
             <tr
               style={{
                 backgroundColor: '#bdd7ee',
                 color: '#000000',
               }}
-              className="text-[10.5px] sm:text-[11px] font-extrabold uppercase text-center leading-tight"
+              className="text-xs sm:text-[13px] font-extrabold uppercase text-center leading-tight"
             >
-              <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+              <th style={{ border: '1.5px solid #000000' }} className="py-2.5 px-2 w-16">
                 SL #
               </th>
-              <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+              <th style={{ border: '1.5px solid #000000' }} className="py-2.5 px-2.5 w-32">
                 DATE
               </th>
-              <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+              <th style={{ border: '1.5px solid #000000' }} className="py-2.5 px-3 min-w-[150px]">
                 SHIPPER
               </th>
-              <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+              <th style={{ border: '1.5px solid #000000' }} className="py-2.5 px-2.5 w-28">
                 FLIGHT
               </th>
-              <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+              <th style={{ border: '1.5px solid #000000' }} className="py-2.5 px-2.5 w-28">
                 TOTAL BOX
               </th>
-              <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+              <th style={{ border: '1.5px solid #000000' }} className="py-2.5 px-2.5 w-32">
                 RMB/PER BOX
               </th>
-              <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+              <th style={{ border: '1.5px solid #000000' }} className="py-2.5 px-2.5 w-36">
                 TOTAL RMB
               </th>
-              <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+              <th style={{ border: '1.5px solid #000000' }} className="py-2.5 px-2.5 w-24">
                 RATE
               </th>
-              <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+              <th style={{ border: '1.5px solid #000000' }} className="py-2.5 px-3 w-40">
                 BDT AMOUNT
               </th>
             </tr>
@@ -756,8 +765,8 @@ export const AirWayBillView: React.FC = () => {
                 >
                   {/* 0. SL # */}
                   <td
-                    style={{ border: '1.5px solid #000000', height: '30px' }}
-                    className="p-0.5 text-center"
+                    style={{ border: '1.5px solid #000000', height: '36px' }}
+                    className="px-2 py-1 text-center"
                   >
                     <span className="zsb-sl-badge">
                       {String(rowNum).padStart(2, '0')}
@@ -766,8 +775,8 @@ export const AirWayBillView: React.FC = () => {
 
                   {/* 1. DATE */}
                   <td
-                    style={{ border: '1.5px solid #000000', height: '30px' }}
-                    className="p-0.5 text-center font-mono font-semibold text-[11px]"
+                    style={{ border: '1.5px solid #000000', height: '36px' }}
+                    className="px-2 py-1 text-center font-mono font-semibold text-xs sm:text-sm whitespace-nowrap"
                   >
                     {isFromPackingList ? (
                       <span data-testid={`awb-row-${rowNum}-date`}>
@@ -781,15 +790,15 @@ export const AirWayBillView: React.FC = () => {
                         onChange={(e) =>
                           handleRowEditableChange(row, 'date', e.target.value)
                         }
-                        className="w-full h-full text-center font-mono text-[11px] bg-transparent focus:bg-amber-50 focus:outline-none px-0.5"
+                        className="w-full h-full text-center font-mono text-xs sm:text-sm bg-transparent focus:bg-amber-50 focus:outline-none px-1"
                       />
                     )}
                   </td>
 
                   {/* 2. SHIPPER */}
                   <td
-                    style={{ border: '1.5px solid #000000', height: '30px' }}
-                    className="p-0.5 text-center font-bold text-[11px] truncate"
+                    style={{ border: '1.5px solid #000000', height: '36px' }}
+                    className="px-2.5 py-1 text-center font-bold text-xs sm:text-sm whitespace-nowrap"
                   >
                     {isFromPackingList ? (
                       <span data-testid={`awb-row-${rowNum}-shipper`}>
@@ -804,15 +813,15 @@ export const AirWayBillView: React.FC = () => {
                         onChange={(e) =>
                           handleRowEditableChange(row, 'shipper', e.target.value)
                         }
-                        className="w-full h-full text-center font-bold text-[11px] bg-transparent focus:bg-amber-50 focus:outline-none px-0.5"
+                        className="w-full h-full text-center font-bold text-xs sm:text-sm bg-transparent focus:bg-amber-50 focus:outline-none px-1"
                       />
                     )}
                   </td>
 
                   {/* 3. FLIGHT */}
                   <td
-                    style={{ border: '1.5px solid #000000', height: '30px' }}
-                    className="p-0.5 text-center font-mono font-bold text-[11px] truncate"
+                    style={{ border: '1.5px solid #000000', height: '36px' }}
+                    className="px-2 py-1 text-center font-mono font-bold text-xs sm:text-sm whitespace-nowrap"
                   >
                     {isFromPackingList ? (
                       <span data-testid={`awb-row-${rowNum}-flight`}>
@@ -827,15 +836,15 @@ export const AirWayBillView: React.FC = () => {
                         onChange={(e) =>
                           handleRowEditableChange(row, 'flight', e.target.value)
                         }
-                        className="w-full h-full text-center font-mono font-bold text-[11px] bg-transparent focus:bg-amber-50 focus:outline-none px-0.5"
+                        className="w-full h-full text-center font-mono font-bold text-xs sm:text-sm bg-transparent focus:bg-amber-50 focus:outline-none px-1"
                       />
                     )}
                   </td>
 
                   {/* 4. TOTAL BOX */}
                   <td
-                    style={{ border: '1.5px solid #000000', height: '30px' }}
-                    className="p-0.5 text-center font-mono font-bold text-[11px] tabular-nums"
+                    style={{ border: '1.5px solid #000000', height: '36px' }}
+                    className="px-2 py-1 text-center font-mono font-bold text-xs sm:text-sm tabular-nums"
                   >
                     {isFromPackingList ? (
                       <span data-testid={`awb-row-${rowNum}-box`}>
@@ -851,15 +860,15 @@ export const AirWayBillView: React.FC = () => {
                         onChange={(e) =>
                           handleRowEditableChange(row, 'totalBox', e.target.value)
                         }
-                        className="w-full h-full text-center font-mono font-bold text-[11px] bg-transparent focus:bg-amber-50 focus:outline-none px-0.5 tabular-nums"
+                        className="w-full h-full text-center font-mono font-bold text-xs sm:text-sm bg-transparent focus:bg-amber-50 focus:outline-none px-1 tabular-nums"
                       />
                     )}
                   </td>
 
                   {/* 5. RMB/PER BOX (EDITABLE) */}
                   <td
-                    style={{ border: '1.5px solid #000000', height: '30px' }}
-                    className="p-0.5 text-center font-mono font-bold text-[11px] tabular-nums bg-amber-50/25"
+                    style={{ border: '1.5px solid #000000', height: '36px' }}
+                    className="px-1.5 py-1 text-center font-mono font-bold text-xs sm:text-sm tabular-nums bg-amber-50/25"
                   >
                     <input
                       type="number"
@@ -871,23 +880,23 @@ export const AirWayBillView: React.FC = () => {
                       onChange={(e) =>
                         handleRowEditableChange(row, 'rmbPerBox', e.target.value)
                       }
-                      className="w-full h-full text-center font-mono font-bold text-[11px] bg-transparent focus:bg-amber-100/70 focus:outline-none px-1 py-0.5 rounded tabular-nums"
+                      className="w-full h-full text-center font-mono font-bold text-xs sm:text-sm bg-transparent focus:bg-amber-100/70 focus:outline-none px-1.5 py-0.5 rounded tabular-nums"
                     />
                   </td>
 
                   {/* 6. TOTAL RMB (= TOTAL BOX * RMB/PER BOX) */}
                   <td
                     data-testid={`awb-row-${rowNum}-total-rmb`}
-                    style={{ border: '1.5px solid #000000', height: '30px' }}
-                    className="py-1 px-1.5 text-center font-mono font-bold text-[11px] tabular-nums"
+                    style={{ border: '1.5px solid #000000', height: '36px' }}
+                    className="px-2.5 py-1 text-center font-mono font-bold text-xs sm:text-sm tabular-nums"
                   >
                     {formatCellNumber(row.totalRmb)}
                   </td>
 
                   {/* 7. RATE (EDITABLE) */}
                   <td
-                    style={{ border: '1.5px solid #000000', height: '30px' }}
-                    className="p-0.5 text-center font-mono font-bold text-[11px] tabular-nums bg-amber-50/25"
+                    style={{ border: '1.5px solid #000000', height: '36px' }}
+                    className="px-1.5 py-1 text-center font-mono font-bold text-xs sm:text-sm tabular-nums bg-amber-50/25"
                   >
                     <input
                       type="number"
@@ -899,15 +908,15 @@ export const AirWayBillView: React.FC = () => {
                       onChange={(e) =>
                         handleRowEditableChange(row, 'rate', e.target.value)
                       }
-                      className="w-full h-full text-center font-mono font-bold text-[11px] bg-transparent focus:bg-amber-100/70 focus:outline-none px-1 py-0.5 rounded tabular-nums"
+                      className="w-full h-full text-center font-mono font-bold text-xs sm:text-sm bg-transparent focus:bg-amber-100/70 focus:outline-none px-1.5 py-0.5 rounded tabular-nums"
                     />
                   </td>
 
                   {/* 8. BDT AMOUNT (= TOTAL RMB * RATE) */}
                   <td
                     data-testid={`awb-row-${rowNum}-bdt-amount`}
-                    style={{ border: '1.5px solid #000000', height: '30px' }}
-                    className="py-1 px-1.5 text-center font-mono font-extrabold text-[11px] tabular-nums"
+                    style={{ border: '1.5px solid #000000', height: '36px' }}
+                    className="px-2.5 py-1 text-center font-mono font-extrabold text-xs sm:text-sm tabular-nums"
                   >
                     {formatCellNumber(row.bdtAmount)}
                   </td>
@@ -917,12 +926,12 @@ export const AirWayBillView: React.FC = () => {
           </tbody>
 
           {/* Footer: Matches Reference Image ("TOTAL AMOUNT (BDT)" spanning RMB/PER BOX..RATE + value in BDT AMOUNT) */}
-          <tfoot>
+          <tfoot className="sticky bottom-0 z-10 bg-white">
             <tr>
               <td
                 colSpan={5}
                 style={{ border: 'none', backgroundColor: 'transparent' }}
-                className="py-1.5 px-1 text-left text-[11px] text-slate-500 font-mono print:text-transparent"
+                className="py-2 px-2 text-left text-xs text-slate-600 font-mono print:text-transparent"
               >
                 {totals.totalBoxes > 0
                   ? `Boxes: ${totals.totalBoxes} | RMB: ¥${totals.totalRmb.toLocaleString('en-US', {
@@ -937,9 +946,9 @@ export const AirWayBillView: React.FC = () => {
                   backgroundColor: '#bdd7ee',
                   color: '#000000',
                   border: '1.5px solid #000000',
-                  height: '32px',
+                  height: '38px',
                 }}
-                className="py-1 px-2 text-center text-[11px] font-extrabold uppercase tracking-wide"
+                className="py-1.5 px-3 text-center text-xs sm:text-sm font-extrabold uppercase tracking-wide"
               >
                 TOTAL AMOUNT (BDT)
               </td>
@@ -949,9 +958,9 @@ export const AirWayBillView: React.FC = () => {
                   backgroundColor: '#ffffff',
                   color: '#000000',
                   border: '1.5px solid #000000',
-                  height: '32px',
+                  height: '38px',
                 }}
-                className="py-1 px-1.5 text-center font-mono font-black text-[11px] tabular-nums"
+                className="py-1.5 px-2.5 text-center font-mono font-black text-xs sm:text-sm tabular-nums"
               >
                 {totals.totalAmountBDT > 0
                   ? totals.totalAmountBDT.toLocaleString('en-US', {

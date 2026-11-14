@@ -14,7 +14,15 @@ import {
   AuditLogRecord,
   AuthUser,
   ActiveTab,
+  PrivateImportDraft,
+  ExporterStatus,
 } from '../types/index.ts';
+import {
+  buildBatchStatusUpdateForPurchase,
+  buildBatchStatusUpdateForPacking,
+  buildBatchStatusUpdateForPayment,
+  filterRecordsAfterBatchDelete,
+} from '../utils/batchDatabaseUpdate.ts';
 import {
   initialCompanyProfile,
   initialDropdownOptions,
@@ -24,6 +32,9 @@ import {
   initialOtherCosts,
   initialSupplierCredits,
   initialMortalities,
+  samplePurchases,
+  samplePackings,
+  samplePayments,
   COMPANY_LOGO_URL,
 } from './initialData.ts';
 import { generateRecordId, deduplicateRecords } from '../utils/idGenerator.ts';
@@ -33,11 +44,15 @@ import {
   calculatePackingTotals,
 } from '../utils/calculations.ts';
 import {
-  buildPurchaseSupplierGroupKey,
   mergePurchaseRecordsBySupplierAndDate,
-  buildPackingShipmentGroupKey,
   mergePackingRecordsByShipmentGroup,
 } from '../utils/csvParser.ts';
+import {
+  upsertPurchasesInPlace,
+  upsertPackingsInPlace,
+  upsertPaymentsInPlace,
+  upsertOtherCostsInPlace,
+} from '../utils/importUpsert.ts';
 import {
   createSupplierCreditRecord,
   applySupplierCreditNote,
@@ -161,6 +176,8 @@ interface AppContextType {
   addPurchase: (record: Omit<PurchaseRecord, 'id' | 'createdAt'>) => string;
   updatePurchase: (id: string, record: Partial<PurchaseRecord>) => void;
   deletePurchase: (id: string) => void;
+  batchDeletePurchases: (ids: string[]) => number;
+  batchUpdatePurchasesStatus: (ids: string[], status: ExporterStatus) => number;
   bulkImportPurchases: (
     records: Omit<PurchaseRecord, 'id' | 'createdAt'>[],
     mode?: 'append' | 'replace'
@@ -172,6 +189,8 @@ interface AppContextType {
   addPacking: (record: Omit<PackingRecord, 'id' | 'createdAt'>) => string;
   updatePacking: (id: string, record: Partial<PackingRecord>, silent?: boolean) => void;
   deletePacking: (id: string) => void;
+  batchDeletePackings: (ids: string[]) => number;
+  batchUpdatePackingsStatus: (ids: string[], status: ExporterStatus) => number;
   bulkImportPackings: (
     records: Omit<PackingRecord, 'id' | 'createdAt'>[],
     mode?: 'append' | 'replace'
@@ -186,6 +205,8 @@ interface AppContextType {
   addPayment: (record: Omit<PaymentRecord, 'id' | 'createdAt'>) => string;
   updatePayment: (id: string, record: Partial<PaymentRecord>) => void;
   deletePayment: (id: string) => void;
+  batchDeletePayments: (ids: string[]) => number;
+  batchUpdatePaymentsStatus: (ids: string[], status: ExporterStatus) => number;
   bulkImportPayments: (
     records: Omit<PaymentRecord, 'id' | 'createdAt'>[],
     mode?: 'append' | 'replace'
@@ -248,13 +269,16 @@ interface AppContextType {
   lastExportedPdfFilename: string | null;
   exportCurrentViewToPdf: (options?: { openPreviewOnly?: boolean }) => Promise<boolean>;
 
-  // Excel & CSV Import/Export Data Center modal state
+  // Excel & CSV Import/Export Data Center modal state + Private Import Draft
   dataCenterModal: DataCenterModalConfig;
   openDataCenterModal: (
     initialTab?: 'import' | 'export',
     initialDataset?: 'purchase' | 'packing' | 'payment' | 'other_cost' | 'all'
   ) => void;
   closeDataCenterModal: () => void;
+  privateImportDraft: PrivateImportDraft | null;
+  savePrivateImportDraft: (draft: Omit<PrivateImportDraft, 'id' | 'ownerUsername' | 'savedAt'>) => PrivateImportDraft;
+  clearPrivateImportDraft: () => void;
 
   // Super Admin Password & Clear / Single Delete Modals
   superAdminPassword: string;
@@ -263,6 +287,7 @@ interface AppContextType {
     newPassword: string,
     confirmPassword: string
   ) => { valid: boolean; error?: string };
+  resetSuperAdminPasswordToDefault: () => void;
   superAdminClearModal: SuperAdminClearModalConfig;
   openSuperAdminClearModal: (scope?: ClearRecordsScope) => void;
   closeSuperAdminClearModal: () => void;
@@ -382,6 +407,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const isAuthenticated = Boolean(currentUser);
 
+  const privateDraftStorageKey = currentUser?.username
+    ? `zsb_private_import_draft_v1_${currentUser.username}`
+    : 'zsb_private_import_draft_v1_anonymous';
+
+  const [privateImportDraft, setPrivateImportDraft] = useState<PrivateImportDraft | null>(null);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(privateDraftStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.ownerUsername === (currentUser?.username || 'anonymous')) {
+          setPrivateImportDraft(parsed as PrivateImportDraft);
+          return;
+        }
+      }
+      setPrivateImportDraft(null);
+    } catch {
+      setPrivateImportDraft(null);
+    }
+  }, [privateDraftStorageKey, currentUser?.username]);
+
+  const savePrivateImportDraft = (
+    draftInput: Omit<PrivateImportDraft, 'id' | 'ownerUsername' | 'savedAt'>
+  ): PrivateImportDraft => {
+    const nextDraft: PrivateImportDraft = {
+      ...draftInput,
+      id: generateRecordId('draft'),
+      ownerUsername: currentUser?.username || 'anonymous',
+      savedAt: new Date().toISOString(),
+    };
+    setPrivateImportDraft(nextDraft);
+    try {
+      localStorage.setItem(privateDraftStorageKey, JSON.stringify(nextDraft));
+    } catch (e) {
+      console.error('Failed to save private import draft:', e);
+    }
+    return nextDraft;
+  };
+
+  const clearPrivateImportDraft = () => {
+    setPrivateImportDraft(null);
+    try {
+      localStorage.removeItem(privateDraftStorageKey);
+    } catch {
+      // ignore
+    }
+  };
+
   const [auditLogs, setAuditLogs] = useState<AuditLogRecord[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.AUDIT_LOGS);
@@ -393,11 +467,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
+  const isSeedRequested =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('seed') === '1';
+
   const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
     if (typeof window !== 'undefined') {
       const searchParams = new URLSearchParams(window.location.search);
       const tabParam = searchParams.get('tab') as ActiveTab | null;
-      if (tabParam === 'exporter_payment_form' || tabParam === 'exporter_payment_slip') {
+      const validTabs: ActiveTab[] = [
+        'dashboard',
+        'purchase_form',
+        'packing_form',
+        'air_way_bill',
+        'payment_form',
+        'exporter_payment_form',
+        'exporter_payment_slip',
+        'profit_loss',
+        'purchase_db',
+        'packing_db',
+        'payment_db',
+        'search_reports',
+        'audit_logs',
+        'settings',
+        'administration',
+      ];
+      if (tabParam && validTabs.includes(tabParam)) {
         return tabParam;
       }
       if (searchParams.get('wechat_tx') || searchParams.get('wechat_tmp_token')) {
@@ -480,6 +575,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [purchases, setPurchases] = useState<PurchaseRecord[]>(() => {
     try {
+      if (isSeedRequested) {
+        localStorage.setItem('zsb_db_wipe_all_v12', '1');
+        localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify(samplePurchases));
+        return samplePurchases;
+      }
       if (!localStorage.getItem('zsb_db_wipe_all_v12')) {
         localStorage.removeItem(STORAGE_KEYS.PURCHASES);
         return [];
@@ -495,6 +595,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [packings, setPackings] = useState<PackingRecord[]>(() => {
     try {
+      if (isSeedRequested) {
+        localStorage.setItem('zsb_db_wipe_all_v12', '1');
+        localStorage.setItem(STORAGE_KEYS.PACKINGS, JSON.stringify(samplePackings));
+        return samplePackings;
+      }
       if (!localStorage.getItem('zsb_db_wipe_all_v12')) {
         localStorage.removeItem(STORAGE_KEYS.PACKINGS);
         return [];
@@ -536,6 +641,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [payments, setPayments] = useState<PaymentRecord[]>(() => {
     try {
+      if (isSeedRequested) {
+        localStorage.setItem('zsb_db_wipe_all_v12', '1');
+        localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(samplePayments));
+        return samplePayments;
+      }
       if (!localStorage.getItem('zsb_db_wipe_all_v12')) {
         localStorage.removeItem(STORAGE_KEYS.PAYMENTS);
         return [];
@@ -1267,6 +1377,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  const batchDeletePurchases = (ids: string[]): number => {
+    if (!ids || ids.length === 0) return 0;
+    const { remaining, deleted, deletedCount } = filterRecordsAfterBatchDelete(purchases, ids);
+    if (deletedCount === 0) return 0;
+
+    setPurchases(remaining);
+    if (editingPurchaseId && ids.includes(editingPurchaseId)) {
+      setEditingPurchaseId(null);
+    }
+    emitPaymentSyncTrigger({
+      category: 'supplier',
+      action: 'delete',
+      invoiceNumber: deleted.map((d) => d.invoiceNumber).slice(0, 3).join(', '),
+      partyName: deleted[0]?.description,
+    });
+    addAuditLog({
+      action: 'DELETE',
+      module: 'Purchase',
+      entityId: `BATCH-PUR-DEL-${deletedCount}`,
+      summary: `Batch deleted ${deletedCount} purchase challan record(s)`,
+      details: `Invoices: ${deleted.map((d) => d.invoiceNumber).slice(0, 6).join(', ')}`,
+    });
+    showToast(`Deleted ${deletedCount} selected purchase record(s) from database.`);
+    return deletedCount;
+  };
+
+  const batchUpdatePurchasesStatus = (ids: string[], status: ExporterStatus): number => {
+    if (!ids || ids.length === 0 || !status) return 0;
+    const targetSet = new Set(ids);
+    const cleanStatus = status.trim().toUpperCase();
+    let updatedCount = 0;
+
+    setPurchases((prev) =>
+      prev.map((p) => {
+        if (!targetSet.has(p.id)) return p;
+        updatedCount++;
+        return {
+          ...p,
+          ...buildBatchStatusUpdateForPurchase(p, cleanStatus),
+        };
+      })
+    );
+
+    if (updatedCount > 0) {
+      emitPaymentSyncTrigger({
+        category: 'supplier',
+        action: 'update',
+        invoiceNumber: `BATCH-${updatedCount}`,
+      });
+      addAuditLog({
+        action: 'UPDATE',
+        module: 'Purchase',
+        entityId: `BATCH-PUR-STATUS-${updatedCount}`,
+        summary: `Batch updated status to ${cleanStatus} for ${updatedCount} purchase record(s)`,
+      });
+      showToast(`Updated status to ${cleanStatus} for ${updatedCount} selected purchase record(s).`);
+    }
+    return updatedCount;
+  };
+
   const bulkImportPurchases = (
     records: Omit<PurchaseRecord, 'id' | 'createdAt'>[],
     mode: 'append' | 'replace' = 'append'
@@ -1279,8 +1449,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     if (mode === 'replace') {
-      const hydrated: PurchaseRecord[] = mergedIncoming.map((rec) => ({
+      const hydrated: PurchaseRecord[] = mergedIncoming.map((rec, idx) => ({
         ...rec,
+        invoiceNumber: rec.invoiceNumber || generateInvoiceNumber('INV', idx),
         id: generateRecordId('pur'),
         createdAt: now,
       }));
@@ -1294,81 +1465,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return hydrated.length;
     }
 
-    setPurchases((prev) => {
-      const updatedExisting = [...prev];
-      const existingIndexByKey = new Map<string, number>();
-      updatedExisting.forEach((p, idx) => {
-        existingIndexByKey.set(
-          buildPurchaseSupplierGroupKey({
-            description: p.description,
-            date: p.date,
-          }),
-          idx
-        );
-      });
-
-      const newlyCreated: PurchaseRecord[] = [];
-      let nextSeqCount = prev.length;
-
-      for (const incoming of mergedIncoming) {
-        const key = buildPurchaseSupplierGroupKey({
-          description: incoming.description,
-          date: incoming.date,
-        });
-
-        const matchIdx = existingIndexByKey.get(key);
-        if (matchIdx !== undefined) {
-          const target = updatedExisting[matchIdx];
-          const combinedItems: PurchaseItemRow[] = [
-            ...(target.items || []),
-            ...(incoming.items || []).map((it, idx) => ({
-              ...it,
-              id: `pi-merged-${Date.now()}-${target.items.length + idx}`,
-            })),
-          ];
-          const combinedPrevious =
-            (Number(target.previousAmount) || 0) + (Number(incoming.previousAmount) || 0);
-          const combinedPaid =
-            (Number(target.paidAmount) || 0) + (Number(incoming.paidAmount) || 0);
-          const totals = calculatePurchaseTotals(
-            combinedItems,
-            combinedPrevious,
-            combinedPaid
-          );
-
-          updatedExisting[matchIdx] = {
-            ...target,
-            contactNumber: target.contactNumber || incoming.contactNumber,
-            items: combinedItems,
-            totalQty: totals.totalQty,
-            totalAmount: totals.totalAmount,
-            previousAmount: totals.previousAmount,
-            paidAmount: totals.paidAmount,
-            balance: totals.balance,
-          };
-        } else {
-          const invoiceNumber =
-            incoming.invoiceNumber || generateInvoiceNumber('PUR', nextSeqCount);
-          nextSeqCount++;
-          newlyCreated.push({
-            ...incoming,
-            invoiceNumber,
-            id: generateRecordId('pur'),
-            createdAt: now,
-          });
-        }
-      }
-
-      return [...newlyCreated, ...updatedExisting];
-    });
+    const upsertResult = upsertPurchasesInPlace(
+      purchases,
+      mergedIncoming,
+      generateRecordId,
+      now
+    );
+    setPurchases(upsertResult.records);
 
     addAuditLog({
       action: 'IMPORT',
       module: 'Purchase',
       entityId: `BULK-PUR-${mergedIncoming.length}`,
-      summary: `Bulk imported ${mergedIncoming.length} merged purchase challan record(s) (append mode)`,
+      summary: `Imported Purchases: ${upsertResult.insertedCount} added, ${upsertResult.updatedCount} updated in place, ${upsertResult.unchangedCount} identical unchanged`,
     });
-    return mergedIncoming.length;
+    return upsertResult.insertedCount + upsertResult.updatedCount;
   };
 
   // Packings CRUD
@@ -1436,6 +1547,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  const batchDeletePackings = (ids: string[]): number => {
+    if (!ids || ids.length === 0) return 0;
+    const { remaining, deleted, deletedCount } = filterRecordsAfterBatchDelete(packings, ids);
+    if (deletedCount === 0) return 0;
+
+    setPackings(remaining);
+    if (editingPackingId && ids.includes(editingPackingId)) {
+      setEditingPackingId(null);
+    }
+    addAuditLog({
+      action: 'DELETE',
+      module: 'Packing',
+      entityId: `BATCH-PKG-DEL-${deletedCount}`,
+      summary: `Batch deleted ${deletedCount} export packing list record(s)`,
+      details: `Manifests: ${deleted.map((d) => d.invoiceNumber).slice(0, 6).join(', ')}`,
+    });
+    showToast(`Deleted ${deletedCount} selected packing list record(s) from database.`);
+    return deletedCount;
+  };
+
+  const batchUpdatePackingsStatus = (ids: string[], status: ExporterStatus): number => {
+    if (!ids || ids.length === 0 || !status) return 0;
+    const targetSet = new Set(ids);
+    const cleanStatus = status.trim().toUpperCase();
+    let updatedCount = 0;
+
+    setPackings((prev) =>
+      prev.map((pkg) => {
+        if (!targetSet.has(pkg.id)) return pkg;
+        updatedCount++;
+        return {
+          ...pkg,
+          ...buildBatchStatusUpdateForPacking(pkg, cleanStatus),
+        };
+      })
+    );
+
+    if (updatedCount > 0) {
+      addAuditLog({
+        action: 'UPDATE',
+        module: 'Packing',
+        entityId: `BATCH-PKG-STATUS-${updatedCount}`,
+        summary: `Batch updated status to ${cleanStatus} for ${updatedCount} packing list record(s)`,
+      });
+      showToast(`Updated status to ${cleanStatus} for ${updatedCount} selected packing record(s).`);
+    }
+    return updatedCount;
+  };
+
   const bulkImportPackings = (
     records: Omit<PackingRecord, 'id' | 'createdAt'>[],
     mode: 'append' | 'replace' = 'append'
@@ -1463,94 +1623,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return hydrated.length;
     }
 
-    setPackings((prev) => {
-      const updatedExisting = [...prev];
-      const existingIndexByKey = new Map<string, number>();
-      updatedExisting.forEach((p, idx) => {
-        existingIndexByKey.set(
-          buildPackingShipmentGroupKey({
-            shippingMark: p.shippingMark,
-            flight: p.flight,
-            destination: p.destination,
-            shipper: p.shipper,
-            packingDate: p.packingDate,
-          }),
-          idx
-        );
-      });
-
-      const newlyCreated: PackingRecord[] = [];
-      let nextSeqCount = prev.length;
-
-      for (const incoming of mergedIncoming) {
-        const key = buildPackingShipmentGroupKey({
-          shippingMark: incoming.shippingMark,
-          flight: incoming.flight,
-          destination: incoming.destination,
-          shipper: incoming.shipper,
-          packingDate: incoming.packingDate,
-        });
-
-        const matchIdx = existingIndexByKey.get(key);
-        if (matchIdx !== undefined) {
-          const target = updatedExisting[matchIdx];
-          const combinedItems: PackingItemRow[] = [
-            ...(target.items || []),
-            ...(incoming.items || []).map((it, idx) => ({
-              ...it,
-              id: `pki-merged-${Date.now()}-${target.items.length + idx}`,
-            })),
-          ];
-          const totals = calculatePackingTotals(combinedItems);
-          const rmbRate =
-            target.rmbRate && target.rmbRate > 0
-              ? target.rmbRate
-              : incoming.rmbRate && incoming.rmbRate > 0
-              ? incoming.rmbRate
-              : undefined;
-          const totalAmountBDT =
-            rmbRate && rmbRate > 0
-              ? Math.round(totals.totalAmount * rmbRate * 100) / 100
-              : target.totalAmountBDT;
-          const rmbAmount =
-            totals.totalWeight > 0
-              ? Math.round((totals.totalAmount / totals.totalWeight) * 100) / 100
-              : 0;
-
-          updatedExisting[matchIdx] = {
-            ...target,
-            items: combinedItems,
-            totalBox: totals.totalBox,
-            totalWeight: totals.totalWeight,
-            totalAmount: totals.totalAmount,
-            rmbAmount,
-            settledAmount: totals.totalAmount,
-            rmbRate,
-            totalAmountBDT,
-          };
-        } else {
-          const invoiceNumber =
-            incoming.invoiceNumber || generateInvoiceNumber('PKG', nextSeqCount);
-          nextSeqCount++;
-          newlyCreated.push({
-            ...incoming,
-            invoiceNumber,
-            id: generateRecordId('pkg'),
-            createdAt: now,
-          });
-        }
-      }
-
-      return [...newlyCreated, ...updatedExisting];
-    });
+    const upsertResult = upsertPackingsInPlace(
+      packings,
+      mergedIncoming,
+      generateRecordId,
+      now
+    );
+    setPackings(upsertResult.records);
 
     addAuditLog({
       action: 'IMPORT',
       module: 'Packing',
       entityId: `BULK-PKG-${mergedIncoming.length}`,
-      summary: `Bulk imported ${mergedIncoming.length} merged packing list manifest(s) (append mode)`,
+      summary: `Imported Packings: ${upsertResult.insertedCount} added, ${upsertResult.updatedCount} updated in place, ${upsertResult.unchangedCount} identical unchanged`,
     });
-    return mergedIncoming.length;
+    return upsertResult.insertedCount + upsertResult.updatedCount;
   };
 
   // Payments CRUD
@@ -1664,25 +1751,102 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  const batchDeletePayments = (ids: string[]): number => {
+    if (!ids || ids.length === 0) return 0;
+    const { remaining, deleted, deletedCount } = filterRecordsAfterBatchDelete(payments, ids);
+    if (deletedCount === 0) return 0;
+
+    setPayments(remaining);
+    if (editingPaymentId && ids.includes(editingPaymentId)) {
+      setEditingPaymentId(null);
+    }
+    emitPaymentSyncTrigger({
+      category: deleted[0]?.paymentCategory === 'exporter' ? 'exporter' : 'supplier',
+      action: 'delete',
+      invoiceNumber: deleted.map((d) => d.invoiceNumber).slice(0, 3).join(', '),
+      partyName: deleted[0]?.description,
+    });
+    addAuditLog({
+      action: 'DELETE',
+      module: 'Payment',
+      entityId: `BATCH-PAY-DEL-${deletedCount}`,
+      summary: `Batch deleted ${deletedCount} payment voucher record(s)`,
+      details: `Vouchers: ${deleted.map((d) => d.invoiceNumber).slice(0, 6).join(', ')}`,
+    });
+    showToast(`Deleted ${deletedCount} selected payment voucher(s) from database.`);
+    return deletedCount;
+  };
+
+  const batchUpdatePaymentsStatus = (ids: string[], status: ExporterStatus): number => {
+    if (!ids || ids.length === 0 || !status) return 0;
+    const targetSet = new Set(ids);
+    const cleanStatus = status.trim().toUpperCase();
+    let updatedCount = 0;
+
+    setPayments((prev) =>
+      prev.map((pm) => {
+        if (!targetSet.has(pm.id)) return pm;
+        updatedCount++;
+        return {
+          ...pm,
+          ...buildBatchStatusUpdateForPayment(pm, cleanStatus),
+        };
+      })
+    );
+
+    if (updatedCount > 0) {
+      emitPaymentSyncTrigger({
+        category: 'supplier',
+        action: 'update',
+        invoiceNumber: `BATCH-${updatedCount}`,
+      });
+      addAuditLog({
+        action: 'UPDATE',
+        module: 'Payment',
+        entityId: `BATCH-PAY-STATUS-${updatedCount}`,
+        summary: `Batch updated status to ${cleanStatus} for ${updatedCount} payment voucher(s)`,
+      });
+      showToast(`Updated status to ${cleanStatus} for ${updatedCount} selected payment record(s).`);
+    }
+    return updatedCount;
+  };
+
   const bulkImportPayments = (
     records: Omit<PaymentRecord, 'id' | 'createdAt'>[],
     mode: 'append' | 'replace' = 'append'
   ): number => {
     if (!records || records.length === 0) return 0;
     const now = new Date().toISOString();
-    const hydrated: PaymentRecord[] = records.map((rec) => ({
-      ...rec,
-      id: generateRecordId('pay'),
-      createdAt: now,
-    }));
-    setPayments((prev) => (mode === 'replace' ? hydrated : [...hydrated, ...prev]));
+    if (mode === 'replace') {
+      const hydrated: PaymentRecord[] = records.map((rec) => ({
+        ...rec,
+        id: generateRecordId('pay'),
+        createdAt: now,
+      }));
+      setPayments(hydrated);
+      addAuditLog({
+        action: 'IMPORT',
+        module: 'Payment',
+        entityId: `BULK-PAY-${hydrated.length}`,
+        summary: `Bulk imported ${hydrated.length} payment voucher(s) (replace mode)`,
+      });
+      return hydrated.length;
+    }
+
+    const upsertResult = upsertPaymentsInPlace(
+      payments,
+      records,
+      generateRecordId,
+      now
+    );
+    setPayments(upsertResult.records);
     addAuditLog({
       action: 'IMPORT',
       module: 'Payment',
-      entityId: `BULK-PAY-${hydrated.length}`,
-      summary: `Bulk imported ${hydrated.length} payment voucher(s) (${mode} mode)`,
+      entityId: `BULK-PAY-${records.length}`,
+      summary: `Imported Payments: ${upsertResult.insertedCount} added, ${upsertResult.updatedCount} updated in place, ${upsertResult.unchangedCount} identical unchanged`,
     });
-    return hydrated.length;
+    return upsertResult.insertedCount + upsertResult.updatedCount;
   };
 
   // Other Costs CRUD
@@ -1738,19 +1902,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ): number => {
     if (!records || records.length === 0) return 0;
     const now = new Date().toISOString();
-    const hydrated: OtherCostRecord[] = records.map((rec) => ({
-      ...rec,
-      id: generateRecordId('cost'),
-      createdAt: now,
-    }));
-    setOtherCosts((prev) => (mode === 'replace' ? hydrated : [...hydrated, ...prev]));
+    if (mode === 'replace') {
+      const hydrated: OtherCostRecord[] = records.map((rec) => ({
+        ...rec,
+        id: generateRecordId('cost'),
+        createdAt: now,
+      }));
+      setOtherCosts(hydrated);
+      addAuditLog({
+        action: 'IMPORT',
+        module: 'OtherCost',
+        entityId: `BULK-COST-${hydrated.length}`,
+        summary: `Bulk imported ${hydrated.length} operating expense record(s) (replace mode)`,
+      });
+      return hydrated.length;
+    }
+
+    const upsertResult = upsertOtherCostsInPlace(
+      otherCosts,
+      records,
+      generateRecordId,
+      now
+    );
+    setOtherCosts(upsertResult.records);
     addAuditLog({
       action: 'IMPORT',
       module: 'OtherCost',
-      entityId: `BULK-COST-${hydrated.length}`,
-      summary: `Bulk imported ${hydrated.length} operating expense record(s) (${mode} mode)`,
+      entityId: `BULK-COST-${records.length}`,
+      summary: `Imported Other Costs: ${upsertResult.insertedCount} added, ${upsertResult.updatedCount} updated in place, ${upsertResult.unchangedCount} identical unchanged`,
     });
-    return hydrated.length;
+    return upsertResult.insertedCount + upsertResult.updatedCount;
   };
 
   // Supplier Credits CRUD & Application
@@ -2070,6 +2251,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSuperAdminPassword(check.normalizedNewPassword);
     showToast('Super Admin password updated successfully.');
     return { valid: true };
+  };
+
+  const resetSuperAdminPasswordToDefault = () => {
+    setSuperAdminPassword(DEFAULT_SUPER_ADMIN_PASSWORD);
+    try {
+      localStorage.setItem(STORAGE_KEYS.SUPER_ADMIN_PASSWORD, DEFAULT_SUPER_ADMIN_PASSWORD);
+    } catch {
+      // Ignore storage error
+    }
+    addAuditLog({
+      action: 'UPDATE',
+      module: 'Settings',
+      entityId: 'SUPER-ADMIN-PASSWORD',
+      summary:
+        'Admin login & Super Admin password reset to default (admin123) via Forgot Password recovery.',
+    });
+    showToast('Password reset to default: admin123');
   };
 
   const executeUnconditionalClearAll = () => {
@@ -2502,6 +2700,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addPurchase,
         updatePurchase,
         deletePurchase,
+        batchDeletePurchases,
+        batchUpdatePurchasesStatus,
         bulkImportPurchases,
         editingPurchaseId,
         setEditingPurchaseId,
@@ -2509,6 +2709,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addPacking,
         updatePacking,
         deletePacking,
+        batchDeletePackings,
+        batchUpdatePackingsStatus,
         bulkImportPackings,
         editingPackingId,
         setEditingPackingId,
@@ -2519,6 +2721,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addPayment,
         updatePayment,
         deletePayment,
+        batchDeletePayments,
+        batchUpdatePaymentsStatus,
         bulkImportPayments,
         editingPaymentId,
         setEditingPaymentId,
@@ -2545,8 +2749,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         dataCenterModal,
         openDataCenterModal,
         closeDataCenterModal,
+        privateImportDraft,
+        savePrivateImportDraft,
+        clearPrivateImportDraft,
         superAdminPassword,
         updateSuperAdminPassword,
+        resetSuperAdminPasswordToDefault,
         superAdminClearModal,
         openSuperAdminClearModal,
         closeSuperAdminClearModal,

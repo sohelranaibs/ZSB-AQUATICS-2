@@ -115,6 +115,20 @@ export function sortPurchaseRecords(
         valA = a.balance;
         valB = b.balance;
         break;
+      case 'status': {
+        const resolveStatus = (r: PurchaseRecord) => {
+          if (r.status && r.status.trim().length > 0) return r.status.trim().toUpperCase();
+          const tot = (Number(r.totalAmount) || 0) + (Number(r.previousAmount) || 0);
+          const paid = Number(r.paidAmount) || 0;
+          const bal = r.balance !== undefined ? Number(r.balance) : tot - paid;
+          if (bal <= 0 && tot > 0) return 'PAID';
+          if (paid > 0 && bal > 0) return 'PARTIAL';
+          return 'UNPAID';
+        };
+        valA = resolveStatus(a);
+        valB = resolveStatus(b);
+        break;
+      }
       case 'reconciliation':
       case 'reconciliationStatus':
         valA = reconciliations?.[a.id]?.label || '';
@@ -195,6 +209,11 @@ export function sortPackingRecords(
       case 'totalAmountBDT':
         valA = calculatePackingTotalAmountBDT(a.totalAmount, a.rmbRate || defaultRmbRate);
         valB = calculatePackingTotalAmountBDT(b.totalAmount, b.rmbRate || defaultRmbRate);
+        break;
+      case 'status':
+      case 'paymentStatus':
+        valA = (a.paymentStatus || a.exporterStatus || 'UNPAID').toUpperCase();
+        valB = (b.paymentStatus || b.exporterStatus || 'UNPAID').toUpperCase();
         break;
       default:
         valA = (a as unknown as Record<string, unknown>)[sort.column!];

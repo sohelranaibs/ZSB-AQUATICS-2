@@ -8,6 +8,7 @@ export interface RowValidationError {
   weight?: boolean;
   description?: boolean;
   debitAmount?: boolean;
+  reportAmount?: boolean;
   creditAmount?: boolean;
   message: string;
 }
@@ -442,12 +443,13 @@ export function validateExporterPaymentForm(
       ({ row }) =>
         row.description.trim() !== '' ||
         row.debitAmount !== 0 ||
+        (row.reportAmount ?? 0) !== 0 ||
         row.creditAmount !== 0
     );
 
   if (touchedRows.length === 0) {
     const msg =
-      'At least one exporter settlement row must be filled with Particulars/Description and a Debit or Credit amount (> 0).';
+      'At least one exporter settlement row must be filled with Particulars/Description and a Report, Debit, or Credit amount (> 0).';
     fieldErrors.rows = msg;
     errors.push(msg);
   } else {
@@ -465,20 +467,28 @@ export function validateExporterPaymentForm(
         rowIssues.push('enter a non-negative Debit Amount');
       }
 
+      if (row.reportAmount !== undefined && (!isValidNumber(row.reportAmount) || row.reportAmount < 0)) {
+        rErr.reportAmount = true;
+        rowIssues.push('enter a non-negative Report Amount');
+      }
+
       if (!isValidNumber(row.creditAmount) || row.creditAmount < 0) {
         rErr.creditAmount = true;
         rowIssues.push('enter a non-negative Credit Amount');
       }
 
+      const reportVal = row.reportAmount ?? 0;
       if (
         isValidNumber(row.debitAmount) &&
+        isValidNumber(reportVal) &&
         isValidNumber(row.creditAmount) &&
         row.debitAmount === 0 &&
+        reportVal === 0 &&
         row.creditAmount === 0
       ) {
-        rErr.debitAmount = true;
+        rErr.reportAmount = true;
         rErr.creditAmount = true;
-        rowIssues.push('enter a Debit or Credit amount greater than 0');
+        rowIssues.push('enter a Report or Credit amount greater than 0');
       }
 
       if (rowIssues.length > 0) {

@@ -12,6 +12,7 @@ import {
   UserCheck,
   FileText,
   DollarSign,
+  Trash2,
 } from 'lucide-react';
 import {
   DropdownOptions,
@@ -43,6 +44,7 @@ interface BatchUpdateSidebarProps {
   onUpdatePurchase: (id: string, record: Partial<PurchaseRecord>) => void;
   onUpdatePacking: (id: string, record: Partial<PackingRecord>, silent?: boolean) => void;
   onUpdatePayment: (id: string, record: Partial<PaymentRecord>) => void;
+  onBatchDelete?: () => void;
   onSuccess: (message: string) => void;
 }
 
@@ -59,12 +61,14 @@ export const BatchUpdateSidebar: React.FC<BatchUpdateSidebarProps> = ({
   onUpdatePurchase,
   onUpdatePacking,
   onUpdatePayment,
+  onBatchDelete,
   onSuccess,
 }) => {
   // Purchase batch fields
   const [purDate, setPurDate] = useState<string>('');
   const [purSupplier, setPurSupplier] = useState<string>('');
   const [purContact, setPurContact] = useState<string>('');
+  const [purStatus, setPurStatus] = useState<string>('');
   const [purRemarks, setPurRemarks] = useState<string>('');
   const [purSettleFull, setPurSettleFull] = useState<boolean>(false);
 
@@ -101,6 +105,7 @@ export const BatchUpdateSidebar: React.FC<BatchUpdateSidebarProps> = ({
           date: purDate,
           description: purSupplier,
           contactNumber: purContact,
+          status: purStatus || undefined,
           remarks: purRemarks,
           settleFullBalance: purSettleFull,
         }
@@ -133,6 +138,7 @@ export const BatchUpdateSidebar: React.FC<BatchUpdateSidebarProps> = ({
     setPurDate('');
     setPurSupplier('');
     setPurContact('');
+    setPurStatus('');
     setPurRemarks('');
     setPurSettleFull(false);
 
@@ -207,17 +213,17 @@ export const BatchUpdateSidebar: React.FC<BatchUpdateSidebarProps> = ({
     <aside
       aria-label="Batch Update Secondary Sidebar"
       data-testid="batch-update-sidebar"
-      className="w-full lg:w-96 shrink-0 bg-white rounded-xl shadow-lg border-2 border-amber-400 overflow-hidden flex flex-col justify-between self-start sticky top-4"
+      className="w-full lg:w-96 shrink-0 bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden flex flex-col justify-between self-start sticky top-4"
     >
       {/* Top Header */}
       <div>
-        <div className="bg-[#1b2b44] text-white px-4 py-3.5 border-b border-slate-700 flex items-center justify-between gap-2">
+        <div className="bg-[#263843] text-white px-4 py-3.5 border-b-2 border-[#00897b] flex items-center justify-between gap-2">
           <div className="flex items-center space-x-2.5">
-            <div className="p-1.5 rounded-lg bg-amber-400 text-slate-950 shrink-0">
+            <div className="p-1.5 rounded-lg bg-[#00897b] text-white shrink-0">
               <Layers className="w-4 h-4 stroke-[2.4]" />
             </div>
             <div>
-              <h3 className="text-xs font-black uppercase tracking-wider text-amber-300">
+              <h3 className="text-xs font-black uppercase tracking-wider text-[#5eead4]">
                 Batch Update Sidebar
               </h3>
               <p className="text-[11px] text-slate-300">
@@ -229,7 +235,7 @@ export const BatchUpdateSidebar: React.FC<BatchUpdateSidebarProps> = ({
             type="button"
             data-testid="close-batch-sidebar-btn"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+            className="p-1 rounded-lg text-slate-300 hover:text-white hover:bg-[#1c2a33] transition cursor-pointer"
             title="Close Batch Update Sidebar"
           >
             <X className="w-4 h-4" />
@@ -237,14 +243,14 @@ export const BatchUpdateSidebar: React.FC<BatchUpdateSidebarProps> = ({
         </div>
 
         {/* Selected Target Records Summary Strip */}
-        <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 space-y-2">
+        <div className="px-4 py-3 bg-[#f3f6f9] border-b border-slate-200 space-y-2">
           <div className="flex items-center justify-between text-xs">
             <span className="font-bold text-slate-700">Selected Target Rows:</span>
             <span
               data-testid="batch-sidebar-selected-count"
               className={`px-2 py-0.5 rounded-full font-mono text-[11px] font-black ${
                 selectedRecords.length > 0
-                  ? 'bg-amber-400 text-slate-950'
+                  ? 'bg-[#00897b] text-white'
                   : 'bg-rose-100 text-rose-800'
               }`}
             >
@@ -328,6 +334,26 @@ export const BatchUpdateSidebar: React.FC<BatchUpdateSidebarProps> = ({
                   onChange={(e) => setPurContact(e.target.value)}
                   className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg font-mono text-xs bg-slate-50 focus:bg-white focus:ring-1 focus:ring-blue-500"
                 />
+              </div>
+
+              <div>
+                <label className="flex items-center gap-1.5 font-bold text-slate-700 mb-1">
+                  <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Bill Payment Status</span>
+                </label>
+                <select
+                  data-testid="batch-purchase-status-select"
+                  value={purStatus}
+                  onChange={(e) => setPurStatus(e.target.value)}
+                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-slate-50 focus:bg-white"
+                >
+                  <option value="">-- Unchanged --</option>
+                  {dropdownOptions.paymentStatuses.map((st) => (
+                    <option key={st} value={st}>
+                      {st}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -641,33 +667,54 @@ export const BatchUpdateSidebar: React.FC<BatchUpdateSidebarProps> = ({
           )}
 
           {/* Action Buttons */}
-          <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-2">
-            <button
-              type="button"
-              data-testid="batch-sidebar-reset-btn"
-              onClick={handleResetFields}
-              className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition cursor-pointer"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Clear Fields</span>
-            </button>
+          <div className="pt-3 border-t border-slate-200 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                data-testid="batch-sidebar-reset-btn"
+                onClick={handleResetFields}
+                className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Clear Fields</span>
+              </button>
 
-            <button
-              type="submit"
-              data-testid="batch-sidebar-apply-btn"
-              disabled={selectedRecords.length === 0 || activeFieldCount === 0}
-              className={`flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wide shadow-sm transition ${
-                selectedRecords.length > 0 && activeFieldCount > 0
-                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 cursor-pointer'
-                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-              }`}
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>
-                Apply to {selectedRecords.length} Row{selectedRecords.length === 1 ? '' : 's'}
-                {activeFieldCount > 0 ? ` (${activeFieldCount})` : ''}
-              </span>
-            </button>
+              <button
+                type="submit"
+                data-testid="batch-sidebar-apply-btn"
+                disabled={selectedRecords.length === 0 || activeFieldCount === 0}
+                className={`flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wide shadow-sm transition ${
+                  selectedRecords.length > 0 && activeFieldCount > 0
+                    ? 'bg-[#00897b] hover:bg-[#00796b] text-white cursor-pointer'
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>
+                  Apply to {selectedRecords.length} Row{selectedRecords.length === 1 ? '' : 's'}
+                  {activeFieldCount > 0 ? ` (${activeFieldCount})` : ''}
+                </span>
+              </button>
+            </div>
+
+            {onBatchDelete && (
+              <button
+                type="button"
+                data-testid="batch-sidebar-delete-btn"
+                disabled={selectedRecords.length === 0}
+                onClick={onBatchDelete}
+                className={`w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wide shadow-xs transition ${
+                  selectedRecords.length > 0
+                    ? 'bg-rose-600 hover:bg-rose-700 text-white cursor-pointer'
+                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>
+                  Delete Selected ({selectedRecords.length} Row{selectedRecords.length === 1 ? '' : 's'})
+                </span>
+              </button>
+            )}
           </div>
         </form>
       </div>

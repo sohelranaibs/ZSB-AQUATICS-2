@@ -101,3 +101,67 @@ ABDULLAH VAI, 2026-10-21, 50000, 0, PAID, 2500`;
   assert.equal(result.records[0].returnRMB, 2500);
 });
 
+test('parsePurchasesCSV and parsePaymentsCSV accept numeric names, blanks, negatives, literal formulas, and text amounts leaving calculations pending', () => {
+  const purchaseCsv = [
+    'Supplier,Date,Item,Quantity,Rate,PreviousAmount,PaidAmount',
+    '1042, 2026-10-29, FF1, 40, TBD, , -500',
+    '1042, 2026-10-29, F1, =SUM(D2:D3), 300, 1000, 0',
+  ].join('\n');
+
+  const pRes = parsePurchasesCSV(purchaseCsv, 0);
+  assert.equal(pRes.success, true);
+  assert.equal(pRes.records.length, 1);
+  const pRec = pRes.records[0];
+  assert.ok(pRec.invoiceNumber.startsWith('INV-'));
+  assert.equal(pRec.description, '1042');
+  assert.equal(pRec.calculationPending, true);
+  assert.equal(pRec.paidAmount, -500);
+  assert.equal(pRec.rawValues?.['item0_rate'], 'TBD');
+  assert.equal(pRec.rawValues?.['item1_quantity'], '=SUM(D2:D3)');
+
+  const payCsv = [
+    'InvoiceNumber,Party,Date,Debit,Credit,Status,ReturnRMB',
+    ', 8844, 2026-10-29, =A1+B1, -250, PENDING, TBD',
+  ].join('\n');
+  const payRes = parsePaymentsCSV(payCsv, 0);
+  assert.equal(payRes.success, true);
+  assert.equal(payRes.records.length, 1);
+  assert.equal(payRes.records[0].description, '8844');
+  assert.equal(payRes.records[0].calculationPending, true);
+  assert.equal(payRes.records[0].rawValues?.['debitAmount'], '=A1+B1');
+  assert.equal(payRes.records[0].rawValues?.['returnRMB'], 'TBD');
+  assert.equal(payRes.records[0].paidAmount, -250);
+});
+
+test('parsePackingsCSV and parsePaymentsCSV preserve formula dates, blank marks, creditAmount text, and explicit PackingNo alongside formula RmbRate', () => {
+  const pkgCsv = [
+    'ShippingMark,Flight,Destination,Shipper,Date,Item,Box,Weight,Rate,RmbRate,PackingNo',
+    ', =C2, , 7788, =TODAY(), 2F, -1, 15, TBD, =D2*16.5, PKG-2026-0500',
+  ].join('\n');
+  const pkgRes = parsePackingsCSV(pkgCsv, 0);
+  assert.equal(pkgRes.success, true);
+  assert.equal(pkgRes.records.length, 1);
+  assert.equal(pkgRes.records[0].invoiceNumber, 'PKG-2026-0500');
+  assert.equal(pkgRes.records[0].shipper, '7788');
+  assert.equal(pkgRes.records[0].totalBox, -1);
+  assert.equal(pkgRes.records[0].calculationPending, true);
+  assert.equal(pkgRes.records[0].rawValues?.flight, '=C2');
+  assert.equal(pkgRes.records[0].rawValues?.packingDate, '=TODAY()');
+  assert.equal(pkgRes.records[0].rawValues?.rmbRate, '=D2*16.5');
+
+  const payCsv = [
+    'InvoiceNumber,Party,Date,Debit,Credit,Status,ReturnRMB,ExportRef',
+    'PAY-2026-0888, 9001, =TODAY(), 1000, pending-credit, =E2, 0, =F2',
+  ].join('\n');
+  const payRes = parsePaymentsCSV(payCsv, 0);
+  assert.equal(payRes.success, true);
+  assert.equal(payRes.records[0].invoiceNumber, 'PAY-2026-0888');
+  assert.equal(payRes.records[0].calculationPending, true);
+  assert.equal(payRes.records[0].rawValues?.creditAmount, 'pending-credit');
+  assert.equal(payRes.records[0].rawValues?.balance, 'pending-credit');
+  assert.equal(payRes.records[0].rawValues?.date, '=TODAY()');
+  assert.equal(payRes.records[0].rawValues?.status, '=E2');
+  assert.equal(payRes.records[0].rawValues?.exportGoodsRef, '=F2');
+});
+
+

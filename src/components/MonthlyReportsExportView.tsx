@@ -190,11 +190,11 @@ export const MonthlyReportsExportView: React.FC<MonthlyReportsExportViewProps> =
       {/* View Header & Action Controls Bar */}
       <section
         aria-label="Monthly Summary Reports Header"
-        className="bg-slate-900 rounded-xl p-5 sm:p-6 border border-slate-800 text-white shadow-sm"
+        className="bg-[#263843] rounded-xl p-5 sm:p-6 border border-[#1d2c35] text-white shadow-sm"
       >
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white p-0.5 border-2 border-amber-400 shadow-md flex items-center justify-center overflow-hidden shrink-0">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white p-0.5 border-2 border-[#00897b] shadow-md flex items-center justify-center overflow-hidden shrink-0">
               <img
                 src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
                 alt={companyProfile.companyName}
@@ -202,7 +202,7 @@ export const MonthlyReportsExportView: React.FC<MonthlyReportsExportViewProps> =
               />
             </div>
             <div className="space-y-1">
-              <div className="flex flex-wrap items-center gap-2 text-xs text-amber-400 font-semibold tracking-wide">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-[#5eead4] font-semibold tracking-wide">
                 <span>Dashboard Sub-View · CSV Export Engine</span>
                 <span aria-hidden="true">·</span>
                 <span className="text-slate-300 font-normal">
@@ -210,19 +210,19 @@ export const MonthlyReportsExportView: React.FC<MonthlyReportsExportViewProps> =
                 </span>
               </div>
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <h1 className="zsb-3d-text-lg text-2xl sm:text-3xl font-black">
+                <h1 className="text-2xl sm:text-3xl font-black text-amber-400 zsb-golden-brand">
                   {companyProfile.companyName}
                 </h1>
-                <span className="text-slate-500 hidden sm:inline" aria-hidden="true">/</span>
+                <span className="text-slate-400 hidden sm:inline" aria-hidden="true">/</span>
                 <span className="text-base sm:text-lg font-bold text-white uppercase tracking-wide">
                   Monthly Summary Reports
                 </span>
-                <span className="text-slate-500 hidden sm:inline" aria-hidden="true">·</span>
-                <span className="text-sm sm:text-base font-semibold text-amber-400">
+                <span className="text-slate-400 hidden sm:inline" aria-hidden="true">·</span>
+                <span className="text-sm sm:text-base font-semibold text-[#80cbc4]">
                   Exports &amp; Purchases CSV
                 </span>
               </div>
-              <p className="text-xs text-slate-400 font-mono tabular-nums">
+              <p className="text-xs text-slate-300 font-mono tabular-nums">
                 Auto-consolidated across {purchases.length} Purchase Bills &amp; {packings.length} Export Manifests
               </p>
             </div>
@@ -234,7 +234,7 @@ export const MonthlyReportsExportView: React.FC<MonthlyReportsExportViewProps> =
               <button
                 type="button"
                 onClick={onBackToOverview}
-                className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer whitespace-nowrap"
+                className="px-3.5 py-2 rounded-lg bg-[#1c2a33] hover:bg-white/15 text-slate-100 border border-white/15 text-xs font-semibold transition cursor-pointer whitespace-nowrap"
               >
                 ← Back to Overview
               </button>
@@ -244,7 +244,7 @@ export const MonthlyReportsExportView: React.FC<MonthlyReportsExportViewProps> =
               type="button"
               data-testid="export-all-monthly-summary-csv"
               onClick={handleExportSummaryCSV}
-              className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-xs transition cursor-pointer whitespace-nowrap"
+              className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-lg bg-[#00897b] hover:bg-[#00796b] text-white text-xs font-bold shadow-xs transition cursor-pointer whitespace-nowrap"
               title="Download consolidated monthly summary of all exports and purchases in CSV format"
             >
               <Download className="w-3.5 h-3.5 shrink-0" />
@@ -255,7 +255,7 @@ export const MonthlyReportsExportView: React.FC<MonthlyReportsExportViewProps> =
               type="button"
               data-testid="export-all-detailed-transactions-csv"
               onClick={() => handleExportDetailedCSV('ALL')}
-              className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-xs transition cursor-pointer whitespace-nowrap"
+              className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-lg bg-[#1877d2] hover:bg-[#1565c0] text-white text-xs font-bold shadow-xs transition cursor-pointer whitespace-nowrap"
               title="Download combined detailed transactions of all purchases and exports in CSV format"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" />
@@ -265,63 +265,63 @@ export const MonthlyReportsExportView: React.FC<MonthlyReportsExportViewProps> =
         </div>
 
         {/* Executive Aggregate Metric Cards for Filtered Range */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-6 pt-5 border-t border-slate-800/90">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-6 pt-5 border-t border-white/15">
           {/* Card 1: Total Purchases Volume & Value */}
-          <div className="bg-slate-800/60 rounded-lg p-3.5 border border-slate-700/70">
-            <div className="flex items-center justify-between text-xs text-slate-400">
+          <div className="bg-[#1c2a33]/90 rounded-lg p-3.5 border border-white/10">
+            <div className="flex items-center justify-between text-xs text-slate-300">
               <span className="font-semibold">Procurement (Purchases)</span>
-              <ShoppingCart className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+              <ShoppingCart className="w-3.5 h-3.5 text-[#5eead4] shrink-0" />
             </div>
             <div className="text-xl sm:text-2xl font-bold text-white font-mono tabular-nums mt-1 whitespace-nowrap">
               {formatCurrency(filteredTotals.totalPurchaseValue, companyProfile.currency)}
             </div>
-            <div className="text-xs text-slate-400 font-mono tabular-nums mt-1">
+            <div className="text-xs text-slate-300 font-mono tabular-nums mt-1">
               {filteredTotals.totalPurchaseVolume.toLocaleString()} KG · {filteredTotals.totalPurchaseCount} Bills
             </div>
           </div>
 
           {/* Card 2: Total Exports Volume & Value */}
-          <div className="bg-slate-800/60 rounded-lg p-3.5 border border-slate-700/70">
-            <div className="flex items-center justify-between text-xs text-slate-400">
+          <div className="bg-[#1c2a33]/90 rounded-lg p-3.5 border border-white/10">
+            <div className="flex items-center justify-between text-xs text-slate-300">
               <span className="font-semibold">Air-Freight Exports</span>
-              <Package className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+              <Package className="w-3.5 h-3.5 text-[#38bdf8] shrink-0" />
             </div>
-            <div className="text-xl sm:text-2xl font-bold text-teal-300 font-mono tabular-nums mt-1 whitespace-nowrap">
+            <div className="text-xl sm:text-2xl font-bold text-[#80cbc4] font-mono tabular-nums mt-1 whitespace-nowrap">
               {formatCurrency(filteredTotals.totalExportValueBDT, 'BDT')}
             </div>
-            <div className="text-xs text-slate-400 font-mono tabular-nums mt-1">
+            <div className="text-xs text-slate-300 font-mono tabular-nums mt-1">
               {formatRMB(filteredTotals.totalExportValueRMB)} · {filteredTotals.totalExportWeight.toLocaleString()} KG ({filteredTotals.totalExportBoxes} Boxes)
             </div>
           </div>
 
           {/* Card 3: Net Trade Profit */}
-          <div className="bg-slate-800/60 rounded-lg p-3.5 border border-slate-700/70">
-            <div className="flex items-center justify-between text-xs text-slate-400">
+          <div className="bg-[#1c2a33]/90 rounded-lg p-3.5 border border-white/10">
+            <div className="flex items-center justify-between text-xs text-slate-300">
               <span className="font-semibold">Net Trade Profit</span>
-              <TrendingUp className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <TrendingUp className="w-3.5 h-3.5 text-[#5eead4] shrink-0" />
             </div>
             <div
               className={`text-xl sm:text-2xl font-bold font-mono tabular-nums mt-1 whitespace-nowrap ${
-                filteredTotals.totalNetProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                filteredTotals.totalNetProfit >= 0 ? 'text-[#5eead4]' : 'text-rose-400'
               }`}
             >
               {formatCurrency(filteredTotals.totalNetProfit, companyProfile.currency)}
             </div>
-            <div className="text-xs text-slate-400 font-mono tabular-nums mt-1">
+            <div className="text-xs text-slate-300 font-mono tabular-nums mt-1">
               Margin: {filteredTotals.overallMarginPercent}% · Costs: {formatCurrency(filteredTotals.totalOtherCosts, companyProfile.currency)}
             </div>
           </div>
 
           {/* Card 4: Consignments & Period Rollup */}
-          <div className="bg-slate-800/60 rounded-lg p-3.5 border border-slate-700/70">
-            <div className="flex items-center justify-between text-xs text-slate-400">
+          <div className="bg-[#1c2a33]/90 rounded-lg p-3.5 border border-white/10">
+            <div className="flex items-center justify-between text-xs text-slate-300">
               <span className="font-semibold">Active Reporting Scope</span>
-              <Scale className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+              <Scale className="w-3.5 h-3.5 text-[#7dd3fc] shrink-0" />
             </div>
             <div className="text-xl sm:text-2xl font-bold text-white font-mono tabular-nums mt-1 whitespace-nowrap">
-              {filteredItems.length} <span className="text-sm font-normal text-slate-400">Month(s)</span>
+              {filteredItems.length} <span className="text-sm font-normal text-slate-300">Month(s)</span>
             </div>
-            <div className="text-xs text-slate-400 font-mono tabular-nums mt-1">
+            <div className="text-xs text-slate-300 font-mono tabular-nums mt-1">
               {filteredTotals.totalExportCount} Manifests · {filteredTotals.totalPurchaseCount} Bills
             </div>
           </div>
@@ -393,7 +393,7 @@ export const MonthlyReportsExportView: React.FC<MonthlyReportsExportViewProps> =
           <div className="overflow-x-auto border-2 border-slate-300 rounded-lg bg-white">
           <table className="w-full text-xs text-left border-collapse min-w-[950px]">
             <thead>
-              <tr className="bg-slate-900 text-white uppercase text-[11px] font-bold border-b border-slate-800">
+              <tr className="bg-[#263843] text-white uppercase text-[11px] font-bold border-b border-[#1d2c35]">
                 <th className="py-3 px-2 text-center w-12">SL #</th>
                 <th className="py-3 px-4 w-44">Month / Period</th>
                 <th className="py-3 px-3 text-right">

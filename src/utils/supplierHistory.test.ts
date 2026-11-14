@@ -137,4 +137,39 @@ describe('supplierHistory pure logic tests', () => {
     assert.equal(totals.totalBalance, -5000); // 90000 - 95000
     assert.ok(totals.paidCount >= 2);
   });
+
+  it('filters history by inclusive fromDate and toDate range', () => {
+    const ranged = buildSupplierRecordHistory(
+      dummyPurchases,
+      dummyPayments,
+      dummyCredits,
+      {
+        supplierName: 'HASAN VAI',
+        fromDate: '2026-10-05',
+        toDate: '2026-10-06',
+        sortDirection: 'asc',
+      }
+    );
+
+    assert.equal(ranged.length, 2);
+    assert.equal(ranged[0].invoiceNumber, 'INV-1002');
+    assert.equal(ranged[1].invoiceNumber, 'PAY-1001');
+
+    const fromOnly = buildSupplierRecordHistory(
+      dummyPurchases,
+      dummyPayments,
+      dummyCredits,
+      { supplierName: 'HASAN VAI', fromDate: '2026-10-06' }
+    );
+    assert.equal(fromOnly.length, 2);
+
+    const toOnly = buildSupplierRecordHistory(
+      dummyPurchases,
+      dummyPayments,
+      dummyCredits,
+      { supplierName: 'HASAN VAI', toDate: '2026-10-01' }
+    );
+    assert.equal(toOnly.length, 1);
+    assert.equal(toOnly[0].invoiceNumber, 'INV-1001');
+  });
 });

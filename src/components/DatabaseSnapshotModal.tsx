@@ -182,20 +182,20 @@ export const DatabaseSnapshotModal: React.FC = () => {
       aria-labelledby="snapshot-modal-title"
       data-testid="database-snapshot-modal"
     >
-      <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl border border-slate-300 flex flex-col overflow-hidden">
+      <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
         {/* Modal Header */}
-        <div className="bg-[#1b2b44] text-white px-5 py-4 flex items-center justify-between border-b-2 border-amber-500 shrink-0">
+        <div className="bg-[#263843] text-white px-5 py-4 flex items-center justify-between border-b-2 border-[#00897b] shrink-0">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center shrink-0">
-              <Archive className="w-5 h-5 text-amber-300" />
+            <div className="w-10 h-10 rounded-xl bg-[#00897b] flex items-center justify-center shrink-0">
+              <Archive className="w-5 h-5 text-white" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="zsb-3d-text text-sm sm:text-base font-black tracking-wider">
+                <span className="text-amber-400 zsb-golden-brand text-sm sm:text-base font-black tracking-tight">
                   {companyProfile.companyName}
                 </span>
                 <span className="text-slate-400">·</span>
-                <span className="text-xs font-mono text-amber-300 font-semibold">
+                <span className="text-xs font-mono text-[#5eead4] font-semibold">
                   Local JSON Archive &amp; Recovery Engine
                 </span>
               </div>
@@ -213,31 +213,31 @@ export const DatabaseSnapshotModal: React.FC = () => {
             onClick={closeSnapshotModal}
             aria-label="Close Database Snapshot Modal"
             data-testid="close-snapshot-modal-btn"
-            className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+            className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-[#1c2a33] transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Live Database Telemetry & Mode Switcher Bar */}
-        <div className="bg-slate-900 text-slate-200 px-5 py-3 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0 text-xs">
+        <div className="bg-[#1c2a33] text-slate-200 px-5 py-3 border-b border-[#334b59] flex flex-wrap items-center justify-between gap-3 shrink-0 text-xs">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono tabular-nums">
             <span className="text-slate-400 font-sans font-semibold">Current Live State:</span>
             <span className="text-white font-bold" data-testid="snapshot-live-total-count">
               {liveTotalRecords} Total Records
             </span>
             <span className="text-slate-600">·</span>
-            <span className="text-blue-300">Purchases: {purchases.length}</span>
+            <span className="text-sky-300">Purchases: {purchases.length}</span>
             <span className="text-slate-600">·</span>
-            <span className="text-teal-300">Packings: {packings.length}</span>
+            <span className="text-[#5eead4]">Packings: {packings.length}</span>
             <span className="text-slate-600">·</span>
-            <span className="text-purple-300">Payments: {payments.length}</span>
+            <span className="text-indigo-300">Payments: {payments.length}</span>
             <span className="text-slate-600">·</span>
-            <span className="text-amber-300">Expenses: {otherCosts.length}</span>
+            <span className="text-cyan-300">Expenses: {otherCosts.length}</span>
           </div>
 
           {/* Segmented Control Tabs */}
-          <div className="flex items-center gap-1 p-1 bg-slate-800 rounded-lg border border-slate-700">
+          <div className="flex items-center gap-1 p-1 bg-[#263843] rounded-lg border border-[#334b59]">
             <button
               type="button"
               data-testid="snapshot-tab-archive"
@@ -247,7 +247,7 @@ export const DatabaseSnapshotModal: React.FC = () => {
               }}
               className={`px-3 py-1.5 rounded-md text-xs font-bold transition whitespace-nowrap shrink-0 cursor-pointer ${
                 activeMode === 'archive'
-                  ? 'bg-amber-500 text-slate-950 shadow-xs'
+                  ? 'bg-[#00897b] text-white shadow-xs'
                   : 'text-slate-300 hover:text-white'
               }`}
             >
@@ -262,7 +262,7 @@ export const DatabaseSnapshotModal: React.FC = () => {
               }}
               className={`px-3 py-1.5 rounded-md text-xs font-bold transition whitespace-nowrap shrink-0 cursor-pointer ${
                 activeMode === 'import_json'
-                  ? 'bg-amber-500 text-slate-950 shadow-xs'
+                  ? 'bg-[#00897b] text-white shadow-xs'
                   : 'text-slate-300 hover:text-white'
               }`}
             >
@@ -334,7 +334,7 @@ export const DatabaseSnapshotModal: React.FC = () => {
                     type="button"
                     data-testid="download-current-snapshot-btn"
                     onClick={() => downloadSnapshotJSON()}
-                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition whitespace-nowrap shrink-0 cursor-pointer"
+                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-[#263843] hover:bg-[#1c2a33] text-[#5eead4] border border-[#334b59] transition whitespace-nowrap shrink-0 cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>Download Current .JSON File</span>
@@ -356,7 +356,7 @@ export const DatabaseSnapshotModal: React.FC = () => {
                       value={labelInput}
                       onChange={(e) => setLabelInput(e.target.value)}
                       placeholder="e.g., October Closing Checkpoint"
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#00897b]"
                     />
                   </div>
                   <div className="sm:col-span-4">
@@ -373,14 +373,14 @@ export const DatabaseSnapshotModal: React.FC = () => {
                       value={notesInput}
                       onChange={(e) => setNotesInput(e.target.value)}
                       placeholder="e.g., Verified all supplier balances"
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#00897b]"
                     />
                   </div>
                   <div className="sm:col-span-3">
                     <button
                       type="submit"
                       data-testid="create-snapshot-btn"
-                      className="w-full flex items-center justify-center space-x-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-[#1b73b4] hover:bg-[#155d93] text-white shadow-sm transition whitespace-nowrap shrink-0 cursor-pointer"
+                      className="w-full flex items-center justify-center space-x-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-[#00897b] hover:bg-[#00796b] text-white shadow-sm transition whitespace-nowrap shrink-0 cursor-pointer"
                     >
                       <PlusCircle className="w-4 h-4" />
                       <span>Create Snapshot</span>
@@ -614,7 +614,7 @@ export const DatabaseSnapshotModal: React.FC = () => {
                     type="button"
                     data-testid="upload-json-file-btn"
                     onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center space-x-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-[#1b73b4] hover:bg-[#155d93] text-white shadow-xs transition whitespace-nowrap shrink-0 cursor-pointer"
+                    className="flex items-center space-x-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-[#1877d2] hover:bg-[#1465b5] text-white shadow-xs transition whitespace-nowrap shrink-0 cursor-pointer"
                   >
                     <Upload className="w-3.5 h-3.5" />
                     <span>Upload .JSON File</span>
@@ -654,7 +654,7 @@ export const DatabaseSnapshotModal: React.FC = () => {
                     if (importStatus) setImportStatus(null);
                   }}
                   placeholder='{"schemaVersion": 1, "label": "My Backup", "payload": {"purchases": [...], "packings": [...], "payments": [...], "otherCosts": [...]}}'
-                  className="w-full p-3 rounded-xl bg-slate-950 text-amber-200 font-mono text-xs border border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full p-3 rounded-xl bg-slate-950 text-[#5eead4] font-mono text-xs border border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#00897b]"
                 />
               </div>
 
@@ -671,7 +671,7 @@ export const DatabaseSnapshotModal: React.FC = () => {
                   type="button"
                   data-testid="restore-json-submit-btn"
                   onClick={() => handleValidateAndRestoreJson(true)}
-                  className="flex items-center space-x-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition whitespace-nowrap shrink-0 cursor-pointer"
+                  className="flex items-center space-x-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-[#00897b] hover:bg-[#00796b] text-white shadow-sm transition whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>Validate &amp; Restore Database State</span>

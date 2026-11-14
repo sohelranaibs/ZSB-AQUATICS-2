@@ -36,6 +36,7 @@ export interface ExporterRecordHistoryRow extends PaymentItemRow {
   weightKg: number;
   description: string;
   debitAmount: number;
+  reportAmount: number;
   creditAmount: number;
   balance: number;
   status: ExporterStatus;
@@ -47,6 +48,7 @@ export interface ExporterHistoryTotals {
   totalBox: number;
   totalWeightKg: number;
   totalDebit: number;
+  totalReport: number;
   totalCredit: number;
   totalBalance: number;
   paidCount: number;
@@ -77,6 +79,8 @@ export function buildExporterRecordHistory(
   const {
     shippingMark = 'ALL',
     packingDate = 'ALL',
+    fromDate = '',
+    toDate = '',
     flight = 'ALL',
     status = 'ALL',
     rmbExchangeRate = 16.5,
@@ -85,6 +89,11 @@ export function buildExporterRecordHistory(
   const rate = Number(rmbExchangeRate) > 0 ? Number(rmbExchangeRate) : 16.5;
   const markTarget = (shippingMark || 'ALL').trim().toLowerCase();
   const dateTarget = (packingDate || 'ALL').trim();
+  const cleanFrom = (fromDate || '').trim().slice(0, 10);
+  const cleanTo = (toDate || '').trim().slice(0, 10);
+  const activeFrom = cleanFrom.toUpperCase() === 'ALL' ? '' : cleanFrom;
+  const activeTo = cleanTo.toUpperCase() === 'ALL' ? '' : cleanTo;
+  const hasDateRange = activeFrom !== '' || activeTo !== '';
   const flightTarget = (flight || 'ALL').trim().toLowerCase();
   const statusTarget = (status || 'ALL').trim().toLowerCase();
 
@@ -126,7 +135,7 @@ export function buildExporterRecordHistory(
       pkg.exporterStatus || pkg.paymentStatus || linkedPayment?.status || 'REPORT'
     );
 
-    // Derive Debit Amount (Export RMB value)
+    // Derive Debit Amount (Export RMB value - display only)
     let debitAmount = 0;
     if (pkg.debitAmount !== undefined && !Number.isNaN(Number(pkg.debitAmount))) {
       debitAmount = Math.round(Number(pkg.debitAmount) * 100) / 100;
@@ -138,6 +147,20 @@ export function buildExporterRecordHistory(
       debitAmount = calculateExporterSlipRowAmount(weightKg, Number(pkg.rmbAmount));
     } else if (linkedPayment && Number(linkedPayment.totalAmount) > 0) {
       debitAmount = Math.round((Number(linkedPayment.totalAmount) / rate) * 100) / 100;
+    }
+
+    // Derive Report Amount (Authoritative RMB calculation base: Balance = Report - Credit)
+    let reportAmount = 0;
+    if (pkg.reportAmount !== undefined && !Number.isNaN(Number(pkg.reportAmount))) {
+      reportAmount = Math.round(Number(pkg.reportAmount) * 100) / 100;
+    } else if (
+      linkedPayment &&
+      linkedPayment.reportAmount !== undefined &&
+      !Number.isNaN(Number(linkedPayment.reportAmount))
+    ) {
+      reportAmount = Math.round(Number(linkedPayment.reportAmount) * 100) / 100;
+    } else {
+      reportAmount = resolvedStatus === 'NO REPORT' ? 0 : debitAmount;
     }
 
     // Derive Credit Amount (Paid / Settled / Claimed RMB value)
@@ -155,15 +178,15 @@ export function buildExporterRecordHistory(
       } else if (Number(linkedPayment.paidAmount) > 0) {
         creditAmount = Math.round(Number(linkedPayment.paidAmount) * 100) / 100;
       } else if (resolvedStatus === 'PAID') {
-        creditAmount = debitAmount;
+        creditAmount = reportAmount;
       }
     } else if (resolvedStatus === 'PAID') {
-      creditAmount = debitAmount;
+      creditAmount = reportAmount;
     } else {
       creditAmount = 0;
     }
 
-    const balance = calculatePaymentRow(debitAmount, creditAmount);
+    const balance = calculatePaymentRow(reportAmount, creditAmount);
 
     const markLabel = (pkg.shippingMark || 'GENERAL').trim();
     const flightLabel = (pkg.flight || '').trim();
@@ -185,6 +208,7 @@ export function buildExporterRecordHistory(
       weightKg,
       description,
       debitAmount,
+      reportAmount,
       creditAmount,
       balance,
       status: resolvedStatus,
@@ -204,6 +228,9 @@ export function buildExporterRecordHistory(
     const itemDebitSum = Array.isArray(pm.items)
       ? pm.items.reduce((acc, it) => acc + (Number(it.debitAmount) || 0), 0)
       : 0;
+    const itemReportSum = Array.isArray(pm.items)
+      ? pm.items.reduce((acc, it) => acc + (Number(it.reportAmount) || 0), 0)
+      : 0;
     const itemCreditSum = Array.isArray(pm.items)
       ? pm.items.reduce((acc, it) => acc + (Number(it.creditAmount) || 0), 0)
       : 0;
@@ -214,13 +241,21 @@ export function buildExporterRecordHistory(
           ? itemDebitSum
           : Number(pm.totalAmount) || Number(pm.returnRMB) || 0) * 100
       ) / 100;
+    const reportAmount =
+      pm.reportAmount !== undefined && !Number.isNaN(Number(pm.reportAmount))
+        ? Math.round(Number(pm.reportAmount) * 100) / 100
+        : itemReportSum > 0
+        ? Math.round(itemReportSum * 100) / 100
+        : resolvedStatus === 'NO REPORT'
+        ? 0
+        : debitAmount;
     const creditAmount =
       Math.round(
         (itemCreditSum > 0
           ? itemCreditSum
-          : Number(pm.paidAmount) || (resolvedStatus === 'PAID' ? debitAmount : 0)) * 100
+          : Number(pm.paidAmount) || (resolvedStatus === 'PAID' ? reportAmount : 0)) * 100
       ) / 100;
-    const balance = calculatePaymentRow(debitAmount, creditAmount);
+    const balance = calculatePaymentRow(reportAmount, creditAmount);
 
     const firstItemDesc =
       Array.isArray(pm.items) && pm.items[0]?.description
@@ -239,6 +274,7 @@ export function buildExporterRecordHistory(
       weightKg: 0,
       description: firstItemDesc,
       debitAmount,
+      reportAmount,
       creditAmount,
       balance,
       status: resolvedStatus,
@@ -257,11 +293,16 @@ export function buildExporterRecordHistory(
     ) {
       return false;
     }
-    if (
+    const rowDate = (row.date || '').trim().slice(0, 10);
+    if (hasDateRange) {
+      if (!rowDate) return false;
+      if (activeFrom && rowDate < activeFrom) return false;
+      if (activeTo && rowDate > activeTo) return false;
+    } else if (
       dateTarget !== 'ALL' &&
       dateTarget !== 'all' &&
       dateTarget !== '' &&
-      row.date !== dateTarget
+      rowDate !== dateTarget.slice(0, 10)
     ) {
       return false;
     }
@@ -291,6 +332,7 @@ export function calculateExporterHistoryTotals(
     box?: number;
     weightKg?: number;
     debitAmount?: number;
+    reportAmount?: number;
     creditAmount?: number;
     balance?: number;
     status?: string;
@@ -300,6 +342,7 @@ export function calculateExporterHistoryTotals(
   let totalBox = 0;
   let totalWeightKg = 0;
   let totalDebit = 0;
+  let totalReport = 0;
   let totalCredit = 0;
   let paidCount = 0;
   let reportCount = 0;
@@ -309,6 +352,8 @@ export function calculateExporterHistoryTotals(
     totalBox += Number(r.box) || 0;
     totalWeightKg += Number(r.weightKg) || 0;
     totalDebit += Number(r.debitAmount) || 0;
+    totalReport +=
+      r.reportAmount !== undefined ? Number(r.reportAmount) || 0 : Number(r.debitAmount) || 0;
     totalCredit += Number(r.creditAmount) || 0;
 
     const st = normalizeExporterStatus(r.status);
@@ -318,14 +363,16 @@ export function calculateExporterHistoryTotals(
   }
 
   const roundedDebit = Math.round(totalDebit * 100) / 100;
+  const roundedReport = Math.round(totalReport * 100) / 100;
   const roundedCredit = Math.round(totalCredit * 100) / 100;
-  const totalBalance = calculatePaymentRow(roundedDebit, roundedCredit);
+  const totalBalance = calculatePaymentRow(roundedReport, roundedCredit);
 
   return {
     recordCount: safeRows.length,
     totalBox,
     totalWeightKg: Math.round(totalWeightKg * 100) / 100,
     totalDebit: roundedDebit,
+    totalReport: roundedReport,
     totalCredit: roundedCredit,
     totalBalance,
     paidCount,

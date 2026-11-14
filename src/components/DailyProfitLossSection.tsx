@@ -172,15 +172,15 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
       className="bg-white rounded-xl shadow border border-slate-200 overflow-hidden"
     >
       {/* Top Section Header Bar */}
-      <div className="bg-[#1b2b44] text-white px-5 py-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b-2 border-amber-500">
+      <div className="bg-[#263843] text-white px-5 py-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b-2 border-[#00897b]">
         <div className="flex items-center gap-2.5 min-w-0">
-          <Calendar className="w-4 h-4 text-amber-400 shrink-0" />
+          <Calendar className="w-4 h-4 text-[#5eead4] shrink-0" />
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-xs sm:text-sm font-black uppercase tracking-wider text-white">
                 Daily Report Details of Profit &amp; Loss
               </h2>
-              <span className="px-2 py-0.5 text-[10px] font-mono font-bold uppercase rounded bg-amber-500/20 text-amber-300 border border-amber-400/30">
+              <span className="px-2 py-0.5 text-[10px] font-mono font-bold uppercase rounded bg-[#00897b]/25 text-[#80cbc4] border border-[#00897b]/50">
                 {totals.totalDays} {totals.totalDays === 1 ? 'Day' : 'Days'}
               </span>
               <span className="px-2 py-0.5 text-[10px] font-mono font-bold uppercase rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
@@ -201,7 +201,7 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
           <div
             role="group"
             aria-label="Daily Profit and Loss Status Filter"
-            className="flex items-center gap-1 bg-slate-800/90 p-1 rounded-lg border border-slate-700"
+            className="flex items-center gap-1 bg-[#1c2a33] p-1 rounded-lg border border-white/15"
           >
             <button
               type="button"
@@ -209,8 +209,8 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
               onClick={() => setStatusFilter('all')}
               className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
                 statusFilter === 'all'
-                  ? 'bg-amber-500 text-slate-950 font-bold'
-                  : 'text-slate-300 hover:text-white'
+                  ? 'bg-[#00897b] text-white font-bold'
+                  : 'text-slate-200 hover:text-white'
               }`}
             >
               All Days ({dailyReport.allEntriesCount})
@@ -221,8 +221,8 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
               onClick={() => setStatusFilter('profit')}
               className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
                 statusFilter === 'profit'
-                  ? 'bg-emerald-500 text-slate-950 font-bold'
-                  : 'text-slate-300 hover:text-white'
+                  ? 'bg-[#00897b] text-white font-bold'
+                  : 'text-slate-200 hover:text-white'
               }`}
             >
               Profit Days
@@ -233,8 +233,8 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
               onClick={() => setStatusFilter('loss')}
               className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
                 statusFilter === 'loss'
-                  ? 'bg-rose-500 text-white font-bold'
-                  : 'text-slate-300 hover:text-white'
+                  ? 'bg-rose-600 text-white font-bold'
+                  : 'text-slate-200 hover:text-white'
               }`}
             >
               Loss Days
@@ -245,7 +245,7 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
             type="button"
             data-testid="pl-daily-print-all-btn"
             onClick={() => handlePrintDailyReport()}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow transition cursor-pointer whitespace-nowrap"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-[#00897b] hover:bg-[#00796b] text-white rounded-lg shadow transition cursor-pointer whitespace-nowrap"
           >
             <Printer className="w-3.5 h-3.5" />
             <span>Print Daily P&amp;L Report</span>

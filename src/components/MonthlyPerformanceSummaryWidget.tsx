@@ -41,25 +41,25 @@ export const MonthlyPerformanceSummaryWidget: React.FC = () => {
     <section
       aria-label="Monthly Performance Summary"
       data-testid="monthly-performance-summary-widget"
-      className="bg-white rounded-xl shadow-xs border border-slate-200/90 overflow-hidden"
+      className="bg-white rounded-xl shadow-xs border border-[#CBD8E6] overflow-hidden"
     >
       {/* Top Executive Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white px-5 py-3.5 border-b border-slate-800 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+      <div className="bg-[#273E56] text-white px-5 py-3.5 border-b border-[#1E3247] flex flex-col xl:flex-row xl:items-center justify-between gap-3">
         <div className="flex items-start sm:items-center gap-3">
-          <span className="w-8 h-8 rounded-lg bg-sky-500/20 border border-sky-400/40 flex items-center justify-center shrink-0">
-            <BarChart3 className="w-4 h-4 text-sky-400" />
+          <span className="w-8 h-8 rounded-lg bg-[#1D6CE0]/25 border border-[#1D6CE0]/50 flex items-center justify-center shrink-0">
+            <BarChart3 className="w-4 h-4 text-sky-300" />
           </span>
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-sm font-bold tracking-wide text-white">
                 Monthly Performance Summary
               </h2>
-              <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-amber-400 text-slate-950">
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-[#00B14F] text-white">
                 Purchases vs. Payments
               </span>
               <span
                 data-testid="monthly-performance-period-label"
-                className="text-xs font-mono text-sky-300 font-semibold tabular-nums"
+                className="text-xs font-mono text-sky-200 font-semibold tabular-nums"
               >
                 {periodRangeLabel}
               </span>
@@ -76,7 +76,7 @@ export const MonthlyPerformanceSummaryWidget: React.FC = () => {
           <div
             role="group"
             aria-label="Payment comparison mode"
-            className="flex items-center gap-1 bg-slate-950/80 p-1 rounded-lg border border-slate-700"
+            className="flex items-center gap-1 bg-[#1E3247] p-1 rounded-lg border border-white/15"
           >
             <button
               type="button"
@@ -84,8 +84,8 @@ export const MonthlyPerformanceSummaryWidget: React.FC = () => {
               onClick={() => setPaymentMode('all_payments')}
               className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
                 paymentMode === 'all_payments'
-                  ? 'bg-emerald-500 text-slate-950 font-bold shadow-2xs'
-                  : 'text-slate-300 hover:text-white'
+                  ? 'bg-[#00B14F] text-white font-bold shadow-2xs'
+                  : 'text-slate-200 hover:text-white'
               }`}
               title="Compare against all monthly settlements (Payment Vouchers + Direct Challan Settlements)"
             >
@@ -97,8 +97,8 @@ export const MonthlyPerformanceSummaryWidget: React.FC = () => {
               onClick={() => setPaymentMode('payment_vouchers')}
               className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
                 paymentMode === 'payment_vouchers'
-                  ? 'bg-emerald-500 text-slate-950 font-bold shadow-2xs'
-                  : 'text-slate-300 hover:text-white'
+                  ? 'bg-[#00B14F] text-white font-bold shadow-2xs'
+                  : 'text-slate-200 hover:text-white'
               }`}
               title="Compare strictly against standalone Payment DB Vouchers"
             >
@@ -110,8 +110,8 @@ export const MonthlyPerformanceSummaryWidget: React.FC = () => {
               onClick={() => setPaymentMode('challan_paid')}
               className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
                 paymentMode === 'challan_paid'
-                  ? 'bg-emerald-500 text-slate-950 font-bold shadow-2xs'
-                  : 'text-slate-300 hover:text-white'
+                  ? 'bg-[#00B14F] text-white font-bold shadow-2xs'
+                  : 'text-slate-200 hover:text-white'
               }`}
               title="Compare against Paid Amounts recorded directly on Purchase Challans"
             >
@@ -123,7 +123,7 @@ export const MonthlyPerformanceSummaryWidget: React.FC = () => {
           <div
             role="group"
             aria-label="Performance summary time window"
-            className="flex items-center gap-1 bg-slate-950/80 p-1 rounded-lg border border-slate-700"
+            className="flex items-center gap-1 bg-[#1E3247] p-1 rounded-lg border border-white/15"
           >
             <button
               type="button"
@@ -131,8 +131,8 @@ export const MonthlyPerformanceSummaryWidget: React.FC = () => {
               onClick={() => setWindowMode('6m')}
               className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
                 windowMode === '6m'
-                  ? 'bg-amber-500 text-slate-950 font-bold'
-                  : 'text-slate-300 hover:text-white'
+                  ? 'bg-[#1D6CE0] text-white font-bold'
+                  : 'text-slate-200 hover:text-white'
               }`}
             >
               6 Months
@@ -143,8 +143,8 @@ export const MonthlyPerformanceSummaryWidget: React.FC = () => {
               onClick={() => setWindowMode('active')}
               className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
                 windowMode === 'active'
-                  ? 'bg-amber-500 text-slate-950 font-bold'
-                  : 'text-slate-300 hover:text-white'
+                  ? 'bg-[#1D6CE0] text-white font-bold'
+                  : 'text-slate-200 hover:text-white'
               }`}
             >
               Active Months
@@ -155,8 +155,8 @@ export const MonthlyPerformanceSummaryWidget: React.FC = () => {
               onClick={() => setWindowMode('12m')}
               className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
                 windowMode === '12m'
-                  ? 'bg-amber-500 text-slate-950 font-bold'
-                  : 'text-slate-300 hover:text-white'
+                  ? 'bg-[#1D6CE0] text-white font-bold'
+                  : 'text-slate-200 hover:text-white'
               }`}
             >
               12 Months
@@ -169,8 +169,8 @@ export const MonthlyPerformanceSummaryWidget: React.FC = () => {
             onClick={() => setShowComparisonTable((prev) => !prev)}
             className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
               showComparisonTable
-                ? 'bg-slate-800 border-amber-400/50 text-amber-300'
-                : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+                ? 'bg-[#1E3247] border-[#1D6CE0]/60 text-sky-200'
+                : 'bg-[#1E3247] border-white/15 text-slate-200 hover:text-white'
             }`}
           >
             <Table2 className="w-3.5 h-3.5" />

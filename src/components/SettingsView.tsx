@@ -132,20 +132,20 @@ export const SettingsView: React.FC = () => {
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
       {/* Top Banner */}
-      <div className="bg-[#1b2b44] text-white px-5 py-3 rounded-lg shadow-md flex items-center justify-between border-b-2 border-amber-500">
+      <div className="bg-[#263843] text-white px-5 py-3 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#00897b]">
         <div className="flex items-center space-x-3">
-          <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
+          <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
               src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
               alt={companyProfile.companyName}
               className="w-full h-full object-contain rounded-full"
             />
           </div>
-          <span className="zsb-3d-text text-xl sm:text-2xl font-black">
+          <span className="text-xl sm:text-2xl font-black tracking-tight text-amber-400 zsb-golden-brand">
             {companyProfile.companyName}
           </span>
-          <span className="text-lg text-slate-300">|</span>
-          <span className="text-sm sm:text-base font-semibold text-slate-100 uppercase tracking-wide">
+          <span className="text-lg text-slate-400">|</span>
+          <span className="text-sm sm:text-base font-semibold text-[#80cbc4] uppercase tracking-wide">
             Master Settings &amp; Dropdown Configuration
           </span>
         </div>
@@ -154,16 +154,16 @@ export const SettingsView: React.FC = () => {
             type="button"
             data-testid="settings-open-snapshots-btn"
             onClick={openSnapshotModal}
-            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold bg-indigo-500/20 text-indigo-200 hover:bg-indigo-500/30 border border-indigo-400/40 rounded transition cursor-pointer"
+            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold bg-[#1c2a33] text-slate-200 hover:bg-[#152028] border border-[#334b59] rounded-lg transition cursor-pointer"
           >
-            <Archive className="w-3.5 h-3.5 text-amber-300" />
+            <Archive className="w-3.5 h-3.5 text-[#5eead4]" />
             <span>Database Snapshots ({snapshots.length})</span>
           </button>
           <button
             type="button"
             data-testid="settings-delete-all-records-btn"
             onClick={() => clearAllDatabaseRecords('all')}
-            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold bg-rose-500/20 text-rose-200 hover:bg-rose-500/30 border border-rose-400/40 rounded transition cursor-pointer"
+            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold bg-rose-500/20 text-rose-200 hover:bg-rose-500/30 border border-rose-400/40 rounded-lg transition cursor-pointer"
           >
             <Lock className="w-3.5 h-3.5" />
             <Trash2 className="w-3.5 h-3.5" />
@@ -172,7 +172,7 @@ export const SettingsView: React.FC = () => {
           <button
             type="button"
             onClick={resetDropdowns}
-            className="flex items-center space-x-1 px-3 py-1.5 text-xs font-bold bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-400/40 rounded transition cursor-pointer"
+            className="flex items-center space-x-1 px-3 py-1.5 text-xs font-bold bg-[#00897b] hover:bg-[#00796b] text-white rounded-lg transition cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Reset Dropdowns</span>
@@ -183,23 +183,23 @@ export const SettingsView: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left: Company Profile & Signatures Settings (5 Cols) */}
         <div className="lg:col-span-5 space-y-4">
-          <div className="bg-white rounded-xl shadow border border-slate-200 overflow-hidden">
-            <div className="bg-slate-800 text-white px-4 py-3 font-bold text-xs uppercase flex items-center justify-between">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="bg-[#263843] text-white px-4 py-3 font-bold text-xs uppercase flex items-center justify-between border-b border-[#1d2c35]">
               <span className="flex items-center space-x-2">
-                <Building className="w-4 h-4 text-amber-400" />
+                <Building className="w-4 h-4 text-[#5eead4]" />
                 <span>COMPANY &amp; SIGNATURE DETAILS</span>
               </span>
-              <span className="text-[10px] text-amber-400 font-bold uppercase">
-                Golden Brand Style
+              <span className="text-[10px] text-[#80cbc4] font-bold uppercase">
+                Corporate Identity
               </span>
             </div>
 
             <form onSubmit={handleSaveProfile} className="p-4 space-y-3.5 text-xs">
-              {/* Golden Company Name & Official Logo (Fixed / Branded) */}
+              {/* Brand Name & Official Logo */}
               <div>
                 <label className="font-bold text-slate-700 block mb-1">Company Brand &amp; Logo</label>
-                <div className="p-3 bg-slate-900 rounded-lg border border-slate-700 flex items-center gap-3.5">
-                  <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-md flex items-center justify-center">
+                <div className="p-3 bg-[#263843] rounded-lg border border-[#1d2c35] flex items-center gap-3.5">
+                  <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-md flex items-center justify-center">
                     <img
                       src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
                       alt={companyProfile.companyName}
@@ -207,11 +207,11 @@ export const SettingsView: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <div className="zsb-3d-text text-xl font-black">
+                    <div className="text-xl font-black tracking-tight text-amber-400 zsb-golden-brand">
                       {companyProfile.companyName}
                     </div>
                     <div className="text-[10px] text-slate-300 mt-0.5">
-                      Official Company Gold Seal Logo • Integrated across all vouchers, headers &amp; PDF / PNG prints
+                      Official Company Seal Logo • Integrated across all vouchers, headers &amp; PDF / PNG prints
                     </div>
                   </div>
                 </div>
@@ -321,7 +321,7 @@ export const SettingsView: React.FC = () => {
 
               <button
                 type="submit"
-                className="w-full bg-[#1b73b4] hover:bg-[#165f95] text-white py-2 rounded font-bold text-xs uppercase shadow transition flex items-center justify-center space-x-1.5 cursor-pointer"
+                className="w-full bg-[#00897b] hover:bg-[#00796b] text-white py-2 rounded-lg font-bold text-xs uppercase shadow-xs transition flex items-center justify-center space-x-1.5 cursor-pointer"
               >
                 <Save className="w-4 h-4" />
                 <span>Save Company Configuration</span>
@@ -452,13 +452,13 @@ export const SettingsView: React.FC = () => {
           </div>
 
           {/* Database Snapshot & Local JSON Recovery Card */}
-          <div className="bg-white rounded-xl shadow border border-slate-200 overflow-hidden">
-            <div className="bg-indigo-950 text-white px-4 py-3 font-bold text-xs uppercase flex items-center justify-between">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="bg-[#263843] text-white px-4 py-3 font-bold text-xs uppercase flex items-center justify-between border-b border-[#1d2c35]">
               <span className="flex items-center space-x-2">
-                <Archive className="w-4 h-4 text-amber-300" />
+                <Archive className="w-4 h-4 text-[#5eead4]" />
                 <span>DATABASE SNAPSHOT &amp; JSON RECOVERY</span>
               </span>
-              <span className="text-[10px] font-mono text-amber-300 font-bold">
+              <span className="text-[10px] font-mono text-[#80cbc4] font-bold">
                 {snapshots.length} Saved
               </span>
             </div>
@@ -473,7 +473,7 @@ export const SettingsView: React.FC = () => {
                   type="button"
                   data-testid="settings-quick-snapshot-btn"
                   onClick={() => createSnapshot(undefined, 'Created from Settings panel', 'manual')}
-                  className="flex items-center justify-center space-x-1.5 px-3 py-2 rounded bg-[#1b73b4] hover:bg-[#155d93] text-white font-bold text-xs transition cursor-pointer"
+                  className="flex items-center justify-center space-x-1.5 px-3 py-2 rounded-lg bg-[#00897b] hover:bg-[#00796b] text-white font-bold text-xs transition cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Create Snapshot</span>
@@ -482,7 +482,7 @@ export const SettingsView: React.FC = () => {
                   type="button"
                   data-testid="settings-download-snapshot-btn"
                   onClick={() => downloadSnapshotJSON()}
-                  className="flex items-center justify-center space-x-1.5 px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs transition cursor-pointer"
+                  className="flex items-center justify-center space-x-1.5 px-3 py-2 rounded-lg bg-[#263843] hover:bg-[#1c2a33] text-[#5eead4] font-bold text-xs transition cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Download .JSON</span>
@@ -503,7 +503,7 @@ export const SettingsView: React.FC = () => {
                     type="button"
                     data-testid="settings-restore-latest-btn"
                     onClick={() => restoreSnapshot(snapshots[0].id)}
-                    className="px-2.5 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shrink-0 transition cursor-pointer"
+                    className="px-2.5 py-1.5 rounded bg-[#00897b] hover:bg-[#00796b] text-white font-bold text-[11px] shrink-0 transition cursor-pointer"
                   >
                     Restore Latest
                   </button>
@@ -514,9 +514,9 @@ export const SettingsView: React.FC = () => {
                 type="button"
                 data-testid="settings-manage-snapshots-btn"
                 onClick={openSnapshotModal}
-                className="w-full py-2 rounded border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 font-bold text-xs uppercase transition flex items-center justify-center space-x-1.5 cursor-pointer"
+                className="w-full py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-[#263843] font-bold text-xs uppercase transition flex items-center justify-center space-x-1.5 cursor-pointer"
               >
-                <Archive className="w-3.5 h-3.5 text-indigo-700" />
+                <Archive className="w-3.5 h-3.5 text-[#00897b]" />
                 <span>Open Snapshot &amp; Recovery Manager ({snapshots.length})</span>
               </button>
             </div>
@@ -525,13 +525,13 @@ export const SettingsView: React.FC = () => {
 
         {/* Right: Master Dropdown Editor (7 Cols) */}
         <div className="lg:col-span-7 space-y-4">
-          <div className="bg-white rounded-xl shadow border border-slate-200 overflow-hidden">
-            <div className="bg-slate-800 text-white px-4 py-3 font-bold text-xs uppercase flex items-center justify-between">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="bg-[#263843] text-white px-4 py-3 font-bold text-xs uppercase flex items-center justify-between border-b border-[#1d2c35]">
               <span className="flex items-center space-x-2">
-                <Settings className="w-4 h-4 text-teal-400" />
+                <Settings className="w-4 h-4 text-[#5eead4]" />
                 <span>DROPDOWN MANAGER (ADD / EDIT / DELETE)</span>
               </span>
-              <span className="text-[11px] text-slate-300">
+              <span className="text-[11px] text-[#80cbc4]">
                 {dropdownOptions[activeCategory].length} items in list
               </span>
             </div>
@@ -547,9 +547,9 @@ export const SettingsView: React.FC = () => {
                       setActiveCategory(cat);
                       setEditingItem(null);
                     }}
-                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition ${
+                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
                       isActive
-                        ? 'bg-blue-600 text-white shadow'
+                        ? 'bg-[#00897b] text-white shadow-xs'
                         : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
                     }`}
                   >
@@ -560,7 +560,7 @@ export const SettingsView: React.FC = () => {
             </div>
 
             {/* Add New Item Input */}
-            <form onSubmit={handleAddItem} className="p-3 bg-blue-50/50 border-b border-blue-200 flex items-center gap-2">
+            <form onSubmit={handleAddItem} className="p-3 bg-slate-50/70 border-b border-slate-200 flex items-center gap-2">
               <input
                 type="text"
                 placeholder={`Add new option to ${categoryTitles[activeCategory]}...`}
@@ -570,7 +570,7 @@ export const SettingsView: React.FC = () => {
               />
               <button
                 type="submit"
-                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-bold uppercase transition flex items-center space-x-1"
+                className="px-3 py-1.5 bg-[#1877d2] hover:bg-[#1465b5] text-white rounded text-xs font-bold uppercase transition flex items-center space-x-1 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Item</span>

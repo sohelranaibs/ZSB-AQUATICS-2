@@ -52,7 +52,11 @@ export interface PurchaseRecord {
   previousAmount: number;
   paidAmount: number;
   balance: number;
+  status?: ExporterStatus;
   remarks?: string;
+  calculationPending?: boolean;
+  pendingFields?: string[];
+  rawValues?: Record<string, string>;
   createdAt: string;
 }
 
@@ -88,6 +92,7 @@ export interface PackingRecord {
   rmbAmount?: number;
   settledAmount?: number;
   debitAmount?: number;
+  reportAmount?: number;
   creditAmount?: number;
   balanceAmount?: number;
   exporterStatus?: ExporterStatus;
@@ -95,6 +100,9 @@ export interface PackingRecord {
   paymentDate?: string;
   billSite?: string;
   remarks?: string;
+  calculationPending?: boolean;
+  pendingFields?: string[];
+  rawValues?: Record<string, string>;
   createdAt: string;
 }
 
@@ -114,6 +122,7 @@ export interface PackingFormDraft {
 export interface ExporterPaymentSlipRow {
   id: string;
   packingId?: string;
+  paymentId?: string;
   invoiceNumber?: string;
   date: string;
   flight: string;
@@ -123,6 +132,7 @@ export interface ExporterPaymentSlipRow {
   rmb: number;
   amount: number;
   debitAmount?: number;
+  reportAmount?: number;
   creditAmount?: number;
   balance?: number;
   status: ExporterStatus;
@@ -144,8 +154,9 @@ export interface PaymentItemRow {
   weightKg?: number;
   description: string;
   debitAmount: number;
+  reportAmount?: number;
   creditAmount: number;
-  balance: number; // debit - credit
+  balance: number; // reportAmount - creditAmount (or debit - credit for supplier)
   status?: ExporterStatus;
 }
 
@@ -168,12 +179,16 @@ export interface PaymentRecord {
   paidAmount: number;
   balance: number;
   status: ExporterStatus;
+  reportAmount?: number;
   returnRMB: number;
   returnRMBInBDT?: number;
   exportGoodsRef?: string;
   paymentCategory?: 'supplier' | 'exporter';
   shippingMark?: string;
   remarks?: string;
+  calculationPending?: boolean;
+  pendingFields?: string[];
+  rawValues?: Record<string, string>;
   createdAt: string;
 }
 
@@ -184,7 +199,28 @@ export interface OtherCostRecord {
   amount: number;
   description: string;
   refInvoice?: string;
+  calculationPending?: boolean;
+  pendingFields?: string[];
+  rawValues?: Record<string, string>;
   createdAt: string;
+}
+
+export interface PrivateImportDraft {
+  id: string;
+  ownerUsername: string;
+  dataset: 'purchase' | 'packing' | 'payment' | 'other_cost' | 'all';
+  importMode: 'append' | 'replace';
+  sourceLabel: string;
+  savedAt: string;
+  populatedRows: number;
+  pendingCount: number;
+  records: {
+    purchases: Omit<PurchaseRecord, 'id' | 'createdAt'>[];
+    packings: Omit<PackingRecord, 'id' | 'createdAt'>[];
+    payments: Omit<PaymentRecord, 'id' | 'createdAt'>[];
+    otherCosts: Omit<OtherCostRecord, 'id' | 'createdAt'>[];
+  };
+  errors: string[];
 }
 
 export type SupplierCreditReason =

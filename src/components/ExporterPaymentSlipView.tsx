@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import {
   DEFAULT_EXPORTER_SLIP_ROWS,
@@ -6,6 +6,7 @@ import {
   buildExporterPaymentSlipRows,
   calculateExporterSlipRowAmount,
   calculateExporterSlipTotals,
+  calculatePaymentRow,
   createEmptyExporterSlipRow,
   createInitialExporterSlipRows,
   isExporterSlipRowPopulated,
@@ -16,6 +17,8 @@ import {
   formatRMB,
   ExporterSlipFilterOptions,
 } from '../utils/calculations.ts';
+import { useRowScrollViewport } from '../hooks/useRowScrollViewport.ts';
+import { MAX_VISIBLE_TABLE_ROWS } from '../utils/tableScroll.ts';
 import { ExporterPaymentSlipRow, ExporterStatus } from '../types/index.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
 import { exportElementToPng } from '../utils/pdfGenerator.ts';
@@ -61,6 +64,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
     payments,
     addPacking,
     updatePacking,
+    updatePayment,
     dropdownOptions,
     companyProfile,
     openPrintModal,
@@ -87,6 +91,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
   const [selectedImageRowPayload, setSelectedImageRowPayload] =
     useState<ExporterRecordSharePayload | null>(null);
   const [autoShareWeChat, setAutoShareWeChat] = useState<boolean>(false);
+  const slipScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -307,6 +312,14 @@ export const ExporterPaymentSlipView: React.FC = () => {
 
   const totals = useMemo(() => calculateExporterSlipTotals(slipRows), [slipRows]);
 
+  const { maxHeight: slipScrollMaxHeight, isCapped: isSlipScrollCapped } =
+    useRowScrollViewport(slipScrollRef, slipRows.length, {
+      maxVisibleRows: MAX_VISIBLE_TABLE_ROWS,
+      enabled: !isExportingPng,
+      includeFooter: true,
+      depsKey: `${selectedMark}|${dateFilterMode}|${selectedDate}|${fromDate}|${toDate}|${selectedFlight}|${selectedStatus}`,
+    });
+
   const statusOptions = useMemo(() => {
     return dropdownOptions.paymentStatuses.length > 0
       ? dropdownOptions.paymentStatuses
@@ -416,9 +429,13 @@ export const ExporterPaymentSlipView: React.FC = () => {
         );
       } else if (field === 'amount') {
         const newAmount = Number(value) || 0;
+        const targetPkg = packings.find((pk) => pk.id === row.packingId);
+        const credit = Number(targetPkg?.creditAmount) || 0;
         updatePacking(
           row.packingId,
           {
+            reportAmount: newAmount,
+            balanceAmount: calculatePaymentRow(newAmount, credit),
             settledAmount: newAmount,
             debitAmount: newAmount,
             totalAmount: newAmount,
@@ -435,6 +452,25 @@ export const ExporterPaymentSlipView: React.FC = () => {
           },
           true
         );
+      }
+      return;
+    }
+
+    if (row.paymentId) {
+      const targetPm = payments.find((pm) => pm.id === row.paymentId);
+      if (field === 'date') {
+        updatePayment(row.paymentId, { date: String(value) });
+      } else if (field === 'mark') {
+        updatePayment(row.paymentId, { shippingMark: String(value).toUpperCase() });
+      } else if (field === 'amount') {
+        const newAmount = Number(value) || 0;
+        const paid = Number(targetPm?.paidAmount) || 0;
+        updatePayment(row.paymentId, {
+          reportAmount: newAmount,
+          balance: calculatePaymentRow(newAmount, paid),
+        });
+      } else if (field === 'status') {
+        updatePayment(row.paymentId, { status: String(value) as ExporterStatus });
       }
       return;
     }
@@ -529,7 +565,9 @@ export const ExporterPaymentSlipView: React.FC = () => {
       rmbAmount: rmbRateVal > 0 ? rmbRateVal : 0,
       settledAmount: effectiveRmbTotal,
       debitAmount: effectiveRmbTotal,
+      reportAmount: effectiveRmbTotal,
       creditAmount: normalizedStatus === 'PAID' ? effectiveRmbTotal : 0,
+      balanceAmount: normalizedStatus === 'PAID' ? 0 : effectiveRmbTotal,
       exporterStatus: normalizedStatus,
       paymentStatus: normalizedStatus,
     });
@@ -656,9 +694,9 @@ export const ExporterPaymentSlipView: React.FC = () => {
       </datalist>
 
       {/* Top Action & Filter Bar */}
-      <div className="bg-slate-900 text-white px-5 py-3.5 rounded-xl shadow-md border-b-2 border-amber-500 flex flex-wrap items-center justify-between gap-4">
+      <div className="bg-[#263843] text-white px-5 py-3.5 rounded-xl shadow-sm border-b-2 border-[#00897b] flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center space-x-3">
-          <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
+          <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
               src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
               alt={companyProfile.companyName}
@@ -667,11 +705,11 @@ export const ExporterPaymentSlipView: React.FC = () => {
           </div>
           <div>
             <div className="flex items-center space-x-2.5">
-              <span className="zsb-3d-text text-lg sm:text-xl font-black">
+              <span className="text-lg sm:text-xl font-black tracking-tight text-amber-400 zsb-golden-brand">
                 {companyProfile.companyName}
               </span>
-              <span className="text-slate-500">·</span>
-              <h1 className="text-sm sm:text-base font-bold text-white tracking-wide">
+              <span className="text-slate-400">·</span>
+              <h1 className="text-sm sm:text-base font-bold text-[#80cbc4] tracking-wide">
                 Exporter Payment Slip (付款单) — Automatic Database Sheet
               </h1>
             </div>
@@ -685,34 +723,34 @@ export const ExporterPaymentSlipView: React.FC = () => {
           <button
             type="button"
             onClick={handleAddRow}
-            className="flex items-center space-x-1.5 px-3 py-2 text-xs font-black bg-[#98486f] hover:bg-[#7d3759] text-white border border-amber-400/50 rounded-lg shadow-xs transition cursor-pointer"
+            className="flex items-center space-x-1.5 px-3 py-2 text-xs font-bold bg-[#1c2a33] hover:bg-[#162129] text-white border border-[#334b59] rounded-lg shadow-xs transition cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5 text-amber-300" />
+            <Plus className="w-3.5 h-3.5 text-[#5eead4]" />
             <span>Add Row (添加行)</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('packing_form')}
-            className="flex items-center space-x-1.5 px-3 py-2 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition cursor-pointer"
+            className="flex items-center space-x-1.5 px-3 py-2 text-xs font-bold bg-[#1c2a33] hover:bg-[#162129] text-slate-200 border border-[#334b59] rounded-lg transition cursor-pointer"
           >
-            <PlusCircle className="w-3.5 h-3.5 text-amber-400" />
+            <PlusCircle className="w-3.5 h-3.5 text-[#5eead4]" />
             <span>+ New Packing Entry</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('packing_db')}
-            className="flex items-center space-x-1.5 px-3 py-2 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition cursor-pointer"
+            className="flex items-center space-x-1.5 px-3 py-2 text-xs font-bold bg-[#1c2a33] hover:bg-[#162129] text-slate-200 border border-[#334b59] rounded-lg transition cursor-pointer"
           >
-            <Database className="w-3.5 h-3.5 text-teal-400" />
+            <Database className="w-3.5 h-3.5 text-[#5eead4]" />
             <span>Exporter / Packing DB ({packings.length})</span>
           </button>
 
           <button
             type="button"
             onClick={handlePrintSlip}
-            className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-md transition cursor-pointer"
+            className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-[#00897b] hover:bg-[#00796b] text-white rounded-lg shadow-xs transition cursor-pointer"
             title="Open Print, Save PDF & Save .PNG Preview"
           >
             <Printer className="w-4 h-4" />
@@ -723,7 +761,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
             type="button"
             onClick={handleSavePngSlip}
             disabled={isExportingPng}
-            className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-black bg-amber-600 hover:bg-amber-500 text-white rounded-lg shadow-md transition cursor-pointer disabled:opacity-50"
+            className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-[#1877d2] hover:bg-[#1465b5] text-white rounded-lg shadow-xs transition cursor-pointer disabled:opacity-50"
             title="Download Payment Slip directly as a high-resolution .PNG image"
           >
             {isExportingPng ? (
@@ -744,7 +782,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
             type="button"
             data-testid="exporter-share-wechat-btn"
             onClick={() => setIsShareModalOpen(true)}
-            className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-black bg-[#07C160] hover:bg-[#06a853] text-white rounded-lg shadow-md transition cursor-pointer"
+            className="flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold bg-[#07C160] hover:bg-[#06a853] text-white rounded-lg shadow-xs transition cursor-pointer"
             title="Share Payment Slip .PNG directly to Chinese buyers via WeChat (微信)"
           >
             <WeChatIcon className="w-4 h-4 text-white" />
@@ -1057,7 +1095,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
       {/* Main "Exporter Payment Slip" Spreadsheet Canvas */}
       <div className="bg-white rounded-sm shadow-xl border-2 border-slate-900 overflow-hidden">
         <div className="overflow-x-auto">
-          <div id="exporter-payment-slip-canvas" className="min-w-[900px] font-sans bg-white">
+          <div id="exporter-payment-slip-canvas" className="zsb-print-paper min-w-[900px] font-sans bg-white text-slate-900">
             {/* 1. Top Plum Title Header: ZSB AQUATICS */}
             <div className="bg-[#98486f] text-white py-3 px-6 flex items-center justify-center gap-3.5 border-b-2 border-black">
               <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-300 bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
@@ -1102,15 +1140,25 @@ export const ExporterPaymentSlipView: React.FC = () => {
 
             {/* 4. 7-Column Bilingual Exporter Payment Slip Table */}
             <div className="p-2.5 bg-[#faefd0] border-b-2 border-black">
+              {isSlipScrollCapped && (
+                <div className="mb-1.5 flex items-center justify-between text-[11px] font-mono text-slate-800 px-1">
+                  <span>
+                    Viewport: <strong>31 Rows</strong> visible ({slipRows.length} total rows — scroll vertically to view more)
+                  </span>
+                </div>
+              )}
               <div
+                ref={slipScrollRef}
                 data-testid="exporter-payment-slip-scroll-box"
-                className="overflow-x-auto border-2 border-black rounded-lg bg-[#faefd0]"
+                data-visible-row-limit="31"
+                style={slipScrollMaxHeight ? { maxHeight: `${slipScrollMaxHeight}px` } : undefined}
+                className="overflow-auto border-2 border-black rounded-lg bg-[#faefd0] print:!max-h-none print:!overflow-visible"
               >
             <table
               className="w-full border-collapse text-center"
               data-testid="exporter-payment-slip-table"
             >
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr className="bg-[#98486f] text-white text-xs sm:text-sm font-bold uppercase border-b-2 border-black">
                   <th className="py-2.5 px-2 border-r-2 border-black w-16">
                     <div>SL #</div>
@@ -1135,7 +1183,10 @@ export const ExporterPaymentSlipView: React.FC = () => {
                     <div>WEIGHT</div>
                     <div className="text-xs font-normal mt-0.5">/KG 重量</div>
                   </th>
-                  <th className="py-2.5 px-2 border-r-2 border-black w-40">
+                  <th
+                    className="py-2.5 px-2 border-r-2 border-black w-40"
+                    title="AMOUNT = REPORT (RMB) collected from Exporter Payment"
+                  >
                     <div>AMOUNT</div>
                     <div className="text-xs font-normal mt-0.5">待结金额</div>
                   </th>
@@ -1262,7 +1313,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
                             ))}
                           </select>
 
-                          {!row.packingId && (
+                          {!row.packingId && !row.paymentId && (
                             <div
                               data-export-ignore="true"
                               className="flex items-center gap-0.5"
@@ -1297,7 +1348,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
               </tbody>
 
               {/* 5. GRAND TOTAL 累计 Plum Footer Row */}
-              <tfoot>
+              <tfoot className="sticky bottom-0 z-10">
                 <tr className="bg-[#98486f] text-white border-t-2 border-b-2 border-black text-sm sm:text-base font-black">
                   <td
                     colSpan={4}

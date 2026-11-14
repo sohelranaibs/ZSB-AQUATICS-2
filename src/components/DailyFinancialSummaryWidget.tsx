@@ -86,20 +86,19 @@ export const DailyFinancialSummaryWidget: React.FC<DailyFinancialSummaryWidgetPr
     <section
       aria-label="Daily Financial Summary"
       data-testid="daily-financial-summary-widget"
-      className="bg-white rounded-2xl shadow-sm border border-slate-200/90 overflow-hidden transition-all duration-200 h-full flex flex-col justify-between"
+      className="bg-white rounded-2xl shadow-sm border border-[#CBD8E6] overflow-hidden transition-all duration-200 h-full flex flex-col justify-between"
     >
       {/* Top Executive Command Bar */}
-      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-white px-4 sm:px-5 py-3 border-b border-slate-800">
+      <div className="bg-[#273E56] text-white px-4 sm:px-5 py-3 border-b border-[#1E3247]">
         <div className="flex flex-wrap items-center justify-between gap-2.5">
           {/* Left: Icon, Title & Active Date Badges */}
           <div className="flex flex-wrap items-center gap-2.5">
             <div className="relative">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500/25 to-teal-500/10 border border-emerald-400/40 flex items-center justify-center shrink-0 shadow-inner">
-                <Wallet className="w-4 h-4 text-emerald-300" />
+              <div className="w-9 h-9 rounded-xl bg-[#1D6CE0]/25 border border-[#1D6CE0]/50 flex items-center justify-center shrink-0">
+                <Wallet className="w-4 h-4 text-sky-300" />
               </div>
               <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 border border-slate-950"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#00B14F] border border-[#273E56]"></span>
               </span>
             </div>
 
@@ -112,13 +111,13 @@ export const DailyFinancialSummaryWidget: React.FC<DailyFinancialSummaryWidgetPr
               data-testid="daily-summary-active-date-badge"
               className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold border tracking-wide transition shadow-xs whitespace-nowrap ${
                 isViewingToday
-                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/50'
-                  : 'bg-amber-500/20 text-amber-300 border-amber-400/50'
+                  ? 'bg-[#00897b]/25 text-[#80cbc4] border-[#00897b]/50'
+                  : 'bg-[#1877d2]/25 text-sky-200 border-[#1877d2]/50'
               }`}
             >
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
-                  isViewingToday ? 'bg-emerald-400' : 'bg-amber-400'
+                  isViewingToday ? 'bg-[#5eead4]' : 'bg-sky-400'
                 }`}
               />
               <span>
@@ -129,27 +128,27 @@ export const DailyFinancialSummaryWidget: React.FC<DailyFinancialSummaryWidgetPr
             </span>
 
             {/* Activity Counts Pill */}
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-medium bg-slate-800/90 text-slate-300 border border-slate-700/80 whitespace-nowrap">
-              <span className="text-emerald-400 font-bold">{summary.purchaseCount}</span> Purchases ·{' '}
-              <span className="text-teal-400 font-bold">{summary.paymentCount}</span> Payments
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-medium bg-[#1c2a33] text-slate-200 border border-white/15 whitespace-nowrap">
+              <span className="text-[#5eead4] font-bold">{summary.purchaseCount}</span> Purchases ·{' '}
+              <span className="text-sky-300 font-bold">{summary.paymentCount}</span> Payments
             </span>
           </div>
 
           {/* Right: Quick Date Control Suite */}
           <div className="flex flex-wrap items-center gap-1.5 shrink-0">
             {/* Step navigation & Date picker */}
-            <div className="inline-flex items-center bg-slate-800/90 hover:bg-slate-800 border border-slate-700 rounded-xl p-0.5 gap-0.5 shadow-inner transition">
+            <div className="inline-flex items-center bg-[#1c2a33] hover:bg-[#18242c] border border-white/15 rounded-xl p-0.5 gap-0.5 transition">
               <button
                 type="button"
                 onClick={() => handleStepDay(-1)}
-                className="w-6 h-6 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/80 flex items-center justify-center transition cursor-pointer"
+                className="w-6 h-6 rounded-lg text-slate-200 hover:text-white hover:bg-white/10 flex items-center justify-center transition cursor-pointer"
                 title="Previous Day"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
 
               <div className="flex items-center px-1.5 gap-1">
-                <Calendar className="w-3 h-3 text-emerald-400 shrink-0" />
+                <Calendar className="w-3 h-3 text-[#5eead4] shrink-0" />
                 <label htmlFor="daily-summary-date-picker" className="sr-only">
                   Select Day
                 </label>
@@ -163,14 +162,14 @@ export const DailyFinancialSummaryWidget: React.FC<DailyFinancialSummaryWidgetPr
                       setSelectedDate(e.target.value);
                     }
                   }}
-                  className="bg-transparent text-[11px] font-mono font-bold text-white focus:outline-none cursor-pointer w-26 text-center"
+                  className="bg-transparent text-[11px] font-mono font-bold text-white focus:outline-none cursor-pointer w-26 text-center [color-scheme:dark]"
                 />
               </div>
 
               <button
                 type="button"
                 onClick={() => handleStepDay(1)}
-                className="w-6 h-6 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/80 flex items-center justify-center transition cursor-pointer"
+                className="w-6 h-6 rounded-lg text-slate-200 hover:text-white hover:bg-white/10 flex items-center justify-center transition cursor-pointer"
                 title="Next Day"
               >
                 <ChevronRight className="w-3.5 h-3.5" />
@@ -185,8 +184,8 @@ export const DailyFinancialSummaryWidget: React.FC<DailyFinancialSummaryWidgetPr
               disabled={isViewingToday}
               className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition flex items-center gap-1 whitespace-nowrap ${
                 isViewingToday
-                  ? 'bg-slate-800/60 text-slate-500 border-slate-800/60 cursor-default'
-                  : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-400/90 cursor-pointer shadow-sm active:scale-95'
+                  ? 'bg-[#1c2a33]/60 text-slate-400 border-white/10 cursor-default'
+                  : 'bg-[#00897b] hover:bg-[#00796b] text-white border-[#00897b] cursor-pointer shadow-sm active:scale-95'
               }`}
               title="Reset to Current Day"
             >
@@ -202,10 +201,10 @@ export const DailyFinancialSummaryWidget: React.FC<DailyFinancialSummaryWidgetPr
                   type="button"
                   data-testid="daily-summary-latest-activity-btn"
                   onClick={() => setSelectedDate(summary.latestActivityDate)}
-                  className="px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/40 text-[11px] font-bold transition cursor-pointer whitespace-nowrap flex items-center gap-1 shadow-xs"
+                  className="px-2.5 py-1.5 rounded-xl bg-[#1877d2]/25 hover:bg-[#1877d2]/40 text-sky-100 border border-[#1877d2]/50 text-[11px] font-bold transition cursor-pointer whitespace-nowrap flex items-center gap-1 shadow-xs"
                   title={`View most recent day with recorded transactions (${summary.latestActivityDate})`}
                 >
-                  <Sparkles className="w-3 h-3 text-amber-300" />
+                  <Sparkles className="w-3 h-3 text-sky-300" />
                   <span>Latest: {formatDate(summary.latestActivityDate)}</span>
                 </button>
               )}
@@ -217,13 +216,13 @@ export const DailyFinancialSummaryWidget: React.FC<DailyFinancialSummaryWidgetPr
               onClick={() => setShowRecordsDetail((prev) => !prev)}
               className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition flex items-center gap-1 whitespace-nowrap cursor-pointer ${
                 showRecordsDetail
-                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/50'
-                  : 'bg-slate-800 hover:bg-slate-700/90 text-slate-200 border-slate-700 shadow-xs'
+                  ? 'bg-[#00897b] text-white border-[#00897b]'
+                  : 'bg-[#1c2a33] hover:bg-white/15 text-slate-100 border-white/15 shadow-xs'
               }`}
             >
-              <FileText className="w-3 h-3 text-emerald-400" />
+              <FileText className="w-3 h-3 text-[#5eead4]" />
               <span>{showRecordsDetail ? 'Hide Records' : 'Daily Records'}</span>
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-slate-900 text-emerald-300 border border-slate-700">
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-[#142026] text-[#80cbc4] border border-white/15">
                 {summary.purchaseCount + summary.paymentCount}
               </span>
               {showRecordsDetail ? (
@@ -242,9 +241,9 @@ export const DailyFinancialSummaryWidget: React.FC<DailyFinancialSummaryWidgetPr
           {/* ==================== ROW 1, COL 1: TOTAL PURCHASES ==================== */}
           <div
             data-testid="daily-summary-purchases-card"
-            className="group relative bg-white rounded-xl px-4 py-3.5 border border-slate-200/90 hover:border-sky-300 shadow-2xs hover:shadow-xs transition-all duration-200 flex flex-col justify-between overflow-hidden"
+            className="group relative bg-white rounded-xl px-4 py-3.5 border border-[#CBD8E6] hover:border-[#1D6CE0] shadow-2xs hover:shadow-xs transition-all duration-200 flex flex-col justify-between overflow-hidden"
           >
-            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-sky-400 via-sky-500 to-blue-600" />
+            <div className="absolute top-0 inset-x-0 h-1 bg-[#1D6CE0]" />
 
             {/* Card Row 1: Title + Badges + Main Value */}
             <div className="flex items-center justify-between gap-2">
@@ -316,9 +315,9 @@ export const DailyFinancialSummaryWidget: React.FC<DailyFinancialSummaryWidgetPr
           {/* ==================== ROW 1, COL 2: TOTAL PAYMENTS ==================== */}
           <div
             data-testid="daily-summary-payments-card"
-            className="group relative bg-white rounded-xl px-4 py-3.5 border border-slate-200/90 hover:border-emerald-300 shadow-2xs hover:shadow-xs transition-all duration-200 flex flex-col justify-between overflow-hidden"
+            className="group relative bg-white rounded-xl px-4 py-3.5 border border-[#CBD8E6] hover:border-[#00B14F] shadow-2xs hover:shadow-xs transition-all duration-200 flex flex-col justify-between overflow-hidden"
           >
-            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-600" />
+            <div className="absolute top-0 inset-x-0 h-1 bg-[#00B14F]" />
 
             {/* Card Row 1: Title + Badges + Main Value */}
             <div className="flex items-center justify-between gap-2">
@@ -389,9 +388,9 @@ export const DailyFinancialSummaryWidget: React.FC<DailyFinancialSummaryWidgetPr
           {/* ==================== ROW 2, COL 1: PAYMENT CHANNELS BREAKDOWN ==================== */}
           <div
             data-testid="daily-summary-breakdown-card"
-            className="group relative bg-white rounded-xl px-4 py-3.5 border border-slate-200/90 hover:border-indigo-300 shadow-2xs hover:shadow-xs transition-all duration-200 flex flex-col justify-between overflow-hidden"
+            className="group relative bg-white rounded-xl px-4 py-3.5 border border-[#CBD8E6] hover:border-[#7C3AED] shadow-2xs hover:shadow-xs transition-all duration-200 flex flex-col justify-between overflow-hidden"
           >
-            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-indigo-400 via-indigo-500 to-purple-600" />
+            <div className="absolute top-0 inset-x-0 h-1 bg-[#7C3AED]" />
 
             {/* Card Row 1: Title + Quick Action Links */}
             <div className="flex items-center justify-between gap-2">
@@ -469,18 +468,10 @@ export const DailyFinancialSummaryWidget: React.FC<DailyFinancialSummaryWidgetPr
                 ? 'bg-gradient-to-b from-rose-50/40 to-white border-rose-200/90 hover:border-rose-300'
                 : summary.netDailyBalance < 0
                 ? 'bg-gradient-to-b from-emerald-50/40 to-white border-emerald-200/90 hover:border-emerald-300'
-                : 'bg-gradient-to-b from-slate-50/60 to-white border-slate-200 hover:border-slate-300'
+                : 'bg-gradient-to-b from-slate-50/60 to-white border-[#CBD8E6] hover:border-[#F97316]'
             }`}
           >
-            <div
-              className={`absolute top-0 inset-x-0 h-1 ${
-                summary.netDailyBalance > 0
-                  ? 'bg-gradient-to-r from-rose-400 via-rose-500 to-red-600'
-                  : summary.netDailyBalance < 0
-                  ? 'bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-600'
-                  : 'bg-gradient-to-r from-slate-300 to-slate-400'
-              }`}
-            />
+            <div className="absolute top-0 inset-x-0 h-1 bg-[#F97316]" />
 
             {/* Card Row 1: Title + Status Badge + Main Net Balance */}
             <div className="flex items-center justify-between gap-2">
@@ -623,7 +614,7 @@ export const DailyFinancialSummaryWidget: React.FC<DailyFinancialSummaryWidgetPr
                   }`}
                 >
                   <div>
-                    <div className="bg-gradient-to-r from-sky-950 to-slate-900 text-white px-4 py-2.5 flex items-center justify-between border-b border-sky-900/50">
+                    <div className="bg-[#263843] text-white px-4 py-2.5 flex items-center justify-between border-b border-[#1d2c35]">
                       <div className="flex items-center gap-2">
                         <ShoppingCart className="w-4 h-4 text-sky-400" />
                         <span className="text-xs font-bold uppercase tracking-wide">
@@ -718,7 +709,7 @@ export const DailyFinancialSummaryWidget: React.FC<DailyFinancialSummaryWidgetPr
                   }`}
                 >
                   <div>
-                    <div className="bg-gradient-to-r from-emerald-950 to-slate-900 text-white px-4 py-2.5 flex items-center justify-between border-b border-emerald-900/50">
+                    <div className="bg-[#263843] text-white px-4 py-2.5 flex items-center justify-between border-b border-[#1d2c35]">
                       <div className="flex items-center gap-2">
                         <CreditCard className="w-4 h-4 text-emerald-400" />
                         <span className="text-xs font-bold uppercase tracking-wide">

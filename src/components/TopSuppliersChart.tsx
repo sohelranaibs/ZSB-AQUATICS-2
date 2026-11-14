@@ -20,7 +20,7 @@ import {
 } from 'recharts';
 import { Users, Award, Plus, ArrowUpRight } from 'lucide-react';
 
-const BAR_COLORS = ['#0284c7', '#0d9488', '#d97706', '#4f46e5', '#475569'];
+const BAR_COLORS = ['#1D6CE0', '#00B14F', '#7C3AED', '#F97316', '#E11D48'];
 
 export const TopSuppliersChart: React.FC = () => {
   const { purchases, dropdownOptions, companyProfile, setActiveTab } = useApp();
@@ -90,16 +90,16 @@ export const TopSuppliersChart: React.FC = () => {
     <section
       aria-label="Top 5 Suppliers by Purchase Volume"
       data-testid="top-suppliers-summary"
-      className="bg-white rounded-xl shadow-xs border border-slate-200/90 overflow-hidden"
+      className="bg-white rounded-xl shadow-xs border border-[#CBD8E6] overflow-hidden"
     >
       {/* Header Bar */}
-      <div className="bg-slate-900 text-white px-5 py-3.5 border-b border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+      <div className="bg-[#273E56] text-white px-5 py-3.5 border-b border-[#1E3247] flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2.5">
-          <Users className="w-4 h-4 text-amber-400 shrink-0" />
+          <Users className="w-4 h-4 text-sky-300 shrink-0" />
           <h2 className="text-sm font-bold tracking-wide text-white">
             Top 5 Suppliers by Purchase Volume
           </h2>
-          <span className="text-slate-600" aria-hidden="true">
+          <span className="text-slate-400" aria-hidden="true">
             ·
           </span>
           <span className="text-xs text-slate-300 font-mono tabular-nums">
@@ -112,7 +112,7 @@ export const TopSuppliersChart: React.FC = () => {
           <div
             role="group"
             aria-label="Supplier Chart Mode"
-            className="flex items-center gap-1 bg-slate-800 p-1 rounded-lg border border-slate-700"
+            className="flex items-center gap-1 bg-[#1E3247] p-1 rounded-lg border border-white/15"
           >
             <button
               type="button"
@@ -120,8 +120,8 @@ export const TopSuppliersChart: React.FC = () => {
               onClick={() => setDisplayMode('volume_only')}
               className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
                 displayMode === 'volume_only'
-                  ? 'bg-amber-500 text-slate-950 font-bold'
-                  : 'text-slate-300 hover:text-white'
+                  ? 'bg-[#1D6CE0] text-white font-bold shadow-2xs'
+                  : 'text-slate-200 hover:text-white'
               }`}
             >
               Volume (KG)
@@ -132,8 +132,8 @@ export const TopSuppliersChart: React.FC = () => {
               onClick={() => setDisplayMode('volume_and_value')}
               className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
                 displayMode === 'volume_and_value'
-                  ? 'bg-amber-500 text-slate-950 font-bold'
-                  : 'text-slate-300 hover:text-white'
+                  ? 'bg-[#1D6CE0] text-white font-bold shadow-2xs'
+                  : 'text-slate-200 hover:text-white'
               }`}
             >
               Volume &amp; Value ({companyProfile.currency})
@@ -146,7 +146,7 @@ export const TopSuppliersChart: React.FC = () => {
             data-testid="top-suppliers-period-select"
             value={selectedPeriod}
             onChange={(e) => setSelectedPeriod(e.target.value)}
-            className="bg-slate-800 text-white text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-700 focus:outline-none focus:border-amber-400 cursor-pointer font-mono"
+            className="bg-[#1E3247] text-white text-xs font-semibold px-3 py-1.5 rounded-lg border border-white/15 focus:outline-none focus:border-[#1D6CE0] cursor-pointer font-mono"
           >
             <option value="all">Period: All Time</option>
             {availableMonths.map((ym) => (
@@ -159,7 +159,7 @@ export const TopSuppliersChart: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('purchase_form')}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold transition cursor-pointer whitespace-nowrap"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#00B14F] hover:bg-[#009944] text-white text-xs font-semibold transition cursor-pointer whitespace-nowrap"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Add Bill</span>
@@ -270,23 +270,24 @@ export const TopSuppliersChart: React.FC = () => {
                         : String(_label);
                     }}
                     contentStyle={{
-                      backgroundColor: '#0f172a',
-                      borderColor: '#334155',
-                      borderRadius: '8px',
-                      color: '#f8fafc',
+                      backgroundColor: '#ffffff',
+                      borderColor: '#CBD8E6',
+                      borderRadius: '10px',
+                      color: '#0f172a',
                       fontSize: '12px',
                       fontFamily: 'monospace',
+                      boxShadow: '0 8px 20px rgba(15, 23, 42, 0.08)',
                     }}
-                    itemStyle={{ color: '#f8fafc' }}
-                    labelStyle={{ color: '#fbbf24', fontWeight: 700, marginBottom: '4px' }}
+                    itemStyle={{ color: '#0f172a' }}
+                    labelStyle={{ color: '#1D6CE0', fontWeight: 700, marginBottom: '4px' }}
                   />
                   <Legend
-                    wrapperStyle={{ fontSize: '12px', fontWeight: 600, paddingTop: '6px' }}
+                    wrapperStyle={{ fontSize: '12px', fontWeight: 600, paddingTop: '6px', color: '#334155' }}
                   />
                   <Bar
                     dataKey="totalVolume"
                     name="Total Purchase Volume (KG)"
-                    fill="#0284c7"
+                    fill="#1877d2"
                     radius={[4, 4, 0, 0]}
                     isAnimationActive={false}
                   >
@@ -315,7 +316,7 @@ export const TopSuppliersChart: React.FC = () => {
                   <YAxis
                     yAxisId="left"
                     tickFormatter={(val: number) => `${val}kg`}
-                    tick={{ fill: '#0284c7', fontSize: 11, fontFamily: 'monospace' }}
+                    tick={{ fill: '#1877d2', fontSize: 11, fontFamily: 'monospace' }}
                     axisLine={{ stroke: '#93c5fd' }}
                     tickLine={false}
                     width={54}
@@ -326,7 +327,7 @@ export const TopSuppliersChart: React.FC = () => {
                     tickFormatter={(val: number) =>
                       val >= 1000 ? `${Math.round(val / 1000)}k` : String(val)
                     }
-                    tick={{ fill: '#0d9488', fontSize: 11, fontFamily: 'monospace' }}
+                    tick={{ fill: '#00897b', fontSize: 11, fontFamily: 'monospace' }}
                     axisLine={{ stroke: '#5eead4' }}
                     tickLine={false}
                     width={54}
@@ -340,24 +341,25 @@ export const TopSuppliersChart: React.FC = () => {
                       return [`${Number(value || 0).toLocaleString()} KG`, label];
                     }}
                     contentStyle={{
-                      backgroundColor: '#0f172a',
-                      borderColor: '#334155',
-                      borderRadius: '8px',
-                      color: '#f8fafc',
+                      backgroundColor: '#ffffff',
+                      borderColor: '#CBD8E6',
+                      borderRadius: '10px',
+                      color: '#0f172a',
                       fontSize: '12px',
                       fontFamily: 'monospace',
+                      boxShadow: '0 8px 20px rgba(15, 23, 42, 0.08)',
                     }}
-                    itemStyle={{ color: '#f8fafc' }}
-                    labelStyle={{ color: '#fbbf24', fontWeight: 700, marginBottom: '4px' }}
+                    itemStyle={{ color: '#0f172a' }}
+                    labelStyle={{ color: '#1D6CE0', fontWeight: 700, marginBottom: '4px' }}
                   />
                   <Legend
-                    wrapperStyle={{ fontSize: '12px', fontWeight: 600, paddingTop: '6px' }}
+                    wrapperStyle={{ fontSize: '12px', fontWeight: 600, paddingTop: '6px', color: '#334155' }}
                   />
                   <Bar
                     yAxisId="left"
                     dataKey="totalVolume"
                     name="Total Purchase Volume (KG)"
-                    fill="#0284c7"
+                    fill="#1877d2"
                     radius={[4, 4, 0, 0]}
                     maxBarSize={34}
                     isAnimationActive={false}
@@ -366,7 +368,7 @@ export const TopSuppliersChart: React.FC = () => {
                     yAxisId="right"
                     dataKey="totalAmount"
                     name={`Total Purchase Value (${companyProfile.currency})`}
-                    fill="#0d9488"
+                    fill="#00897b"
                     radius={[4, 4, 0, 0]}
                     maxBarSize={34}
                     isAnimationActive={false}
@@ -382,7 +384,7 @@ export const TopSuppliersChart: React.FC = () => {
           <div>
             <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                <Award className="w-4 h-4 text-amber-600 shrink-0" />
+                <Award className="w-4 h-4 text-[#00897b] shrink-0" />
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-800">
                   Supplier Volume Leaderboard
                 </span>
@@ -397,20 +399,20 @@ export const TopSuppliersChart: React.FC = () => {
                   <div
                     key={`${sup.supplierName}-${idx}`}
                     data-testid={`top-supplier-row-${idx + 1}`}
-                    className="px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-white transition"
+                    className="px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-slate-100/70 transition"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <span
                         className={`w-6 h-6 rounded-md font-mono font-bold text-[11px] flex items-center justify-center text-white shrink-0 ${
                           idx === 0
-                            ? 'bg-sky-600'
+                            ? 'bg-[#071c36] text-white'
                             : idx === 1
-                            ? 'bg-teal-600'
+                            ? 'bg-[#1877d2] text-white'
                             : idx === 2
-                            ? 'bg-amber-600'
+                            ? 'bg-[#089bc4] text-white'
                             : idx === 3
-                            ? 'bg-indigo-600'
-                            : 'bg-slate-600'
+                            ? 'bg-[#5685bd] text-white'
+                            : 'bg-[#00897b] text-white'
                         }`}
                       >
                         0{sup.rank}

@@ -230,9 +230,9 @@ export const ProfitLossView: React.FC = () => {
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
       {/* Top Banner */}
-      <div className="bg-[#1b2b44] text-white px-5 py-3 rounded-lg shadow-md flex items-center justify-between border-b-2 border-amber-500">
+      <div className="bg-[#263843] text-white px-5 py-3.5 rounded-xl shadow-xs flex items-center justify-between border-b-2 border-[#00897b]">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
+          <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-[#00897b] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
               src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
               alt={companyProfile.companyName}
@@ -241,11 +241,11 @@ export const ProfitLossView: React.FC = () => {
           </div>
           <div>
             <div className="flex items-center space-x-3">
-              <span className="zsb-3d-text text-xl sm:text-2xl font-black">
+              <span className="text-xl sm:text-2xl font-black text-amber-400 zsb-golden-brand">
                 {companyProfile.companyName}
               </span>
-              <span className="text-lg text-slate-300">|</span>
-              <span className="text-sm sm:text-base font-semibold text-slate-100 uppercase tracking-wide">
+              <span className="text-lg text-slate-400">|</span>
+              <span className="text-sm sm:text-base font-semibold text-[#5eead4] uppercase tracking-wide">
                 Loss &amp; Profit Statement &amp; Other Costing
               </span>
             </div>
@@ -257,7 +257,7 @@ export const ProfitLossView: React.FC = () => {
 
         <button
           onClick={handlePrintProfitLoss}
-          className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded shadow transition cursor-pointer"
+          className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold bg-[#00897b] hover:bg-[#00796b] text-white rounded-lg shadow transition cursor-pointer"
         >
           <Printer className="w-3.5 h-3.5" />
           <span>Print P&amp;L Statement</span>
@@ -359,13 +359,13 @@ export const ProfitLossView: React.FC = () => {
         className="bg-white rounded-xl shadow border border-slate-200 overflow-hidden"
       >
         {/* Trends Header Bar */}
-        <div className="bg-[#1b2b44] text-white px-5 py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-800">
+        <div className="bg-[#263843] text-white px-5 py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-[#1d2c35]">
           <div className="flex items-center gap-2.5 min-w-0">
-            <BarChart3 className="w-4 h-4 text-amber-400 shrink-0" />
+            <BarChart3 className="w-4 h-4 text-[#5eead4] shrink-0" />
             <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-white truncate">
               Month-over-Month Trends: Export Revenue vs. Supplier Outflows
             </h2>
-            <span className="text-slate-500 shrink-0" aria-hidden="true">
+            <span className="text-slate-400 shrink-0" aria-hidden="true">
               ·
             </span>
             <span className="text-xs text-slate-300 font-mono tabular-nums whitespace-nowrap shrink-0">
@@ -378,7 +378,7 @@ export const ProfitLossView: React.FC = () => {
             <div
               role="group"
               aria-label="Trends Chart Visualization Mode"
-              className="flex items-center gap-1 bg-slate-800/90 p-1 rounded-lg border border-slate-700 shrink-0"
+              className="flex items-center gap-1 bg-[#1c2a33] p-1 rounded-lg border border-white/15 shrink-0"
             >
               <button
                 type="button"
@@ -386,8 +386,8 @@ export const ProfitLossView: React.FC = () => {
                 onClick={() => setChartType('composed')}
                 className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0 ${
                   chartType === 'composed'
-                    ? 'bg-amber-500 text-slate-950 font-bold'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-[#00897b] text-white font-bold'
+                    : 'text-slate-200 hover:text-white'
                 }`}
               >
                 Bar &amp; Net Spread
@@ -398,8 +398,8 @@ export const ProfitLossView: React.FC = () => {
                 onClick={() => setChartType('area')}
                 className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0 ${
                   chartType === 'area'
-                    ? 'bg-amber-500 text-slate-950 font-bold'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-[#00897b] text-white font-bold'
+                    : 'text-slate-200 hover:text-white'
                 }`}
               >
                 Area Trajectory
@@ -410,7 +410,7 @@ export const ProfitLossView: React.FC = () => {
             <div
               role="group"
               aria-label="Trends Month Window"
-              className="flex items-center gap-1 bg-slate-800/90 p-1 rounded-lg border border-slate-700 shrink-0"
+              className="flex items-center gap-1 bg-[#1c2a33] p-1 rounded-lg border border-white/15 shrink-0"
             >
               <button
                 type="button"
@@ -418,8 +418,8 @@ export const ProfitLossView: React.FC = () => {
                 onClick={() => setTrendWindow('active')}
                 className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0 ${
                   trendWindow === 'active'
-                    ? 'bg-teal-500 text-slate-950 font-bold'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-[#1877d2] text-white font-bold'
+                    : 'text-slate-200 hover:text-white'
                 }`}
               >
                 Active Months
@@ -430,8 +430,8 @@ export const ProfitLossView: React.FC = () => {
                 onClick={() => setTrendWindow('6m')}
                 className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0 ${
                   trendWindow === '6m'
-                    ? 'bg-teal-500 text-slate-950 font-bold'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-[#1877d2] text-white font-bold'
+                    : 'text-slate-200 hover:text-white'
                 }`}
               >
                 6 Months
@@ -442,8 +442,8 @@ export const ProfitLossView: React.FC = () => {
                 onClick={() => setTrendWindow('12m')}
                 className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0 ${
                   trendWindow === '12m'
-                    ? 'bg-teal-500 text-slate-950 font-bold'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-[#1877d2] text-white font-bold'
+                    : 'text-slate-200 hover:text-white'
                 }`}
               >
                 12 Months
@@ -633,23 +633,24 @@ export const ProfitLossView: React.FC = () => {
                         return `${pt.monthLabel}${revDelta}${outDelta}`;
                       }}
                       contentStyle={{
-                        backgroundColor: '#0f172a',
-                        borderColor: '#334155',
-                        borderRadius: '8px',
-                        color: '#f8fafc',
+                        backgroundColor: '#ffffff',
+                        borderColor: '#CBD8E6',
+                        borderRadius: '10px',
+                        color: '#0f172a',
                         fontSize: '12px',
                         fontFamily: 'monospace',
+                        boxShadow: '0 8px 20px rgba(15, 23, 42, 0.08)',
                       }}
-                      itemStyle={{ color: '#f8fafc' }}
-                      labelStyle={{ color: '#fbbf24', fontWeight: 700, marginBottom: '4px' }}
+                      itemStyle={{ color: '#0f172a' }}
+                      labelStyle={{ color: '#1D6CE0', fontWeight: 700, marginBottom: '4px' }}
                     />
                     <Legend
-                      wrapperStyle={{ fontSize: '12px', fontWeight: 600, paddingTop: '8px' }}
+                      wrapperStyle={{ fontSize: '12px', fontWeight: 600, paddingTop: '8px', color: '#334155' }}
                     />
                     <Bar
                       dataKey="exportRevenue"
                       name={`Total Export Revenue (${companyProfile.currency})`}
-                      fill="#0d9488"
+                      fill="#00897b"
                       radius={[4, 4, 0, 0]}
                       maxBarSize={42}
                       isAnimationActive={false}
@@ -657,7 +658,7 @@ export const ProfitLossView: React.FC = () => {
                     <Bar
                       dataKey="supplierPaymentOutflow"
                       name={`Supplier Payment Outflows (${companyProfile.currency})`}
-                      fill="#e11d48"
+                      fill="#1877d2"
                       radius={[4, 4, 0, 0]}
                       maxBarSize={42}
                       isAnimationActive={false}
@@ -666,9 +667,9 @@ export const ProfitLossView: React.FC = () => {
                       type="monotone"
                       dataKey="netCashflowSpread"
                       name={`Net Revenue Spread (${companyProfile.currency})`}
-                      stroke="#0284c7"
+                      stroke="#071c36"
                       strokeWidth={2.5}
-                      dot={{ r: 4, fill: '#0284c7', strokeWidth: 2, stroke: '#ffffff' }}
+                      dot={{ r: 4, fill: '#071c36', strokeWidth: 2, stroke: '#ffffff' }}
                       isAnimationActive={false}
                     />
                   </ComposedChart>
@@ -699,25 +700,26 @@ export const ProfitLossView: React.FC = () => {
                         String(name),
                       ]}
                       contentStyle={{
-                        backgroundColor: '#0f172a',
-                        borderColor: '#334155',
-                        borderRadius: '8px',
-                        color: '#f8fafc',
+                        backgroundColor: '#ffffff',
+                        borderColor: '#CBD8E6',
+                        borderRadius: '10px',
+                        color: '#0f172a',
                         fontSize: '12px',
                         fontFamily: 'monospace',
+                        boxShadow: '0 8px 20px rgba(15, 23, 42, 0.08)',
                       }}
-                      itemStyle={{ color: '#f8fafc' }}
-                      labelStyle={{ color: '#fbbf24', fontWeight: 700, marginBottom: '4px' }}
+                      itemStyle={{ color: '#0f172a' }}
+                      labelStyle={{ color: '#1D6CE0', fontWeight: 700, marginBottom: '4px' }}
                     />
                     <Legend
-                      wrapperStyle={{ fontSize: '12px', fontWeight: 600, paddingTop: '8px' }}
+                      wrapperStyle={{ fontSize: '12px', fontWeight: 600, paddingTop: '8px', color: '#334155' }}
                     />
                     <Area
                       type="monotone"
                       dataKey="exportRevenue"
                       name={`Total Export Revenue (${companyProfile.currency})`}
-                      stroke="#0d9488"
-                      fill="#0d9488"
+                      stroke="#00897b"
+                      fill="#00897b"
                       fillOpacity={0.18}
                       strokeWidth={2.5}
                       isAnimationActive={false}
@@ -726,9 +728,9 @@ export const ProfitLossView: React.FC = () => {
                       type="monotone"
                       dataKey="supplierPaymentOutflow"
                       name={`Supplier Payment Outflows (${companyProfile.currency})`}
-                      stroke="#e11d48"
-                      fill="#e11d48"
-                      fillOpacity={0.16}
+                      stroke="#1877d2"
+                      fill="#1877d2"
+                      fillOpacity={0.18}
                       strokeWidth={2.5}
                       isAnimationActive={false}
                     />
@@ -736,8 +738,8 @@ export const ProfitLossView: React.FC = () => {
                       type="monotone"
                       dataKey="netCashflowSpread"
                       name={`Net Revenue Spread (${companyProfile.currency})`}
-                      stroke="#0284c7"
-                      fill="#0284c7"
+                      stroke="#071c36"
+                      fill="#071c36"
                       fillOpacity={0.1}
                       strokeWidth={2}
                       isAnimationActive={false}
@@ -870,16 +872,16 @@ export const ProfitLossView: React.FC = () => {
       <section
         aria-label="Supplier Performance Top 5 Suppliers by Total Purchase Value"
         data-testid="pl-supplier-performance-section"
-        className="bg-white rounded-xl shadow border border-slate-200 overflow-hidden"
+        className="bg-white rounded-xl shadow border border-[#CBD8E6] overflow-hidden"
       >
         {/* Module Header Bar */}
-        <div className="bg-[#1b2b44] text-white px-5 py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-800">
+        <div className="bg-[#273E56] text-white px-5 py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-[#1E3247]">
           <div className="flex items-center gap-2.5 min-w-0">
-            <Award className="w-4 h-4 text-amber-400 shrink-0" />
+            <Award className="w-4 h-4 text-sky-300 shrink-0" />
             <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-white whitespace-nowrap">
               Supplier Performance: Top 5 Suppliers
             </h2>
-            <span className="text-slate-500 shrink-0" aria-hidden="true">
+            <span className="text-slate-400 shrink-0" aria-hidden="true">
               ·
             </span>
             <span
@@ -895,7 +897,7 @@ export const ProfitLossView: React.FC = () => {
             <div
               role="group"
               aria-label="Supplier Performance Chart Mode"
-              className="flex items-center gap-1 bg-slate-800/90 p-1 rounded-lg border border-slate-700 shrink-0"
+              className="flex items-center gap-1 bg-[#1E3247] p-1 rounded-lg border border-white/15 shrink-0"
             >
               <button
                 type="button"
@@ -903,8 +905,8 @@ export const ProfitLossView: React.FC = () => {
                 onClick={() => setSupplierChartMode('value')}
                 className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0 ${
                   supplierChartMode === 'value'
-                    ? 'bg-amber-500 text-slate-950 font-bold'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-[#00B14F] text-white font-bold'
+                    : 'text-slate-200 hover:text-white'
                 }`}
               >
                 Value &amp; Settlement
@@ -915,8 +917,8 @@ export const ProfitLossView: React.FC = () => {
                 onClick={() => setSupplierChartMode('volume')}
                 className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0 ${
                   supplierChartMode === 'volume'
-                    ? 'bg-amber-500 text-slate-950 font-bold'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-[#00B14F] text-white font-bold'
+                    : 'text-slate-200 hover:text-white'
                 }`}
               >
                 Volume &amp; Rate
@@ -927,7 +929,7 @@ export const ProfitLossView: React.FC = () => {
             <div
               role="group"
               aria-label="Supplier Performance Timeframe Window"
-              className="flex items-center gap-1 bg-slate-800/90 p-1 rounded-lg border border-slate-700 shrink-0"
+              className="flex items-center gap-1 bg-[#1E3247] p-1 rounded-lg border border-white/15 shrink-0"
             >
               <button
                 type="button"
@@ -935,8 +937,8 @@ export const ProfitLossView: React.FC = () => {
                 onClick={() => setSupplierWindow('6m')}
                 className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0 ${
                   supplierWindow === '6m'
-                    ? 'bg-teal-500 text-slate-950 font-bold'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-[#1D6CE0] text-white font-bold'
+                    : 'text-slate-200 hover:text-white'
                 }`}
               >
                 Last 6 Months
@@ -947,8 +949,8 @@ export const ProfitLossView: React.FC = () => {
                 onClick={() => setSupplierWindow('all')}
                 className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0 ${
                   supplierWindow === 'all'
-                    ? 'bg-teal-500 text-slate-950 font-bold'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-[#1D6CE0] text-white font-bold'
+                    : 'text-slate-200 hover:text-white'
                 }`}
               >
                 All Time
@@ -1128,23 +1130,24 @@ export const ProfitLossView: React.FC = () => {
                           return `#${sup.rank} ${sup.supplierName} · ${sup.totalQuantityKg} KG (${sup.shareOfWindowSpendPercent}% of 6M Spend)`;
                         }}
                         contentStyle={{
-                          backgroundColor: '#0f172a',
-                          borderColor: '#334155',
-                          borderRadius: '8px',
-                          color: '#f8fafc',
+                          backgroundColor: '#ffffff',
+                          borderColor: '#CBD8E6',
+                          borderRadius: '10px',
+                          color: '#0f172a',
                           fontSize: '12px',
                           fontFamily: 'monospace',
+                          boxShadow: '0 8px 20px rgba(15, 23, 42, 0.08)',
                         }}
-                        itemStyle={{ color: '#f8fafc' }}
-                        labelStyle={{ color: '#fbbf24', fontWeight: 700, marginBottom: '4px' }}
+                        itemStyle={{ color: '#0f172a' }}
+                        labelStyle={{ color: '#1D6CE0', fontWeight: 700, marginBottom: '4px' }}
                       />
                       <Legend
-                        wrapperStyle={{ fontSize: '12px', fontWeight: 600, paddingTop: '8px' }}
+                        wrapperStyle={{ fontSize: '12px', fontWeight: 600, paddingTop: '8px', color: '#334155' }}
                       />
                       <Bar
                         dataKey="totalPurchaseValue"
                         name={`Total Purchase Value (${companyProfile.currency})`}
-                        fill="#2563eb"
+                        fill="#1877d2"
                         radius={[4, 4, 0, 0]}
                         maxBarSize={42}
                         isAnimationActive={false}
@@ -1152,7 +1155,7 @@ export const ProfitLossView: React.FC = () => {
                       <Bar
                         dataKey="totalPaidAmount"
                         name={`Paid Settlement (${companyProfile.currency})`}
-                        fill="#0d9488"
+                        fill="#00897b"
                         radius={[4, 4, 0, 0]}
                         maxBarSize={42}
                         isAnimationActive={false}
@@ -1161,9 +1164,9 @@ export const ProfitLossView: React.FC = () => {
                         type="monotone"
                         dataKey="totalBalanceDue"
                         name={`Outstanding Due (${companyProfile.currency})`}
-                        stroke="#e11d48"
+                        stroke="#071c36"
                         strokeWidth={2.5}
-                        dot={{ r: 4, fill: '#e11d48', strokeWidth: 2, stroke: '#ffffff' }}
+                        dot={{ r: 4, fill: '#071c36', strokeWidth: 2, stroke: '#ffffff' }}
                         isAnimationActive={false}
                       />
                     </ComposedChart>
@@ -1185,8 +1188,8 @@ export const ProfitLossView: React.FC = () => {
                         tickFormatter={(val: number) =>
                           Math.abs(val) >= 1000 ? `${(val / 1000).toFixed(0)}k` : `${val}`
                         }
-                        tick={{ fill: '#475569', fontSize: 11, fontFamily: 'monospace' }}
-                        axisLine={{ stroke: '#cbd5e1' }}
+                        tick={{ fill: '#1877d2', fontSize: 11, fontFamily: 'monospace' }}
+                        axisLine={{ stroke: '#93c5fd' }}
                         tickLine={false}
                         width={56}
                       />
@@ -1194,8 +1197,8 @@ export const ProfitLossView: React.FC = () => {
                         yAxisId="right"
                         orientation="right"
                         tickFormatter={(val: number) => `${val} KG`}
-                        tick={{ fill: '#d97706', fontSize: 11, fontFamily: 'monospace' }}
-                        axisLine={{ stroke: '#cbd5e1' }}
+                        tick={{ fill: '#00897b', fontSize: 11, fontFamily: 'monospace' }}
+                        axisLine={{ stroke: '#5eead4' }}
                         tickLine={false}
                         width={58}
                       />
@@ -1221,24 +1224,25 @@ export const ProfitLossView: React.FC = () => {
                           )}/KG`;
                         }}
                         contentStyle={{
-                          backgroundColor: '#0f172a',
-                          borderColor: '#334155',
-                          borderRadius: '8px',
-                          color: '#f8fafc',
+                          backgroundColor: '#ffffff',
+                          borderColor: '#CBD8E6',
+                          borderRadius: '10px',
+                          color: '#0f172a',
                           fontSize: '12px',
                           fontFamily: 'monospace',
+                          boxShadow: '0 8px 20px rgba(15, 23, 42, 0.08)',
                         }}
-                        itemStyle={{ color: '#f8fafc' }}
-                        labelStyle={{ color: '#fbbf24', fontWeight: 700, marginBottom: '4px' }}
+                        itemStyle={{ color: '#0f172a' }}
+                        labelStyle={{ color: '#1D6CE0', fontWeight: 700, marginBottom: '4px' }}
                       />
                       <Legend
-                        wrapperStyle={{ fontSize: '12px', fontWeight: 600, paddingTop: '8px' }}
+                        wrapperStyle={{ fontSize: '12px', fontWeight: 600, paddingTop: '8px', color: '#334155' }}
                       />
                       <Bar
                         yAxisId="left"
                         dataKey="totalPurchaseValue"
                         name={`Total Purchase Value (${companyProfile.currency})`}
-                        fill="#2563eb"
+                        fill="#1877d2"
                         radius={[4, 4, 0, 0]}
                         maxBarSize={44}
                         isAnimationActive={false}
@@ -1248,9 +1252,9 @@ export const ProfitLossView: React.FC = () => {
                         type="monotone"
                         dataKey="totalQuantityKg"
                         name="Total Quantity Procured (KG)"
-                        stroke="#d97706"
+                        stroke="#00897b"
                         strokeWidth={2.5}
-                        dot={{ r: 4, fill: '#d97706', strokeWidth: 2, stroke: '#ffffff' }}
+                        dot={{ r: 4, fill: '#00897b', strokeWidth: 2, stroke: '#ffffff' }}
                         isAnimationActive={false}
                       />
                     </ComposedChart>
@@ -1377,13 +1381,13 @@ export const ProfitLossView: React.FC = () => {
         className="bg-white rounded-xl shadow border border-slate-200 overflow-hidden"
       >
         {/* Module Header Bar */}
-        <div className="bg-[#1b2b44] text-white px-5 py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-800">
+        <div className="bg-[#263843] text-white px-5 py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-[#1d2c35]">
           <div className="flex items-center gap-2.5 min-w-0">
-            <BadgePercent className="w-4 h-4 text-amber-400 shrink-0" />
+            <BadgePercent className="w-4 h-4 text-[#5eead4] shrink-0" />
             <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-white whitespace-nowrap">
               Supplier Credit Tracking &amp; Purchase Rebates
             </h2>
-            <span className="text-slate-500 shrink-0" aria-hidden="true">
+            <span className="text-slate-400 shrink-0" aria-hidden="true">
               ·
             </span>
             <span className="text-xs text-slate-300 font-mono tabular-nums whitespace-nowrap shrink-0">
@@ -1396,7 +1400,7 @@ export const ProfitLossView: React.FC = () => {
             <div
               role="group"
               aria-label="Supplier Credit Status Filter"
-              className="flex items-center gap-1 bg-slate-800/90 p-1 rounded-lg border border-slate-700 shrink-0"
+              className="flex items-center gap-1 bg-[#1c2a33] p-1 rounded-lg border border-white/15 shrink-0"
             >
               <button
                 type="button"
@@ -1404,8 +1408,8 @@ export const ProfitLossView: React.FC = () => {
                 onClick={() => setCreditFilter('all')}
                 className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0 ${
                   creditFilter === 'all'
-                    ? 'bg-amber-500 text-slate-950 font-bold'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-[#00897b] text-white font-bold'
+                    : 'text-slate-200 hover:text-white'
                 }`}
               >
                 All Credits ({creditSummary.totalCreditsCount})
@@ -1416,8 +1420,8 @@ export const ProfitLossView: React.FC = () => {
                 onClick={() => setCreditFilter('open')}
                 className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0 ${
                   creditFilter === 'open'
-                    ? 'bg-teal-500 text-slate-950 font-bold'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-[#1877d2] text-white font-bold'
+                    : 'text-slate-200 hover:text-white'
                 }`}
               >
                 Available ({creditSummary.openCreditsCount})
@@ -1428,8 +1432,8 @@ export const ProfitLossView: React.FC = () => {
                 onClick={() => setCreditFilter('applied')}
                 className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0 ${
                   creditFilter === 'applied'
-                    ? 'bg-teal-500 text-slate-950 font-bold'
-                    : 'text-slate-300 hover:text-white'
+                    ? 'bg-[#1877d2] text-white font-bold'
+                    : 'text-slate-200 hover:text-white'
                 }`}
               >
                 Fully Applied ({creditSummary.appliedCreditsCount})
@@ -1439,7 +1443,7 @@ export const ProfitLossView: React.FC = () => {
             <button
               type="button"
               onClick={() => setActiveTab('payment_form')}
-              className="px-2.5 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0 inline-flex items-center gap-1"
+              className="px-2.5 py-1.5 rounded-lg bg-[#00897b] hover:bg-[#00796b] text-white text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0 inline-flex items-center gap-1"
             >
               <span>Apply in Supplier Payment</span>
               <ArrowUpRight className="w-3.5 h-3.5" />
@@ -1809,9 +1813,9 @@ export const ProfitLossView: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left: Financial Statement Table (7 Cols) */}
         <div className="lg:col-span-7 bg-white rounded-xl shadow border border-slate-200 overflow-hidden">
-          <div className="bg-[#1b2b44] text-white px-5 py-3 font-bold text-xs uppercase tracking-wider flex items-center justify-between">
+          <div className="bg-[#263843] text-white px-5 py-3 font-bold text-xs uppercase tracking-wider flex items-center justify-between">
             <span>FINANCIAL SUMMARY LEDGER</span>
-            <Scale className="w-4 h-4 text-amber-400" />
+            <Scale className="w-4 h-4 text-[#5eead4]" />
           </div>
 
           <div className="p-3 bg-slate-50/70">
@@ -1963,7 +1967,7 @@ export const ProfitLossView: React.FC = () => {
 
               <button
                 type="submit"
-                className="w-full bg-[#1b73b4] hover:bg-[#165f95] text-white py-2 rounded font-bold text-xs uppercase shadow transition flex items-center justify-center space-x-1"
+                className="w-full bg-[#00897b] hover:bg-[#00796b] text-white py-2 rounded-lg font-bold text-xs uppercase shadow transition flex items-center justify-center space-x-1 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Save Other Costing</span>

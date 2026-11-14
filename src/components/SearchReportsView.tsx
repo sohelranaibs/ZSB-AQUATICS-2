@@ -277,9 +277,9 @@ export const SearchReportsView: React.FC = () => {
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
       {/* Top Banner */}
-      <div className="bg-[#1b2b44] text-white px-5 py-3 rounded-lg shadow-md flex flex-wrap items-center justify-between gap-4 border-b-2 border-amber-500">
+      <div className="bg-[#263843] text-white px-5 py-3 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-4 border-b-2 border-[#00897b]">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
+          <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
               src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
               alt={companyProfile.companyName}
@@ -288,11 +288,11 @@ export const SearchReportsView: React.FC = () => {
           </div>
           <div>
             <div className="flex items-center space-x-3">
-              <span className="zsb-3d-text text-xl sm:text-2xl font-black">
+              <span className="text-xl sm:text-2xl font-black tracking-tight text-amber-400 zsb-golden-brand">
                 {companyProfile.companyName}
               </span>
-              <span className="text-lg text-slate-300">|</span>
-              <span className="text-sm sm:text-base font-semibold text-slate-100 uppercase tracking-wide">
+              <span className="text-lg text-slate-400">|</span>
+              <span className="text-sm sm:text-base font-semibold text-[#80cbc4] uppercase tracking-wide">
                 Financial Search &amp; Global Reports
               </span>
             </div>
@@ -305,7 +305,7 @@ export const SearchReportsView: React.FC = () => {
         <div className="flex items-center space-x-2">
           <button
             onClick={handleExportFilteredCSV}
-            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded shadow transition cursor-pointer"
+            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold bg-[#00897b] hover:bg-[#00796b] text-white rounded-lg shadow-xs transition cursor-pointer"
             title="Export filtered records to CSV"
           >
             <Download className="w-3.5 h-3.5" />
@@ -314,7 +314,7 @@ export const SearchReportsView: React.FC = () => {
 
           <button
             onClick={handlePrintFilteredReport}
-            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white rounded shadow transition cursor-pointer"
+            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold bg-[#1877d2] hover:bg-[#1465b5] text-white rounded-lg shadow-xs transition cursor-pointer"
           >
             <Printer className="w-3.5 h-3.5" />
             <span>Print Report</span>
@@ -325,16 +325,16 @@ export const SearchReportsView: React.FC = () => {
       {/* Global Date Range Picker Box */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         {/* Date Filter Header Bar */}
-        <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white px-5 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="bg-[#263843] text-white px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-[#1d2c35]">
           <div className="flex items-center space-x-2.5">
-            <div className="w-7 h-7 rounded-md bg-blue-500/30 flex items-center justify-center text-blue-200 border border-blue-400/40">
-              <Calendar className="w-4 h-4 text-amber-400" />
+            <div className="w-7 h-7 rounded-md bg-[#1c2a33] flex items-center justify-center border border-[#334b59]">
+              <Calendar className="w-4 h-4 text-[#5eead4]" />
             </div>
             <div>
               <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-white">
                 Global Date Range Filter
               </span>
-              <span className="text-[11px] text-blue-200 ml-2 hidden sm:inline">
+              <span className="text-[11px] text-[#80cbc4] ml-2 hidden sm:inline">
                 Controls all financial transactions and summary metrics
               </span>
             </div>
@@ -342,11 +342,11 @@ export const SearchReportsView: React.FC = () => {
 
           <div className="flex items-center space-x-2 text-xs">
             {activePreset !== 'all' ? (
-              <span className="px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/40 font-mono font-bold text-[11px]">
+              <span className="px-2.5 py-0.5 rounded-full bg-[#00897b]/25 text-[#5eead4] border border-[#00897b]/50 font-mono font-bold text-[11px]">
                 Preset: {DATE_PRESET_OPTIONS.find((o) => o.key === activePreset)?.label || 'Custom'}
               </span>
             ) : (
-              <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[11px]">
+              <span className="px-2 py-0.5 rounded bg-[#1c2a33] text-slate-300 text-[11px] border border-[#334b59]">
                 All Historical Time
               </span>
             )}
@@ -651,7 +651,7 @@ export const SearchReportsView: React.FC = () => {
             onClick={() => setActiveKindTab('all')}
             className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center space-x-1.5 cursor-pointer ${
               activeKindTab === 'all'
-                ? 'bg-slate-900 text-white shadow-sm'
+                ? 'bg-[#263843] text-white shadow-sm'
                 : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
             }`}
           >
@@ -663,11 +663,11 @@ export const SearchReportsView: React.FC = () => {
             onClick={() => setActiveKindTab('packing')}
             className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center space-x-1.5 cursor-pointer ${
               activeKindTab === 'packing'
-                ? 'bg-teal-700 text-white shadow-sm'
+                ? 'bg-[#00897b] text-white shadow-sm'
                 : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
             }`}
           >
-            <Package className="w-3.5 h-3.5 text-teal-500" />
+            <Package className={`w-3.5 h-3.5 ${activeKindTab === 'packing' ? 'text-white' : 'text-[#00897b]'}`} />
             <span>Export Cargo ({filteredPackings.length})</span>
           </button>
 
@@ -675,11 +675,11 @@ export const SearchReportsView: React.FC = () => {
             onClick={() => setActiveKindTab('purchase')}
             className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center space-x-1.5 cursor-pointer ${
               activeKindTab === 'purchase'
-                ? 'bg-blue-700 text-white shadow-sm'
+                ? 'bg-[#1877d2] text-white shadow-sm'
                 : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
             }`}
           >
-            <ShoppingCart className="w-3.5 h-3.5 text-blue-500" />
+            <ShoppingCart className={`w-3.5 h-3.5 ${activeKindTab === 'purchase' ? 'text-white' : 'text-[#1877d2]'}`} />
             <span>Purchases ({filteredPurchases.length})</span>
           </button>
 
@@ -687,11 +687,11 @@ export const SearchReportsView: React.FC = () => {
             onClick={() => setActiveKindTab('payment')}
             className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center space-x-1.5 cursor-pointer ${
               activeKindTab === 'payment'
-                ? 'bg-purple-700 text-white shadow-sm'
+                ? 'bg-[#089bc4] text-white shadow-sm'
                 : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
             }`}
           >
-            <CreditCard className="w-3.5 h-3.5 text-purple-500" />
+            <CreditCard className={`w-3.5 h-3.5 ${activeKindTab === 'payment' ? 'text-white' : 'text-[#089bc4]'}`} />
             <span>Payments ({filteredPayments.length})</span>
           </button>
 
@@ -699,30 +699,30 @@ export const SearchReportsView: React.FC = () => {
             onClick={() => setActiveKindTab('other_cost')}
             className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center space-x-1.5 cursor-pointer ${
               activeKindTab === 'other_cost'
-                ? 'bg-amber-700 text-white shadow-sm'
+                ? 'bg-[#071c36] text-white shadow-sm'
                 : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
             }`}
           >
-            <Receipt className="w-3.5 h-3.5 text-amber-500" />
+            <Receipt className={`w-3.5 h-3.5 ${activeKindTab === 'other_cost' ? 'text-white' : 'text-[#5685bd]'}`} />
             <span>Operational Costs ({filteredOtherCosts.length})</span>
           </button>
         </div>
 
         {/* Monthly Statement Quick Box */}
-        <div className="flex items-center space-x-2 bg-purple-50 border border-purple-200 px-3 py-1 rounded-lg">
-          <Calendar className="w-3.5 h-3.5 text-purple-700" />
-          <span className="text-[11px] font-bold text-purple-950 uppercase hidden sm:inline">
+        <div className="flex items-center space-x-2 bg-white border border-slate-200 px-3 py-1 rounded-lg">
+          <Calendar className="w-3.5 h-3.5 text-[#00897b]" />
+          <span className="text-[11px] font-bold text-[#263843] uppercase hidden sm:inline">
             Statement:
           </span>
           <input
             type="month"
             value={statementMonth}
             onChange={(e) => setStatementMonth(e.target.value)}
-            className="border border-purple-300 rounded px-2 py-0.5 text-xs font-mono font-bold text-purple-900 bg-white"
+            className="border border-slate-300 rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-800 bg-slate-50"
           />
           <button
             onClick={handleGenerateMonthlyStatement}
-            className="flex items-center space-x-1 px-2.5 py-1 bg-purple-700 hover:bg-purple-800 text-white rounded text-[11px] font-bold uppercase transition cursor-pointer"
+            className="flex items-center space-x-1 px-2.5 py-1 bg-[#1877d2] hover:bg-[#1465b5] text-white rounded text-[11px] font-bold uppercase transition cursor-pointer"
           >
             <FileText className="w-3 h-3" />
             <span>PDF</span>
@@ -731,11 +731,11 @@ export const SearchReportsView: React.FC = () => {
       </div>
 
       {/* Main Transactions Table */}
-      <div className="bg-white rounded-xl shadow border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         {/* Table Title Bar */}
-        <div className="px-5 py-3 bg-slate-900 text-white font-bold text-xs uppercase flex items-center justify-between">
+        <div className="px-5 py-3 bg-[#263843] text-white font-bold text-xs uppercase flex items-center justify-between border-b border-[#1d2c35]">
           <div className="flex items-center space-x-2">
-            <ArrowDownUp className="w-4 h-4 text-amber-400" />
+            <ArrowDownUp className="w-4 h-4 text-[#5eead4]" />
             <span>
               {activeKindTab === 'all'
                 ? 'Consolidated Financial Transactions Stream'
@@ -747,7 +747,7 @@ export const SearchReportsView: React.FC = () => {
                 ? 'Party & Supplier Payment Vouchers'
                 : 'Operational Overhead & Other Expenses'}
             </span>
-            <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono text-[10px]">
+            <span className="px-2 py-0.5 rounded-full bg-[#1c2a33] text-[#80cbc4] font-mono text-[10px]">
               {unifiedTransactions.length} records matching timeframe
             </span>
           </div>

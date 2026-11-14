@@ -265,6 +265,10 @@ function sanitizePackingRecords(raw: unknown[], warnings: string[]): PackingReco
       totalAmountBDT: r.totalAmountBDT !== undefined ? Number(r.totalAmountBDT) || 0 : undefined,
       rmbAmount: r.rmbAmount !== undefined ? Number(r.rmbAmount) || 0 : undefined,
       settledAmount: r.settledAmount !== undefined ? Number(r.settledAmount) || 0 : undefined,
+      debitAmount: r.debitAmount !== undefined ? Number(r.debitAmount) || 0 : undefined,
+      reportAmount: r.reportAmount !== undefined ? Number(r.reportAmount) || 0 : undefined,
+      creditAmount: r.creditAmount !== undefined ? Number(r.creditAmount) || 0 : undefined,
+      balanceAmount: r.balanceAmount !== undefined ? Number(r.balanceAmount) || 0 : undefined,
       exporterStatus: r.exporterStatus ? String(r.exporterStatus) : undefined,
       paymentStatus: r.paymentStatus ? String(r.paymentStatus) : undefined,
       paymentDate: r.paymentDate ? String(r.paymentDate) : undefined,
@@ -297,8 +301,9 @@ function sanitizePaymentRecords(raw: unknown[], warnings: string[]): PaymentReco
             id: typeof row.id === 'string' && row.id ? row.id : `${idx + 1}-${rowIdx + 1}`,
             description: String(row.description ?? ''),
             debitAmount: Number(row.debitAmount) || 0,
+            ...(row.reportAmount !== undefined ? { reportAmount: Number(row.reportAmount) || 0 } : {}),
             creditAmount: Number(row.creditAmount) || 0,
-            balance: Number(row.balance) || (Number(row.debitAmount) || 0) - (Number(row.creditAmount) || 0),
+            balance: Number(row.balance) || (Number(row.reportAmount ?? row.debitAmount) || 0) - (Number(row.creditAmount) || 0),
           }))
       : [];
 
@@ -318,6 +323,7 @@ function sanitizePaymentRecords(raw: unknown[], warnings: string[]): PaymentReco
       paidAmount: Number(r.paidAmount) || 0,
       balance: Number(r.balance) || 0,
       status: String(r.status ?? 'NO REPORT'),
+      ...(r.reportAmount !== undefined ? { reportAmount: Number(r.reportAmount) || 0 } : {}),
       returnRMB: Number(r.returnRMB) || 0,
       returnRMBInBDT: r.returnRMBInBDT !== undefined ? Number(r.returnRMBInBDT) || 0 : undefined,
       exportGoodsRef: r.exportGoodsRef ? String(r.exportGoodsRef) : undefined,

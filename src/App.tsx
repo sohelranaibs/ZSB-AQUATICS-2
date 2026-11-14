@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { AppProvider, useApp } from './context/AppContext.tsx';
 import { ExcelHeaderRibbon } from './components/ExcelHeaderRibbon.tsx';
+import { ThemeSidebarNav, buildWorkbookSheets } from './components/ThemeSidebarNav.tsx';
 import { DashboardView } from './components/DashboardView.tsx';
 import { PurchaseFormView } from './components/PurchaseFormView.tsx';
 import { PackingListView } from './components/PackingListView.tsx';
@@ -62,6 +63,7 @@ import {
   loadDisplayPreferences,
   saveDisplayPreferences,
 } from './utils/displayViewport.ts';
+import { bindGlobalButtonGoldenClickHandler } from './utils/buttonClickHighlight.ts';
 
 const MainContent: React.FC = () => {
   const {
@@ -84,9 +86,26 @@ const MainContent: React.FC = () => {
     triggerManualSync,
     createSnapshot,
     exportCurrentViewToPdf,
+    purchases,
+    packings,
+    payments,
+    auditLogs,
   } = useApp();
 
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+
+  const workbookSheets = useMemo(
+    () =>
+      buildWorkbookSheets({
+        purchasesCount: purchases.length,
+        packingsCount: packings.length,
+        paymentsCount: payments.length,
+        auditLogsCount: auditLogs.length,
+      }),
+    [purchases.length, packings.length, payments.length, auditLogs.length]
+  );
 
   // Display Mode, Zoom In/Out & Full Screen Workspace State
   const [displayPrefs, setDisplayPrefs] = useState(() => loadDisplayPreferences());
@@ -738,135 +757,151 @@ const MainContent: React.FC = () => {
       data-display-mode={layoutMetrics.displayMode}
       data-zoom-percent={layoutMetrics.userZoomPercent}
       data-fullscreen={isFullScreen ? 'true' : 'false'}
-      className={`min-h-screen flex flex-col bg-slate-100 text-slate-900 pb-14 ${
+      className={`min-h-screen flex bg-[#273E56] zsb-light-workspace text-slate-900 ${
         layoutMetrics.displayMode === 'smart_mobile' ? 'smart-mobile-active' : 'desktop-view-active'
       } ${isFullScreen ? 'workspace-fullscreen-active' : ''}`}
     >
-      {/* Excel Ribbon & Sheet Navigation Tabs */}
-      <ExcelHeaderRibbon
-        onOpenShortcutsModal={() => setShortcutsModalOpen(true)}
-        displayMode={layoutMetrics.displayMode}
-        onChangeDisplayMode={handleChangeDisplayMode}
-        zoomPercent={layoutMetrics.userZoomPercent}
-        effectivePercentLabel={layoutMetrics.effectivePercentLabel}
-        onZoomIn={handleZoomIn}
-        onZoomOut={handleZoomOut}
-        onZoomReset={handleZoomReset}
-        onSelectZoomPreset={handleSelectZoomPreset}
-        isFullScreen={isFullScreen}
-        onToggleFullScreen={handleToggleFullScreen}
+      {/* Left Full-Height Corporate Navy Sidebar Navigation (#273E56) — Shown across every sheet */}
+      <ThemeSidebarNav
+        sheets={workbookSheets}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+        isMobileDrawerOpen={isMobileDrawerOpen}
+        onCloseMobileDrawer={() => setIsMobileDrawerOpen(false)}
       />
 
-      {/* Toast Notification Banner */}
-      {toastMessage && (
-        <div
-          role="status"
-          aria-live="polite"
-          data-testid="global-toast-banner"
-          className="fixed bottom-14 right-3 sm:bottom-4 sm:right-4 z-[70] bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl border-2 border-emerald-400/80 flex items-center space-x-2.5 text-xs font-bold transition-all duration-150 print:hidden max-w-md"
-        >
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span className="leading-snug">{toastMessage}</span>
-        </div>
-      )}
+      {/* Right Column: Seamless #273E56 Top Header + Rounded Cool Ice-Slate (#EDF2F7) Main Workspace */}
+      <div className="flex-1 min-w-0 flex flex-col bg-[#273E56]">
+        {/* Top Navy Control Header & Sheet Formula Strip */}
+        <ExcelHeaderRibbon
+          onOpenShortcutsModal={() => setShortcutsModalOpen(true)}
+          displayMode={layoutMetrics.displayMode}
+          onChangeDisplayMode={handleChangeDisplayMode}
+          zoomPercent={layoutMetrics.userZoomPercent}
+          effectivePercentLabel={layoutMetrics.effectivePercentLabel}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onZoomReset={handleZoomReset}
+          onSelectZoomPreset={handleSelectZoomPreset}
+          isFullScreen={isFullScreen}
+          onToggleFullScreen={handleToggleFullScreen}
+          isSidebarCollapsed={isSidebarCollapsed}
+          onToggleSidebar={() => setIsSidebarCollapsed((prev) => !prev)}
+          onOpenMobileDrawer={() => setIsMobileDrawerOpen(true)}
+        />
 
-      {/* Smart Mobile Horizontal Swipe-to-Scroll Navigation Strip (Visible when horizontal overflow exists in Smart Mobile mode) */}
-      {layoutMetrics.displayMode === 'smart_mobile' && scrollState.maxScrollLeft > 0 && (
-        <div
-          data-testid="smart-mobile-swipe-bar"
-          className="bg-slate-900/95 text-slate-200 px-3 py-1 border-b border-slate-800 flex items-center justify-between gap-2 text-[11px] print:hidden select-none"
-        >
-          <div className="flex items-center space-x-1.5 min-w-0">
-            <MoveHorizontal className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span className="font-semibold text-emerald-300 truncate">
-              Swipe Left / Right to Scroll Sheet
-            </span>
-            <span className="text-slate-400 font-mono text-[10px]">
-              ({scrollState.scrollProgressPercent}%)
-            </span>
+        {/* Toast Notification Banner */}
+        {toastMessage && (
+          <div
+            role="status"
+            aria-live="polite"
+            data-testid="global-toast-banner"
+            className="fixed bottom-14 right-3 sm:bottom-4 sm:right-4 z-[70] bg-[#273E56] text-white px-4 py-3 rounded-xl shadow-lg border border-[#1D6CE0] flex items-center space-x-2.5 text-xs font-semibold transition-all duration-150 print:hidden max-w-md"
+          >
+            <CheckCircle2 className="w-4 h-4 text-[#00B14F] shrink-0" />
+            <span className="leading-snug">{toastMessage}</span>
           </div>
+        )}
 
-          <div className="flex items-center space-x-1 shrink-0">
-            <button
-              type="button"
-              data-testid="smart-mobile-pan-left-btn"
-              onClick={() => handleQuickHorizontalPan('left')}
-              disabled={!scrollState.canScrollLeft}
-              aria-label="Pan Sheet Left"
-              title="Pan Sheet Left"
-              className="flex items-center space-x-0.5 px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-100 disabled:opacity-40 cursor-pointer font-bold"
-            >
-              <ChevronLeft className="w-3 h-3" />
-              <span>Left</span>
-            </button>
-            <button
-              type="button"
-              data-testid="smart-mobile-pan-right-btn"
-              onClick={() => handleQuickHorizontalPan('right')}
-              disabled={!scrollState.canScrollRight}
-              aria-label="Pan Sheet Right"
-              title="Pan Sheet Right"
-              className="flex items-center space-x-0.5 px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-100 disabled:opacity-40 cursor-pointer font-bold"
-            >
-              <span>Right</span>
-              <ChevronRight className="w-3 h-3" />
-            </button>
+        {/* Smart Mobile Horizontal Swipe-to-Scroll Navigation Strip (Visible when horizontal overflow exists in Smart Mobile mode) */}
+        {layoutMetrics.displayMode === 'smart_mobile' && scrollState.maxScrollLeft > 0 && (
+          <div
+            data-testid="smart-mobile-swipe-bar"
+            className="bg-white text-slate-800 px-3 py-1.5 border-b border-[#CBD8E6] flex items-center justify-between gap-2 text-[11px] print:hidden select-none"
+          >
+            <div className="flex items-center space-x-1.5 min-w-0">
+              <MoveHorizontal className="w-3.5 h-3.5 text-[#1D6CE0] shrink-0" />
+              <span className="font-semibold text-[#1D6CE0] truncate">
+                Swipe Left / Right to Scroll Sheet
+              </span>
+              <span className="text-slate-500 font-mono text-[10px]">
+                ({scrollState.scrollProgressPercent}%)
+              </span>
+            </div>
+
+            <div className="flex items-center space-x-1 shrink-0">
+              <button
+                type="button"
+                data-testid="smart-mobile-pan-left-btn"
+                onClick={() => handleQuickHorizontalPan('left')}
+                disabled={!scrollState.canScrollLeft}
+                aria-label="Pan Sheet Left"
+                title="Pan Sheet Left"
+                className="flex items-center space-x-0.5 px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 border border-[#CBD8E6] text-slate-800 disabled:opacity-40 cursor-pointer font-semibold"
+              >
+                <ChevronLeft className="w-3 h-3" />
+                <span>Left</span>
+              </button>
+              <button
+                type="button"
+                data-testid="smart-mobile-pan-right-btn"
+                onClick={() => handleQuickHorizontalPan('right')}
+                disabled={!scrollState.canScrollRight}
+                aria-label="Pan Sheet Right"
+                title="Pan Sheet Right"
+                className="flex items-center space-x-0.5 px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 border border-[#CBD8E6] text-slate-800 disabled:opacity-40 cursor-pointer font-semibold"
+              >
+                <span>Right</span>
+                <ChevronRight className="w-3 h-3" />
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Main Active Sheet Body with Smart Mobile / Desktop View (1440px), Horizontal Swipe-to-Scroll & Zoom Scaling */}
-      <div
-        ref={sheetScrollWrapperRef}
-        data-testid="sheet-viewport-scroll-wrapper"
-        data-passive-touch="true"
-        data-swipe-enabled={layoutMetrics.displayMode === 'smart_mobile' ? 'true' : 'false'}
-        data-swipe-scrolling={isSwipeScrolling ? 'true' : 'false'}
-        data-scroll-left={scrollState.scrollLeft}
-        data-max-scroll-left={scrollState.maxScrollLeft}
-        data-can-scroll-left={scrollState.canScrollLeft ? 'true' : 'false'}
-        data-can-scroll-right={scrollState.canScrollRight ? 'true' : 'false'}
-        data-scroll-progress={scrollState.scrollProgressPercent}
-        onPointerDown={handleWrapperPointerDown}
-        onPointerMove={handleWrapperPointerMove}
-        onPointerUp={handleWrapperPointerUp}
-        onPointerCancel={handleWrapperPointerUp}
-        onPointerLeave={handleWrapperPointerUp}
-        onScrollCapture={handleWrapperScroll}
-        className="flex-1 w-full overflow-x-auto smart-scroll-container"
-      >
-        <main
-          data-testid="sheet-zoom-canvas"
-          style={{
-            zoom: layoutMetrics.effectiveScale,
-            minWidth: layoutMetrics.canvasMinWidthPx
-              ? `${layoutMetrics.canvasMinWidthPx}px`
-              : undefined,
-          }}
-          className="w-full origin-top-left transition-none"
+        {/* Main Active Sheet Body — Rounded Ice-Slate (#EDF2F7) Surface Inset inside the #273E56 Navy L-Frame */}
+        <div
+          ref={sheetScrollWrapperRef}
+          data-testid="sheet-viewport-scroll-wrapper"
+          data-passive-touch="true"
+          data-swipe-enabled={layoutMetrics.displayMode === 'smart_mobile' ? 'true' : 'false'}
+          data-swipe-scrolling={isSwipeScrolling ? 'true' : 'false'}
+          data-scroll-left={scrollState.scrollLeft}
+          data-max-scroll-left={scrollState.maxScrollLeft}
+          data-can-scroll-left={scrollState.canScrollLeft ? 'true' : 'false'}
+          data-can-scroll-right={scrollState.canScrollRight ? 'true' : 'false'}
+          data-scroll-progress={scrollState.scrollProgressPercent}
+          onPointerDown={handleWrapperPointerDown}
+          onPointerMove={handleWrapperPointerMove}
+          onPointerUp={handleWrapperPointerUp}
+          onPointerCancel={handleWrapperPointerUp}
+          onPointerLeave={handleWrapperPointerUp}
+          onScrollCapture={handleWrapperScroll}
+          className="flex-1 min-w-0 overflow-x-auto smart-scroll-container bg-[#EDF2F7] md:rounded-tl-[24px] pb-14 shadow-inner"
         >
-          {activeTab === 'dashboard' && <DashboardView />}
-          {activeTab === 'purchase_form' && <PurchaseFormView />}
-          {activeTab === 'packing_form' && <PackingListView />}
-          {activeTab === 'air_way_bill' && <AirWayBillView />}
-          {activeTab === 'payment_form' && <PaymentFormView />}
-          {activeTab === 'exporter_payment_form' && <ExporterPaymentFormView />}
-          {activeTab === 'exporter_payment_slip' && <ExporterPaymentSlipView />}
-          {activeTab === 'profit_loss' && <ProfitLossView />}
-          {activeTab === 'purchase_db' && <DatabaseView initialType="purchase" />}
-          {activeTab === 'packing_db' && <DatabaseView initialType="packing" />}
-          {activeTab === 'payment_db' && <DatabaseView initialType="payment" />}
-          {activeTab === 'search_reports' && <SearchReportsView />}
-          {activeTab === 'audit_logs' && <AuditLogsView />}
-          {activeTab === 'settings' && <SettingsView />}
-          {activeTab === 'administration' && <AdministrationView />}
-        </main>
+          <main
+            data-testid="sheet-zoom-canvas"
+            style={{
+              zoom: layoutMetrics.effectiveScale,
+              minWidth: layoutMetrics.canvasMinWidthPx
+                ? `${layoutMetrics.canvasMinWidthPx}px`
+                : undefined,
+            }}
+            className="w-full origin-top-left transition-none"
+          >
+            {activeTab === 'dashboard' && <DashboardView />}
+            {activeTab === 'purchase_form' && <PurchaseFormView />}
+            {activeTab === 'packing_form' && <PackingListView />}
+            {activeTab === 'air_way_bill' && <AirWayBillView />}
+            {activeTab === 'payment_form' && <PaymentFormView />}
+            {activeTab === 'exporter_payment_form' && <ExporterPaymentFormView />}
+            {activeTab === 'exporter_payment_slip' && <ExporterPaymentSlipView />}
+            {activeTab === 'profit_loss' && <ProfitLossView />}
+            {activeTab === 'purchase_db' && <DatabaseView initialType="purchase" />}
+            {activeTab === 'packing_db' && <DatabaseView initialType="packing" />}
+            {activeTab === 'payment_db' && <DatabaseView initialType="payment" />}
+            {activeTab === 'search_reports' && <SearchReportsView />}
+            {activeTab === 'audit_logs' && <AuditLogsView />}
+            {activeTab === 'settings' && <SettingsView />}
+            {activeTab === 'administration' && <AdministrationView />}
+          </main>
+        </div>
       </div>
 
-      {/* Floating Quick Display, Zoom & Full Screen Pill (Fast Bottom-Left Access on Mobile & Desktop) */}
+      {/* Floating Quick Display, Zoom & Full Screen Pill (Shown in Full Screen when Ribbon is Hidden) */}
+      {isFullScreen && (
       <div
         data-testid="floating-display-quickbar"
-        className="fixed bottom-3 left-3 z-50 flex items-center space-x-1 bg-slate-950/95 text-slate-100 px-2 py-1 rounded-full shadow-xl border border-slate-700/90 backdrop-blur-xs print:hidden select-none text-[11px] font-mono"
+        className="fixed bottom-3 right-3 z-50 flex items-center space-x-1 bg-white/95 text-slate-800 px-2 py-1 rounded-full shadow-lg border border-slate-200 backdrop-blur-sm print:hidden select-none text-[11px] font-mono transition-all"
       >
         <button
           type="button"
@@ -881,11 +916,7 @@ const MainContent: React.FC = () => {
               ? 'Currently in Smart Mobile Mode. Click to switch to Desktop View (1440px).'
               : 'Currently in Desktop View (1440px). Click to switch to Smart Mobile Adjust.'
           }
-          className={`flex items-center space-x-1 px-2 py-0.5 rounded-full font-sans font-bold transition cursor-pointer ${
-            layoutMetrics.displayMode === 'desktop_full'
-              ? 'bg-amber-500 text-slate-950'
-              : 'bg-emerald-600 text-white'
-          }`}
+          className="flex items-center space-x-1 px-2.5 py-0.5 rounded-full font-sans font-bold bg-[#00897b] hover:bg-[#007367] text-white transition cursor-pointer"
         >
           {layoutMetrics.displayMode === 'desktop_full' ? (
             <>
@@ -900,7 +931,7 @@ const MainContent: React.FC = () => {
           )}
         </button>
 
-        <div className="h-3.5 w-px bg-slate-700" />
+        <div className="h-3.5 w-px bg-slate-200" />
 
         <button
           type="button"
@@ -909,7 +940,7 @@ const MainContent: React.FC = () => {
           disabled={layoutMetrics.userZoomPercent <= 40}
           aria-label="Quick Zoom Out"
           title="Zoom Out (-10%)"
-          className="p-1 rounded-full hover:bg-slate-800 text-slate-200 hover:text-amber-300 disabled:opacity-40 cursor-pointer"
+          className="p-1 rounded-full hover:bg-slate-100 text-slate-600 hover:text-[#00897b] disabled:opacity-40 cursor-pointer"
         >
           <ZoomOut className="w-3 h-3" />
         </button>
@@ -919,7 +950,7 @@ const MainContent: React.FC = () => {
           data-testid="quickbar-zoom-reset-btn"
           onClick={handleZoomReset}
           title="Click to reset zoom to 100%"
-          className="px-1.5 py-0.5 rounded hover:bg-slate-800 text-amber-300 font-bold cursor-pointer"
+          className="px-1.5 py-0.5 rounded hover:bg-slate-100 text-[#00897b] font-bold cursor-pointer"
         >
           {layoutMetrics.effectivePercentLabel}
         </button>
@@ -931,7 +962,7 @@ const MainContent: React.FC = () => {
           disabled={layoutMetrics.userZoomPercent >= 200}
           aria-label="Quick Zoom In"
           title="Zoom In (+10%)"
-          className="p-1 rounded-full hover:bg-slate-800 text-slate-200 hover:text-amber-300 disabled:opacity-40 cursor-pointer"
+          className="p-1 rounded-full hover:bg-slate-100 text-slate-600 hover:text-[#00897b] disabled:opacity-40 cursor-pointer"
         >
           <ZoomIn className="w-3 h-3" />
         </button>
@@ -941,13 +972,13 @@ const MainContent: React.FC = () => {
             type="button"
             onClick={handleZoomReset}
             title="Reset Zoom to 100%"
-            className="p-1 rounded-full hover:bg-slate-800 text-amber-400 cursor-pointer"
+            className="p-1 rounded-full hover:bg-slate-100 text-[#00897b] cursor-pointer"
           >
             <RotateCcw className="w-3 h-3" />
           </button>
         )}
 
-        <div className="h-3.5 w-px bg-slate-700" />
+        <div className="h-3.5 w-px bg-slate-200" />
 
         <button
           type="button"
@@ -957,8 +988,8 @@ const MainContent: React.FC = () => {
           title={isFullScreen ? 'Exit Full Screen' : 'Show Full Screen'}
           className={`flex items-center space-x-1 px-2 py-0.5 rounded-full font-sans font-bold transition cursor-pointer ${
             isFullScreen
-              ? 'bg-indigo-600 text-white'
-              : 'bg-slate-800 hover:bg-slate-700 text-amber-300'
+              ? 'bg-[#263843] text-white'
+              : 'bg-slate-100 hover:bg-slate-200 text-[#00897b]'
           }`}
         >
           {isFullScreen ? (
@@ -974,6 +1005,7 @@ const MainContent: React.FC = () => {
           )}
         </button>
       </div>
+      )}
 
       {/* Printable Modal (Voucher / Statement / PDF) */}
       <PrintPreviewModal />
@@ -1008,6 +1040,10 @@ const AuthGate: React.FC = () => {
 };
 
 export default function App() {
+  useEffect(() => {
+    return bindGlobalButtonGoldenClickHandler(document);
+  }, []);
+
   return (
     <AppProvider>
       <AuthGate />

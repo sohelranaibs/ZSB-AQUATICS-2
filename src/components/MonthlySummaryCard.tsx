@@ -71,19 +71,19 @@ export const MonthlySummaryCard: React.FC<MonthlySummaryCardProps> = ({
     <section
       aria-label="Current Month Financial Summary"
       data-testid="monthly-summary-card"
-      className="bg-white rounded-xl border border-slate-200/90 shadow-xs overflow-hidden"
+      className="bg-white rounded-xl border border-[#CBD8E6] shadow-xs overflow-hidden"
     >
       {/* Executive Section Header Bar */}
-      <div className="bg-slate-900 text-white px-5 py-3.5 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="bg-[#273E56] text-white px-5 py-3.5 border-b border-[#1E3247] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2.5">
-          <Calendar className="w-4 h-4 text-amber-400 shrink-0" />
+          <Calendar className="w-4 h-4 text-sky-300 shrink-0" />
           <h2 className="text-sm font-bold tracking-wide text-white">
             Monthly Financial Performance
           </h2>
-          <span className="text-slate-600" aria-hidden="true">·</span>
+          <span className="text-slate-400" aria-hidden="true">·</span>
           <span
             data-testid="monthly-summary-period-badge"
-            className="text-amber-300 font-mono text-xs font-semibold tabular-nums"
+            className="text-sky-200 font-mono text-xs font-semibold tabular-nums"
           >
             {summary.monthLabel}
             {isCurrentMonth ? ' (Current Period)' : ''}
@@ -92,8 +92,8 @@ export const MonthlySummaryCard: React.FC<MonthlySummaryCardProps> = ({
 
         {/* Month Selector & P&L Sheet Link */}
         <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex items-center bg-slate-800/90 border border-slate-700 rounded-lg px-2.5 py-1 text-xs">
-            <label htmlFor="dashboard-summary-month" className="text-slate-300 font-medium mr-2 whitespace-nowrap">
+          <div className="flex items-center bg-[#1E3247] border border-white/15 rounded-lg px-2.5 py-1 text-xs">
+            <label htmlFor="dashboard-summary-month" className="text-slate-200 font-medium mr-2 whitespace-nowrap">
               Period:
             </label>
             <input
@@ -110,10 +110,10 @@ export const MonthlySummaryCard: React.FC<MonthlySummaryCardProps> = ({
             <button
               type="button"
               onClick={() => setSelectedMonth(currentYearMonth)}
-              className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0"
+              className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-[#1E3247] hover:bg-white/15 text-slate-200 border border-white/15 text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0"
               title="Reset to Current Month"
             >
-              <RotateCcw className="w-3 h-3 text-amber-400" />
+              <RotateCcw className="w-3 h-3 text-sky-300" />
               <span>Current Month</span>
             </button>
           )}
@@ -123,7 +123,7 @@ export const MonthlySummaryCard: React.FC<MonthlySummaryCardProps> = ({
               type="button"
               data-testid="monthly-summary-export-csv-btn"
               onClick={onOpenMonthlyReports}
-              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0 shadow-xs"
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-[#00B14F] hover:bg-[#009944] text-white text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0 shadow-xs"
               title="Open Monthly Summary Reports and CSV Export View"
             >
               <Download className="w-3.5 h-3.5" />
@@ -134,7 +134,7 @@ export const MonthlySummaryCard: React.FC<MonthlySummaryCardProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('profit_loss')}
-            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0"
+            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-[#1D6CE0] hover:bg-[#1558BD] text-white text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0"
           >
             <span>P&amp;L Statement</span>
             <ArrowUpRight className="w-3.5 h-3.5" />

@@ -12,6 +12,7 @@ interface DatabaseValidatedCellProps {
   align?: 'left' | 'right' | 'center';
   className?: string;
   alwaysShowInput?: boolean;
+  isPendingCalc?: boolean;
   inputPlaceholder?: string;
   onDraftChange: (recordId: string, fieldKey: string, nextRawValue: string) => void;
   onCommitValid: (
@@ -32,6 +33,7 @@ export const DatabaseValidatedCell: React.FC<DatabaseValidatedCellProps> = ({
   align = 'left',
   className = '',
   alwaysShowInput = false,
+  isPendingCalc = false,
   inputPlaceholder = '',
   onDraftChange,
   onCommitValid,
@@ -95,10 +97,12 @@ export const DatabaseValidatedCell: React.FC<DatabaseValidatedCellProps> = ({
   return (
     <td
       data-testid={`db-cell-${recordId}-${fieldKey}`}
-      data-validation-status={isInvalid ? 'invalid' : 'valid'}
+      data-validation-status={isInvalid ? 'invalid' : isPendingCalc ? 'pending' : 'valid'}
       className={`px-1 py-1.5 align-middle transition-colors ${alignClass} ${
         isInvalid
           ? 'bg-rose-100/95 border-2 border-rose-600 text-rose-950 ring-2 ring-rose-500/30'
+          : isPendingCalc
+          ? 'bg-amber-50/90 text-amber-900 border border-amber-300'
           : className
       }`}
     >

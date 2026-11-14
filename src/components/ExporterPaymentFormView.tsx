@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import {
   calculatePaymentRow,
@@ -10,6 +10,8 @@ import {
   getExporterManifestStats,
   classifyPaymentCategory,
 } from '../utils/calculations.ts';
+import { useRowScrollViewport } from '../hooks/useRowScrollViewport.ts';
+import { MAX_VISIBLE_TABLE_ROWS } from '../utils/tableScroll.ts';
 import {
   EXPORTER_STATUS_OPTIONS,
   ExporterRecordHistoryRow,
@@ -79,11 +81,15 @@ export const ExporterPaymentFormView: React.FC = () => {
     [payments]
   );
 
+  const historyScrollRef = useRef<HTMLDivElement>(null);
+
   const nextVoucherNo = generateInvoiceNumber('EXP-PAY', exporterPayments.length);
   const [invoiceNumber, setInvoiceNumber] = useState<string>(nextVoucherNo);
   const [date, setDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [shippingMark, setShippingMark] = useState<string>('ALL');
   const [selectedPackingDate, setSelectedPackingDate] = useState<string>('ALL');
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
   const [contactNumber, setContactNumber] = useState<string>('');
 
@@ -98,6 +104,7 @@ export const ExporterPaymentFormView: React.FC = () => {
     shippingMark: defaultMark,
     description: '',
     debitAmount: 0,
+    reportAmount: 0,
     creditAmount: 0,
     balance: 0,
     status: 'UNPAID',
@@ -133,6 +140,7 @@ export const ExporterPaymentFormView: React.FC = () => {
   }, []);
 
   const [overallPreviousAmount, setOverallPreviousAmount] = useState<number>(0);
+  const [overallReportAmount, setOverallReportAmount] = useState<number>(0);
   const [overallPaidAmount, setOverallPaidAmount] = useState<number>(0);
 
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -203,6 +211,8 @@ export const ExporterPaymentFormView: React.FC = () => {
       buildExporterRecordHistory(packings, payments, {
         shippingMark: shippingMark || 'ALL',
         packingDate: selectedPackingDate || 'ALL',
+        fromDate,
+        toDate,
         status: selectedStatusFilter || 'ALL',
         rmbExchangeRate: companyProfile.rmbExchangeRate,
       }),
@@ -211,6 +221,8 @@ export const ExporterPaymentFormView: React.FC = () => {
       payments,
       shippingMark,
       selectedPackingDate,
+      fromDate,
+      toDate,
       selectedStatusFilter,
       companyProfile.rmbExchangeRate,
       historySyncRevision,
@@ -317,7 +329,24 @@ export const ExporterPaymentFormView: React.FC = () => {
     const normalized = newDate || 'ALL';
     setSelectedPackingDate(normalized);
     if (normalized !== 'ALL') {
+      setFromDate('');
+      setToDate('');
       setDate(normalized);
+    }
+  };
+
+  const handleFromDateChange = (newFromDate: string) => {
+    setFromDate(newFromDate);
+    if (newFromDate) {
+      setSelectedPackingDate('ALL');
+      setDate(newFromDate);
+    }
+  };
+
+  const handleToDateChange = (newToDate: string) => {
+    setToDate(newToDate);
+    if (newToDate) {
+      setSelectedPackingDate('ALL');
     }
   };
 
@@ -327,6 +356,8 @@ export const ExporterPaymentFormView: React.FC = () => {
     if (foundPkg) {
       setShippingMark(foundPkg.shippingMark);
       setSelectedPackingDate(foundPkg.packingDate || 'ALL');
+      setFromDate('');
+      setToDate('');
       const estRmb =
         foundPkg.rmbAmount && foundPkg.rmbAmount > 0
           ? foundPkg.rmbAmount
@@ -344,25 +375,36 @@ export const ExporterPaymentFormView: React.FC = () => {
 
   const handleRowChange = (
     row: PaymentItemRow,
-    field: 'description' | 'debitAmount' | 'creditAmount' | 'status',
+    field: 'description' | 'debitAmount' | 'reportAmount' | 'creditAmount' | 'status',
     value: string | number
   ) => {
+    const currentReport = row.reportAmount ?? 0;
+
     if (row.packingId) {
       if (field === 'description') {
         const nextDesc = String(value);
         setRowDescriptionOverrides((prev) => ({ ...prev, [row.id]: nextDesc }));
       } else if (field === 'debitAmount') {
         const nextDebit = Math.max(0, Number(value) || 0);
-        const nextBalance = calculatePaymentRow(nextDebit, row.creditAmount);
+        const preservedBalance = calculatePaymentRow(currentReport, row.creditAmount);
         updatePacking(row.packingId, {
           debitAmount: nextDebit,
           settledAmount: nextDebit,
+          reportAmount: currentReport,
+          balanceAmount: preservedBalance,
+        });
+      } else if (field === 'reportAmount') {
+        const nextReport = Math.max(0, Number(value) || 0);
+        const nextBalance = calculatePaymentRow(nextReport, row.creditAmount);
+        updatePacking(row.packingId, {
+          reportAmount: nextReport,
           balanceAmount: nextBalance,
         });
       } else if (field === 'creditAmount') {
         const nextCredit = Math.max(0, Number(value) || 0);
-        const nextBalance = calculatePaymentRow(row.debitAmount, nextCredit);
+        const nextBalance = calculatePaymentRow(currentReport, nextCredit);
         updatePacking(row.packingId, {
+          reportAmount: currentReport,
           creditAmount: nextCredit,
           balanceAmount: nextBalance,
         });
@@ -385,15 +427,24 @@ export const ExporterPaymentFormView: React.FC = () => {
         });
       } else if (field === 'debitAmount') {
         const nextDebit = Math.max(0, Number(value) || 0);
-        const nextBalance = calculatePaymentRow(nextDebit, row.creditAmount);
+        const preservedBalance = calculatePaymentRow(currentReport, row.creditAmount);
         updatePayment(row.paymentId, {
           totalAmount: nextDebit,
+          reportAmount: currentReport,
+          balance: preservedBalance,
+        });
+      } else if (field === 'reportAmount') {
+        const nextReport = Math.max(0, Number(value) || 0);
+        const nextBalance = calculatePaymentRow(nextReport, row.creditAmount);
+        updatePayment(row.paymentId, {
+          reportAmount: nextReport,
           balance: nextBalance,
         });
       } else if (field === 'creditAmount') {
         const nextCredit = Math.max(0, Number(value) || 0);
-        const nextBalance = calculatePaymentRow(row.debitAmount, nextCredit);
+        const nextBalance = calculatePaymentRow(currentReport, nextCredit);
         updatePayment(row.paymentId, {
+          reportAmount: currentReport,
           paidAmount: nextCredit,
           balance: nextBalance,
         });
@@ -437,9 +488,11 @@ export const ExporterPaymentFormView: React.FC = () => {
       return baseList.map((r) => {
         if (r.id !== row.id) return r;
         const updated = { ...r, [field]: value };
-        const d = field === 'debitAmount' ? Number(value) : r.debitAmount;
-        const c = field === 'creditAmount' ? Number(value) : r.creditAmount;
-        updated.balance = calculatePaymentRow(d, c);
+        const rep =
+          field === 'reportAmount' ? Number(value) || 0 : (r.reportAmount ?? 0);
+        const cred =
+          field === 'creditAmount' ? Number(value) || 0 : r.creditAmount;
+        updated.balance = calculatePaymentRow(rep, cred);
         return updated;
       });
     });
@@ -503,6 +556,8 @@ export const ExporterPaymentFormView: React.FC = () => {
   const resetFormFields = () => {
     setShippingMark('ALL');
     setSelectedPackingDate('ALL');
+    setFromDate('');
+    setToDate('');
     setSelectedStatusFilter('ALL');
     setContactNumber('');
     setExporterStatus('UNPAID');
@@ -511,6 +566,7 @@ export const ExporterPaymentFormView: React.FC = () => {
     setRemarks('');
     setSearchQuery('');
     setOverallPreviousAmount(0);
+    setOverallReportAmount(0);
     setOverallPaidAmount(0);
     setDate(new Date().toISOString().slice(0, 10));
     setCustomRows([]);
@@ -525,28 +581,36 @@ export const ExporterPaymentFormView: React.FC = () => {
     showToast('Reset lookup filters and showing all Exporter record history.');
   };
 
-  const { totalDebit, totalCredit } = calculatePaymentTotals(
-    rows,
-    overallPreviousAmount,
-    overallPaidAmount
-  );
+  const totalDebit = historyTotals.totalDebit;
+  const totalReport = historyTotals.totalReport;
+  const totalCredit = historyTotals.totalCredit;
 
-  const filteredOutstandingBalance =
-    Math.round((totalDebit - totalCredit) * 100) / 100;
+  const filteredOutstandingBalance = historyTotals.totalBalance;
 
-  const effectiveTotalDebit =
-    overallPreviousAmount > 0 ? overallPreviousAmount : totalDebit;
+  const effectiveTotalReport =
+    overallReportAmount > 0 ? overallReportAmount : totalReport;
   const effectiveTotalPaid =
     overallPaidAmount > 0 ? overallPaidAmount : totalCredit;
   const balance =
-    Math.round((effectiveTotalDebit - effectiveTotalPaid) * 100) / 100;
+    Math.round((effectiveTotalReport - effectiveTotalPaid) * 100) / 100;
 
   const returnRMBInBDT =
     Math.round(returnRMB * companyProfile.rmbExchangeRate * 100) / 100;
 
   const activeRowCount = rows.filter(
-    (r) => r.description.trim() !== '' || r.debitAmount !== 0 || r.creditAmount !== 0
+    (r) =>
+      r.description.trim() !== '' ||
+      r.debitAmount !== 0 ||
+      (r.reportAmount ?? 0) !== 0 ||
+      r.creditAmount !== 0
   ).length;
+
+  const { maxHeight: historyScrollMaxHeight, isCapped: isHistoryScrollCapped } =
+    useRowScrollViewport(historyScrollRef, rows.length, {
+      maxVisibleRows: MAX_VISIBLE_TABLE_ROWS,
+      includeFooter: false,
+      depsKey: `${shippingMark}|${selectedPackingDate}|${fromDate}|${toDate}|${selectedStatusFilter}|${editingRowId || ''}`,
+    });
 
   const commitExporterPaymentEntry = (options?: { openPreview?: boolean }) => {
     const shouldOpenPreview = options?.openPreview ?? true;
@@ -580,6 +644,13 @@ export const ExporterPaymentFormView: React.FC = () => {
       Math.round(
         newCustomItems.reduce((s, r) => s + (Number(r.debitAmount) || 0), 0) * 100
       ) / 100;
+    const newCustomReport =
+      Math.round(
+        newCustomItems.reduce(
+          (s, r) => s + (Number(r.reportAmount) || 0),
+          0
+        ) * 100
+      ) / 100;
     const newCustomCredit =
       Math.round(
         newCustomItems.reduce((s, r) => s + (Number(r.creditAmount) || 0), 0) * 100
@@ -594,6 +665,8 @@ export const ExporterPaymentFormView: React.FC = () => {
       newCustomItems.length > 0 ? newCustomItems : validItems;
     const recordDebit =
       newCustomItems.length > 0 ? newCustomDebit : totalDebit;
+    const recordReport =
+      newCustomItems.length > 0 ? newCustomReport : totalReport;
     const recordPaid =
       newCustomItems.length > 0
         ? newCustomCredit > 0
@@ -601,7 +674,7 @@ export const ExporterPaymentFormView: React.FC = () => {
           : overallPaidAmount
         : overallPaidAmount || totalCredit;
     const recordBalance =
-      Math.round((recordDebit - recordPaid) * 100) / 100;
+      Math.round((recordReport - recordPaid) * 100) / 100;
 
     const newRecord = {
       invoiceNumber: invoiceNumber.trim(),
@@ -620,6 +693,7 @@ export const ExporterPaymentFormView: React.FC = () => {
       paidAmount: recordPaid,
       balance: recordBalance,
       status: exporterStatus,
+      reportAmount: overallReportAmount || recordReport,
       returnRMB: returnRMB || recordPaid,
       returnRMBInBDT,
       exportGoodsRef,
@@ -636,7 +710,7 @@ export const ExporterPaymentFormView: React.FC = () => {
         action: 'confirm',
         invoiceNumber: newRecord.invoiceNumber,
         partyName: effectiveShippingMarkForSave,
-        debitAmount: totalDebit,
+        debitAmount: totalReport,
         creditAmount: totalCredit,
         runningBalance: balance,
       });
@@ -650,6 +724,12 @@ export const ExporterPaymentFormView: React.FC = () => {
         updatePacking(matchedPkg.id, {
           exporterStatus,
           paymentStatus: exporterStatus,
+          reportAmount:
+            overallReportAmount > 0
+              ? overallReportAmount
+              : recordReport > 0
+              ? recordReport
+              : matchedPkg.reportAmount,
           rmbAmount: returnRMB > 0 ? returnRMB : matchedPkg.rmbAmount,
           settledAmount: returnRMB > 0 ? returnRMB : matchedPkg.settledAmount,
         });
@@ -666,9 +746,9 @@ export const ExporterPaymentFormView: React.FC = () => {
         data: {
           ...newRecord,
           items: validItems,
-          totalAmount: totalDebit,
+          totalAmount: totalReport,
           paidAmount: overallPaidAmount || totalCredit,
-          balance: totalDebit - totalCredit,
+          balance: totalReport - (overallPaidAmount || totalCredit),
         },
         items: validItems,
       });
@@ -693,7 +773,11 @@ export const ExporterPaymentFormView: React.FC = () => {
 
   const handlePrintSelected = () => {
     const validItems = rows.filter(
-      (r) => r.description.trim() !== '' || r.debitAmount > 0 || r.creditAmount > 0
+      (r) =>
+        r.description.trim() !== '' ||
+        r.debitAmount > 0 ||
+        (r.reportAmount ?? 0) > 0 ||
+        r.creditAmount > 0
     );
     openPrintModal({
       type: 'payment',
@@ -708,11 +792,12 @@ export const ExporterPaymentFormView: React.FC = () => {
         shippingMark: effectiveShippingMarkForSave,
         contactNumber,
         items: validItems.length > 0 ? validItems : rows.slice(0, 5),
-        totalAmount: totalDebit,
+        totalAmount: totalReport,
         previousAmount: overallPreviousAmount || totalDebit,
         paidAmount: overallPaidAmount || totalCredit,
-        balance: totalDebit - totalCredit,
+        balance: effectiveTotalReport - effectiveTotalPaid,
         status: exporterStatus,
+        reportAmount: effectiveTotalReport,
         returnRMB: returnRMB || totalCredit,
         returnRMBInBDT,
         exportGoodsRef,
@@ -788,9 +873,9 @@ export const ExporterPaymentFormView: React.FC = () => {
   return (
     <div className="p-3 sm:p-5 max-w-7xl mx-auto space-y-5">
       {/* Top Banner (Sheet #04 - Dedicated Exporter Payment) */}
-      <div className="bg-[#0f3d4c] text-white px-5 py-3 rounded-lg shadow-md flex flex-wrap items-center justify-between gap-3 border-b-2 border-amber-500">
+      <div className="bg-[#263843] text-white px-5 py-3 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#00897b]">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
+          <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
               src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
               alt={companyProfile.companyName}
@@ -798,11 +883,11 @@ export const ExporterPaymentFormView: React.FC = () => {
             />
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <span className="zsb-3d-text text-xl sm:text-2xl font-black">
+            <span className="text-xl sm:text-2xl font-black tracking-tight text-amber-400 zsb-golden-brand">
               {companyProfile.companyName}
             </span>
-            <span className="text-lg text-slate-300 hidden sm:inline">|</span>
-            <span className="text-sm sm:text-base font-semibold text-slate-100 uppercase tracking-wide">
+            <span className="text-lg text-slate-400 hidden sm:inline">|</span>
+            <span className="text-sm sm:text-base font-semibold text-[#80cbc4] uppercase tracking-wide">
               Exporter Payment Data Entry Form – All Record History (Debit, Credit, Balance &amp; Status)
             </span>
           </div>
@@ -811,19 +896,19 @@ export const ExporterPaymentFormView: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('payment_form')}
-            className="text-xs bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 px-3 py-1 rounded border border-purple-400/40 font-bold flex items-center space-x-1.5 transition cursor-pointer"
+            className="text-xs bg-[#1c2a33] hover:bg-[#162129] text-slate-200 px-3 py-1 rounded border border-[#334b59] font-bold flex items-center space-x-1.5 transition cursor-pointer"
           >
             <span>Supplier Payment Sheet (#05)</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('exporter_payment_slip')}
-            className="text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 px-3 py-1 rounded font-black flex items-center space-x-1.5 transition cursor-pointer shadow-xs"
+            className="text-xs bg-[#00897b] hover:bg-[#00796b] text-white px-3 py-1 rounded font-bold flex items-center space-x-1.5 transition cursor-pointer shadow-xs"
           >
             <Receipt className="w-3.5 h-3.5" />
             <span>Exporter Payment Slip 付款单 (#07)</span>
           </button>
-          <span className="text-xs bg-amber-400/20 text-amber-300 px-2.5 py-1 rounded border border-amber-400/40 font-mono font-bold">
+          <span className="text-xs bg-[#00897b]/25 text-[#5eead4] px-2.5 py-1 rounded border border-[#00897b]/50 font-mono font-bold">
             Sheet #04
           </span>
         </div>
@@ -842,6 +927,28 @@ export const ExporterPaymentFormView: React.FC = () => {
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs">
+            {(fromDate || toDate) && (
+              <span
+                data-testid="exporter-lookup-date-range-badge"
+                className="inline-flex items-center gap-1.5 font-mono bg-sky-50 text-sky-900 border border-sky-200 px-2.5 py-0.5 rounded font-bold"
+              >
+                <span>
+                  {fromDate ? formatDate(fromDate) : 'Start'} → {toDate ? formatDate(toDate) : 'Present'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFromDate('');
+                    setToDate('');
+                  }}
+                  aria-label="Clear Date Range"
+                  className="text-sky-700 hover:text-rose-700 cursor-pointer"
+                  title="Clear From/To Date filter"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
             <span className="font-mono bg-teal-50 text-teal-900 border border-teal-200 px-2.5 py-0.5 rounded font-bold">
               Showing {rows.length} Record{rows.length === 1 ? '' : 's'} ({historyTotals.paidCount} PAID · {historyTotals.reportCount + historyTotals.noReportCount} UNPAID)
             </span>
@@ -856,24 +963,24 @@ export const ExporterPaymentFormView: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 items-end text-xs">
           {/* 1. Select Shipping Mark */}
-          <div>
+          <div className="lg:col-span-3">
             <label
               htmlFor="exporter-lookup-mark-select"
-              className="flex items-center justify-between font-black uppercase text-slate-700 mb-1"
+              className="flex items-center justify-between gap-1 font-black uppercase text-slate-700 mb-1 whitespace-nowrap"
             >
               <span className="flex items-center gap-1">
-                <Tag className="w-3.5 h-3.5 text-[#126b62]" />
+                <Tag className="w-3.5 h-3.5 text-[#126b62] shrink-0" />
                 <span>Select Shipping Mark</span>
               </span>
-              <span className="text-[10px] text-emerald-700 font-bold">Auto-Lookup</span>
+              <span className="text-[10px] text-emerald-700 font-bold shrink-0">Auto-Lookup</span>
             </label>
             <select
               id="exporter-lookup-mark-select"
               value={shippingMark}
               onChange={(e) => handleSelectShippingMark(e.target.value)}
-              className="w-full bg-teal-50/50 border-2 border-teal-600/40 rounded-lg px-2.5 py-1.5 font-black text-sm text-slate-950 focus:bg-white focus:border-teal-700 focus:outline-none"
+              className="w-full h-[36px] bg-teal-50/50 border-2 border-teal-600/40 rounded-lg px-2.5 font-black text-xs sm:text-sm text-slate-950 focus:bg-white focus:border-teal-700 focus:outline-none"
             >
               <option value="ALL">ALL SHIPPING MARKS ({packings.length})</option>
               <optgroup label="Marks with Saved Exporter Records">
@@ -896,22 +1003,22 @@ export const ExporterPaymentFormView: React.FC = () => {
           </div>
 
           {/* 2. Select Packing Date */}
-          <div>
+          <div className="lg:col-span-3">
             <label
               htmlFor="exporter-lookup-date-select"
-              className="flex items-center justify-between font-black uppercase text-slate-700 mb-1"
+              className="flex items-center justify-between gap-1 font-black uppercase text-slate-700 mb-1 whitespace-nowrap"
             >
               <span className="flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5 text-[#126b62]" />
+                <Calendar className="w-3.5 h-3.5 text-[#126b62] shrink-0" />
                 <span>Select Packing Date</span>
               </span>
-              <span className="text-[10px] text-emerald-700 font-bold">Auto-Lookup</span>
+              <span className="text-[10px] text-emerald-700 font-bold shrink-0">Auto-Lookup</span>
             </label>
             <select
               id="exporter-lookup-date-select"
               value={selectedPackingDate}
               onChange={(e) => handleSelectPackingDate(e.target.value)}
-              className="w-full bg-teal-50/50 border-2 border-teal-600/40 rounded-lg px-2.5 py-1.5 font-mono font-bold text-slate-900 focus:bg-white focus:border-teal-700 focus:outline-none"
+              className="w-full h-[36px] bg-teal-50/50 border-2 border-teal-600/40 rounded-lg px-2.5 font-mono font-bold text-slate-900 focus:bg-white focus:border-teal-700 focus:outline-none"
             >
               <option value="ALL">-- ALL PACKING DATES --</option>
               {availablePackingDates.map((d) => (
@@ -922,22 +1029,68 @@ export const ExporterPaymentFormView: React.FC = () => {
             </select>
           </div>
 
-          {/* 3. Filter by Status (PAID, UNPAID) */}
-          <div>
+          {/* 3. FROM DATE */}
+          <div className="lg:col-span-2">
             <label
-              htmlFor="exporter-lookup-status-filter"
-              className="flex items-center justify-between font-black uppercase text-slate-700 mb-1"
+              htmlFor="exporter-lookup-from-date"
+              className="flex items-center justify-between gap-1 font-black uppercase text-slate-700 mb-1 whitespace-nowrap"
             >
               <span className="flex items-center gap-1">
-                <CheckCircle className="w-3.5 h-3.5 text-[#126b62]" />
-                <span>Status Filter (PAID / UNPAID)</span>
+                <Calendar className="w-3.5 h-3.5 text-[#126b62] shrink-0" />
+                <span>FROM DATE</span>
+              </span>
+              <span className="text-[10px] text-emerald-700 font-bold shrink-0">Range</span>
+            </label>
+            <input
+              id="exporter-lookup-from-date"
+              data-testid="exporter-lookup-from-date"
+              aria-label="FROM DATE"
+              type="date"
+              value={fromDate}
+              onChange={(e) => handleFromDateChange(e.target.value)}
+              className="w-full h-[36px] bg-teal-50/50 border-2 border-teal-600/40 rounded-lg px-2 font-mono font-bold text-slate-900 focus:bg-white focus:border-teal-700 focus:outline-none"
+            />
+          </div>
+
+          {/* 4. TO DATE */}
+          <div className="lg:col-span-2">
+            <label
+              htmlFor="exporter-lookup-to-date"
+              className="flex items-center justify-between gap-1 font-black uppercase text-slate-700 mb-1 whitespace-nowrap"
+            >
+              <span className="flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-[#126b62] shrink-0" />
+                <span>TO DATE</span>
+              </span>
+              <span className="text-[10px] text-emerald-700 font-bold shrink-0">Range</span>
+            </label>
+            <input
+              id="exporter-lookup-to-date"
+              data-testid="exporter-lookup-to-date"
+              aria-label="TO DATE"
+              type="date"
+              value={toDate}
+              onChange={(e) => handleToDateChange(e.target.value)}
+              className="w-full h-[36px] bg-teal-50/50 border-2 border-teal-600/40 rounded-lg px-2 font-mono font-bold text-slate-900 focus:bg-white focus:border-teal-700 focus:outline-none"
+            />
+          </div>
+
+          {/* 5. Filter by Status (PAID, UNPAID) */}
+          <div className="lg:col-span-2 sm:col-span-2">
+            <label
+              htmlFor="exporter-lookup-status-filter"
+              className="flex items-center justify-between gap-1 font-black uppercase text-slate-700 mb-1 whitespace-nowrap"
+            >
+              <span className="flex items-center gap-1">
+                <CheckCircle className="w-3.5 h-3.5 text-[#126b62] shrink-0" />
+                <span>Status Filter</span>
               </span>
             </label>
             <select
               id="exporter-lookup-status-filter"
               value={selectedStatusFilter}
               onChange={(e) => setSelectedStatusFilter(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold text-slate-900 focus:bg-white focus:border-teal-700 focus:outline-none"
+              className="w-full h-[36px] bg-slate-50 border border-slate-300 rounded-lg px-2 font-bold text-slate-900 focus:bg-white focus:border-teal-700 focus:outline-none"
             >
               <option value="ALL">-- All Statuses (PAID, UNPAID) --</option>
               {statusOptions.map((st) => (
@@ -954,32 +1107,32 @@ export const ExporterPaymentFormView: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Left: The Dedicated Exporter Payment Excel Sheet (8 Cols) */}
         <div className="lg:col-span-8 space-y-4">
-          <div className="bg-white rounded-xl shadow-md border-2 border-slate-300 overflow-hidden">
-            {/* Teal / Navy Sheet Header Box */}
-            <div className="bg-[#126b62] text-white py-3 px-4 text-center border-b border-teal-950 shadow-inner space-y-1.5">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            {/* Slate-Teal Sheet Header Box */}
+            <div className="bg-[#263843] text-white py-3 px-4 text-center border-b border-[#1d2c35] space-y-1.5">
               <div className="flex items-center justify-center gap-2.5">
-                <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-amber-300 bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
+                <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
                   <img
                     src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
                     alt={companyProfile.companyName}
                     className="w-full h-full object-contain rounded-full"
                   />
                 </div>
-                <div className="zsb-3d-text-lg text-xl sm:text-2xl font-black">
+                <div className="text-xl sm:text-2xl font-black tracking-tight text-amber-400 zsb-golden-brand">
                   {companyProfile.companyName}
                 </div>
               </div>
-              <div className="text-xs sm:text-sm font-bold tracking-wider uppercase text-teal-100">
+              <div className="text-xs sm:text-sm font-bold tracking-wider uppercase text-[#80cbc4]">
                 EXPORTER PAYMENT DATA ENTRY &amp; RECORD HISTORY (DEBIT, CREDIT, BALANCE &amp; STATUS)
               </div>
               <div className="flex flex-wrap items-center justify-center gap-2 pt-0.5">
-                <span className="bg-white/95 text-black px-2.5 py-0.5 rounded text-[11px] font-bold shadow-xs">
+                <span className="bg-[#1c2a33] border border-[#334b59] text-slate-200 px-2.5 py-0.5 rounded text-[11px] font-medium">
                   Address: {companyProfile.address}
                 </span>
-                <span className="bg-white/95 text-black px-2.5 py-0.5 rounded text-[11px] font-bold font-mono shadow-xs">
+                <span className="bg-[#1c2a33] border border-[#334b59] text-slate-200 px-2.5 py-0.5 rounded text-[11px] font-medium font-mono">
                   Mobile: {companyProfile.mobiles.join(', ')}
                 </span>
-                <span className="bg-white/95 text-black px-2.5 py-0.5 rounded text-[11px] font-bold font-mono shadow-xs">
+                <span className="bg-[#1c2a33] border border-[#334b59] text-slate-200 px-2.5 py-0.5 rounded text-[11px] font-medium font-mono">
                   EMAIL: {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}
                 </span>
               </div>
@@ -1225,39 +1378,58 @@ export const ExporterPaymentFormView: React.FC = () => {
               </div>
             </div>
 
-            {/* Data Entry & Record History Table Grid */}
+            {/* Data Entry & Record History Table Grid (31-Row Scroll Viewport) */}
             <div className="p-2.5 bg-slate-50/70">
+              {isHistoryScrollCapped && (
+                <div className="mb-1.5 flex items-center justify-between text-[11px] font-mono text-slate-600 px-1">
+                  <span>
+                    Viewport: <strong>31 Rows</strong> visible ({rows.length} total rows — scroll vertically to view more)
+                  </span>
+                </div>
+              )}
               <div
+                ref={historyScrollRef}
                 data-testid="exporter-payment-history-scroll-box"
-                className="overflow-x-auto border-2 border-teal-200 rounded-lg bg-white"
+                data-visible-row-limit="31"
+                style={historyScrollMaxHeight ? { maxHeight: `${historyScrollMaxHeight}px` } : undefined}
+                className="overflow-auto border border-slate-200 rounded-lg bg-white print:!max-h-none print:!overflow-visible"
               >
               <table
                 data-testid="exporter-payment-history-table"
                 className="w-full border-collapse text-xs"
               >
-                <thead>
-                  <tr className="bg-[#126b62] text-white uppercase text-[11px] font-bold tracking-wider text-center border-b border-teal-950">
-                    <th className="px-2 py-2.5 border-r border-teal-800/60 w-9">SL</th>
-                    <th className="px-3 py-2.5 border-r border-teal-800/60 text-left min-w-[200px]">
-                      RECORD HISTORY / SHIPMENT PARTICULARS (MARK &amp; DATE)
+                <thead className="sticky top-0 z-10 shadow-xs">
+                  <tr className="bg-[#263843] text-white uppercase text-[10px] font-bold tracking-wide text-center border-b border-[#1d2c35]">
+                    <th className="px-1.5 py-2 border-r border-[#334b59] w-8">SL</th>
+                    <th className="px-2 py-2 border-r border-[#334b59] text-left min-w-[130px]">
+                      RECORD HISTORY / PARTICULARS
                     </th>
-                    <th className="px-2 py-2.5 border-r border-teal-800/60 w-24">
+                    <th
+                      className="px-1.5 py-2 border-r border-[#334b59] w-[78px] text-slate-300"
+                      title="Display only — Balance is calculated as REPORT (RMB) - CREDIT (RMB)"
+                    >
                       DEBIT (RMB)
                     </th>
-                    <th className="px-2 py-2.5 border-r border-teal-800/60 w-24">
+                    <th
+                      className="px-1.5 py-2 border-r border-[#334b59] w-[78px] bg-[#1c2a33] text-[#80cbc4]"
+                      title="Authoritative Report RMB used for Balance = REPORT (RMB) - CREDIT (RMB)"
+                    >
+                      REPORT (RMB)
+                    </th>
+                    <th className="px-1.5 py-2 border-r border-[#334b59] w-[78px]">
                       CREDIT (RMB)
                     </th>
-                    <th className="px-2 py-2.5 border-r border-teal-800/60 w-24">
+                    <th className="px-1.5 py-2 border-r border-[#334b59] w-[72px]">
                       BALANCE (RMB)
                     </th>
-                    <th className="px-2 py-2.5 border-r border-teal-800/60 w-28 min-w-[98px]">
-                      STATUS (PAID / UNPAID)
+                    <th className="px-1.5 py-2 border-r border-[#334b59] w-[80px]">
+                      STATUS
                     </th>
-                    <th className="px-2 py-2.5 border-r border-teal-800/60 w-16 text-center">
+                    <th className="px-1 py-2 border-r border-[#334b59] w-[50px] text-center">
                       EDIT
                     </th>
-                    <th className="px-2 py-2.5 w-16 text-center">
-                      DELETE
+                    <th className="px-1 py-2 w-[54px] text-center">
+                      DEL
                     </th>
                   </tr>
                 </thead>
@@ -1326,10 +1498,11 @@ export const ExporterPaymentFormView: React.FC = () => {
                           </div>
                         </td>
 
-                        {/* Debit Amount */}
-                        <td className="p-1 border-r border-slate-200">
+                        {/* Debit Amount (Show Only) */}
+                        <td className="p-1 border-r border-slate-200 bg-slate-50/50">
                           <input
                             type="number"
+                            data-testid={`exporter-row-debit-${idx + 1}`}
                             aria-label={`Exporter payment row ${idx + 1} debit amount`}
                             aria-invalid={Boolean(
                               rowErr?.debitAmount || highlightFirstEmptyRow
@@ -1344,7 +1517,8 @@ export const ExporterPaymentFormView: React.FC = () => {
                                 parseFloat(e.target.value) || 0
                               )
                             }
-                            className={`w-full bg-white border rounded px-2 py-1.5 text-right font-mono text-slate-900 font-semibold focus:outline-none focus:ring-1 ${
+                            title="Display only — does not affect Balance calculation"
+                            className={`w-full bg-white border rounded px-2 py-1.5 text-right font-mono text-slate-600 font-semibold focus:outline-none focus:ring-1 ${
                               isRowEditing
                                 ? 'border-teal-600 ring-1 ring-teal-500'
                                 : rowErr?.debitAmount || highlightFirstEmptyRow
@@ -1355,10 +1529,42 @@ export const ExporterPaymentFormView: React.FC = () => {
                           />
                         </td>
 
+                        {/* Report Amount (Right side of Debit - drives Balance = Report - Credit) */}
+                        <td className="p-1 border-r border-slate-200 bg-sky-50/40">
+                          <input
+                            type="number"
+                            data-testid={`exporter-row-report-${idx + 1}`}
+                            aria-label={`Exporter payment row ${idx + 1} report amount`}
+                            aria-invalid={Boolean(
+                              rowErr?.reportAmount || highlightFirstEmptyRow
+                            )}
+                            min="0"
+                            step="0.01"
+                            value={row.reportAmount || ''}
+                            onChange={(e) =>
+                              handleRowChange(
+                                row,
+                                'reportAmount',
+                                parseFloat(e.target.value) || 0
+                              )
+                            }
+                            title="Report RMB used in Balance = REPORT (RMB) - CREDIT (RMB)"
+                            className={`w-full bg-white border rounded px-2 py-1.5 text-right font-mono text-slate-900 font-bold focus:outline-none focus:ring-1 ${
+                              isRowEditing
+                                ? 'border-teal-600 ring-1 ring-teal-500'
+                                : rowErr?.reportAmount || highlightFirstEmptyRow
+                                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
+                                : 'border-sky-300 focus:ring-teal-600'
+                            }`}
+                            placeholder="0.00"
+                          />
+                        </td>
+
                         {/* Credit Amount */}
                         <td className="p-1 border-r border-slate-200">
                           <input
                             type="number"
+                            data-testid={`exporter-row-credit-${idx + 1}`}
                             aria-label={`Exporter payment row ${idx + 1} credit amount`}
                             aria-invalid={Boolean(
                               rowErr?.creditAmount || highlightFirstEmptyRow
@@ -1384,8 +1590,11 @@ export const ExporterPaymentFormView: React.FC = () => {
                           />
                         </td>
 
-                        {/* Row Balance */}
-                        <td className="p-1 border-r border-slate-200 text-right font-mono font-bold text-slate-900 pr-2.5 bg-slate-50">
+                        {/* Row Balance (= REPORT - CREDIT) */}
+                        <td
+                          data-testid={`exporter-row-balance-${idx + 1}`}
+                          className="p-1 border-r border-slate-200 text-right font-mono font-bold text-slate-900 pr-2.5 bg-slate-50"
+                        >
                           {row.balance.toFixed(2)}
                         </td>
 
@@ -1427,7 +1636,7 @@ export const ExporterPaymentFormView: React.FC = () => {
                                 ? `Save Exporter row ${idx + 1}`
                                 : `Edit Exporter row ${idx + 1}`
                             }
-                            className={`inline-flex items-center justify-center gap-1 px-2 py-1 rounded font-bold text-[10px] border transition cursor-pointer ${
+                            className={`inline-flex items-center justify-center gap-0.5 px-1.5 py-1 rounded font-bold text-[10px] border transition cursor-pointer ${
                               isRowEditing
                                 ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700'
                                 : 'bg-teal-50 hover:bg-teal-600 text-teal-800 hover:text-white border-teal-200'
@@ -1455,10 +1664,10 @@ export const ExporterPaymentFormView: React.FC = () => {
                             onClick={() => handleDeleteRow(row, idx)}
                             title={`Delete Exporter row ${idx + 1}`}
                             aria-label={`Delete Exporter row ${idx + 1}`}
-                            className="inline-flex items-center justify-center gap-1 px-2 py-1 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 rounded font-bold text-[10px] transition cursor-pointer"
+                            className="inline-flex items-center justify-center gap-0.5 px-1.5 py-1 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 rounded font-bold text-[10px] transition cursor-pointer"
                           >
                             <Trash2 className="w-3 h-3" />
-                            <span>Delete</span>
+                            <span>Del</span>
                           </button>
                         </td>
                       </tr>
@@ -1470,25 +1679,25 @@ export const ExporterPaymentFormView: React.FC = () => {
                 <tfoot data-testid="exporter-payment-history-footer">
                   <tr
                     data-testid="exporter-history-summary-footer-row"
-                    className="bg-[#126b62] text-white font-black border-t-2 border-teal-950"
+                    className="bg-[#263843] text-white font-black border-t-2 border-[#00897b]"
                   >
                     <td
                       colSpan={2}
-                      className="px-3 py-2.5 text-left uppercase tracking-wider text-xs border-r border-teal-800/60"
+                      className="px-3 py-2.5 text-left uppercase tracking-wider text-xs border-r border-[#334b59]"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-1">
                         <span>TOTAL EXPORTER RECORD HISTORY (RMB)</span>
-                        <span className="text-[10px] font-mono bg-teal-950/80 text-teal-100 px-1.5 py-0.5 rounded">
-                          Outstanding Balance = Debit − Credit
+                        <span className="text-[10px] font-mono bg-[#1c2a33] text-[#80cbc4] px-1.5 py-0.5 rounded">
+                          Balance = Report − Credit
                         </span>
                       </div>
                     </td>
                     <td
                       data-testid="exporter-history-footer-total-debit"
-                      className="px-2.5 py-2.5 text-right font-mono text-amber-300 font-black text-sm border-r border-teal-800/60"
+                      className="px-2.5 py-2.5 text-right font-mono text-slate-300 font-bold text-sm border-r border-[#334b59]"
                     >
-                      <div className="text-[9px] font-sans uppercase text-teal-100 font-bold leading-none mb-0.5">
-                        Total Debit (RMB)
+                      <div className="text-[9px] font-sans uppercase text-slate-400 font-bold leading-none mb-0.5">
+                        Debit (Show)
                       </div>
                       {totalDebit.toLocaleString('en-US', {
                         minimumFractionDigits: 2,
@@ -1496,11 +1705,23 @@ export const ExporterPaymentFormView: React.FC = () => {
                       })}
                     </td>
                     <td
-                      data-testid="exporter-history-footer-total-paid"
-                      className="px-2.5 py-2.5 text-right font-mono text-emerald-200 font-black text-sm border-r border-teal-800/60 bg-teal-800/70"
+                      data-testid="exporter-history-footer-total-report"
+                      className="px-2.5 py-2.5 text-right font-mono text-sky-200 font-black text-sm border-r border-[#334b59] bg-[#1c2a33]"
                     >
-                      <div className="text-[9px] font-sans uppercase text-emerald-200 font-bold leading-none mb-0.5">
-                        Total Paid (Credit)
+                      <div className="text-[9px] font-sans uppercase text-[#80cbc4] font-bold leading-none mb-0.5">
+                        Total Report
+                      </div>
+                      {totalReport.toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </td>
+                    <td
+                      data-testid="exporter-history-footer-total-paid"
+                      className="px-2.5 py-2.5 text-right font-mono text-[#5eead4] font-black text-sm border-r border-[#334b59] bg-[#1c2a33]"
+                    >
+                      <div className="text-[9px] font-sans uppercase text-[#80cbc4] font-bold leading-none mb-0.5">
+                        Total Credit
                       </div>
                       {totalCredit.toLocaleString('en-US', {
                         minimumFractionDigits: 2,
@@ -1509,10 +1730,10 @@ export const ExporterPaymentFormView: React.FC = () => {
                     </td>
                     <td
                       data-testid="exporter-history-footer-outstanding-balance"
-                      className="px-2.5 py-2.5 text-right font-mono text-amber-300 font-black text-sm border-r border-teal-800/60 bg-teal-900/80"
+                      className="px-2.5 py-2.5 text-right font-mono text-white font-black text-sm border-r border-[#334b59] bg-[#00897b]/30"
                     >
-                      <div className="text-[9px] font-sans uppercase text-amber-200 font-bold leading-none mb-0.5">
-                        Outstanding Balance
+                      <div className="text-[9px] font-sans uppercase text-[#5eead4] font-bold leading-none mb-0.5">
+                        Balance
                       </div>
                       {filteredOutstandingBalance.toLocaleString('en-US', {
                         minimumFractionDigits: 2,
@@ -1521,7 +1742,7 @@ export const ExporterPaymentFormView: React.FC = () => {
                     </td>
                     <td
                       colSpan={3}
-                      className="px-2 py-2.5 text-center font-mono text-[10px] text-teal-100 bg-teal-950/50"
+                      className="px-2 py-2.5 text-center font-mono text-[10px] text-slate-200 bg-[#1c2a33]"
                     >
                       <div className="font-bold text-white">
                         {activeRowCount} Active / {rows.length} Filtered Rows
@@ -1534,21 +1755,21 @@ export const ExporterPaymentFormView: React.FC = () => {
                   </tr>
 
                   {/* Review Section */}
-                  <tr className="bg-amber-100/70 text-slate-800 font-bold border-t border-amber-300">
+                  <tr className="bg-slate-50 text-slate-700 font-bold border-t border-slate-200">
                     <td
                       colSpan={2}
-                      rowSpan={3}
-                      className="px-3 py-2 text-center uppercase font-black tracking-widest text-[#126b62] border-r border-amber-300"
+                      rowSpan={4}
+                      className="px-3 py-2 text-center uppercase font-black tracking-widest text-[#263843] border-r border-slate-200"
                     >
                       EXPORTER BALANCE REVIEW
                     </td>
                     <td
                       colSpan={2}
-                      className="px-2 py-1.5 text-right font-bold text-slate-700"
+                      className="px-2 py-1.5 text-right font-bold text-slate-600"
                     >
-                      TOTAL DEBIT / INVOICED (RMB):
+                      TOTAL DEBIT (SHOW ONLY) (RMB):
                     </td>
-                    <td colSpan={4} className="px-2 py-1.5">
+                    <td colSpan={5} className="px-2 py-1.5">
                       <input
                         type="number"
                         min="0"
@@ -1559,18 +1780,40 @@ export const ExporterPaymentFormView: React.FC = () => {
                           setOverallPreviousAmount(parseFloat(e.target.value) || 0)
                         }
                         placeholder="0.00"
-                        className="w-full bg-white border border-amber-400 rounded px-2 py-1 text-right font-mono font-bold text-slate-800"
+                        className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-right font-mono font-bold text-slate-600"
                       />
                     </td>
                   </tr>
-                  <tr className="bg-amber-100/70 text-slate-800 font-bold">
+                  <tr className="bg-slate-50 text-slate-800 font-bold">
+                    <td
+                      colSpan={2}
+                      className="px-2 py-1.5 text-right font-bold text-slate-800"
+                    >
+                      TOTAL REPORT (RMB):
+                    </td>
+                    <td colSpan={5} className="px-2 py-1.5">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        aria-label="Exporter Total Report Amount"
+                        value={overallReportAmount || totalReport || ''}
+                        onChange={(e) =>
+                          setOverallReportAmount(parseFloat(e.target.value) || 0)
+                        }
+                        placeholder="0.00"
+                        className="w-full bg-white border border-sky-300 rounded px-2 py-1 text-right font-mono font-bold text-slate-900"
+                      />
+                    </td>
+                  </tr>
+                  <tr className="bg-slate-50 text-slate-800 font-bold">
                     <td
                       colSpan={2}
                       className="px-2 py-1.5 text-right font-bold text-slate-700"
                     >
                       TOTAL CREDIT / PAID (RMB):
                     </td>
-                    <td colSpan={4} className="px-2 py-1.5">
+                    <td colSpan={5} className="px-2 py-1.5">
                       <input
                         type="number"
                         min="0"
@@ -1581,20 +1824,21 @@ export const ExporterPaymentFormView: React.FC = () => {
                           setOverallPaidAmount(parseFloat(e.target.value) || 0)
                         }
                         placeholder="0.00"
-                        className="w-full bg-white border border-amber-400 rounded px-2 py-1 text-right font-mono font-bold text-emerald-800"
+                        className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-right font-mono font-bold text-[#00897b]"
                       />
                     </td>
                   </tr>
-                  <tr className="bg-amber-200 text-slate-900 font-black border-t border-amber-300">
+                  <tr className="bg-teal-50/80 text-slate-900 font-black border-t border-teal-200">
                     <td
                       colSpan={2}
-                      className="px-2 py-1.5 text-right font-extrabold uppercase text-[#126b62]"
+                      className="px-2 py-1.5 text-right font-extrabold uppercase text-[#263843]"
                     >
-                      OUTSTANDING EXPORTER BALANCE (RMB):
+                      OUTSTANDING EXPORTER BALANCE (REPORT − CREDIT) (RMB):
                     </td>
                     <td
-                      colSpan={4}
-                      className="px-2 py-1.5 text-right font-mono text-base text-rose-800 pr-3"
+                      colSpan={5}
+                      data-testid="exporter-review-outstanding-balance"
+                      className="px-2 py-1.5 text-right font-mono text-base text-rose-700 pr-3"
                     >
                       {balance.toLocaleString('en-US', {
                         minimumFractionDigits: 2,
@@ -1629,27 +1873,27 @@ export const ExporterPaymentFormView: React.FC = () => {
               ACTION BUTTONS (EXPORTER VOUCHER)
             </div>
 
-            {/* SAVE (PDF) Button - Emerald Green */}
+            {/* SAVE (PDF) Button - Emerald Teal */}
             <button
               type="button"
               onClick={handleSavePDF}
               title="Save Exporter Payment Voucher (Shortcut: Ctrl+S)"
-              className="w-full bg-[#129c54] hover:bg-[#0e8346] text-white py-2.5 px-4 rounded-lg font-bold text-sm shadow flex items-center justify-center space-x-2 transition transform active:scale-95 cursor-pointer"
+              className="w-full bg-[#00897b] hover:bg-[#00796b] text-white py-2.5 px-4 rounded-lg font-bold text-sm shadow-xs flex items-center justify-center space-x-2 transition transform active:scale-95 cursor-pointer"
             >
               <Save className="w-5 h-5" />
               <span>SAVE (PDF)</span>
-              <span className="text-[10px] font-mono bg-emerald-950/60 px-1.5 py-0.5 rounded text-amber-200">
+              <span className="text-[10px] font-mono bg-black/25 px-1.5 py-0.5 rounded text-[#80cbc4]">
                 Ctrl+S
               </span>
             </button>
 
-            {/* OPEN EXPORTER PAYMENT SLIP (付款单) Button - Plum/Gold */}
+            {/* OPEN EXPORTER PAYMENT SLIP (付款单) Button */}
             <button
               type="button"
               onClick={() => setActiveTab('exporter_payment_slip')}
-              className="w-full bg-[#98486f] hover:bg-[#7d3859] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow flex items-center justify-center space-x-2 transition cursor-pointer"
+              className="w-full bg-[#263843] hover:bg-[#1c2a33] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
             >
-              <Receipt className="w-4 h-4 text-amber-300" />
+              <Receipt className="w-4 h-4 text-[#5eead4]" />
               <span>EXPORTER PAYMENT SLIP (付款单)</span>
             </button>
 
@@ -1657,7 +1901,7 @@ export const ExporterPaymentFormView: React.FC = () => {
             <button
               type="button"
               onClick={handleMonthlyStatement}
-              className="w-full bg-[#6d28d9] hover:bg-[#5b21b6] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow flex items-center justify-center space-x-2 transition cursor-pointer"
+              className="w-full bg-[#089bc4] hover:bg-[#0782a5] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
             >
               <FileText className="w-4 h-4" />
               <span>MONTHLY STATEMENT (PDF)</span>
@@ -1667,7 +1911,7 @@ export const ExporterPaymentFormView: React.FC = () => {
             <button
               type="button"
               onClick={() => setActiveTab('payment_db')}
-              className="w-full bg-[#1b73b4] hover:bg-[#165f95] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow flex items-center justify-center space-x-2 transition cursor-pointer"
+              className="w-full bg-[#1877d2] hover:bg-[#1465b5] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
             >
               <Search className="w-4 h-4" />
               <span>SEARCH PAYMENT DB</span>
@@ -1678,11 +1922,11 @@ export const ExporterPaymentFormView: React.FC = () => {
               type="button"
               onClick={handleClear}
               title="Reset form fields (Shortcut: Alt+R)"
-              className="w-full bg-[#dc2626] hover:bg-[#b91c1c] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow flex items-center justify-center space-x-2 transition cursor-pointer"
+              className="w-full bg-[#dc2626] hover:bg-[#b91c1c] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
             >
               <Trash2 className="w-4 h-4" />
               <span>CLEAR</span>
-              <span className="text-[10px] font-mono bg-red-950/60 px-1.5 py-0.5 rounded text-amber-200">
+              <span className="text-[10px] font-mono bg-red-950/60 px-1.5 py-0.5 rounded text-rose-200">
                 Alt+R
               </span>
             </button>
@@ -1692,11 +1936,11 @@ export const ExporterPaymentFormView: React.FC = () => {
               type="button"
               onClick={handlePrintSelected}
               title="Open Print / PDF Preview (Shortcut: Ctrl+P)"
-              className="w-full bg-[#0891b2] hover:bg-[#0e7490] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow flex items-center justify-center space-x-2 transition cursor-pointer"
+              className="w-full bg-[#1c2a33] hover:bg-[#152028] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
             >
-              <Printer className="w-4 h-4" />
+              <Printer className="w-4 h-4 text-[#5eead4]" />
               <span>PRINT (Selected Cells)</span>
-              <span className="text-[10px] font-mono bg-cyan-950/60 px-1.5 py-0.5 rounded text-amber-200">
+              <span className="text-[10px] font-mono bg-black/30 px-1.5 py-0.5 rounded text-[#80cbc4]">
                 Ctrl+P
               </span>
             </button>

@@ -313,6 +313,9 @@ export const PackingListView: React.FC = () => {
         paymentDate: paymentStatus === 'PAID' ? packingDate : '',
         paymentStatus,
         billSite: destination,
+        calculationPending: false,
+        pendingFields: undefined,
+        rawValues: undefined,
       };
 
       updatePacking(editingPackingId, updatedFields);
@@ -473,9 +476,9 @@ export const PackingListView: React.FC = () => {
   return (
     <div className="p-3 sm:p-5 max-w-[1440px] mx-auto space-y-5">
       {/* Top Banner with Official ZSB Branding */}
-      <div className="bg-[#1e2548] text-white px-5 py-3.5 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-amber-500">
+      <div className="bg-[#263843] text-white px-5 py-3.5 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#00897b]">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
+          <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
               src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
               alt={companyProfile.companyName}
@@ -484,21 +487,21 @@ export const PackingListView: React.FC = () => {
           </div>
           <div>
             <div className="flex items-center gap-2.5">
-              <span className="zsb-3d-text text-xl sm:text-2xl font-black">
+              <span className="text-xl sm:text-2xl font-black tracking-tight text-amber-400 zsb-golden-brand">
                 {companyProfile.companyName}
               </span>
               <span className="text-slate-400 hidden sm:inline">·</span>
-              <span className="text-sm sm:text-base font-semibold text-slate-100 tracking-wide">
+              <span className="text-sm sm:text-base font-semibold text-[#80cbc4] tracking-wide">
                 Export Packing List — Manifest Entry Form
               </span>
             </div>
-            <div className="mt-1 inline-flex flex-wrap items-center gap-2 bg-amber-50/95 px-2.5 py-0.5 rounded text-[11px] font-semibold text-black">
+            <div className="mt-1 inline-flex flex-wrap items-center gap-2 bg-[#1c2a33] border border-[#334b59] px-2.5 py-0.5 rounded text-[11px] font-medium text-slate-200">
               <span>{companyProfile.address}</span>
-              <span>|</span>
+              <span className="text-slate-500">|</span>
               <span className="font-mono">
                 Mob: {companyProfile.mobiles.join(', ')}
               </span>
-              <span>|</span>
+              <span className="text-slate-500">|</span>
               <span className="font-mono">
                 EMAIL: {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}
               </span>
@@ -511,16 +514,16 @@ export const PackingListView: React.FC = () => {
             Active Rows: <strong>{populatedRowCount}</strong>/{rows.length}
           </span>
           <span aria-hidden="true">·</span>
-          <span className="text-emerald-300 font-bold">
+          <span className="text-[#5eead4] font-bold">
             {totalBox} Boxes ({totalWeight.toFixed(2)} KG)
           </span>
           <span aria-hidden="true">·</span>
-          <span className="text-amber-300 font-bold">
+          <span className="text-white font-bold">
             {formatCurrency(totalAmount, 'RMB')}
           </span>
           <span aria-hidden="true">·</span>
-          <span className="bg-amber-400/20 text-amber-300 px-2.5 py-0.5 rounded border border-amber-400/40">
-            Sheet #3
+          <span className="bg-[#00897b]/25 text-[#5eead4] px-2.5 py-0.5 rounded border border-[#00897b]/50 font-bold">
+            Sheet #03
           </span>
         </div>
       </div>
@@ -529,11 +532,11 @@ export const PackingListView: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* Left: Packing List Data Entry Sheet (9 Cols) */}
         <div className="lg:col-span-9 space-y-4">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             {/* Sheet Title Header */}
-            <div className="bg-[#8b3858] text-white py-3 px-5 flex flex-wrap items-center justify-between gap-3 border-b border-pink-950">
+            <div className="bg-[#263843] text-white py-3 px-5 flex flex-wrap items-center justify-between gap-3 border-b border-[#1d2c35]">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-amber-300 bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
+                <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
                   <img
                     src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
                     alt={companyProfile.companyName}
@@ -541,18 +544,18 @@ export const PackingListView: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <div className="zsb-3d-text text-lg sm:text-xl font-black">
+                  <div className="text-lg sm:text-xl font-black tracking-tight text-amber-400 zsb-golden-brand">
                     {companyProfile.companyName}
                   </div>
-                  <div className="text-xs font-semibold tracking-wider uppercase text-pink-100">
+                  <div className="text-xs font-semibold tracking-wider uppercase text-[#80cbc4]">
                     PACKING LIST DATA ENTRY FORM (AIR FREIGHT EXPORT MANIFEST)
                   </div>
                 </div>
               </div>
               <div className="flex items-center gap-2.5">
-                <div className="text-right font-mono text-xs text-pink-100 tabular-nums">
-                  <div className="text-[11px] text-pink-200 uppercase">Manifest Ref</div>
-                  <div className="font-bold text-amber-300 text-sm">{invoiceNumber}</div>
+                <div className="text-right font-mono text-xs text-slate-300 tabular-nums">
+                  <div className="text-[11px] text-[#80cbc4] uppercase">Manifest Ref</div>
+                  <div className="font-bold text-white text-sm">{invoiceNumber}</div>
                 </div>
               </div>
             </div>
@@ -909,69 +912,69 @@ export const PackingListView: React.FC = () => {
             <div className="p-2.5 bg-slate-50/70">
               <div
                 data-testid="packing-entry-scroll-box"
-                className="overflow-x-auto border-2 border-amber-200 rounded-lg bg-white"
+                className="overflow-x-auto border border-slate-200 rounded-lg bg-white"
               >
               <table
                 className="w-full border-collapse text-xs"
                 data-testid="packing-entry-table"
               >
                 <thead>
-                  <tr className="bg-[#e67327] text-white uppercase text-[11px] font-bold tracking-wider border-b border-amber-800">
-                    <th className="px-2 py-2.5 border-r border-amber-600/60 w-10 text-center">
+                  <tr className="bg-[#263843] text-white uppercase text-[11px] font-bold tracking-wider border-b border-[#1d2c35]">
+                    <th className="px-2 py-2.5 border-r border-[#334b59] w-10 text-center">
                       SL #
                     </th>
-                    <th className="px-2.5 py-2.5 border-r border-amber-600/60 text-left min-w-[150px]">
+                    <th className="px-2.5 py-2.5 border-r border-[#334b59] text-left min-w-[150px]">
                       <div className="flex items-center justify-between">
                         <span>ITEM / SIZE</span>
                         <button
                           type="button"
                           onClick={() => setAddingCategory('exportItems')}
-                          className="text-[9px] bg-amber-900/90 hover:bg-amber-950 px-1.5 py-0.5 rounded text-amber-200 font-bold cursor-pointer"
+                          className="text-[9px] bg-[#00897b] hover:bg-[#00796b] px-1.5 py-0.5 rounded text-white font-bold cursor-pointer"
                           title="Add new export item"
                         >
                           +New
                         </button>
                       </div>
                     </th>
-                    <th className="px-2 py-2.5 border-r border-amber-600/60 w-24 text-center">
+                    <th className="px-2 py-2.5 border-r border-[#334b59] w-24 text-center">
                       <div className="flex items-center justify-between px-1">
                         <span>BOX</span>
                         <button
                           type="button"
                           onClick={() => setAddingCategory('boxes')}
-                          className="text-[9px] bg-amber-900/90 hover:bg-amber-950 px-1 py-0.5 rounded text-amber-200 cursor-pointer"
+                          className="text-[9px] bg-[#00897b] hover:bg-[#00796b] px-1 py-0.5 rounded text-white cursor-pointer"
                           title="Add box preset"
                         >
                           +
                         </button>
                       </div>
                     </th>
-                    <th className="px-2 py-2.5 border-r border-amber-600/60 w-24 text-center">
+                    <th className="px-2 py-2.5 border-r border-[#334b59] w-24 text-center">
                       <div className="flex items-center justify-between px-1">
                         <span>WEIGHT (KG)</span>
                         <button
                           type="button"
                           onClick={() => setAddingCategory('weights')}
-                          className="text-[9px] bg-amber-900/90 hover:bg-amber-950 px-1 py-0.5 rounded text-amber-200 cursor-pointer"
+                          className="text-[9px] bg-[#00897b] hover:bg-[#00796b] px-1 py-0.5 rounded text-white cursor-pointer"
                           title="Add weight preset"
                         >
                           +
                         </button>
                       </div>
                     </th>
-                    <th className="px-2.5 py-2.5 border-r border-amber-600/60 w-28 text-right">
+                    <th className="px-2.5 py-2.5 border-r border-[#334b59] w-28 text-right">
                       TOTAL WEIGHT
                     </th>
-                    <th className="px-2 py-2.5 border-r border-amber-600/60 w-20 text-center">
+                    <th className="px-2 py-2.5 border-r border-[#334b59] w-20 text-center">
                       UNIT
                     </th>
-                    <th className="px-2.5 py-2.5 border-r border-amber-600/60 w-28 text-right">
+                    <th className="px-2.5 py-2.5 border-r border-[#334b59] w-28 text-right">
                       <div>RATE (RMB)</div>
-                      <div className="text-[9px] font-normal lowercase tracking-normal text-amber-100">
+                      <div className="text-[9px] font-normal lowercase tracking-normal text-[#80cbc4]">
                         {paymentStatus === 'UNPAID' ? '≥ 0 (Unpaid)' : '> 0 (Required)'}
                       </div>
                     </th>
-                    <th className="px-2.5 py-2.5 border-r border-amber-600/60 w-32 text-right">
+                    <th className="px-2.5 py-2.5 border-r border-[#334b59] w-32 text-right">
                       TOTAL AMOUNT (RMB)
                     </th>
                     <th className="px-2 py-2.5 w-12 text-center">CLR</th>
@@ -1182,13 +1185,13 @@ export const PackingListView: React.FC = () => {
                 {/* Subtotals & Instant Automatic Summation Rows */}
                 <tfoot>
                   {/* Row 1: Direct Column-Aligned Subtotals */}
-                  <tr className="bg-[#e67327] text-white font-bold border-t-2 border-amber-800 text-xs">
+                  <tr className="bg-[#1c2a33] text-white font-bold border-t-2 border-[#00897b] text-xs">
                     <td
                       colSpan={2}
-                      className="px-3 py-2.5 text-right uppercase tracking-wider border-r border-amber-600/60"
+                      className="px-3 py-2.5 text-right uppercase tracking-wider border-r border-[#334b59]"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-mono font-semibold text-amber-200 bg-amber-950/40 px-1.5 py-0.5 rounded">
+                        <span className="text-[10px] font-mono font-semibold text-[#5eead4] bg-[#263843] px-1.5 py-0.5 rounded">
                           {populatedRowCount} {populatedRowCount === 1 ? 'Item' : 'Items'}
                         </span>
                         <span className="font-extrabold">TOTAL QUANTITY:</span>
@@ -1196,16 +1199,16 @@ export const PackingListView: React.FC = () => {
                     </td>
                     <td
                       data-testid="packing-footer-box"
-                      className="px-2 py-2.5 text-center font-mono tabular-nums text-amber-100 text-sm font-black border-r border-amber-600/60 bg-amber-900/40 whitespace-nowrap"
+                      className="px-2 py-2.5 text-center font-mono tabular-nums text-[#5eead4] text-sm font-black border-r border-[#334b59] bg-[#263843]/70 whitespace-nowrap"
                     >
                       {totalBox} Boxes
                     </td>
-                    <td className="px-2 py-2.5 text-right uppercase text-[11px] font-bold border-r border-amber-600/60 whitespace-nowrap">
+                    <td className="px-2 py-2.5 text-right uppercase text-[11px] font-bold border-r border-[#334b59] whitespace-nowrap">
                       TOTAL WT:
                     </td>
                     <td
                       data-testid="packing-footer-weight"
-                      className="px-2.5 py-2.5 text-right font-mono tabular-nums text-amber-100 text-sm font-black border-r border-amber-600/60 bg-amber-900/40 whitespace-nowrap"
+                      className="px-2.5 py-2.5 text-right font-mono tabular-nums text-[#5eead4] text-sm font-black border-r border-[#334b59] bg-[#263843]/70 whitespace-nowrap"
                     >
                       {totalWeight.toLocaleString('en-US', {
                         minimumFractionDigits: 2,
@@ -1215,25 +1218,25 @@ export const PackingListView: React.FC = () => {
                     </td>
                     <td
                       colSpan={2}
-                      className="px-2.5 py-2.5 text-right uppercase text-[11px] font-bold border-r border-amber-600/60 whitespace-nowrap"
+                      className="px-2.5 py-2.5 text-right uppercase text-[11px] font-bold border-r border-[#334b59] whitespace-nowrap"
                     >
                       TOTAL VALUE:
                     </td>
                     <td
                       colSpan={2}
                       data-testid="packing-footer-total"
-                      className="px-2.5 py-2.5 text-right font-mono tabular-nums text-white text-sm font-black pr-3 bg-amber-950/40 whitespace-nowrap"
+                      className="px-2.5 py-2.5 text-right font-mono tabular-nums text-white text-sm font-black pr-3 bg-[#00897b]/30 whitespace-nowrap"
                     >
                       {formatCurrency(totalAmount, 'RMB')}
                     </td>
                   </tr>
 
                   {/* Row 2: Prominent Shipment Totals Live Summation Banner */}
-                  <tr className="bg-slate-900 text-white border-t border-amber-500/80">
+                  <tr className="bg-[#263843] text-white border-t border-[#334b59]">
                     <td colSpan={9} className="p-3">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="flex items-center gap-2">
-                          <span className="px-2.5 py-1 rounded bg-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-xs">
+                          <span className="px-2.5 py-1 rounded bg-[#00897b] text-white font-black text-xs uppercase tracking-wider shadow-xs">
                             SHIPMENT TOTALS
                           </span>
                           <span className="text-slate-300 text-xs font-medium hidden sm:inline">
@@ -1242,26 +1245,26 @@ export const PackingListView: React.FC = () => {
                         </div>
                         <div className="flex flex-wrap items-center gap-3 sm:gap-5 font-mono text-xs">
                           {/* Total Quantity */}
-                          <div className="flex items-center gap-1.5 bg-slate-800/90 px-3 py-1.5 rounded-lg border border-slate-700">
+                          <div className="flex items-center gap-1.5 bg-[#1c2a33] px-3 py-1.5 rounded-lg border border-[#334b59]">
                             <span className="text-slate-400 font-bold uppercase text-[10.5px]">
                               Total Quantity:
                             </span>
                             <span
                               data-testid="packing-shipment-total-qty"
-                              className="font-black text-amber-300 text-sm tabular-nums"
+                              className="font-black text-white text-sm tabular-nums"
                             >
                               {totalBox} Cartons / Boxes
                             </span>
                           </div>
 
                           {/* Total Net Weight */}
-                          <div className="flex items-center gap-1.5 bg-slate-800/90 px-3 py-1.5 rounded-lg border border-slate-700">
+                          <div className="flex items-center gap-1.5 bg-[#1c2a33] px-3 py-1.5 rounded-lg border border-[#334b59]">
                             <span className="text-slate-400 font-bold uppercase text-[10.5px]">
                               Total Weight:
                             </span>
                             <span
                               data-testid="packing-shipment-total-weight"
-                              className="font-black text-teal-300 text-sm tabular-nums"
+                              className="font-black text-[#5eead4] text-sm tabular-nums"
                             >
                               {totalWeight.toLocaleString('en-US', {
                                 minimumFractionDigits: 2,
@@ -1272,7 +1275,7 @@ export const PackingListView: React.FC = () => {
                           </div>
 
                           {/* Total Value */}
-                          <div className="flex items-center gap-1.5 bg-slate-800/90 px-3 py-1.5 rounded-lg border border-slate-700">
+                          <div className="flex items-center gap-1.5 bg-[#1c2a33] px-3 py-1.5 rounded-lg border border-[#334b59]">
                             <span className="text-slate-400 font-bold uppercase text-[10.5px]">
                               Shipment Value:
                             </span>
@@ -1283,7 +1286,7 @@ export const PackingListView: React.FC = () => {
                               {formatCurrency(totalAmount, 'RMB')}
                             </span>
                             {companyProfile.rmbExchangeRate > 0 && (
-                              <span className="text-[11px] text-amber-200/90">
+                              <span className="text-[11px] text-[#80cbc4]">
                                 (≈{' '}
                                 {formatCurrency(
                                   Math.round(totalAmount * companyProfile.rmbExchangeRate),
@@ -1365,14 +1368,14 @@ export const PackingListView: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="bg-amber-50/80 p-3 rounded-lg border border-amber-300 shadow-2xs">
-                  <div className="text-[10px] font-bold uppercase text-amber-900 flex items-center justify-between">
+                <div className="bg-teal-50/70 p-3 rounded-lg border border-teal-200 shadow-2xs">
+                  <div className="text-[10px] font-bold uppercase text-[#263843] flex items-center justify-between">
                     <span>TOTAL MANIFEST VALUE</span>
-                    <span className="text-[9px] text-amber-800 bg-amber-100 px-1 rounded font-mono">RMB</span>
+                    <span className="text-[9px] text-[#00897b] bg-teal-100 px-1 rounded font-mono">RMB</span>
                   </div>
                   <div
                     data-testid="packing-summary-total"
-                    className="text-base font-black font-mono tabular-nums text-amber-950 mt-0.5"
+                    className="text-base font-black font-mono tabular-nums text-[#263843] mt-0.5"
                   >
                     {formatCurrency(totalAmount, 'RMB')}
                   </div>
@@ -1393,7 +1396,7 @@ export const PackingListView: React.FC = () => {
                   placeholder="e.g. Oxygenated poly bags, Airway bill handover notes, temperature check..."
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
-                  className="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  className="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#00897b]"
                 />
               </div>
             </div>
@@ -1414,16 +1417,16 @@ export const PackingListView: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleSavePDF}
-                  className="w-full bg-[#d97706] hover:bg-[#b45309] text-white py-2.5 px-4 rounded-lg font-bold text-sm shadow-xs flex items-center justify-center space-x-2 transition transform active:scale-95 cursor-pointer whitespace-nowrap"
+                  className="w-full bg-[#00897b] hover:bg-[#00796b] text-white py-2.5 px-4 rounded-lg font-bold text-sm shadow-xs flex items-center justify-center space-x-2 transition transform active:scale-95 cursor-pointer whitespace-nowrap"
                 >
-                  <Edit3 className="w-4 h-4 text-amber-200 shrink-0" />
+                  <Edit3 className="w-4 h-4 text-[#80cbc4] shrink-0" />
                   <span>UPDATE MANIFEST (SAVE)</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={handleCancelEdit}
-                  className="w-full bg-slate-700 hover:bg-slate-800 text-white py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer whitespace-nowrap"
+                  className="w-full bg-[#263843] hover:bg-[#1c2a33] text-white py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer whitespace-nowrap"
                 >
                   <RotateCcw className="w-3.5 h-3.5 text-slate-300 shrink-0" />
                   <span>CANCEL EDIT (NEW MANIFEST)</span>
@@ -1433,12 +1436,12 @@ export const PackingListView: React.FC = () => {
               <button
                 type="button"
                 onClick={handleSavePDF}
-                className="w-full text-white py-2.5 px-4 rounded-lg font-bold text-sm shadow-xs flex items-center justify-center space-x-2 transition transform active:scale-95 cursor-pointer bg-[#129c54] hover:bg-[#0e8346] whitespace-nowrap"
+                className="w-full text-white py-2.5 px-4 rounded-lg font-bold text-sm shadow-xs flex items-center justify-center space-x-2 transition transform active:scale-95 cursor-pointer bg-[#00897b] hover:bg-[#00796b] whitespace-nowrap"
                 title="Save Manifest (Shortcut: Ctrl+S)"
               >
                 <Save className="w-5 h-5 shrink-0" />
                 <span>SAVE MANIFEST</span>
-                <span className="text-[10px] font-mono bg-emerald-950/60 px-1.5 py-0.5 rounded text-amber-200">
+                <span className="text-[10px] font-mono bg-black/25 px-1.5 py-0.5 rounded text-[#80cbc4]">
                   Ctrl+S
                 </span>
               </button>
@@ -1456,13 +1459,12 @@ export const PackingListView: React.FC = () => {
               <span>SHARE VIA WECHAT (微信)</span>
             </button>
 
-            {/* SEARCH Button - Royal Blue */}
             {/* FLIGHT RETURN BILL Monthly Statement Button */}
             <button
               type="button"
               data-testid="packing-open-awb-btn"
               onClick={() => setActiveTab('air_way_bill')}
-              className="w-full bg-[#2f75b5] hover:bg-[#245c8f] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
+              className="w-full bg-[#1877d2] hover:bg-[#1465b5] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
             >
               <Printer className="w-4 h-4" />
               <span>FLIGHT RETURN BILL STATEMENT</span>
@@ -1472,17 +1474,17 @@ export const PackingListView: React.FC = () => {
               type="button"
               data-testid="packing-import-excel-csv-btn"
               onClick={() => openDataCenterModal('import', 'packing')}
-              className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 py-2.5 px-4 rounded-lg font-extrabold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
+              className="w-full bg-[#263843] hover:bg-[#1c2a33] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
               title="Import Packing List rows from Excel (.xlsx) or CSV (.csv) — same Mark, Flight, Destination, Shipper & Date automatically merge into 1 Invoice & Packing No"
             >
-              <UploadCloud className="w-4 h-4 stroke-[2.2]" />
+              <UploadCloud className="w-4 h-4 stroke-[2.2] text-[#5eead4]" />
               <span>IMPORT EXCEL / CSV</span>
             </button>
 
             <button
               type="button"
               onClick={() => setActiveTab('packing_db')}
-              className="w-full bg-[#1b73b4] hover:bg-[#165f95] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
+              className="w-full bg-[#089bc4] hover:bg-[#0782a5] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
             >
               <Search className="w-4 h-4" />
               <span>SEARCH PACKING DB</span>
@@ -1678,7 +1680,7 @@ export const PackingListView: React.FC = () => {
       <div className="fixed -left-[9999px] top-0 pointer-events-none" aria-hidden="true">
         <div
           id="packing-manifest-export-canvas"
-          className="relative w-[760px] max-w-[760px] bg-white rounded-sm border border-slate-300 p-7 space-y-5 text-slate-900 overflow-hidden"
+          className="zsb-print-paper relative w-[760px] max-w-[760px] bg-white rounded-sm border border-slate-300 p-7 space-y-5 text-slate-900 overflow-hidden"
           style={{ width: '760px', backgroundColor: '#ffffff', color: '#000000', position: 'relative' }}
         >
           {/* Centered Watermark Logo */}
@@ -1890,7 +1892,7 @@ export const PackingListView: React.FC = () => {
               <div style={{ color: '#0f172a' }} className="mt-1.5 font-bold uppercase tracking-wider text-xs">
                 Managing Partner
               </div>
-              <div style={{ color: '#64748b' }} className="text-[10px] uppercase font-semibold">
+              <div style={{ color: '#d97706', fontWeight: 800 }} className="text-[10px] uppercase font-extrabold text-amber-500 zsb-golden-brand-light">
                 {companyProfile.companyName}
               </div>
             </div>
@@ -1907,7 +1909,7 @@ export const PackingListView: React.FC = () => {
               <div style={{ color: '#0f172a' }} className="mt-1.5 font-bold uppercase tracking-wider text-xs">
                 Partner
               </div>
-              <div style={{ color: '#64748b' }} className="text-[10px] uppercase font-semibold">
+              <div style={{ color: '#d97706', fontWeight: 800 }} className="text-[10px] uppercase font-extrabold text-amber-500 zsb-golden-brand-light">
                 {companyProfile.companyName}
               </div>
             </div>
@@ -1919,7 +1921,7 @@ export const PackingListView: React.FC = () => {
             className="flex justify-between items-center text-[10px] pt-4 mt-6"
           >
             <span>
-              This is an official computer-generated document from {companyProfile.companyName} System • Validated and archived.
+              This is an official computer-generated document from <strong style={{ color: '#d97706', fontWeight: 800 }} className="font-extrabold text-amber-500 zsb-golden-brand-light">{companyProfile.companyName}</strong> System • Validated and archived.
             </span>
             <span className="print-page-number-counter font-mono font-bold text-slate-600">
               <span className="print:hidden">Page 1 of 1</span>

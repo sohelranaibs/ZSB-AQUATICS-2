@@ -189,7 +189,7 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
       {/* Search Input Box */}
       <div className="relative flex items-center">
         <div className="absolute left-3 pointer-events-none text-slate-400 flex items-center">
-          <Search className="w-4 h-4 text-amber-400/90" />
+          <Search className="w-4 h-4 text-[#1D6CE0]" />
         </div>
 
         <input
@@ -211,7 +211,7 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
           }}
           onFocus={() => setIsOpen(true)}
           onKeyDown={handleKeyDown}
-          className="w-full bg-slate-950/90 hover:bg-slate-950 text-slate-100 placeholder-slate-400 text-xs rounded-lg pl-9 pr-20 py-1.5 border border-slate-700 hover:border-amber-500/60 focus:border-amber-400 focus:ring-1 focus:ring-amber-400 focus:outline-none transition-all shadow-inner font-sans"
+          className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-lg pl-9 pr-20 py-1.5 border border-[#CBD8E6] hover:border-sky-300 focus:bg-white focus:border-[#1D6CE0] focus:ring-1 focus:ring-[#1D6CE0] focus:outline-none transition-all font-sans shadow-2xs"
         />
 
         {/* Clear Button & Keyboard Shortcut Badge */}
@@ -223,12 +223,12 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
               title="Clear search query"
               aria-label="Clear search query"
               data-testid="clear-global-search-btn"
-              className="p-0.5 text-slate-400 hover:text-slate-100 rounded hover:bg-slate-800 transition cursor-pointer"
+              className="p-0.5 text-slate-400 hover:text-slate-700 rounded hover:bg-slate-100 transition cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
             </button>
           ) : (
-            <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono font-medium text-amber-300/80 bg-slate-800/80 border border-slate-700/80 rounded">
+            <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono font-medium text-slate-500 bg-white border border-slate-200 rounded">
               Ctrl+K
             </kbd>
           )}
@@ -241,10 +241,10 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
           ref={dropdownRef}
           id="global-search-results-list"
           data-testid="global-search-dropdown"
-          className="absolute right-0 mt-1.5 w-[94vw] sm:w-[540px] md:w-[620px] max-w-[calc(100vw-1.5rem)] bg-slate-900 border border-slate-700/90 rounded-xl shadow-2xl z-50 overflow-hidden max-h-[500px] flex flex-col backdrop-blur-md"
+          className="absolute right-0 mt-1.5 w-[94vw] sm:w-[540px] md:w-[620px] max-w-[calc(100vw-1.5rem)] bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden max-h-[500px] flex flex-col"
         >
           {/* Header Bar with Module Tabs */}
-          <div className="bg-slate-950 px-3 py-2 border-b border-slate-800 flex items-center justify-between gap-2 overflow-x-auto text-xs shrink-0">
+          <div className="bg-slate-50 px-3 py-2 border-b border-slate-200 flex items-center justify-between gap-2 overflow-x-auto text-xs shrink-0">
             <div className="flex items-center space-x-1 shrink-0">
               {moduleTabs.map((tab) => (
                 <button
@@ -254,8 +254,8 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
                   data-testid={`search-tab-${tab.id}`}
                   className={`px-2 py-0.5 rounded text-[11px] font-semibold transition cursor-pointer flex items-center space-x-1 whitespace-nowrap ${
                     selectedModule === tab.id
-                      ? 'bg-amber-500 text-slate-950 shadow-xs'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                      ? 'bg-[#00897b] text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
                   }`}
                 >
                   <span>{tab.label}</span>
@@ -263,8 +263,8 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
                     <span
                       className={`text-[10px] px-1 rounded-full font-mono ${
                         selectedModule === tab.id
-                          ? 'bg-slate-950/20 text-slate-950'
-                          : 'bg-slate-800 text-slate-300'
+                          ? 'bg-white/20 text-white'
+                          : 'bg-slate-200 text-slate-700'
                       }`}
                     >
                       {tab.count}
@@ -280,29 +280,29 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
           </div>
 
           {/* Results List */}
-          <div className="overflow-y-auto flex-1 p-2 space-y-1.5">
+          <div className="overflow-y-auto flex-1 p-2 space-y-1.5 bg-white">
             {query.trim().length === 0 ? (
               // Empty State with Helpful Search Prompts
               <div className="p-4 text-center">
-                <div className="inline-flex p-2.5 bg-amber-500/10 text-amber-400 rounded-full mb-2">
+                <div className="inline-flex p-2.5 bg-teal-50 text-[#00897b] rounded-full mb-2">
                   <Sparkles className="w-5 h-5" />
                 </div>
-                <h4 className="text-xs font-bold text-slate-200">
+                <h4 className="text-xs font-bold text-slate-900">
                   Global Enterprise Trade Ledger Search
                 </h4>
-                <p className="text-[11px] text-slate-400 mt-1 max-w-sm mx-auto">
+                <p className="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto">
                   Instantly locate any invoice number, supplier name, flight number, shipping mark, or contact number.
                 </p>
 
                 {/* Popular Quick-Search Suggestions */}
                 <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
-                  <span className="text-[10px] text-slate-500 uppercase font-semibold">Quick picks:</span>
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Quick picks:</span>
                   {['PUR-', 'PKG-', 'PAY-', 'Abdullah', 'Uzzal', 'AAD', 'CZ392'].map((tag) => (
                     <button
                       key={tag}
                       type="button"
                       onClick={() => handleApplyPresetQuery(tag)}
-                      className="px-2 py-0.5 text-[11px] font-mono bg-slate-800 hover:bg-slate-700 text-amber-300 rounded border border-slate-700 cursor-pointer transition"
+                      className="px-2 py-0.5 text-[11px] font-mono bg-slate-50 hover:bg-teal-50 text-[#00897b] rounded border border-slate-200 hover:border-[#00897b] cursor-pointer transition font-semibold"
                     >
                       {tag}
                     </button>
@@ -312,11 +312,11 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
             ) : searchResults.items.length === 0 ? (
               // No Results Found State
               <div className="p-6 text-center">
-                <p className="text-xs font-semibold text-slate-300">
+                <p className="text-xs font-semibold text-slate-700">
                   No records found matching "{query}"
                 </p>
                 <p className="text-[11px] text-slate-500 mt-1">
-                  Try searching with an invoice prefix (e.g. <span className="font-mono text-amber-400">PUR-</span>, <span className="font-mono text-blue-400">PKG-</span>), supplier name, or flight ID.
+                  Try searching with an invoice prefix (e.g. <span className="font-mono text-[#00897b] font-semibold">PUR-</span>, <span className="font-mono text-[#1877d2] font-semibold">PKG-</span>), supplier name, or flight ID.
                 </p>
               </div>
             ) : (
@@ -333,8 +333,8 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
                     onMouseEnter={() => setSelectedIndex(idx)}
                     className={`p-2.5 rounded-lg border transition cursor-pointer flex flex-col gap-1.5 ${
                       isFocused
-                        ? 'bg-slate-800/90 border-amber-500/70 shadow-md'
-                        : 'bg-slate-900/80 hover:bg-slate-800/50 border-slate-800/80'
+                        ? 'bg-teal-50/70 border-[#00897b] shadow-xs'
+                        : 'bg-white hover:bg-slate-50 border-slate-200'
                     }`}
                   >
                     {/* Top Row: Module Badge + Primary Title + Date + Amount */}
@@ -346,36 +346,36 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
                         >
                           {item.moduleLabel}
                         </span>
-                        <span className="font-mono text-xs font-black text-amber-300 whitespace-nowrap shrink-0">
+                        <span className="font-mono text-xs font-bold text-[#0f172a] whitespace-nowrap shrink-0">
                           {item.primaryTitle}
                         </span>
-                        <span className="text-xs font-semibold text-slate-200 truncate">
+                        <span className="text-xs font-semibold text-slate-700 truncate">
                           {item.secondaryTitle}
                         </span>
                       </div>
 
                       <div className="flex items-center space-x-2 shrink-0 text-right">
-                        <span className="text-[11px] font-mono text-slate-400">
+                        <span className="text-[11px] font-mono text-slate-500">
                           {item.date}
                         </span>
-                        <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                        <span className="text-xs font-mono font-bold text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
                           {item.amountFormatted}
                         </span>
                       </div>
                     </div>
 
                     {/* Middle Row: Subtitle + Metric Details */}
-                    <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-400 gap-1">
-                      <span className="truncate max-w-md text-slate-300">
+                    <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-600 gap-1">
+                      <span className="truncate max-w-md text-slate-600">
                         {item.subtitle}
                       </span>
 
                       {item.details.length > 0 && (
-                        <div className="flex items-center space-x-1.5 font-mono text-[10px] text-slate-400">
+                        <div className="flex items-center space-x-1.5 font-mono text-[10px] text-slate-600">
                           {item.details.map((detail, dIdx) => (
                             <span
                               key={dIdx}
-                              className="bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 text-slate-300"
+                              className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 text-slate-700"
                             >
                               {detail}
                             </span>
@@ -385,13 +385,13 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
                     </div>
 
                     {/* Bottom Row: Matched Fields Tags & Quick Actions */}
-                    <div className="flex items-center justify-between pt-1 border-t border-slate-800/60 text-[10px]">
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[10px]">
                       <div className="flex items-center space-x-1 flex-wrap gap-y-1">
-                        <span className="text-slate-500">Matched:</span>
+                        <span className="text-slate-400">Matched:</span>
                         {item.matchedFields.map((field, fIdx) => (
                           <span
                             key={fIdx}
-                            className="bg-amber-400/10 text-amber-300 px-1.5 py-0.2 rounded border border-amber-500/20 font-medium"
+                            className="bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded border border-slate-200 font-medium"
                           >
                             {field}
                           </span>
@@ -408,14 +408,14 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
                             onClick={(e) => handleQuickPrint(e, item)}
                             title="Print / PDF Voucher Preview"
                             data-testid={`quick-print-${item.primaryTitle}`}
-                            className="text-slate-400 hover:text-amber-300 flex items-center space-x-0.5 px-1.5 py-0.5 rounded hover:bg-slate-800 cursor-pointer transition"
+                            className="text-slate-600 hover:text-[#00897b] flex items-center space-x-0.5 px-1.5 py-0.5 rounded hover:bg-slate-100 cursor-pointer transition"
                           >
                             <Printer className="w-3 h-3" />
                             <span className="hidden sm:inline">Print Slip</span>
                           </button>
                         )}
 
-                        <span className="text-amber-400/80 hover:text-amber-300 flex items-center space-x-0.5 font-semibold">
+                        <span className="text-[#00897b] font-semibold flex items-center space-x-0.5">
                           <span>View Sheet</span>
                           <ArrowRight className="w-3 h-3" />
                         </span>
@@ -428,20 +428,20 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
           </div>
 
           {/* Footer Bar: Keyboard Hints */}
-          <div className="bg-slate-950 px-3 py-1.5 border-t border-slate-800 text-[10px] text-slate-400 flex items-center justify-between shrink-0">
+          <div className="bg-slate-50 px-3 py-1.5 border-t border-slate-200 text-[10px] text-slate-500 flex items-center justify-between shrink-0">
             <div className="flex items-center space-x-3">
               <span>
-                <kbd className="px-1 py-0.5 bg-slate-800 rounded font-mono text-slate-300">↑</kbd>{' '}
-                <kbd className="px-1 py-0.5 bg-slate-800 rounded font-mono text-slate-300">↓</kbd> to navigate
+                <kbd className="px-1 py-0.5 bg-white border border-slate-200 rounded font-mono text-slate-700">↑</kbd>{' '}
+                <kbd className="px-1 py-0.5 bg-white border border-slate-200 rounded font-mono text-slate-700">↓</kbd> to navigate
               </span>
               <span>
-                <kbd className="px-1 py-0.5 bg-slate-800 rounded font-mono text-slate-300">Enter</kbd> to jump
+                <kbd className="px-1 py-0.5 bg-white border border-slate-200 rounded font-mono text-slate-700">Enter</kbd> to jump
               </span>
               <span>
-                <kbd className="px-1 py-0.5 bg-slate-800 rounded font-mono text-slate-300">Esc</kbd> to close
+                <kbd className="px-1 py-0.5 bg-white border border-slate-200 rounded font-mono text-slate-700">Esc</kbd> to close
               </span>
             </div>
-            <span className="text-amber-400/80 font-mono">Real-time Cross-DB Index</span>
+            <span className="text-[#00897b] font-mono font-semibold">Real-time Cross-DB Index</span>
           </div>
         </div>
       )}

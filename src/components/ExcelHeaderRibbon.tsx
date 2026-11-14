@@ -1,6 +1,5 @@
 import React from 'react';
 import { useApp } from '../context/AppContext.tsx';
-import { ActiveTab } from '../types/index.ts';
 import {
   buildExporterPaymentSlipRows,
   calculateExporterSlipTotals,
@@ -10,7 +9,7 @@ import {
   getSyncStatusDisplay,
 } from '../utils/syncStatus.ts';
 import {
-  FileSpreadsheet,
+  Menu,
   Save,
   Printer,
   Download,
@@ -37,9 +36,12 @@ import {
   RotateCcw,
   Maximize2,
   Minimize2,
+  PanelLeft,
+  User,
 } from 'lucide-react';
 import { GlobalSearchBar } from './GlobalSearchBar.tsx';
 import { DisplayMode, ZOOM_PRESETS } from '../utils/displayViewport.ts';
+import { buildWorkbookSheets } from './ThemeSidebarNav.tsx';
 
 interface ExcelHeaderRibbonProps {
   onOpenShortcutsModal?: () => void;
@@ -53,6 +55,9 @@ interface ExcelHeaderRibbonProps {
   onSelectZoomPreset?: (zoom: number) => void;
   isFullScreen?: boolean;
   onToggleFullScreen?: () => void;
+  isSidebarCollapsed?: boolean;
+  onToggleSidebar?: () => void;
+  onOpenMobileDrawer?: () => void;
 }
 
 export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
@@ -67,6 +72,9 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
   onSelectZoomPreset,
   isFullScreen = false,
   onToggleFullScreen,
+  isSidebarCollapsed = false,
+  onToggleSidebar,
+  onOpenMobileDrawer,
 }) => {
   const {
     activeTab,
@@ -175,7 +183,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
       case 'payment_form':
         return '=Supplier_Debit_Paid - Supplier_Credit_Rebate | Previous_Balance - Paid_Amount';
       case 'exporter_payment_form':
-        return '=Debit (Export RMB) - Credit (Claim RMB) = Row_Balance (RMB) | Exporter Status [NO REPORT, REPORT, PAID]';
+        return '=Report (RMB) - Credit (Claim RMB) = Row_Balance (RMB) | Debit (RMB) Display Only';
       case 'exporter_payment_slip':
         return '=Weight * RMB = Amount | FILTER(EXPORTER_DB!A:H, (MARK=Selected_Mark) * (DATE=Selected_Packing_Date))';
       case 'profit_loss':
@@ -191,122 +199,83 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
     }
   };
 
-  const workbookSheets: {
-    id: ActiveTab;
-    num: string;
-    label: string;
-    shortLabel: string;
-    badge?: string | number;
-  }[] = [
-    {
-      id: 'dashboard',
-      num: '01',
-      label: 'Executive Overview',
-      shortLabel: 'Overview',
-    },
-    {
-      id: 'purchase_form',
-      num: '02',
-      label: 'Purchase Challan / Bill',
-      shortLabel: 'Purchase Form',
-    },
-    {
-      id: 'packing_form',
-      num: '03',
-      label: 'Export Packing List',
-      shortLabel: 'Packing List',
-    },
-    {
-      id: 'exporter_payment_form',
-      num: '04',
-      label: 'Exporter Payment Form',
-      shortLabel: 'Exporter Payment',
-    },
-    {
-      id: 'payment_form',
-      num: '05',
-      label: 'Supplier Payment Form',
-      shortLabel: 'Supplier Payment',
-    },
-    {
-      id: 'air_way_bill',
-      num: '06',
-      label: 'FLIGHT RETURN BILL',
-      shortLabel: 'Flight Return Bill',
-    },
-    {
-      id: 'exporter_payment_slip',
-      num: '07',
-      label: 'Exporter Payment Slip 付款单',
-      shortLabel: 'Payment Slip 付款单',
-    },
-    {
-      id: 'profit_loss',
-      num: '08',
-      label: 'Loss & Profit Analysis',
-      shortLabel: 'Loss & Profit',
-    },
-    {
-      id: 'purchase_db',
-      num: '09',
-      label: 'Purchase Database',
-      shortLabel: 'Purchase DB',
-      badge: purchases.length,
-    },
-    {
-      id: 'packing_db',
-      num: '10',
-      label: 'Packing List Database',
-      shortLabel: 'Packing DB',
-      badge: packings.length,
-    },
-    {
-      id: 'payment_db',
-      num: '11',
-      label: 'Payment Vouchers DB',
-      shortLabel: 'Payment DB',
-      badge: payments.length,
-    },
-    {
-      id: 'search_reports',
-      num: '12',
-      label: 'Search & Audit Reports',
-      shortLabel: 'Search & Reports',
-    },
-    {
-      id: 'settings',
-      num: '13',
-      label: 'Settings & Config',
-      shortLabel: 'Settings',
-    },
-    {
-      id: 'audit_logs',
-      num: '14',
-      label: 'System Audit Logs',
-      shortLabel: 'Audit Logs',
-      badge: auditLogs.length,
-    },
-    {
-      id: 'administration',
-      num: '15',
-      label: 'Administration (Super Admin 🔒)',
-      shortLabel: 'Admin 🔒',
-    },
-  ];
+  const workbookSheets = buildWorkbookSheets({
+    purchasesCount: purchases.length,
+    packingsCount: packings.length,
+    paymentsCount: payments.length,
+    auditLogsCount: auditLogs.length,
+  });
 
+  const activeSheetMeta = workbookSheets.find((s) => s.id === activeTab) || workbookSheets[0];
 
   return (
-    <header className="bg-slate-900 border-b border-slate-700 shadow-md select-none print:hidden sticky top-0 z-40">
-      {/* Top Company & Excel Title Bar (Auto-compacted in Full Screen mode for maximum sheet space) */}
+    <header className="bg-[#273E56] text-white select-none print:hidden md:sticky md:top-0 z-40">
+      {/* Persistent Mobile ZSB AQUATICS Export Ledger Bar (< md, visible across every sheet) */}
+      <div
+        data-testid="mobile-export-ledger-bar"
+        className="md:hidden bg-[#273E56] text-white px-3 py-2 border-b border-white/15 flex items-center justify-between gap-2"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {onOpenMobileDrawer && (
+            <button
+              type="button"
+              data-testid="mobile-ledger-menu-btn"
+              onClick={onOpenMobileDrawer}
+              aria-label="Open ZSB AQUATICS Export Ledger Menu"
+              className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white border border-white/20 flex items-center justify-center shrink-0 cursor-pointer"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setActiveTab('dashboard')}
+            className="flex items-center gap-2 min-w-0 text-left cursor-pointer"
+          >
+            <div className="w-7 h-7 rounded-full bg-white p-0.5 border border-[#CBD8E6] flex items-center justify-center overflow-hidden shrink-0">
+              <img
+                src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
+                alt={companyProfile.companyName}
+                className="w-full h-full object-contain rounded-full"
+              />
+            </div>
+            <div className="min-w-0 leading-tight">
+              <div className="text-xs font-black tracking-tight text-amber-400 zsb-golden-brand truncate">
+                {companyProfile.companyName}
+              </div>
+              <div className="text-[10px] font-semibold text-sky-200 truncate">
+                Export Ledger
+              </div>
+            </div>
+          </button>
+        </div>
+
+        <span className="px-2 py-0.5 rounded bg-[#1D6CE0] text-white text-[10px] font-mono font-bold border border-white/20 shrink-0">
+          #{activeSheetMeta?.num} {activeSheetMeta?.shortLabel}
+        </span>
+      </div>
+
+      {/* Top Company & Control Header Bar (Deep Navy #273E56 Matching Reference Top L-Frame) */}
       {!isFullScreen && (
-      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 px-3 sm:px-4 py-1.5 sm:py-2 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 sm:gap-3">
-        {/* Left: Golden Company Branding */}
-        <div className="flex items-center space-x-3">
+      <div className="bg-[#273E56] px-3 sm:px-5 py-2.5 flex flex-wrap items-center justify-between gap-2 sm:gap-3">
+        {/* Left: Sidebar Toggle & Company Branding */}
+        <div className="flex items-center space-x-2.5 sm:space-x-3">
+          {onToggleSidebar && (
+            <button
+              type="button"
+              data-testid="ribbon-sidebar-toggle-btn"
+              onClick={onToggleSidebar}
+              title={isSidebarCollapsed ? 'Expand Sheet Sidebar' : 'Collapse Sheet Sidebar'}
+              className="hidden md:inline-flex items-center justify-center w-8 h-8 rounded-lg border border-white/15 bg-white/10 hover:bg-white/20 text-white transition cursor-pointer shrink-0"
+            >
+              <PanelLeft className="w-4 h-4" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setActiveTab('dashboard')}
             title="Return to Sheet 01 · Executive Overview"
-            className="w-11 h-11 rounded-full bg-white p-0.5 border-2 border-amber-400 shadow-md flex items-center justify-center overflow-hidden shrink-0 cursor-pointer hover:scale-105 transition-transform"
+            className="w-9 h-9 rounded-full bg-white p-0.5 border border-[#CBD8E6] shadow-2xs flex items-center justify-center overflow-hidden shrink-0 cursor-pointer hover:border-[#1D6CE0] transition"
           >
             <img
               src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
@@ -315,74 +284,70 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
             />
           </button>
           <div>
-            <div className="flex items-center space-x-2.5">
+            <div className="flex items-center space-x-2">
               <button
                 type="button"
                 onClick={() => setActiveTab('dashboard')}
-                className="zsb-3d-text text-lg sm:text-xl font-black tracking-wider cursor-pointer text-left"
+                className="text-base sm:text-lg font-black tracking-tight text-amber-400 hover:text-amber-300 zsb-golden-brand cursor-pointer text-left leading-tight transition-colors"
                 title="Go to Executive Overview (Sheet 01)"
               >
                 {companyProfile.companyName}
               </button>
-              <span className="hidden sm:inline-block text-[10px] font-mono uppercase tracking-widest text-slate-400 border-l border-slate-700 pl-2.5">
-                Enterprise Trade Ledger
+              <span className="hidden 2xl:inline-block text-[10px] font-mono uppercase tracking-widest text-sky-200 border-l border-white/20 pl-2">
+                Export Ledger
               </span>
             </div>
-            <div className="hidden md:flex flex-wrap items-center gap-x-4 gap-y-1 mt-0.5 text-[11px] text-slate-300">
-              <div className="flex items-center space-x-1.5">
-                <span className="text-slate-400 font-medium">Address:</span>
+            <div className="hidden 2xl:flex flex-wrap items-center gap-x-2.5 gap-y-0.5 mt-0.5 text-[10px] text-slate-300 leading-tight">
+              <div className="flex items-center space-x-1">
+                <span className="text-slate-400 font-medium">Addr:</span>
                 <span className="font-semibold text-slate-100">{companyProfile.address}</span>
               </div>
-              <span className="text-slate-700 hidden sm:inline">•</span>
-              <div className="flex items-center space-x-1.5">
-                <span className="text-slate-400 font-medium">Mobile:</span>
+              <span className="text-white/30">•</span>
+              <div className="flex items-center space-x-1">
+                <span className="text-slate-400 font-medium">Tel:</span>
                 <span className="font-mono font-semibold text-slate-100">
                   {companyProfile.mobiles.join(', ')}
                 </span>
               </div>
-              <span className="text-slate-700 hidden sm:inline">•</span>
-              <div className="flex items-center space-x-1.5">
-                <span className="text-amber-400 font-bold">EMAIL:</span>
-                <span className="font-mono font-semibold text-amber-300">
+              <span className="text-white/30">•</span>
+              <div className="flex items-center space-x-1">
+                <span className="text-sky-300 font-bold">Email:</span>
+                <span className="font-mono font-semibold text-slate-100">
                   {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com'
                     ? companyProfile.email
                     : 'zsbaquatics@gmail.com'}
                 </span>
               </div>
-              <span className="text-slate-700 hidden sm:inline">•</span>
-              <div className="flex items-center space-x-1.5">
-                <span className="text-amber-400 font-bold">Website:</span>
-                <span className="font-mono font-semibold text-amber-300">
-                  {companyProfile.website || 'www.zsbaquatics.com'}
-                </span>
-              </div>
+            </div>
+            <div className="hidden md:flex 2xl:hidden items-center gap-x-2 mt-0.5 text-[10px] text-slate-300 max-w-[230px] truncate leading-tight">
+              <span className="truncate">{companyProfile.address}</span>
             </div>
           </div>
         </div>
 
         {/* Center: Global Cross-Database Search Bar */}
-        <div className="flex-1 max-w-xl mx-1 min-w-[260px] order-3 xl:order-2 w-full xl:w-auto">
+        <div className="flex-1 max-w-xs xl:max-w-sm mx-1 min-w-[170px] order-3 xl:order-2 w-full xl:w-auto">
           <GlobalSearchBar />
         </div>
 
         {/* Right: Quick Macro Actions & Sync Status */}
-        <div className="flex items-center space-x-2 order-2 xl:order-3 flex-wrap gap-y-1.5">
+        <div className="flex items-center gap-1.5 order-2 xl:order-3 flex-wrap justify-end">
           {/* Live Sync Background Auto-save Toggle */}
           <div
-            className="flex items-center space-x-1.5 px-2 py-1 text-xs rounded border border-slate-700 bg-slate-950/80 whitespace-nowrap shrink-0"
+            className="flex items-center space-x-1 px-2 py-1 text-[11px] rounded-lg border border-white/15 bg-[#1F3349] whitespace-nowrap shrink-0"
             title={
               isLiveSyncEnabled
                 ? 'Live Sync is ON: Background database auto-save is active. Click to pause for high-frequency data entry.'
                 : 'Live Sync is PAUSED: Background auto-save disabled for faster data entry. Click to resume or use "Sync Now" (Ctrl+S) to save.'
             }
           >
-            <div className="flex items-center space-x-1 text-slate-300">
+            <div className="flex items-center space-x-1 text-slate-200">
               <Zap
-                className={`w-3.5 h-3.5 transition-colors ${
-                  isLiveSyncEnabled ? 'text-amber-400 drop-shadow-[0_0_4px_rgba(251,191,36,0.5)]' : 'text-slate-500'
+                className={`w-3 h-3 transition-colors ${
+                  isLiveSyncEnabled ? 'text-[#00B14F]' : 'text-slate-400'
                 }`}
               />
-              <span className="text-[11px] font-bold hidden sm:inline">Live Sync</span>
+              <span className="text-[10px] font-bold hidden 2xl:inline">Live Sync</span>
             </div>
 
             <button
@@ -394,20 +359,20 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
               aria-label={`Live Sync background auto-save toggle. Currently ${
                 isLiveSyncEnabled ? 'Enabled' : 'Paused'
               }. Click to toggle.`}
-              className={`relative inline-flex h-4.5 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-1 focus:ring-amber-400 ${
-                isLiveSyncEnabled ? 'bg-emerald-600' : 'bg-slate-700'
+              className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-1 focus:ring-[#1D6CE0] ${
+                isLiveSyncEnabled ? 'bg-[#00B14F]' : 'bg-slate-500'
               }`}
             >
               <span
-                className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                  isLiveSyncEnabled ? 'translate-x-3.5' : 'translate-x-0'
+                className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                  isLiveSyncEnabled ? 'translate-x-3' : 'translate-x-0'
                 }`}
               />
             </button>
 
             <span
               className={`text-[10px] font-mono font-bold ${
-                isLiveSyncEnabled ? 'text-emerald-400' : 'text-amber-400'
+                isLiveSyncEnabled ? 'text-emerald-300' : 'text-amber-300'
               }`}
             >
               {isLiveSyncEnabled ? 'ON' : 'OFF'}
@@ -425,42 +390,25 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
             }}
             aria-label={`${syncDisplay.ariaLabel} (${syncDisplay.freshnessLabel} · ${syncDisplay.elapsedText})`}
             title={`Ledger Database Status: ${syncDisplay.freshnessLabel} (${syncDisplay.elapsedText} at ${syncDisplay.formattedTime}). Click to synchronize all ledger data now.`}
-            className={`flex items-center space-x-1.5 px-2.5 py-1.5 text-xs font-bold rounded border transition-all whitespace-nowrap shrink-0 cursor-pointer ${
-              syncDisplay.indicatorColor === 'rose'
-                ? 'bg-rose-950/90 hover:bg-rose-900/90 border-rose-500/70 text-rose-200 ring-1 ring-rose-500/40'
-                : syncDisplay.indicatorColor === 'amber'
-                ? 'bg-amber-950/85 hover:bg-amber-900/85 border-amber-400/70 text-amber-200 shadow-xs'
-                : syncDisplay.indicatorColor === 'sky'
-                ? 'bg-sky-950/85 hover:bg-sky-900/85 border-sky-400/60 text-sky-200'
-                : 'bg-emerald-950/85 hover:bg-emerald-900/85 border-emerald-500/50 text-emerald-300'
-            }`}
+            className="flex items-center space-x-1 px-2 py-1 text-[11px] font-bold rounded-lg border border-white/15 bg-white/10 hover:bg-white/20 text-white transition-all whitespace-nowrap shrink-0 cursor-pointer"
           >
             {syncStatus === 'saving' ? (
-              <RefreshCw className="w-3.5 h-3.5 text-amber-400 animate-spin shrink-0" />
+              <RefreshCw className="w-3 h-3 text-amber-300 animate-spin shrink-0" />
             ) : syncDisplay.indicatorColor === 'rose' ? (
-              <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+              <AlertCircle className="w-3 h-3 text-rose-300 shrink-0" />
             ) : syncStatus === 'paused' ? (
-              <Pause className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <Pause className="w-3 h-3 text-amber-300 shrink-0" />
             ) : (
               <span
                 data-testid="header-sync-status-dot"
-                className="relative flex h-2.5 w-2.5 shrink-0"
+                className="relative flex h-2 w-2 shrink-0"
               >
                 <span
-                  className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                  className={`relative inline-flex rounded-full h-2 w-2 ${
                     syncDisplay.indicatorColor === 'emerald'
-                      ? 'bg-emerald-400'
+                      ? 'bg-[#00B14F]'
                       : syncDisplay.indicatorColor === 'sky'
-                      ? 'bg-sky-400'
-                      : 'bg-amber-400'
-                  }`}
-                />
-                <span
-                  className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
-                    syncDisplay.indicatorColor === 'emerald'
-                      ? 'bg-emerald-400'
-                      : syncDisplay.indicatorColor === 'sky'
-                      ? 'bg-sky-400'
+                      ? 'bg-[#1D6CE0]'
                       : 'bg-amber-400'
                   }`}
                 />
@@ -468,16 +416,16 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
             )}
             <span data-testid="header-sync-freshness-label">
               {syncStatus === 'saving'
-                ? 'Auto-saving...'
+                ? 'Saving...'
                 : syncStatus === 'paused'
                 ? hasUnsyncedChanges
-                  ? 'Out of Sync (Unsaved)'
-                  : 'Sync Paused'
+                  ? 'Unsaved'
+                  : 'Paused'
                 : syncDisplay.freshnessLabel}
             </span>
             <span
               data-testid="header-sync-elapsed-badge"
-              className="text-[10px] font-mono font-semibold opacity-90 border-l border-current/25 pl-1.5"
+              className="text-[10px] font-mono font-semibold text-sky-200 border-l border-white/20 pl-1 hidden 2xl:inline"
             >
               {syncStatus === 'saving'
                 ? lastSyncedEntity
@@ -489,10 +437,10 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
             type="button"
             data-testid="ribbon-snapshots-btn"
             onClick={openSnapshotModal}
-            className="flex items-center space-x-1.5 px-2.5 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded shadow-sm transition whitespace-nowrap shrink-0 cursor-pointer"
+            className="flex items-center space-x-1 px-2.5 py-1 text-[11px] font-bold bg-[#1D6CE0] hover:bg-[#1558BD] text-white rounded-lg shadow-2xs transition whitespace-nowrap shrink-0 cursor-pointer"
             title="Open Database Snapshot & Local JSON Recovery Manager (Shortcut: Ctrl+Shift+S)"
           >
-            <Archive className="w-3.5 h-3.5 text-amber-300" />
+            <Archive className="w-3 h-3 text-white" />
             <span>Snapshots ({snapshots.length})</span>
           </button>
 
@@ -500,72 +448,89 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
             type="button"
             data-testid="ribbon-shortcuts-btn"
             onClick={onOpenShortcutsModal}
-            className="flex items-center space-x-1.5 px-2.5 py-1.5 text-xs font-bold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/40 rounded shadow-sm transition whitespace-nowrap shrink-0 cursor-pointer"
+            className="flex items-center space-x-1 px-2 py-1 text-[11px] font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/15 rounded-lg transition whitespace-nowrap shrink-0 cursor-pointer"
             title="Open Global Keyboard Shortcuts Reference (Shortcut: Ctrl+/ or ?)"
           >
-            <Keyboard className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            <span className="hidden md:inline">Shortcuts</span>
-            <kbd className="px-1 py-0.2 bg-slate-900 border border-slate-700 rounded text-[10px] font-mono text-amber-300">
+            <Keyboard className="w-3 h-3 text-sky-200 shrink-0" />
+            <span className="hidden 2xl:inline">Shortcuts</span>
+            <kbd className="px-1 py-0 bg-white/15 border border-white/20 rounded text-[9px] font-mono text-white">
               Ctrl+/
             </kbd>
           </button>
 
           <button
             onClick={exportDatabaseJSON}
-            className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded transition cursor-pointer"
+            className="flex items-center space-x-1 px-2 py-1 text-[11px] font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/15 rounded-lg transition cursor-pointer whitespace-nowrap shrink-0"
             title="Export full database backup as JSON"
           >
-            <Download className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">Backup DB</span>
+            <Download className="w-3 h-3 text-sky-300" />
+            <span className="hidden 2xl:inline">Backup DB</span>
           </button>
 
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded transition cursor-pointer"
+            className="flex items-center space-x-1 px-2 py-1 text-[11px] font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/15 rounded-lg transition cursor-pointer whitespace-nowrap shrink-0"
             title="Restore database from JSON"
           >
-            <Upload className="w-3.5 h-3.5 text-blue-400" />
-            <span className="hidden sm:inline">Restore</span>
+            <Upload className="w-3 h-3 text-emerald-300" />
+            <span className="hidden 2xl:inline">Restore</span>
           </button>
 
           <button
             type="button"
             data-testid="ribbon-audit-logs-btn"
             onClick={() => setActiveTab('audit_logs')}
-            className={`flex items-center space-x-1 px-2.5 py-1.5 text-xs font-semibold rounded border transition cursor-pointer whitespace-nowrap shrink-0 ${
+            className={`flex items-center space-x-1 px-2 py-1 text-[11px] font-semibold rounded-lg border transition cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === 'audit_logs'
-                ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold'
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                ? 'bg-[#EDF2F7] text-[#1F3349] border-[#EDF2F7] font-bold'
+                : 'bg-white/10 hover:bg-white/20 text-white border-white/15'
             }`}
             title="Open System Audit Logs (Entries, Edits & Deletions)"
           >
-            <ShieldCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            <span className="hidden lg:inline">Audit Logs ({auditLogs.length})</span>
+            <ShieldCheck className={`w-3 h-3 shrink-0 ${activeTab === 'audit_logs' ? 'text-[#1D6CE0]' : 'text-emerald-300'}`} />
+            <span className="hidden lg:inline">Audit ({auditLogs.length})</span>
           </button>
 
           <button
             type="button"
             data-testid="ribbon-landing-page-btn"
             onClick={logout}
-            className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/50 rounded transition cursor-pointer whitespace-nowrap shrink-0"
+            className="flex items-center space-x-1 px-2 py-1 text-[11px] font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/15 rounded-lg transition cursor-pointer whitespace-nowrap shrink-0"
             title="Return to ZSB AQUATICS Landing Page"
           >
-            <span>Landing Page</span>
+            <span>Landing</span>
           </button>
+
+          {/* Top-Right Active User Profile Lockup */}
+          {currentUser && (
+            <div className="hidden xl:flex items-center gap-2 pl-2 border-l border-white/15">
+              <div className="text-right leading-tight">
+                <div className="text-[11px] font-bold text-white">
+                  {currentUser.displayName}
+                </div>
+                <div className="text-[9px] font-mono font-bold text-sky-200 uppercase tracking-wider">
+                  {currentUser.role === 'SUPER_ADMIN' ? 'ADMIN' : currentUser.role}
+                </div>
+              </div>
+              <div className="w-7 h-7 rounded-full border border-white/25 bg-white/15 flex items-center justify-center text-white shrink-0">
+                <User className="w-3.5 h-3.5 text-white" />
+              </div>
+            </div>
+          )}
 
           <button
             type="button"
             data-testid="ribbon-logout-btn"
             onClick={logout}
-            className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-rose-950/90 text-slate-200 hover:text-rose-200 border border-slate-700 hover:border-rose-700/70 rounded transition cursor-pointer whitespace-nowrap shrink-0"
+            className="flex items-center space-x-1 px-2 py-1 text-[11px] font-semibold bg-white/10 hover:bg-rose-500/80 text-white border border-white/15 hover:border-rose-400 rounded-lg transition cursor-pointer whitespace-nowrap shrink-0"
             title={
               currentUser
                 ? `Signed in as ${currentUser.displayName} (${currentUser.role}). Click to lock & sign out.`
                 : 'Sign out to login screen'
             }
           >
-            <LogOut className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+            <LogOut className="w-3 h-3 text-rose-300 shrink-0" />
             <span className="hidden sm:inline">Sign Out</span>
           </button>
 
@@ -580,47 +545,26 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
       </div>
       )}
 
-      {/* Excel Formula Bar + Smart Display, Zoom In/Out, Desktop View & Full Screen Controls */}
-      <div className="bg-slate-800 px-2.5 sm:px-4 py-1.5 border-b border-slate-700 flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-slate-300">
-        <div className="flex items-center space-x-2 min-w-0 flex-1">
+      {/* Clean Compact Navy Formula Bar + Display & Zoom Toolbar */}
+      <div className="bg-[#1F3349] px-2.5 sm:px-5 py-1.5 border-t border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-slate-200">
+        <div className={`${isFullScreen ? 'flex' : 'hidden xl:flex'} flex-wrap items-center gap-2 min-w-0 flex-1 basis-auto`}>
           {isFullScreen && (
             <button
               type="button"
               onClick={() => setActiveTab('dashboard')}
-              className="zsb-3d-text text-xs font-black tracking-wider shrink-0 mr-1 cursor-pointer"
+              className="text-xs font-black tracking-tight text-amber-400 zsb-golden-brand shrink-0 mr-1 cursor-pointer"
               title="ZSB AQUATICS — Return to Dashboard"
             >
               {companyProfile.companyName}
             </button>
           )}
 
-          {/* Direct Sheet Dropdown Jumper */}
-          <div className="flex items-center space-x-1.5 shrink-0">
-            <label htmlFor="global-sheet-select" className="text-[10px] uppercase tracking-wider text-amber-400 font-bold hidden sm:inline">
-              Sheet:
-            </label>
-            <select
-              id="global-sheet-select"
-              data-testid="ribbon-sheet-select"
-              aria-label="Jump to Workbook Sheet"
-              value={activeTab}
-              onChange={(e) => setActiveTab(e.target.value as ActiveTab)}
-              className="bg-slate-950 text-amber-300 border border-amber-500/50 rounded px-2 py-0.5 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-amber-400 cursor-pointer max-w-[190px] sm:max-w-none"
-            >
-              {workbookSheets.map((s) => (
-                <option key={s.id} value={s.id} className="bg-slate-900 text-white">
-                  [{s.num}] {s.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="text-slate-400 font-bold select-none text-emerald-400 italic hidden xl:inline">
+          <div className="font-bold select-none text-sky-300 italic hidden xl:inline">
             fx
           </div>
-          <div className="h-4 w-px bg-slate-700 hidden xl:block" />
+          <div className="h-4 w-px bg-white/15 hidden xl:block" />
           <div className="flex-1 overflow-x-auto whitespace-nowrap text-slate-200 hidden xl:block">
-            <span className="text-amber-300/90 font-medium">{getFormulaForTab()}</span>
+            <span className="text-slate-200 font-medium">{getFormulaForTab()}</span>
           </div>
         </div>
 
@@ -633,7 +577,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
           <div
             role="group"
             aria-label="Display Viewport Mode"
-            className="inline-flex items-center rounded border border-slate-600 bg-slate-950/90 p-0.5"
+            className="inline-flex items-center rounded-md border border-white/15 bg-[#273E56] p-0.5"
           >
             <button
               type="button"
@@ -643,8 +587,8 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
               title="Smart Mobile Display Adjust: Automatically optimizes layout, table scrolling, and responsive touch controls for mobile & tablet screens"
               className={`flex items-center space-x-1 px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold transition cursor-pointer ${
                 displayMode === 'smart_mobile'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                  ? 'bg-white text-[#1F3349] shadow-2xs'
+                  : 'text-slate-200 hover:text-white hover:bg-white/10'
               }`}
             >
               <Smartphone className="w-3 h-3 shrink-0" />
@@ -659,8 +603,8 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
               title="Show Desktop View (1440px Full Workbook Sheet): Renders the complete desktop spreadsheet layout scaled to fit any screen"
               className={`flex items-center space-x-1 px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold transition cursor-pointer ${
                 displayMode === 'desktop_full'
-                  ? 'bg-amber-500 text-slate-950 shadow-xs font-black'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                  ? 'bg-white text-[#1F3349] shadow-2xs'
+                  : 'text-slate-200 hover:text-white hover:bg-white/10'
               }`}
             >
               <Monitor className="w-3 h-3 shrink-0" />
@@ -672,7 +616,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
           <div
             role="group"
             aria-label="Zoom Controls"
-            className="inline-flex items-center rounded border border-slate-600 bg-slate-950/90 p-0.5 space-x-0.5"
+            className="inline-flex items-center rounded-md border border-white/15 bg-[#273E56] p-0.5 space-x-0.5"
           >
             <button
               type="button"
@@ -681,7 +625,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
               disabled={zoomPercent <= 40}
               aria-label="Zoom Out"
               title="Zoom Out (-10%)"
-              className="flex items-center justify-center w-5 sm:w-6 h-5 rounded text-slate-200 hover:bg-slate-800 hover:text-amber-300 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+              className="flex items-center justify-center w-5 sm:w-6 h-5 rounded text-slate-200 hover:bg-white/10 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
             >
               <ZoomOut className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
             </button>
@@ -692,13 +636,13 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
               value={zoomPercent}
               onChange={(e) => onSelectZoomPreset?.(Number(e.target.value))}
               title={`Current Display Scale: ${effectivePercentLabel}. Select a preset zoom level (50% - 200%).`}
-              className="bg-slate-900 text-amber-300 border border-slate-700 rounded px-1 sm:px-1.5 py-0.5 text-[10px] sm:text-[11px] font-mono font-bold focus:outline-none focus:ring-1 focus:ring-amber-400 cursor-pointer"
+              className="bg-white text-[#1F3349] border border-[#CBD8E6] rounded px-1 sm:px-1.5 py-0.5 text-[10px] sm:text-[11px] font-mono font-bold focus:outline-none focus:border-[#1D6CE0] cursor-pointer"
             >
               {!ZOOM_PRESETS.includes(zoomPercent) && (
                 <option value={zoomPercent}>{effectivePercentLabel}</option>
               )}
               {ZOOM_PRESETS.map((preset) => (
-                <option key={preset} value={preset} className="bg-slate-900 text-white">
+                <option key={preset} value={preset}>
                   {preset === 100 && effectivePercentLabel.startsWith('Fit')
                     ? effectivePercentLabel
                     : `${preset}%`}
@@ -713,7 +657,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
               disabled={zoomPercent >= 200}
               aria-label="Zoom In"
               title="Zoom In (+10%)"
-              className="flex items-center justify-center w-5 sm:w-6 h-5 rounded text-slate-200 hover:bg-slate-800 hover:text-amber-300 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+              className="flex items-center justify-center w-5 sm:w-6 h-5 rounded text-slate-200 hover:bg-white/10 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
             >
               <ZoomIn className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
             </button>
@@ -725,7 +669,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
                 onClick={onZoomReset}
                 aria-label="Reset Zoom to 100%"
                 title="Reset Zoom to 100%"
-                className="flex items-center justify-center px-1 sm:px-1.5 h-5 rounded bg-slate-800 hover:bg-slate-700 text-amber-300 text-[10px] font-bold transition cursor-pointer"
+                className="flex items-center justify-center px-1 sm:px-1.5 h-5 rounded bg-white/15 hover:bg-white/25 text-white text-[10px] font-bold transition cursor-pointer"
               >
                 <RotateCcw className="w-2.5 h-2.5 mr-0.5" />
                 <span>100%</span>
@@ -744,10 +688,10 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
                 ? 'Exit Full Screen Workspace (Esc)'
                 : 'Show Full Screen Workspace (Maximizes active sheet & hides top banner)'
             }
-            className={`flex items-center space-x-1 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded border text-[10px] sm:text-[11px] font-bold transition cursor-pointer ${
+            className={`flex items-center space-x-1 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md border text-[10px] sm:text-[11px] font-bold transition cursor-pointer ${
               isFullScreen
-                ? 'bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-400 shadow-xs'
-                : 'bg-slate-900 hover:bg-slate-700 text-amber-300 border-amber-500/40'
+                ? 'bg-white text-[#1F3349] border-white'
+                : 'bg-white/10 hover:bg-white/20 text-white border-white/15'
             }`}
           >
             {isFullScreen ? (
@@ -767,17 +711,17 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
         <div
           role="status"
           aria-live="polite"
-          className="text-[11px] font-mono text-slate-400 hidden 2xl:flex items-center space-x-2.5 shrink-0"
+          className="text-[11px] font-mono text-slate-200 hidden 2xl:flex items-center space-x-2.5 shrink-0"
         >
           <span
             className={`flex items-center space-x-1 ${
               syncStatus === 'saving'
                 ? 'text-amber-300 font-semibold'
                 : syncStatus === 'error'
-                ? 'text-rose-400 font-semibold'
+                ? 'text-rose-300 font-semibold'
                 : syncStatus === 'paused'
-                ? 'text-amber-400 font-semibold'
-                : 'text-emerald-400/90'
+                ? 'text-amber-300 font-semibold'
+                : 'text-emerald-300 font-semibold'
             }`}
           >
             <Database className="w-3 h-3 shrink-0" />
@@ -793,65 +737,10 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
                 : `Synced (${totalRecordsCount} records)`}
             </span>
           </span>
-          <span className="text-slate-600">|</span>
-          <span>1 RMB = {companyProfile.rmbExchangeRate} TK</span>
+          <span className="text-white/25">|</span>
+          <span className="text-sky-200">1 RMB = {companyProfile.rmbExchangeRate} TK</span>
         </div>
       </div>
-
-      {/* Horizontal Workbook Sheet Tab Strip (All Sheets Displayed in a Dedicated Row) */}
-      <nav
-        aria-label="Workbook Sheet Tabs"
-        data-testid="enterprise-sheet-tab-bar"
-        className="bg-[#0b1322] px-3 py-1 border-t border-slate-800 flex items-center space-x-1 overflow-x-auto scrollbar-thin select-none"
-      >
-        <div className="flex items-center space-x-1.5 pr-2 mr-1 border-r border-slate-800 shrink-0 text-amber-400 font-mono text-[11px] font-bold uppercase tracking-wider">
-          <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" />
-          <span className="hidden sm:inline">Sheets ({workbookSheets.length}):</span>
-        </div>
-
-        {workbookSheets.map((s, idx) => {
-          const isActive = activeTab === s.id;
-          const serialStr = String(idx + 1).padStart(2, '0');
-          return (
-            <button
-              key={s.id}
-              type="button"
-              data-testid={`sheet-tab-${s.id}`}
-              data-serial-number={serialStr}
-              onClick={() => setActiveTab(s.id)}
-              className={`flex items-center space-x-1.5 px-2.5 py-1.5 text-xs font-bold rounded-t-lg transition-all shrink-0 cursor-pointer ${
-                isActive
-                  ? 'bg-[#1e293b] text-amber-300 border-t-2 border-t-amber-400 border-x border-slate-700/80 shadow-md font-black'
-                  : 'bg-slate-900/90 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-800/80 font-semibold'
-              }`}
-              title={`Switch to Sheet #${serialStr} · ${s.label}`}
-            >
-              <span
-                data-testid={`sheet-tab-serial-${s.id}`}
-                className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-mono font-black tracking-tight shadow-2xs ${
-                  isActive
-                    ? 'bg-gradient-to-b from-amber-300 to-amber-500 text-slate-950 border border-amber-200 ring-1 ring-amber-400/50'
-                    : 'bg-gradient-to-b from-slate-800 to-slate-950 text-amber-300 border border-amber-500/40'
-                }`}
-              >
-                #{serialStr}
-              </span>
-              <span className="whitespace-nowrap">{s.shortLabel || s.label}</span>
-              {s.badge !== undefined && (
-                <span
-                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black ${
-                    isActive
-                      ? 'bg-amber-400 text-slate-950'
-                      : 'bg-slate-800 text-amber-300 border border-amber-500/30'
-                  }`}
-                >
-                  {s.badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
     </header>
   );
 };

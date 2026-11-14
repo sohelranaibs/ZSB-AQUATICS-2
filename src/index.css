@@ -1,51 +1,216 @@
 @import "tailwindcss";
 
+:root {
+  --zsb-canvas: #edf2f7;
+  --zsb-surface: #ffffff;
+  --zsb-subsurface: #f8fafc;
+  --zsb-gold-border: #cbd8e6;
+  --zsb-border: #cbd8e6;
+  --zsb-sidebar-bg: #273e56;
+  --zsb-sidebar-border: #1e3247;
+  --zsb-btn-bg: #273e56;
+  --zsb-btn-hover: #1e3247;
+  --zsb-teal: #273e56;
+  --zsb-teal-hover: #1e3247;
+  --zsb-emerald: #00b14f;
+  --zsb-navy-ink: #0f172a;
+  --zsb-slate-muted: #64748b;
+  --zsb-chart-midnight: #1e3247;
+  --zsb-chart-royal: #1d6ce0;
+  --zsb-chart-cyan: #089bc4;
+  --zsb-chart-steel: #5685bd;
+}
+
 @layer base {
+  html,
   body {
-    @apply bg-slate-100 text-slate-900 antialiased font-sans selection:bg-amber-400 selection:text-slate-950;
+    background-color: var(--zsb-sidebar-bg);
+    color: var(--zsb-navy-ink);
+    color-scheme: light;
+    min-height: 100%;
   }
 
-  th, td {
+  body {
+    @apply antialiased font-sans selection:bg-blue-100 selection:text-slate-950;
+  }
+
+  button {
+    background-color: #273e56;
+    color: #ffffff;
+    padding: 0.25rem 0.625rem;
+    border-radius: 0.375rem;
+  }
+
+  th,
+  td {
     vertical-align: middle !important;
   }
 }
 
-/* 3D Sculpted Gold Font for "ZSB AQUATICS" across all sheets & headers */
+/* Signature Cool Ice Slate Application Canvas */
+.zsb-theme-bg {
+  background-color: var(--zsb-sidebar-bg);
+  color: var(--zsb-navy-ink);
+}
+
+/* Clean Elevated White Cards (Matching Reference Single-Elevation Cards) */
+.zsb-surface-card {
+  background-color: var(--zsb-surface);
+  border: 1px solid var(--zsb-border);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
+}
+
+.zsb-surface-subcard {
+  background-color: var(--zsb-subsurface);
+  border: 1px solid var(--zsb-border);
+}
+
+/* Unified #273E56 Corporate Button Styling Across All Buttons */
+.zsb-teal-cta,
+.zsb-aqua-cta {
+  background-color: #273e56 !important;
+  color: #ffffff !important;
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.zsb-teal-cta:hover,
+.zsb-aqua-cta:hover {
+  background-color: #273e56 !important;
+  filter: brightness(1.08);
+}
+
+button:not([data-testid^="db-cell-trigger-"]):not(.packing-ledger-plain-table *):not([data-zsb-clicked="true"]),
+[type="button"]:not([data-testid^="db-cell-trigger-"]):not(.packing-ledger-plain-table *):not([data-zsb-clicked="true"]),
+[type="submit"]:not(.packing-ledger-plain-table *):not([data-zsb-clicked="true"]),
+[type="reset"]:not(.packing-ledger-plain-table *):not([data-zsb-clicked="true"]) {
+  background-color: #273e56 !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.24) !important;
+}
+
+button:not([data-testid^="db-cell-trigger-"]):not(.packing-ledger-plain-table *):not([data-zsb-clicked="true"]):hover:not(:disabled),
+[type="button"]:not([data-testid^="db-cell-trigger-"]):not(.packing-ledger-plain-table *):not([data-zsb-clicked="true"]):hover:not(:disabled),
+[type="submit"]:not(.packing-ledger-plain-table *):not([data-zsb-clicked="true"]):hover:not(:disabled),
+[type="reset"]:not(.packing-ledger-plain-table *):not([data-zsb-clicked="true"]):hover:not(:disabled) {
+  background-color: #273e56 !important;
+  border-color: rgba(251, 191, 36, 0.65) !important;
+  color: #ffffff !important;
+  filter: brightness(1.08);
+}
+
+button[aria-pressed="true"]:not(.packing-ledger-plain-table *):not([data-zsb-clicked="true"]) {
+  border-color: #fbbf24 !important;
+  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.55) !important;
+}
+
+button:not([data-testid^="db-cell-trigger-"]):not(.packing-ledger-plain-table *):not([data-zsb-clicked="true"]) *:not(.zsb-golden-brand):not(.zsb-golden-brand-light) {
+  color: #ffffff !important;
+}
+
+button:not([data-testid^="db-cell-trigger-"]):not(.packing-ledger-plain-table *) :is(span, kbd, div):not(:has(img)):not([data-testid="header-sync-status-dot"]):not([data-testid="header-sync-status-dot"] *):not([role="switch"] *) {
+  background-color: transparent !important;
+}
+
+/* Inline database cell trigger reset */
+button[data-testid^="db-cell-trigger-"] {
+  background-color: transparent !important;
+  border: none !important;
+  color: inherit !important;
+  padding: 0.125rem !important;
+}
+
+/* Packing List Ledger — Live BDT Conversion: Remove all cell color and make all text Black */
+.packing-ledger-plain-table,
+.packing-ledger-plain-table thead,
+.packing-ledger-plain-table tbody,
+.packing-ledger-plain-table tfoot,
+.packing-ledger-plain-table tr,
+.packing-ledger-plain-table th,
+.packing-ledger-plain-table td {
+  background-color: #ffffff !important;
+  background-image: none !important;
+  color: #000000 !important;
+}
+
+.packing-ledger-plain-table *:not(svg):not(path):not(button[data-zsb-clicked="true"]):not(button:active) {
+  background-color: transparent !important;
+  background-image: none !important;
+  color: #000000 !important;
+}
+
+.packing-ledger-plain-table svg {
+  color: #000000 !important;
+}
+
+.packing-ledger-plain-table input[type="text"],
+.packing-ledger-plain-table button:not([data-testid^="db-cell-trigger-"]):not([data-zsb-clicked="true"]) {
+  border: 1px solid #cbd5e1 !important;
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+/* Clicked / Active State for ALL Buttons -> Golden Color (#fbbf24) */
+button:not([data-testid^="db-cell-trigger-"])[data-zsb-clicked="true"]:not(:disabled),
+button:not([data-testid^="db-cell-trigger-"]):active:not(:disabled),
+[type="button"]:not([data-testid^="db-cell-trigger-"])[data-zsb-clicked="true"]:not(:disabled),
+[type="button"]:not([data-testid^="db-cell-trigger-"]):active:not(:disabled),
+[type="submit"][data-zsb-clicked="true"]:not(:disabled),
+[type="submit"]:active:not(:disabled),
+[type="reset"][data-zsb-clicked="true"]:not(:disabled),
+[type="reset"]:active:not(:disabled),
+.packing-ledger-plain-table button:not([data-testid^="db-cell-trigger-"])[data-zsb-clicked="true"]:not(:disabled),
+.packing-ledger-plain-table button:not([data-testid^="db-cell-trigger-"]):active:not(:disabled) {
+  background-color: #fbbf24 !important;
+  background-image: none !important;
+  color: #000000 !important;
+  border: 1px solid #d97706 !important;
+  filter: none !important;
+}
+
+button:not([data-testid^="db-cell-trigger-"])[data-zsb-clicked="true"]:not(:disabled) *,
+button:not([data-testid^="db-cell-trigger-"]):active:not(:disabled) *,
+[type="button"]:not([data-testid^="db-cell-trigger-"])[data-zsb-clicked="true"]:not(:disabled) *,
+[type="button"]:not([data-testid^="db-cell-trigger-"]):active:not(:disabled) *,
+[type="submit"][data-zsb-clicked="true"]:not(:disabled) *,
+[type="submit"]:active:not(:disabled) *,
+[type="reset"][data-zsb-clicked="true"]:not(:disabled) *,
+[type="reset"]:active:not(:disabled) * {
+  color: #000000 !important;
+}
+
+/* Crisp Editorial Brand Wordmark for Screen Headers — Golden & Bold */
 .zsb-3d-text {
-  font-family: 'Cinzel', Georgia, Cambria, "Times New Roman", Times, serif;
-  font-weight: 900;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 800;
+  color: #fbbf24;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #ffe066;
-  text-shadow:
-    0px 1px 0px #d97706,
-    1px 2px 0px #b45309,
-    2px 3px 0px #92400e,
-    3px 4px 0px #78350f,
-    4px 5px 0px #451a03,
-    5px 6px 8px rgba(0, 0, 0, 0.72),
-    0px 0px 14px rgba(251, 191, 36, 0.25);
+  letter-spacing: 0.03em;
   display: inline-block;
 }
 
 .zsb-3d-text-lg {
-  font-family: 'Cinzel', Georgia, Cambria, "Times New Roman", Times, serif;
-  font-weight: 900;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 800;
+  color: #fbbf24;
   text-transform: uppercase;
-  letter-spacing: 0.09em;
-  color: #ffe57f;
-  text-shadow:
-    0px 1px 0px #f59e0b,
-    1px 2px 0px #d97706,
-    2px 3px 0px #b45309,
-    3px 4px 0px #92400e,
-    4px 5px 0px #78350f,
-    5px 6px 0px #451a03,
-    6px 8px 10px rgba(0, 0, 0, 0.75),
-    0px 0px 18px rgba(251, 191, 36, 0.3);
+  letter-spacing: 0.02em;
   display: inline-block;
 }
 
+/* Signature Golden & Bold Brand Styling for ZSB AQUATICS Everywhere */
+.zsb-golden-brand {
+  color: #fbbf24 !important;
+  font-weight: 800 !important;
+}
+
+.zsb-golden-brand-light {
+  color: #d97706 !important;
+  font-weight: 800 !important;
+}
+
+/* Preserved 3D Sculpted Gold Seal Typography Strictly for Official Printed & Exported A4 Vouchers */
 .zsb-3d-text-print {
   font-family: 'Cinzel', Georgia, Cambria, "Times New Roman", Times, serif;
   font-weight: 900;
@@ -59,6 +224,49 @@
     4px 4px 0px #451a03,
     5px 5px 7px rgba(15, 23, 42, 0.35);
   display: inline-block;
+}
+
+/* ============================================================================
+   LIGHT CORPORATE THEME WORKSPACE HELPERS (All 15 Workbook Sheets)
+   Clean slim scrollbars & focus states without brittle CSS !important overrides.
+   ============================================================================ */
+@media screen {
+  .zsb-light-workspace {
+    color-scheme: light;
+  }
+
+  .zsb-light-workspace ::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+  }
+  .zsb-light-workspace ::-webkit-scrollbar-track {
+    background: #e2e8f0;
+  }
+  .zsb-light-workspace ::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+    border-radius: 9999px;
+    border: 1px solid #cbd8e6;
+  }
+  .zsb-light-workspace ::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+  }
+
+  .zsb-light-workspace :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), select, textarea):not(.zsb-print-paper):not(.zsb-print-paper *):focus {
+    border-color: #1d6ce0;
+    box-shadow: 0 0 0 2px rgba(29, 108, 224, 0.22);
+    outline: none;
+  }
+
+  /* Explicit Protection for Crisp Printable / Export Papers */
+  .zsb-print-paper {
+    color-scheme: light;
+    color: #0f172a;
+  }
+  .zsb-print-paper input,
+  .zsb-print-paper select,
+  .zsb-print-paper textarea {
+    color-scheme: light;
+  }
 }
 
 @media print {
@@ -98,7 +306,9 @@
     display: inline !important;
   }
 
-  html, body {
+  html,
+  body {
+    background: #ffffff !important;
     background-color: #ffffff !important;
     color: #000000 !important;
     margin: 0 !important;
@@ -160,7 +370,8 @@
     page-break-after: auto;
   }
 
-  th, td {
+  th,
+  td {
     vertical-align: middle !important;
   }
 }
@@ -209,10 +420,24 @@
 .workspace-fullscreen-active {
   min-height: 100dvh;
   width: 100%;
-  background-color: #f1f5f9;
+  background-color: var(--zsb-canvas);
 }
 
 /* Desktop View (1440px) Mode on Mobile/Tablet: enforce desktop multi-column grid layout */
+.desktop-view-active .sm\:grid-cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+.desktop-view-active .md\:grid-cols-3,
+.desktop-view-active .sm\:grid-cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+.desktop-view-active .lg\:grid-cols-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+.desktop-view-active .lg\:grid-cols-5,
+.desktop-view-active .grid-cols-5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+}
 .desktop-view-active .lg\:grid-cols-12 {
   grid-template-columns: repeat(12, minmax(0, 1fr)) !important;
 }
@@ -222,14 +447,8 @@
 .desktop-view-active .lg\:col-span-4 {
   grid-column: span 4 / span 4 !important;
 }
-.desktop-view-active .md\:grid-cols-3 {
-  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-}
-.desktop-view-active .sm\:grid-cols-2 {
-  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-}
 
-/* Enterprise Trade Ledger — Decorated Serial Number Badge for All Sheet Rows */
+/* Enterprise Trade Ledger — Clean Serial Number Badge for All Sheet Rows */
 .zsb-sl-badge {
   display: inline-flex;
   align-items: center;
@@ -240,13 +459,9 @@
   border-radius: 0.375rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: #1e293b;
-  background: linear-gradient(180deg, #fef3c7 0%, #fde68a 100%);
-  border: 1px solid #f59e0b;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  color: #1f3349;
+  background-color: #edf2f7;
+  border: 1px solid #cbd8e6;
 }
-
-
-

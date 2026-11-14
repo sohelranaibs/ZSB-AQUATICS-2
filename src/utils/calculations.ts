@@ -517,13 +517,27 @@ export interface SupplierLedgerStats {
  */
 export function getSupplierLedgerStats(
   purchases: PurchaseRecord[],
-  supplierName: string
+  supplierName: string,
+  excludePurchaseId?: string
 ): SupplierLedgerStats {
   const normalizedTarget = (supplierName || '').trim().toLowerCase();
-  const matched = purchases
-    .filter((p) => (p.description || '').trim().toLowerCase() === normalizedTarget)
-    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const matchedWithIndex = purchases
+    .map((p, idx) => ({ p, idx }))
+    .filter(
+      ({ p }) =>
+        normalizedTarget !== '' &&
+        (p.description || '').trim().toLowerCase() === normalizedTarget &&
+        (!excludePurchaseId || p.id !== excludePurchaseId)
+    )
+    .sort((a, b) => {
+      const dateDiff = (b.p.date || '').localeCompare(a.p.date || '');
+      if (dateDiff !== 0) return dateDiff;
+      const createdDiff = (b.p.createdAt || '').localeCompare(a.p.createdAt || '');
+      if (createdDiff !== 0) return createdDiff;
+      return b.idx - a.idx;
+    });
 
+  const matched = matchedWithIndex.map((entry) => entry.p);
   const totalPurchasedQty = matched.reduce((acc, p) => acc + (Number(p.totalQty) || 0), 0);
   const totalPurchasedValue = matched.reduce((acc, p) => acc + (Number(p.totalAmount) || 0), 0);
   const totalPaidAmount = matched.reduce((acc, p) => acc + (Number(p.paidAmount) || 0), 0);
@@ -866,12 +880,32 @@ export function buildExporterPaymentSlipRows(
     return true;
   });
 
+  const matchedPackingInvoices = new Set<string>();
+  const matchedPaymentIds = new Set<string>();
+
   const rows: ExporterPaymentSlipRow[] = matchedPackings.map((pkg) => {
+    if (pkg.invoiceNumber) {
+      matchedPackingInvoices.add(pkg.invoiceNumber.trim().toLowerCase());
+    }
+
     const linkedPayment = payments.find(
       (pm) =>
-        (pm.exportGoodsRef && pm.exportGoodsRef.trim().toLowerCase() === pkg.invoiceNumber.trim().toLowerCase()) ||
-        (pm.description && pm.description.trim().toLowerCase() === pkg.shippingMark.trim().toLowerCase())
+        pm.paymentCategory !== 'supplier' &&
+        ((pm.exportGoodsRef &&
+          pkg.invoiceNumber &&
+          pm.exportGoodsRef.trim().toLowerCase() === pkg.invoiceNumber.trim().toLowerCase()) ||
+          (pm.shippingMark &&
+            pkg.shippingMark &&
+            pm.shippingMark.trim().toLowerCase() === pkg.shippingMark.trim().toLowerCase() &&
+            (!pm.date || !pkg.packingDate || pm.date === pkg.packingDate)) ||
+          (pm.description &&
+            pkg.shippingMark &&
+            pm.description.trim().toLowerCase() === pkg.shippingMark.trim().toLowerCase() &&
+            (!pm.date || !pkg.packingDate || pm.date === pkg.packingDate)))
     );
+    if (linkedPayment) {
+      matchedPaymentIds.add(linkedPayment.id);
+    }
 
     const itemTotals =
       Array.isArray(pkg.items) && pkg.items.length > 0
@@ -885,6 +919,7 @@ export function buildExporterPaymentSlipRows(
 
     const computedStatus =
       pkg.exporterStatus || pkg.paymentStatus || linkedPayment?.status || 'REPORT';
+    const normalizedStatus = (computedStatus || '').trim().toUpperCase();
 
     let computedRmb = 0;
     if (pkg.rmbAmount !== undefined && Number(pkg.rmbAmount) > 0) {
@@ -912,20 +947,52 @@ export function buildExporterPaymentSlipRows(
     const weightXRate = calculateExporterSlipRowAmount(weightKg, rmb);
     const settled = Number(pkg.settledAmount) || Number(pkg.debitAmount) || 0;
     const hasExplicitRmbRate = pkg.rmbAmount !== undefined && Number(pkg.rmbAmount) > 0;
-    const computedAmount =
-      settled > 0 && !hasExplicitRmbRate
-        ? Math.round(settled * 100) / 100
-        : weightKg > 0 && rmb > 0
-        ? weightXRate
-        : settled > 0
-        ? Math.round(settled * 100) / 100
-        : rawTotalAmount > 0 && !hasExplicitRmbRate
-        ? Math.round(rawTotalAmount * 100) / 100
+
+    const linkedVoucherReportSum =
+      linkedPayment && Array.isArray(linkedPayment.items)
+        ? linkedPayment.items.reduce(
+            (acc, it) => acc + (it.reportAmount !== undefined ? Number(it.reportAmount) || 0 : 0),
+            0
+          )
         : 0;
+    const hasLinkedVoucherItemReport = Boolean(
+      linkedPayment &&
+        Array.isArray(linkedPayment.items) &&
+        linkedPayment.items.some((it) => it.reportAmount !== undefined)
+    );
+
+    let computedAmount = 0;
+    if (pkg.reportAmount !== undefined && !Number.isNaN(Number(pkg.reportAmount))) {
+      // Authoritative REPORT (RMB) saved from Exporter Payment onto PackingRecord
+      computedAmount = Math.round(Number(pkg.reportAmount) * 100) / 100;
+    } else if (
+      linkedPayment &&
+      linkedPayment.reportAmount !== undefined &&
+      !Number.isNaN(Number(linkedPayment.reportAmount))
+    ) {
+      // Authoritative REPORT (RMB) collected from linked Exporter Payment voucher
+      computedAmount = Math.round(Number(linkedPayment.reportAmount) * 100) / 100;
+    } else if (hasLinkedVoucherItemReport) {
+      computedAmount = Math.round(linkedVoucherReportSum * 100) / 100;
+    } else if (normalizedStatus === 'NO REPORT') {
+      computedAmount = 0;
+    } else {
+      computedAmount =
+        settled > 0 && !hasExplicitRmbRate
+          ? Math.round(settled * 100) / 100
+          : weightKg > 0 && rmb > 0
+          ? weightXRate
+          : settled > 0
+          ? Math.round(settled * 100) / 100
+          : rawTotalAmount > 0 && !hasExplicitRmbRate
+          ? Math.round(rawTotalAmount * 100) / 100
+          : 0;
+    }
 
     return {
       id: pkg.id,
       packingId: pkg.id,
+      paymentId: linkedPayment?.id,
       invoiceNumber: pkg.invoiceNumber,
       date: pkg.packingDate,
       flight: pkg.flight,
@@ -934,6 +1001,7 @@ export function buildExporterPaymentSlipRows(
       weightKg,
       rmb,
       amount: computedAmount,
+      reportAmount: computedAmount,
       status: computedStatus,
       destination: pkg.destination,
       shipper: pkg.shipper,
@@ -941,8 +1009,82 @@ export function buildExporterPaymentSlipRows(
     };
   });
 
+  // Also collect unmatched standalone Exporter Payment vouchers (REPORT (RMB) from Exporter Payment)
+  const standaloneVoucherRows: ExporterPaymentSlipRow[] = [];
+  for (const pm of payments) {
+    if (classifyPaymentCategory(pm) !== 'exporter') continue;
+    if (matchedPaymentIds.has(pm.id)) continue;
+    const refInv = (pm.exportGoodsRef || '').trim().toLowerCase();
+    if (refInv && matchedPackingInvoices.has(refInv)) continue;
+
+    const pmMark = (pm.shippingMark || pm.description || 'EXPORTER').trim();
+    if (
+      markTarget !== 'all' &&
+      markTarget !== '' &&
+      pmMark.toLowerCase() !== markTarget &&
+      !(pm.description || '').toLowerCase().includes(markTarget)
+    ) {
+      continue;
+    }
+
+    const pmDate = (pm.date || '').trim();
+    if (hasDateRange) {
+      if (cleanFrom && cleanTo) {
+        if (pmDate < cleanFrom || pmDate > cleanTo) continue;
+      } else if (cleanFrom) {
+        if (pmDate < cleanFrom) continue;
+      } else if (cleanTo) {
+        if (pmDate > cleanTo) continue;
+      }
+    } else if (dateTarget !== 'ALL' && dateTarget !== 'all' && dateTarget !== '' && pmDate !== dateTarget) {
+      continue;
+    }
+
+    if (flightTarget !== 'all' && flightTarget !== '') {
+      continue;
+    }
+
+    const pmStatus = pm.status || 'REPORT';
+    const normalizedPmStatus = pmStatus.trim().toUpperCase();
+    const itemDebitSum = Array.isArray(pm.items)
+      ? pm.items.reduce((acc, it) => acc + (Number(it.debitAmount) || 0), 0)
+      : 0;
+    const itemReportSum = Array.isArray(pm.items)
+      ? pm.items.reduce((acc, it) => acc + (Number(it.reportAmount) || 0), 0)
+      : 0;
+    const hasItemReport = Array.isArray(pm.items) && pm.items.some((it) => it.reportAmount !== undefined);
+    const fallbackDebit =
+      Math.round((itemDebitSum > 0 ? itemDebitSum : Number(pm.totalAmount) || Number(pm.returnRMB) || 0) * 100) / 100;
+    const reportVal =
+      pm.reportAmount !== undefined && !Number.isNaN(Number(pm.reportAmount))
+        ? Math.round(Number(pm.reportAmount) * 100) / 100
+        : hasItemReport
+        ? Math.round(itemReportSum * 100) / 100
+        : normalizedPmStatus === 'NO REPORT'
+        ? 0
+        : fallbackDebit;
+
+    standaloneVoucherRows.push({
+      id: `slip-pay-${pm.id}`,
+      paymentId: pm.id,
+      invoiceNumber: pm.invoiceNumber,
+      date: pmDate,
+      flight: '',
+      mark: pmMark,
+      box: 0,
+      weightKg: 0,
+      rmb: reportVal,
+      amount: reportVal,
+      reportAmount: reportVal,
+      status: pmStatus,
+      isDraft: false,
+    });
+  }
+
+  const combinedRows = [...rows, ...standaloneVoucherRows];
+
   if (statusTarget !== 'all' && statusTarget !== '') {
-    return rows.filter((r) => {
+    return combinedRows.filter((r) => {
       const normalizedStatus = (r.status || '').trim().toLowerCase();
       if (statusTarget === 'unpaid') {
         return normalizedStatus !== 'paid';
@@ -951,24 +1093,34 @@ export function buildExporterPaymentSlipRows(
     });
   }
 
-  return rows;
+  return combinedRows;
 }
 
 /**
  * Calculates Grand Totals for the Exporter Payment Slip (BOX, WEIGHT/KG, RMB, AMOUNT)
  */
 export function calculateExporterSlipTotals(
-  rows: Array<{ box?: number; weightKg?: number; rmb?: number; amount?: number }>
+  rows: Array<{
+    packingId?: string;
+    paymentId?: string;
+    box?: number;
+    weightKg?: number;
+    rmb?: number;
+    amount?: number;
+  }>
 ) {
   const totalBox = rows.reduce((acc, r) => acc + (Number(r.box) || 0), 0);
   const totalWeightKg = rows.reduce((acc, r) => acc + (Number(r.weightKg) || 0), 0);
   const totalRmb = rows.reduce((acc, r) => acc + (Number(r.rmb) || 0), 0);
   const totalAmount = rows.reduce((acc, r) => {
+    const isLinkedExporterRow = Boolean(r.packingId || r.paymentId);
     const explicitAmount = Number(r.amount) || 0;
     const rowWeight = Number(r.weightKg) || 0;
     const rowRmb = Number(r.rmb) || 0;
     const computed =
-      explicitAmount > 0
+      isLinkedExporterRow && r.amount !== undefined
+        ? explicitAmount
+        : explicitAmount > 0
         ? explicitAmount
         : rowWeight > 0 && rowRmb > 0
         ? calculateExporterSlipRowAmount(rowWeight, rowRmb)
@@ -1205,15 +1357,17 @@ export function mergeExporterPaymentSlipRows(
   const normalizedDbRows = dbRows.map((row) => {
     const weightKg = Number(row.weightKg) || 0;
     const rmb = Number(row.rmb) || 0;
+    const hasCollectedReport = Boolean(row.packingId || row.paymentId) && row.amount !== undefined;
     const explicitAmount = Number(row.amount) || 0;
     return {
       ...row,
-      amount:
-        explicitAmount > 0
-          ? explicitAmount
-          : weightKg > 0 && rmb > 0
-          ? calculateExporterSlipRowAmount(weightKg, rmb)
-          : 0,
+      amount: hasCollectedReport
+        ? Math.round(explicitAmount * 100) / 100
+        : explicitAmount > 0
+        ? explicitAmount
+        : weightKg > 0 && rmb > 0
+        ? calculateExporterSlipRowAmount(weightKg, rmb)
+        : 0,
     };
   });
 

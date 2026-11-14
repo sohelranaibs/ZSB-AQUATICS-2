@@ -198,7 +198,7 @@ export const GlobalOffscreenPrintHost: React.FC<GlobalOffscreenPrintHostProps> =
     >
       <div
         id="global-printable-document"
-        className="w-[760px] bg-white p-6 space-y-5 text-slate-900"
+        className="zsb-print-paper w-[760px] bg-white p-6 space-y-5 text-slate-900"
         style={{ backgroundColor: '#ffffff', color: '#000000' }}
       >
         {!isExporterSlip && (
@@ -491,8 +491,8 @@ export const GlobalOffscreenPrintHost: React.FC<GlobalOffscreenPrintHostProps> =
                 Managing Partner
               </div>
               <div
-                style={{ color: '#64748b' }}
-                className="text-[10px] uppercase font-semibold"
+                style={{ color: '#d97706', fontWeight: 800 }}
+                className="text-[10px] uppercase font-extrabold text-amber-500 zsb-golden-brand-light"
               >
                 {companyProfile.companyName}
               </div>
@@ -518,8 +518,8 @@ export const GlobalOffscreenPrintHost: React.FC<GlobalOffscreenPrintHostProps> =
                 Partner
               </div>
               <div
-                style={{ color: '#64748b' }}
-                className="text-[10px] uppercase font-semibold"
+                style={{ color: '#d97706', fontWeight: 800 }}
+                className="text-[10px] uppercase font-extrabold text-amber-500 zsb-golden-brand-light"
               >
                 {companyProfile.companyName}
               </div>
@@ -531,7 +531,7 @@ export const GlobalOffscreenPrintHost: React.FC<GlobalOffscreenPrintHostProps> =
           style={{ borderTop: '1px solid #e2e8f0', color: '#94a3b8' }}
           className="text-center text-[10px] pt-4"
         >
-          This is an official computer-generated document from {companyProfile.companyName}{' '}
+          This is an official computer-generated document from <strong style={{ color: '#d97706', fontWeight: 800 }} className="font-extrabold text-amber-500 zsb-golden-brand-light">{companyProfile.companyName}</strong>{' '}
           System • Validated and archived.
         </div>
       </div>

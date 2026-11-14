@@ -91,19 +91,19 @@ export const SuperAdminClearModal: React.FC = () => {
         aria-labelledby="super-admin-single-delete-title"
         data-testid="super-admin-single-delete-modal"
       >
-        <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border-2 border-rose-600/80 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-rose-300 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
           {/* Top Security Header */}
-          <div className="bg-gradient-to-r from-rose-900 via-rose-800 to-slate-900 text-white px-5 py-4 flex items-center justify-between border-b-2 border-amber-400">
+          <div className="bg-[#263843] text-white px-5 py-4 flex items-center justify-between border-b-2 border-rose-500">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-full bg-rose-500/20 border border-rose-300/40 flex items-center justify-center shrink-0">
-                <ShieldAlert className="w-5 h-5 text-amber-300" />
+              <div className="w-10 h-10 rounded-full bg-rose-500/20 border border-rose-400/50 flex items-center justify-center shrink-0">
+                <ShieldAlert className="w-5 h-5 text-rose-300" />
               </div>
               <div>
                 <div className="flex items-center space-x-2">
-                  <span className="zsb-3d-text text-sm font-black tracking-wider">
+                  <span className="text-amber-400 zsb-golden-brand text-sm font-black tracking-tight">
                     {companyProfile.companyName}
                   </span>
-                  <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-rose-500/30 text-rose-100 border border-rose-400/30 font-bold">
+                  <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-rose-500/25 text-rose-200 border border-rose-400/40 font-bold">
                     Super Admin Permission
                   </span>
                 </div>
@@ -120,7 +120,7 @@ export const SuperAdminClearModal: React.FC = () => {
               type="button"
               onClick={cancelSingleDelete}
               aria-label="Close Super Admin Permission Modal"
-              className="p-1.5 rounded-lg text-rose-200 hover:text-white hover:bg-rose-800/60 transition cursor-pointer"
+              className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-[#1c2a33] transition cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -322,19 +322,19 @@ export const SuperAdminClearModal: React.FC = () => {
       aria-labelledby="super-admin-modal-title"
       data-testid="super-admin-clear-modal"
     >
-      <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border-2 border-rose-600/80 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-rose-300 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Top Security Header */}
-        <div className="bg-gradient-to-r from-rose-900 via-rose-800 to-slate-900 text-white px-5 py-4 flex items-center justify-between border-b-2 border-amber-400">
+        <div className="bg-[#263843] text-white px-5 py-4 flex items-center justify-between border-b-2 border-rose-500">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-full bg-rose-500/20 border border-rose-300/40 flex items-center justify-center shrink-0">
-              <ShieldAlert className="w-5 h-5 text-amber-300" />
+            <div className="w-10 h-10 rounded-full bg-rose-500/20 border border-rose-400/50 flex items-center justify-center shrink-0">
+              <ShieldAlert className="w-5 h-5 text-rose-300" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="zsb-3d-text text-sm font-black tracking-wider">
+                <span className="text-amber-400 zsb-golden-brand text-sm font-black tracking-tight">
                   {companyProfile.companyName}
                 </span>
-                <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-rose-500/30 text-rose-100 border border-rose-400/30 font-bold">
+                <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-rose-500/25 text-rose-200 border border-rose-400/40 font-bold">
                   Super Admin Gate
                 </span>
               </div>
@@ -351,7 +351,7 @@ export const SuperAdminClearModal: React.FC = () => {
             type="button"
             onClick={closeSuperAdminClearModal}
             aria-label="Close Super Admin Modal"
-            className="p-1.5 rounded-lg text-rose-200 hover:text-white hover:bg-rose-800/60 transition cursor-pointer"
+            className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-[#1c2a33] transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>

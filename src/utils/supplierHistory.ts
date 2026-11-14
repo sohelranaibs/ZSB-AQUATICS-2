@@ -56,6 +56,8 @@ export interface SupplierHistoryFilterOptions {
   status?: string;
   search?: string;
   recordType?: string;
+  fromDate?: string;
+  toDate?: string;
   sortDirection?: 'asc' | 'desc';
 }
 
@@ -85,6 +87,8 @@ export function buildSupplierRecordHistory(
     status = 'ALL',
     search = '',
     recordType = 'ALL',
+    fromDate = '',
+    toDate = '',
     sortDirection = 'desc',
   } = filters;
 
@@ -92,6 +96,8 @@ export function buildSupplierRecordHistory(
   const targetStatus = (status || 'ALL').trim().toUpperCase();
   const targetSearch = (search || '').trim().toLowerCase();
   const targetType = (recordType || 'ALL').trim().toUpperCase();
+  const targetFromDate = (fromDate || '').trim();
+  const targetToDate = (toDate || '').trim();
 
   const isSupplierMatch = (name?: string) => {
     if (targetSupplier === 'all' || !targetSupplier) return true;
@@ -152,10 +158,12 @@ export function buildSupplierRecordHistory(
       Math.round((Number(pm.balance) || pmTotal - creditAmt) * 100) / 100;
 
     let rowStatus: ExporterStatus = normalizeSupplierStatus(pm.status, 'PAID');
-    if (pmBalance <= 0 && creditAmt > 0) {
-      rowStatus = 'PAID';
-    } else if (pmBalance > 0 && (creditAmt > 0 || debitAmt > 0)) {
-      rowStatus = 'REPORT';
+    if (!pm.status) {
+      if (pmBalance <= 0 && creditAmt > 0) {
+        rowStatus = 'PAID';
+      } else if (pmBalance > 0 && (creditAmt > 0 || debitAmt > 0)) {
+        rowStatus = 'REPORT';
+      }
     }
 
     rawRows.push({
@@ -182,7 +190,9 @@ export function buildSupplierRecordHistory(
     const purBalance = Math.round((Number(pur.balance) || (purDebit - purPaid)) * 100) / 100;
 
     let purStatus: ExporterStatus = 'REPORT';
-    if (purBalance <= 0 && purDebit > 0) {
+    if (pur.status && pur.status.trim().length > 0) {
+      purStatus = pur.status.trim().toUpperCase();
+    } else if (purBalance <= 0 && purDebit > 0) {
       purStatus = 'PAID';
     } else if (purPaid === 0 && purDebit > 0) {
       purStatus = 'NO REPORT';
@@ -240,7 +250,7 @@ export function buildSupplierRecordHistory(
     };
   });
 
-  // 6. Apply Filter by record type, status, search
+  // 6. Apply Filter by record type, status, search, and From/To Date range
   const filtered = computedRows.filter((r) => {
     if (targetType !== 'ALL' && r.recordType !== targetType) {
       return false;
@@ -250,6 +260,14 @@ export function buildSupplierRecordHistory(
       if (r.status.toUpperCase() !== targetStatus) {
         return false;
       }
+    }
+
+    if (targetFromDate && (!r.date || r.date < targetFromDate)) {
+      return false;
+    }
+
+    if (targetToDate && (!r.date || r.date > targetToDate)) {
+      return false;
     }
 
     if (targetSearch) {

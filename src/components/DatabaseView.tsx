@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import {
   formatCurrency,
@@ -6,6 +6,8 @@ import {
   classifyPaymentCategory,
   calculatePackingTotalAmountBDT,
 } from '../utils/calculations.ts';
+import { useRowScrollViewport } from '../hooks/useRowScrollViewport.ts';
+import { MAX_VISIBLE_TABLE_ROWS } from '../utils/tableScroll.ts';
 import {
   FileSpreadsheet,
   Printer,
@@ -66,13 +68,23 @@ import {
 } from '../utils/smartDataSync.ts';
 import { buildSupplierRecordHistory } from '../utils/supplierHistory.ts';
 import { formatDateImageStyle } from '../utils/calculations.ts';
-import { exportElementsToCombinedPdf } from '../utils/pdfGenerator.ts';
+import { exportElementToPdf, exportElementsToCombinedPdf, resolveCompanyLogoSrc } from '../utils/pdfGenerator.ts';
+import { COMPANY_LOGO_URL } from '../context/initialData.ts';
 import {
   formatBatchPaymentSlipsPdfFilename,
   preparePaymentRecordsForBatchExport,
 } from '../utils/batchPaymentSlipPdf.ts';
 import { PaymentSlipPrintCard } from './PaymentSlipPrintCard.tsx';
 import { BatchUpdateSidebar } from './BatchUpdateSidebar.tsx';
+import {
+  BATCH_STATUS_OPTIONS,
+  computeBulkSelectionState,
+  toggleBulkSelectAll,
+  toggleBulkSelectRow,
+  resolvePurchaseRecordStatus,
+  resolvePackingRecordStatus,
+  resolvePaymentRecordStatus,
+} from '../utils/batchDatabaseUpdate.ts';
 import {
   DatabaseTableType,
   summarizeTableValidation,
@@ -98,13 +110,19 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     addPurchase,
     updatePurchase,
     deletePurchase,
+    batchDeletePurchases,
+    batchUpdatePurchasesStatus,
     packings,
     updatePacking,
     deletePacking,
+    batchDeletePackings,
+    batchUpdatePackingsStatus,
     payments,
     addPayment,
     updatePayment,
     deletePayment,
+    batchDeletePayments,
+    batchUpdatePaymentsStatus,
     supplierCredits,
     companyProfile,
     dropdownOptions,
@@ -138,11 +156,26 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   const [searchTerm, setSearchTerm] = useState<string>(() => focusedShipmentInvoice || '');
   const [paymentSearchQuery, setPaymentSearchQuery] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkTargetStatus, setBulkTargetStatus] = useState<ExporterStatus>('PAID');
+  const [selectedLedgerRowIds, setSelectedLedgerRowIds] = useState<string[]>([]);
+  const [ledgerTargetStatus, setLedgerTargetStatus] = useState<ExporterStatus>('PAID');
   const [isExportingBatchSlips, setIsExportingBatchSlips] = useState<boolean>(false);
   const [isBatchSidebarOpen, setIsBatchSidebarOpen] = useState<boolean>(false);
   const [syncLedgerSupplier, setSyncLedgerSupplier] = useState<string>('ALL');
+  const [syncLedgerFromDate, setSyncLedgerFromDate] = useState<string>('');
+  const [syncLedgerToDate, setSyncLedgerToDate] = useState<string>('');
   const [syncLedgerSortDirection, setSyncLedgerSortDirection] = useState<'asc' | 'desc'>('asc');
   const [isSyncLedgerExpanded, setIsSyncLedgerExpanded] = useState<boolean>(true);
+  const [isExportingSyncLedgerPdf, setIsExportingSyncLedgerPdf] = useState<boolean>(false);
+
+  const syncLedgerScrollRef = useRef<HTMLDivElement>(null);
+  const purchaseDbScrollRef = useRef<HTMLDivElement>(null);
+  const packingDbScrollRef = useRef<HTMLDivElement>(null);
+  const paymentDbScrollRef = useRef<HTMLDivElement>(null);
+  const purchaseHeaderCheckboxRef = useRef<HTMLInputElement>(null);
+  const packingHeaderCheckboxRef = useRef<HTMLInputElement>(null);
+  const paymentHeaderCheckboxRef = useRef<HTMLInputElement>(null);
+  const ledgerHeaderCheckboxRef = useRef<HTMLInputElement>(null);
 
   // Selected payment records for batch export
   const selectedPaymentsForBatch = useMemo(
@@ -198,7 +231,8 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
       summarizeTableValidation(
         activeDbType,
         activeRecordsForValidation,
-        cellDraftsByDb[activeDbType]
+        cellDraftsByDb[activeDbType],
+        { acceptSavedNegatives: true, acceptSavedImportValues: true }
       ),
     [activeDbType, activeRecordsForValidation, cellDraftsByDb]
   );
@@ -267,6 +301,12 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
       const target = purchases.find((p) => p.id === recordId);
       if (!target) return;
       const updates: Record<string, unknown> = { [fieldKey]: parsedValue };
+      const nextPending = (target.pendingFields || []).filter((f) => f !== fieldKey);
+      const nextRaw = { ...(target.rawValues || {}) };
+      delete nextRaw[fieldKey];
+      updates.pendingFields = nextPending.length > 0 ? nextPending : undefined;
+      updates.rawValues = Object.keys(nextRaw).length > 0 ? nextRaw : undefined;
+      updates.calculationPending = nextPending.length > 0;
       if (fieldKey === 'totalAmount' || fieldKey === 'paidAmount') {
         const nextTotal =
           fieldKey === 'totalAmount' ? Number(parsedValue) || 0 : target.totalAmount;
@@ -279,6 +319,12 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
       const target = packings.find((pk) => pk.id === recordId);
       if (!target) return;
       const updates: Record<string, unknown> = { [fieldKey]: parsedValue };
+      const nextPending = (target.pendingFields || []).filter((f) => f !== fieldKey);
+      const nextRaw = { ...(target.rawValues || {}) };
+      delete nextRaw[fieldKey];
+      updates.pendingFields = nextPending.length > 0 ? nextPending : undefined;
+      updates.rawValues = Object.keys(nextRaw).length > 0 ? nextRaw : undefined;
+      updates.calculationPending = nextPending.length > 0;
       if (fieldKey === 'totalAmount' || fieldKey === 'rmbRate') {
         const nextTotal =
           fieldKey === 'totalAmount' ? Number(parsedValue) || 0 : target.totalAmount;
@@ -294,7 +340,14 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     } else {
       const target = payments.find((pm) => pm.id === recordId);
       if (!target) return;
-      updatePayment(recordId, { [fieldKey]: parsedValue });
+      const updates: Record<string, unknown> = { [fieldKey]: parsedValue };
+      const nextPending = (target.pendingFields || []).filter((f) => f !== fieldKey);
+      const nextRaw = { ...(target.rawValues || {}) };
+      delete nextRaw[fieldKey];
+      updates.pendingFields = nextPending.length > 0 ? nextPending : undefined;
+      updates.rawValues = Object.keys(nextRaw).length > 0 ? nextRaw : undefined;
+      updates.calculationPending = nextPending.length > 0;
+      updatePayment(recordId, updates);
     }
   };
 
@@ -316,9 +369,19 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   const syncSupplierLedgerRows = useMemo(() => {
     return buildSupplierRecordHistory(purchases, payments, supplierCredits || [], {
       supplierName: syncLedgerSupplier,
+      fromDate: syncLedgerFromDate,
+      toDate: syncLedgerToDate,
       sortDirection: syncLedgerSortDirection,
     });
-  }, [purchases, payments, supplierCredits, syncLedgerSupplier, syncLedgerSortDirection]);
+  }, [
+    purchases,
+    payments,
+    supplierCredits,
+    syncLedgerSupplier,
+    syncLedgerFromDate,
+    syncLedgerToDate,
+    syncLedgerSortDirection,
+  ]);
 
   const syncSupplierLedgerTotals = useMemo(() => {
     const totalDebit = syncSupplierLedgerRows.reduce((acc, r) => acc + r.debitAmount, 0);
@@ -326,6 +389,30 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     const netEndingBalance = totalDebit - totalCredit;
     return { totalDebit, totalCredit, netEndingBalance };
   }, [syncSupplierLedgerRows]);
+
+  const handleExportSyncLedgerPdf = async () => {
+    if (isExportingSyncLedgerPdf) return;
+    setIsExportingSyncLedgerPdf(true);
+    try {
+      const safeSupplier =
+        syncLedgerSupplier === 'ALL'
+          ? 'ALL_SUPPLIERS'
+          : syncLedgerSupplier.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const dateTag =
+        syncLedgerFromDate || syncLedgerToDate
+          ? `${syncLedgerFromDate || 'START'}_to_${syncLedgerToDate || 'END'}`
+          : new Date().toISOString().slice(0, 10);
+      const filename = `ZSB_AQUATICS_SUPPLIER_RECONCILIATION_LEDGER_${safeSupplier}_${dateTag}.pdf`;
+      const ok = await exportElementToPdf('supplier-reconciliation-ledger-pdf-canvas', filename);
+      if (ok) {
+        showToast(`Exported PDF: ${filename}`);
+      } else {
+        showToast('Failed to export Supplier Reconciliation Ledger PDF. Please try again.');
+      }
+    } finally {
+      setIsExportingSyncLedgerPdf(false);
+    }
+  };
 
   const handleSmartSyncReconcile = (targetRecordId?: string) => {
     const plan = buildSmartSyncReconciliationPlan(purchases, payments, targetRecordId);
@@ -370,6 +457,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     paidAmount: string;
     totalAmount: string;
     balance: string;
+    returnRMB: string;
     status: ExporterStatus;
     exportGoodsRef: string;
     remarks: string;
@@ -380,6 +468,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     paidAmount: '',
     totalAmount: '',
     balance: '',
+    returnRMB: '0',
     status: 'PAID',
     exportGoodsRef: '',
     remarks: '',
@@ -388,15 +477,39 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   useEffect(() => {
     if (editingPaymentRecord) {
       setPaymentEditForm({
-        invoiceNumber: editingPaymentRecord.invoiceNumber || '',
-        date: editingPaymentRecord.date || new Date().toISOString().slice(0, 10),
-        description: editingPaymentRecord.description || '',
-        paidAmount: String(editingPaymentRecord.paidAmount || 0),
-        totalAmount: String(editingPaymentRecord.totalAmount || 0),
-        balance: String(editingPaymentRecord.balance || 0),
+        invoiceNumber:
+          editingPaymentRecord.rawValues?.invoiceNumber ||
+          editingPaymentRecord.invoiceNumber ||
+          '',
+        date:
+          editingPaymentRecord.rawValues?.date ||
+          editingPaymentRecord.date ||
+          new Date().toISOString().slice(0, 10),
+        description:
+          editingPaymentRecord.rawValues?.description ??
+          (editingPaymentRecord.description || ''),
+        paidAmount:
+          editingPaymentRecord.rawValues?.paidAmount ??
+          editingPaymentRecord.rawValues?.totalAmount ??
+          String(editingPaymentRecord.paidAmount ?? 0),
+        totalAmount:
+          editingPaymentRecord.rawValues?.totalAmount ??
+          editingPaymentRecord.rawValues?.debitAmount ??
+          String(editingPaymentRecord.totalAmount ?? 0),
+        balance:
+          editingPaymentRecord.rawValues?.balance ??
+          editingPaymentRecord.rawValues?.creditAmount ??
+          String(editingPaymentRecord.balance ?? 0),
+        returnRMB:
+          editingPaymentRecord.rawValues?.returnRMB ??
+          String(editingPaymentRecord.returnRMB ?? 0),
         status: (editingPaymentRecord.status as ExporterStatus) || 'PAID',
-        exportGoodsRef: editingPaymentRecord.exportGoodsRef || '',
-        remarks: editingPaymentRecord.remarks || '',
+        exportGoodsRef:
+          editingPaymentRecord.rawValues?.exportGoodsRef ??
+          (editingPaymentRecord.exportGoodsRef || ''),
+        remarks:
+          editingPaymentRecord.rawValues?.remarks ??
+          (editingPaymentRecord.remarks || ''),
       });
     }
   }, [editingPaymentRecord]);
@@ -404,12 +517,90 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   const handleSavePaymentEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingPaymentRecord) return;
-    const paidAmt = Math.round((parseFloat(paymentEditForm.paidAmount) || 0) * 100) / 100;
-    const totalAmt = Math.round((parseFloat(paymentEditForm.totalAmount) || 0) * 100) / 100;
-    const balAmt =
-      paymentEditForm.balance !== ''
-        ? Math.round((parseFloat(paymentEditForm.balance) || 0) * 100) / 100
-        : Math.round(Math.max(0, totalAmt - paidAmt) * 100) / 100;
+    const paidRawStr = String(paymentEditForm.paidAmount ?? '').trim();
+    const totalRawStr = String(paymentEditForm.totalAmount ?? '').trim();
+    const balRawStr = String(paymentEditForm.balance ?? '').trim();
+    const rmbRawStr = String(paymentEditForm.returnRMB ?? '').trim();
+    const dateRawStr = String(paymentEditForm.date ?? '').trim();
+
+    const paidIsFormulaOrText =
+      paidRawStr !== '' &&
+      (paidRawStr.startsWith('=') || !/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(paidRawStr));
+    const totalIsFormulaOrText =
+      totalRawStr !== '' &&
+      (totalRawStr.startsWith('=') || !/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(totalRawStr));
+    const balIsFormulaOrText =
+      balRawStr !== '' &&
+      (balRawStr.startsWith('=') || !/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(balRawStr));
+    const rmbIsFormulaOrText =
+      rmbRawStr !== '' &&
+      (rmbRawStr.startsWith('=') || !/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(rmbRawStr));
+
+    const paidAmt = paidIsFormulaOrText
+      ? 0
+      : Math.round((parseFloat(paidRawStr) || 0) * 100) / 100;
+    const totalAmt = totalIsFormulaOrText
+      ? 0
+      : Math.round((parseFloat(totalRawStr) || 0) * 100) / 100;
+    const balAmt = balIsFormulaOrText
+      ? 0
+      : balRawStr !== ''
+      ? Math.round((parseFloat(balRawStr) || 0) * 100) / 100
+      : Math.round((totalAmt - paidAmt) * 100) / 100;
+    const rmbAmt = rmbIsFormulaOrText
+      ? 0
+      : Math.round((parseFloat(rmbRawStr) || 0) * 100) / 100;
+    const rmbRate = companyProfile.rmbExchangeRate || 16.5;
+
+    const nextRawValues: Record<string, string> = { ...(editingPaymentRecord.rawValues || {}) };
+    const nextPendingFields = new Set(editingPaymentRecord.pendingFields || []);
+    if (paidIsFormulaOrText) {
+      nextRawValues.paidAmount = paidRawStr;
+      nextPendingFields.add('paidAmount');
+    } else {
+      delete nextRawValues.paidAmount;
+      nextPendingFields.delete('paidAmount');
+    }
+    if (totalIsFormulaOrText) {
+      nextRawValues.totalAmount = totalRawStr;
+      nextRawValues.debitAmount = totalRawStr;
+      nextPendingFields.add('totalAmount');
+    } else {
+      delete nextRawValues.totalAmount;
+      delete nextRawValues.debitAmount;
+      nextPendingFields.delete('totalAmount');
+    }
+    if (balIsFormulaOrText) {
+      nextRawValues.balance = balRawStr;
+      nextRawValues.creditAmount = balRawStr;
+      nextPendingFields.add('balance');
+    } else {
+      delete nextRawValues.balance;
+      delete nextRawValues.creditAmount;
+      nextPendingFields.delete('balance');
+    }
+    if (rmbIsFormulaOrText) {
+      nextRawValues.returnRMB = rmbRawStr;
+      nextPendingFields.add('returnRMB');
+    } else {
+      delete nextRawValues.returnRMB;
+      nextPendingFields.delete('returnRMB');
+    }
+    if (dateRawStr.startsWith('=')) {
+      nextRawValues.date = dateRawStr;
+    } else {
+      delete nextRawValues.date;
+    }
+    if (paymentEditForm.description.trim().startsWith('=')) {
+      nextRawValues.description = paymentEditForm.description.trim();
+    } else {
+      delete nextRawValues.description;
+    }
+    if (paymentEditForm.remarks.trim().startsWith('=')) {
+      nextRawValues.remarks = paymentEditForm.remarks.trim();
+    } else {
+      delete nextRawValues.remarks;
+    }
 
     const updatedItems =
       Array.isArray(editingPaymentRecord.items) && editingPaymentRecord.items.length > 0
@@ -417,7 +608,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
             idx === 0
               ? {
                   ...it,
-                  date: paymentEditForm.date,
+                  date: dateRawStr,
                   creditAmount: paidAmt,
                   debitAmount: it.debitAmount || 0,
                   balance: balAmt,
@@ -429,7 +620,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
         : [
             {
               id: '1',
-              date: paymentEditForm.date,
+              date: dateRawStr,
               creditAmount: paidAmt,
               debitAmount: 0,
               balance: balAmt,
@@ -440,17 +631,23 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
             },
           ];
 
+    const pendingArr = Array.from(nextPendingFields);
     updatePayment(editingPaymentRecord.id, {
       invoiceNumber: paymentEditForm.invoiceNumber.trim(),
-      date: paymentEditForm.date,
+      date: dateRawStr,
       description: paymentEditForm.description.trim(),
       paidAmount: paidAmt,
       totalAmount: totalAmt,
       balance: balAmt,
+      returnRMB: rmbAmt,
+      returnRMBInBDT: rmbIsFormulaOrText ? 0 : Math.round(rmbAmt * rmbRate * 100) / 100,
       status: paymentEditForm.status,
       exportGoodsRef: paymentEditForm.exportGoodsRef.trim(),
       remarks: paymentEditForm.remarks.trim(),
       items: updatedItems,
+      calculationPending: pendingArr.length > 0,
+      pendingFields: pendingArr.length > 0 ? pendingArr : undefined,
+      rawValues: Object.keys(nextRawValues).length > 0 ? nextRawValues : undefined,
     });
 
     emitPaymentSyncTrigger({
@@ -490,17 +687,19 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   }, []);
 
   const handleSelectAll = (allIds: string[]) => {
-    if (selectedIds.length === allIds.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(allIds);
-    }
+    setSelectedIds((prev) => toggleBulkSelectAll(allIds, prev));
   };
 
   const toggleSelectOne = (id: string) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
-    );
+    setSelectedIds((prev) => toggleBulkSelectRow(id, prev));
+  };
+
+  const handleSelectAllLedgerRows = (allLedgerIds: string[]) => {
+    setSelectedLedgerRowIds((prev) => toggleBulkSelectAll(allLedgerIds, prev));
+  };
+
+  const toggleSelectLedgerRow = (rowId: string) => {
+    setSelectedLedgerRowIds((prev) => toggleBulkSelectRow(rowId, prev));
   };
 
   // Date range presets
@@ -797,6 +996,48 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     );
   }, [filteredPayments, paymentSort, smartSyncAnalysis.paymentReconciliations]);
 
+  const {
+    maxHeight: syncLedgerScrollMaxHeight,
+    isCapped: isSyncLedgerScrollCapped,
+  } = useRowScrollViewport(syncLedgerScrollRef, syncSupplierLedgerRows.length, {
+    maxVisibleRows: MAX_VISIBLE_TABLE_ROWS,
+    enabled:
+      isSyncLedgerExpanded &&
+      (activeDbType === 'purchase' || activeDbType === 'payment'),
+    includeFooter: true,
+    depsKey: `${activeDbType}|${syncLedgerSupplier}|${syncLedgerFromDate}|${syncLedgerToDate}|${syncLedgerSortDirection}`,
+  });
+
+  const {
+    maxHeight: purchaseDbScrollMaxHeight,
+    isCapped: isPurchaseDbScrollCapped,
+  } = useRowScrollViewport(purchaseDbScrollRef, sortedPurchases.length, {
+    maxVisibleRows: MAX_VISIBLE_TABLE_ROWS,
+    enabled: activeDbType === 'purchase',
+    includeFooter: false,
+    depsKey: `${activeDbType}|${searchTerm}|${startDate}|${endDate}|${purchaseSort.column}|${purchaseSort.direction}|${validationFilter}|${reconciliationFilter}`,
+  });
+
+  const {
+    maxHeight: packingDbScrollMaxHeight,
+    isCapped: isPackingDbScrollCapped,
+  } = useRowScrollViewport(packingDbScrollRef, sortedPackings.length, {
+    maxVisibleRows: MAX_VISIBLE_TABLE_ROWS,
+    enabled: activeDbType === 'packing',
+    includeFooter: true,
+    depsKey: `${activeDbType}|${searchTerm}|${startDate}|${endDate}|${packingSort.column}|${packingSort.direction}|${validationFilter}`,
+  });
+
+  const {
+    maxHeight: paymentDbScrollMaxHeight,
+    isCapped: isPaymentDbScrollCapped,
+  } = useRowScrollViewport(paymentDbScrollRef, sortedPayments.length, {
+    maxVisibleRows: MAX_VISIBLE_TABLE_ROWS,
+    enabled: activeDbType === 'payment',
+    includeFooter: false,
+    depsKey: `${activeDbType}|${searchTerm}|${paymentSearchQuery}|${startDate}|${endDate}|${paymentCategoryFilter}|${paymentSort.column}|${paymentSort.direction}|${validationFilter}|${reconciliationFilter}`,
+  });
+
   // Current active filtered/sorted records count and total records
   const currentFilteredCount =
     activeDbType === 'purchase'
@@ -811,6 +1052,150 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
       : activeDbType === 'packing'
       ? packings.length
       : payments.length;
+
+  // Visible row IDs and bulk selection state for active DatabaseView table
+  const activeVisibleIds = useMemo(() => {
+    if (activeDbType === 'purchase') return sortedPurchases.map((p) => p.id);
+    if (activeDbType === 'packing') return sortedPackings.map((p) => p.id);
+    return sortedPayments.map((p) => p.id);
+  }, [activeDbType, sortedPurchases, sortedPackings, sortedPayments]);
+
+  const activeSelectionState = useMemo(
+    () => computeBulkSelectionState(activeVisibleIds, selectedIds),
+    [activeVisibleIds, selectedIds]
+  );
+
+  const visibleLedgerRowIds = useMemo(
+    () => syncSupplierLedgerRows.map((r) => r.id),
+    [syncSupplierLedgerRows]
+  );
+
+  const ledgerSelectionState = useMemo(
+    () => computeBulkSelectionState(visibleLedgerRowIds, selectedLedgerRowIds),
+    [visibleLedgerRowIds, selectedLedgerRowIds]
+  );
+
+  // Sync native checkbox indeterminate property for header checkboxes
+  useEffect(() => {
+    if (purchaseHeaderCheckboxRef.current) {
+      purchaseHeaderCheckboxRef.current.indeterminate =
+        activeDbType === 'purchase' && activeSelectionState.someSelected;
+    }
+    if (packingHeaderCheckboxRef.current) {
+      packingHeaderCheckboxRef.current.indeterminate =
+        activeDbType === 'packing' && activeSelectionState.someSelected;
+    }
+    if (paymentHeaderCheckboxRef.current) {
+      paymentHeaderCheckboxRef.current.indeterminate =
+        activeDbType === 'payment' && activeSelectionState.someSelected;
+    }
+  }, [activeDbType, activeSelectionState.someSelected]);
+
+  useEffect(() => {
+    if (ledgerHeaderCheckboxRef.current) {
+      ledgerHeaderCheckboxRef.current.indeterminate = ledgerSelectionState.someSelected;
+    }
+  }, [ledgerSelectionState.someSelected]);
+
+  // Batch status update handler for selected rows in active DatabaseView table
+  const handleBatchStatusUpdate = (statusOverride?: ExporterStatus) => {
+    if (selectedIds.length === 0) {
+      showToast('Please select at least one row using the checkboxes to update status.');
+      return;
+    }
+    const targetStatus = (statusOverride || bulkTargetStatus || 'PAID').trim().toUpperCase();
+    if (activeDbType === 'purchase') {
+      batchUpdatePurchasesStatus(selectedIds, targetStatus);
+    } else if (activeDbType === 'packing') {
+      batchUpdatePackingsStatus(selectedIds, targetStatus);
+    } else {
+      batchUpdatePaymentsStatus(selectedIds, targetStatus);
+    }
+  };
+
+  // Batch deletion handler for selected rows in active DatabaseView table
+  const handleBatchDeleteSelected = () => {
+    if (selectedIds.length === 0) {
+      showToast('Please select at least one row using the checkboxes to delete.');
+      return;
+    }
+    if (activeDbType === 'purchase') {
+      batchDeletePurchases(selectedIds);
+    } else if (activeDbType === 'packing') {
+      batchDeletePackings(selectedIds);
+    } else {
+      batchDeletePayments(selectedIds);
+    }
+    setSelectedIds([]);
+  };
+
+  // Batch status update & delete for Supplier Account Reconciliation Ledger rows
+  const handleLedgerBatchStatusUpdate = (statusOverride?: ExporterStatus) => {
+    if (selectedLedgerRowIds.length === 0) {
+      showToast('Please select at least one reconciliation ledger row to update status.');
+      return;
+    }
+    const targetStatus = (statusOverride || ledgerTargetStatus || 'PAID').trim().toUpperCase();
+    const purchaseIds = selectedLedgerRowIds
+      .filter((id) => id.startsWith('purchase-'))
+      .map((id) => id.replace(/^purchase-/, ''));
+    const paymentIds = selectedLedgerRowIds
+      .filter((id) => id.startsWith('voucher-'))
+      .map((id) => id.replace(/^voucher-/, ''));
+
+    if (purchaseIds.length > 0) {
+      batchUpdatePurchasesStatus(purchaseIds, targetStatus);
+    }
+    if (paymentIds.length > 0) {
+      batchUpdatePaymentsStatus(paymentIds, targetStatus);
+    }
+    showToast(
+      `Updated status to ${targetStatus} for ${selectedLedgerRowIds.length} selected reconciliation ledger row(s).`
+    );
+  };
+
+  const handleLedgerBatchDeleteSelected = () => {
+    if (selectedLedgerRowIds.length === 0) {
+      showToast('Please select at least one reconciliation ledger row to delete.');
+      return;
+    }
+    const purchaseIds = selectedLedgerRowIds
+      .filter((id) => id.startsWith('purchase-'))
+      .map((id) => id.replace(/^purchase-/, ''));
+    const paymentIds = selectedLedgerRowIds
+      .filter((id) => id.startsWith('voucher-'))
+      .map((id) => id.replace(/^voucher-/, ''));
+
+    if (purchaseIds.length > 0) {
+      batchDeletePurchases(purchaseIds);
+    }
+    if (paymentIds.length > 0) {
+      batchDeletePayments(paymentIds);
+    }
+    setSelectedLedgerRowIds([]);
+  };
+
+  // Helper to render consistent status badge across all DatabaseView tables
+  const renderStatusBadge = (statusValue: ExporterStatus, testId?: string) => {
+    const clean = (statusValue || 'UNPAID').trim().toUpperCase();
+    const badgeColor =
+      clean === 'PAID'
+        ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+        : clean === 'REPORT' || clean === 'PARTIAL'
+        ? 'bg-blue-100 text-blue-800 border-blue-300'
+        : clean === 'PENDING'
+        ? 'bg-amber-100 text-amber-800 border-amber-300'
+        : 'bg-rose-100 text-rose-800 border-rose-300';
+
+    return (
+      <span
+        data-testid={testId}
+        className={`inline-block px-1.5 py-0.5 rounded border text-[9px] font-black uppercase tracking-tight whitespace-nowrap ${badgeColor}`}
+      >
+        {clean}
+      </span>
+    );
+  };
 
   // Export current database view as Excel (.xlsx) file
   const handleExportExcel = () => {
@@ -963,9 +1348,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   return (
     <div className="w-full max-w-full mx-auto px-2 sm:px-3 py-3 space-y-4">
       {/* Top Banner */}
-      <div className="bg-[#1b2b44] text-white px-5 py-3 rounded-lg shadow-md flex flex-wrap items-center justify-between gap-4 border-b-2 border-amber-500">
+      <div className="bg-[#273E56] text-white px-5 py-3 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-4 border-b-2 border-[#1D6CE0]">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
+          <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-[#93C5FD] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
               src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
               alt={companyProfile.companyName}
@@ -974,11 +1359,11 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
           </div>
           <div>
             <div className="flex items-center space-x-3">
-              <span className="zsb-3d-text text-xl sm:text-2xl font-black">
+              <span className="text-xl sm:text-2xl font-black tracking-tight text-amber-400 zsb-golden-brand">
                 {companyProfile.companyName}
               </span>
-              <span className="text-lg text-slate-300">|</span>
-              <span className="text-sm sm:text-base font-semibold text-slate-100 uppercase tracking-wide">
+              <span className="text-lg text-slate-400">|</span>
+              <span className="text-sm sm:text-base font-semibold text-[#93C5FD] uppercase tracking-wide">
                 Master Database Sheets &amp; Batch Print Center
               </span>
             </div>
@@ -989,15 +1374,15 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
         </div>
 
         {/* Database Switcher Tabs */}
-        <div className="flex items-center space-x-1.5 bg-slate-900/80 p-1 rounded-lg border border-slate-700">
+        <div className="flex items-center space-x-1.5 bg-[#1F3349] p-1 rounded-lg border border-[#3B5572]">
           <button
             onClick={() => {
               setActiveDbType('purchase');
               setSelectedIds([]);
             }}
-            className={`px-3 py-1.5 rounded text-xs font-bold uppercase transition ${
+            className={`px-3 py-1.5 rounded text-xs font-bold uppercase transition cursor-pointer ${
               activeDbType === 'purchase'
-                ? 'bg-blue-600 text-white shadow'
+                ? 'bg-[#1D6CE0] text-white shadow'
                 : 'text-slate-300 hover:text-white'
             }`}
           >
@@ -1008,9 +1393,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               setActiveDbType('packing');
               setSelectedIds([]);
             }}
-            className={`px-3 py-1.5 rounded text-xs font-bold uppercase transition ${
+            className={`px-3 py-1.5 rounded text-xs font-bold uppercase transition cursor-pointer ${
               activeDbType === 'packing'
-                ? 'bg-teal-600 text-white shadow'
+                ? 'bg-[#00B14F] text-white shadow'
                 : 'text-slate-300 hover:text-white'
             }`}
           >
@@ -1021,9 +1406,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               setActiveDbType('payment');
               setSelectedIds([]);
             }}
-            className={`px-3 py-1.5 rounded text-xs font-bold uppercase transition ${
+            className={`px-3 py-1.5 rounded text-xs font-bold uppercase transition cursor-pointer ${
               activeDbType === 'payment'
-                ? 'bg-purple-600 text-white shadow'
+                ? 'bg-[#7C3AED] text-white shadow'
                 : 'text-slate-300 hover:text-white'
             }`}
           >
@@ -1094,7 +1479,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   onClick={() => setReconciliationFilter('all')}
                   className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
                     reconciliationFilter === 'all'
-                      ? 'bg-[#1b2b44] text-white'
+                      ? 'bg-[#263843] text-white'
                       : 'text-slate-700 hover:bg-slate-100'
                   }`}
                 >
@@ -1262,6 +1647,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   <span className="text-[10px] font-bold uppercase text-slate-500">Supplier:</span>
                   <select
                     data-testid="smart-sync-supplier-select"
+                    aria-label="Supplier filter"
                     value={syncLedgerSupplier}
                     onChange={(e) => setSyncLedgerSupplier(e.target.value)}
                     className="font-bold text-slate-900 text-xs bg-transparent focus:outline-none cursor-pointer"
@@ -1275,12 +1661,57 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   </select>
                 </div>
 
+                {/* From Date Input */}
+                <label className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-lg border border-slate-300 shadow-xs">
+                  <span className="text-[10px] font-bold uppercase text-slate-500 whitespace-nowrap">
+                    From Date:
+                  </span>
+                  <input
+                    type="date"
+                    data-testid="sync-ledger-from-date"
+                    aria-label="Reconciliation From Date"
+                    value={syncLedgerFromDate}
+                    onChange={(e) => setSyncLedgerFromDate(e.target.value)}
+                    className="font-mono font-bold text-slate-900 text-xs bg-transparent focus:outline-none cursor-pointer"
+                  />
+                </label>
+
+                {/* To Date Input */}
+                <label className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-lg border border-slate-300 shadow-xs">
+                  <span className="text-[10px] font-bold uppercase text-slate-500 whitespace-nowrap">
+                    To Date:
+                  </span>
+                  <input
+                    type="date"
+                    data-testid="sync-ledger-to-date"
+                    aria-label="Reconciliation To Date"
+                    value={syncLedgerToDate}
+                    onChange={(e) => setSyncLedgerToDate(e.target.value)}
+                    className="font-mono font-bold text-slate-900 text-xs bg-transparent focus:outline-none cursor-pointer"
+                  />
+                </label>
+
+                {(syncLedgerFromDate || syncLedgerToDate) && (
+                  <button
+                    type="button"
+                    data-testid="sync-ledger-clear-dates-btn"
+                    onClick={() => {
+                      setSyncLedgerFromDate('');
+                      setSyncLedgerToDate('');
+                    }}
+                    className="px-2 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-[10px] font-bold uppercase whitespace-nowrap shrink-0 cursor-pointer transition"
+                    title="Clear From/To Date filter"
+                  >
+                    Clear Dates
+                  </button>
+                )}
+
                 {/* Sort Direction Toggle */}
                 <div className="flex items-center bg-white p-0.5 rounded-lg border border-slate-300 shadow-xs">
                   <button
                     type="button"
                     onClick={() => setSyncLedgerSortDirection('asc')}
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition cursor-pointer ${
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition cursor-pointer whitespace-nowrap ${
                       syncLedgerSortDirection === 'asc'
                         ? 'bg-blue-700 text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
@@ -1292,7 +1723,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   <button
                     type="button"
                     onClick={() => setSyncLedgerSortDirection('desc')}
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition cursor-pointer ${
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition cursor-pointer whitespace-nowrap ${
                       syncLedgerSortDirection === 'desc'
                         ? 'bg-blue-700 text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
@@ -1302,39 +1733,161 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                     Newest First (Desc)
                   </button>
                 </div>
+
+                {/* Export PDF Button */}
+                <button
+                  type="button"
+                  data-testid="sync-ledger-export-pdf-btn"
+                  onClick={handleExportSyncLedgerPdf}
+                  disabled={isExportingSyncLedgerPdf}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#00897b] hover:bg-[#00796b] disabled:opacity-60 text-white text-[11px] font-bold uppercase tracking-wide shadow-xs transition cursor-pointer whitespace-nowrap shrink-0"
+                  title="Export Supplier Account Reconciliation Ledger as official A4 PDF"
+                >
+                  {isExportingSyncLedgerPdf ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                  ) : (
+                    <FileDown className="w-3.5 h-3.5 shrink-0" />
+                  )}
+                  <span>{isExportingSyncLedgerPdf ? 'Exporting...' : 'Export PDF'}</span>
+                </button>
               </div>
             </div>
 
             {isSyncLedgerExpanded && (
-              <div className="overflow-x-auto border-2 border-blue-600 rounded-lg bg-white shadow-xs">
+              <div>
+                {/* Bulk Selection Action Bar for Supplier Reconciliation Ledger */}
+                {selectedLedgerRowIds.length > 0 && (
+                  <div
+                    data-testid="reconciliation-ledger-bulk-bar"
+                    className="mb-2 px-3 py-2 rounded-lg bg-[#273E56] text-white flex flex-wrap items-center justify-between gap-2 text-xs shadow-sm"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        data-testid="reconciliation-selected-count"
+                        className="px-2 py-0.5 rounded bg-[#1D6CE0] text-white font-mono font-black text-[11px]"
+                      >
+                        {selectedLedgerRowIds.length} Selected
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedLedgerRowIds([])}
+                        className="text-[11px] text-slate-300 hover:text-white underline cursor-pointer"
+                      >
+                        Clear Selection
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-1 bg-[#1F3349] px-2 py-1 rounded border border-[#3B5572]">
+                        <span className="text-[10px] font-bold uppercase text-[#93C5FD]">
+                          Status:
+                        </span>
+                        <select
+                          data-testid="reconciliation-bulk-status-select"
+                          aria-label="Batch status for selected reconciliation rows"
+                          value={ledgerTargetStatus}
+                          onChange={(e) => setLedgerTargetStatus(e.target.value)}
+                          className="bg-transparent text-white font-bold text-xs focus:outline-none cursor-pointer"
+                        >
+                          {BATCH_STATUS_OPTIONS.map((st) => (
+                            <option key={st} value={st} className="text-slate-900">
+                              {st}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          data-testid="reconciliation-bulk-status-apply-btn"
+                          onClick={() => handleLedgerBatchStatusUpdate()}
+                          className="ml-1 px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black uppercase cursor-pointer"
+                        >
+                          Update Status
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        data-testid="reconciliation-bulk-delete-btn"
+                        onClick={handleLedgerBatchDeleteSelected}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-black uppercase cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete Selected ({selectedLedgerRowIds.length})</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {isSyncLedgerScrollCapped && (
+                  <div className="mb-1.5 flex items-center justify-between text-[11px] font-mono text-slate-600 px-1">
+                    <span>
+                      Viewport: <strong>31 Rows</strong> visible ({syncSupplierLedgerRows.length} total rows — scroll vertically to view more)
+                    </span>
+                  </div>
+                )}
+                <div
+                  ref={syncLedgerScrollRef}
+                  data-testid="supplier-reconciliation-scroll-box"
+                  data-visible-row-limit="31"
+                  style={syncLedgerScrollMaxHeight ? { maxHeight: `${syncLedgerScrollMaxHeight}px` } : undefined}
+                  className="overflow-auto border border-slate-200 rounded-lg bg-white shadow-xs print:!max-h-none print:!overflow-visible"
+                >
                 <table className="w-full text-left border-collapse text-xs font-mono">
-                  <thead className="bg-[#1d5ec1] text-white font-bold uppercase text-[11px] tracking-wider border-b border-blue-900">
+                  <thead className="sticky top-0 z-10 bg-[#273E56] text-white font-bold uppercase text-[11px] tracking-wider border-b border-[#1F3349]">
                     <tr>
-                      <th className="px-2 py-2 border-r border-blue-400/40 w-12 text-center">SL #</th>
-                      <th className="px-3 py-2 border-r border-blue-400/40 w-32 text-center">DATE</th>
-                      <th className="px-3 py-2 border-r border-blue-400/40 min-w-[160px]">SUPLIER NAME</th>
-                      <th className="px-3 py-2 border-r border-blue-400/40 text-right w-36">DEBIT AMOUNT</th>
-                      <th className="px-3 py-2 border-r border-blue-400/40 text-right w-36">CREDIT AMOUNT</th>
-                      <th className="px-3 py-2 text-right w-40 bg-[#16499a]">BALANCE</th>
+                      <th className="px-2 py-2 border-r border-[#3B5572] w-8 text-center">
+                        <input
+                          ref={ledgerHeaderCheckboxRef}
+                          type="checkbox"
+                          data-testid="select-all-reconciliation-checkbox"
+                          aria-label="Select all reconciliation ledger rows"
+                          checked={ledgerSelectionState.allSelected}
+                          onChange={() => handleSelectAllLedgerRows(visibleLedgerRowIds)}
+                          className="cursor-pointer accent-[#1D6CE0]"
+                        />
+                      </th>
+                      <th className="px-2 py-2 border-r border-[#3B5572] w-12 text-center">SL #</th>
+                      <th className="px-3 py-2 border-r border-[#3B5572] w-32 text-center">DATE</th>
+                      <th className="px-3 py-2 border-r border-[#3B5572] min-w-[160px]">SUPLIER NAME</th>
+                      <th className="px-3 py-2 border-r border-[#3B5572] text-right w-36">DEBIT AMOUNT</th>
+                      <th className="px-3 py-2 border-r border-[#3B5572] text-right w-36">CREDIT AMOUNT</th>
+                      <th className="px-3 py-2 border-r border-[#3B5572] text-right w-40 bg-[#1F3349]">BALANCE</th>
+                      <th className="px-2.5 py-2 text-center w-24">STATUS</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     {syncSupplierLedgerRows.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-slate-400 italic bg-slate-50 font-sans">
+                        <td colSpan={8} className="px-4 py-8 text-center text-slate-400 italic bg-slate-50 font-sans">
                           No purchase bills or supplier payment vouchers found for the selected supplier.
                         </td>
                       </tr>
                     ) : (
                       syncSupplierLedgerRows.map((row, idx) => {
                         const isEven = idx % 2 === 1;
+                        const isRowSelected = selectedLedgerRowIds.includes(row.id);
                         return (
                           <tr
                             key={row.id}
-                            className={`hover:bg-blue-50/60 transition-colors ${
-                              isEven ? 'bg-slate-50/70' : 'bg-white'
+                            data-testid={`reconciliation-row-${row.id}`}
+                            className={`transition-colors ${
+                              isRowSelected
+                                ? 'bg-blue-100/85 hover:bg-blue-100'
+                                : isEven
+                                ? 'bg-slate-50/70 hover:bg-blue-50/60'
+                                : 'bg-white hover:bg-blue-50/60'
                             }`}
                           >
+                            <td className="px-2 py-2 border-r border-slate-200 text-center whitespace-nowrap">
+                              <input
+                                type="checkbox"
+                                data-testid={`select-reconciliation-row-${row.id}`}
+                                aria-label={`Select reconciliation row ${row.invoiceNumber}`}
+                                checked={isRowSelected}
+                                onChange={() => toggleSelectLedgerRow(row.id)}
+                                className="cursor-pointer accent-[#1D6CE0]"
+                              />
+                            </td>
                             <td className="px-2 py-2 border-r border-slate-200 text-center whitespace-nowrap">
                               <span className="zsb-sl-badge">
                                 {String(idx + 1).padStart(2, '0')}
@@ -1347,13 +1900,16 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                               {row.supplierName}
                             </td>
                             <td className="px-3 py-2 border-r border-slate-200 text-right font-bold text-slate-900 whitespace-nowrap">
-                              {row.debitAmount > 0 ? formatCurrency(row.debitAmount, '') : ''}
+                              {row.debitAmount !== 0 ? formatCurrency(row.debitAmount, '') : ''}
                             </td>
                             <td className="px-3 py-2 border-r border-slate-200 text-right font-bold text-slate-900 whitespace-nowrap">
-                              {row.creditAmount > 0 ? formatCurrency(row.creditAmount, '') : ''}
+                              {row.creditAmount !== 0 ? formatCurrency(row.creditAmount, '') : ''}
                             </td>
-                            <td className="px-3 py-2 text-right font-black text-slate-950 bg-blue-50/40 whitespace-nowrap">
+                            <td className="px-3 py-2 border-r border-slate-200 text-right font-black text-slate-950 bg-blue-50/40 whitespace-nowrap">
                               {formatCurrency(row.balance, '')}
+                            </td>
+                            <td className="px-2 py-2 text-center whitespace-nowrap font-sans">
+                              {renderStatusBadge(row.status, `reconciliation-status-${row.id}`)}
                             </td>
                           </tr>
                         );
@@ -1361,9 +1917,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                     )}
                   </tbody>
                   {syncSupplierLedgerRows.length > 0 && (
-                    <tfoot className="bg-slate-100 font-bold border-t-2 border-slate-400 text-slate-900 text-xs">
+                    <tfoot className="sticky bottom-0 z-10 bg-slate-100 font-bold border-t-2 border-slate-400 text-slate-900 text-xs">
                       <tr>
-                        <td colSpan={3} className="px-3 py-2 border-r border-slate-300 uppercase text-right font-sans font-black">
+                        <td colSpan={4} className="px-3 py-2 border-r border-slate-300 uppercase text-right font-sans font-black">
                           TOTALS ({syncSupplierLedgerRows.length} ENTRIES):
                         </td>
                         <td className="px-3 py-2 border-r border-slate-300 text-right font-black text-slate-950">
@@ -1372,13 +1928,15 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         <td className="px-3 py-2 border-r border-slate-300 text-right font-black text-emerald-800">
                           {formatCurrency(syncSupplierLedgerTotals.totalCredit, '')}
                         </td>
-                        <td className="px-3 py-2 text-right font-black text-blue-900 bg-blue-100/70">
+                        <td className="px-3 py-2 border-r border-slate-300 text-right font-black text-blue-900 bg-blue-100/70">
                           {formatCurrency(syncSupplierLedgerTotals.netEndingBalance, companyProfile.currency)}
                         </td>
+                        <td className="bg-slate-100"></td>
                       </tr>
                     </tfoot>
                   )}
                 </table>
+                </div>
               </div>
             )}
           </div>
@@ -1583,10 +2141,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
             type="button"
             data-testid="database-export-csv-btn"
             onClick={handleExportCSV}
-            className="flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-sm transition bg-teal-700 hover:bg-teal-600 active:bg-teal-800 text-white cursor-pointer"
+            className="flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-sm transition bg-[#00897b] hover:bg-[#00796b] text-white cursor-pointer"
             title={`Export current filtered ${activeDbType} view as Excel-compatible CSV`}
           >
-            <Download className="w-4 h-4 text-teal-200" />
+            <Download className="w-4 h-4 text-[#80cbc4]" />
             <span>EXPORT CSV ({currentFilteredCount})</span>
           </button>
 
@@ -1597,10 +2155,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
             onClick={() => setIsBatchSidebarOpen((prev) => !prev)}
             className={`flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-sm transition cursor-pointer ${
               isBatchSidebarOpen
-                ? 'bg-amber-500 text-slate-950 ring-2 ring-amber-400'
+                ? 'bg-[#00897b] text-white ring-2 ring-[#5eead4]'
                 : selectedIds.length > 0
-                ? 'bg-amber-400 hover:bg-amber-300 text-slate-950'
-                : 'bg-slate-800 hover:bg-slate-700 text-amber-300'
+                ? 'bg-[#1877d2] hover:bg-[#1465b5] text-white'
+                : 'bg-[#263843] hover:bg-[#1c2a33] text-[#5eead4]'
             }`}
             title="Open Batch Update secondary sidebar to bulk edit multiple selected rows at once"
           >
@@ -1625,12 +2183,12 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
             disabled={currentFilteredCount === 0}
             className={`flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-sm transition whitespace-nowrap ${
               currentFilteredCount > 0
-                ? 'bg-amber-600 hover:bg-amber-500 text-white cursor-pointer active:bg-amber-700'
+                ? 'bg-[#089bc4] hover:bg-[#0782a5] text-white cursor-pointer'
                 : 'bg-slate-200 text-slate-400 cursor-not-allowed'
             }`}
             title={`Select all ${currentFilteredCount} records and open batch update panel`}
           >
-            <Sparkles className="w-4 h-4 text-amber-200" />
+            <Sparkles className="w-4 h-4 text-white" />
             <span>UPDATE ALL ({currentFilteredCount})</span>
           </button>
 
@@ -1642,7 +2200,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
             disabled={selectedIds.length === 0}
             className={`flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-sm transition ${
               selectedIds.length > 0
-                ? 'bg-[#1b2b44] hover:bg-slate-800 text-white cursor-pointer'
+                ? 'bg-[#263843] hover:bg-[#1c2a33] text-white cursor-pointer'
                 : 'bg-slate-200 text-slate-400 cursor-not-allowed'
             }`}
           >
@@ -1659,19 +2217,19 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               disabled={isExportingBatchSlips || selectedIds.length === 0}
               className={`flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-sm transition ${
                 selectedIds.length > 0
-                  ? 'bg-purple-700 hover:bg-purple-600 active:bg-purple-800 text-white cursor-pointer ring-1 ring-purple-400/50'
+                  ? 'bg-[#00897b] hover:bg-[#00796b] text-white cursor-pointer'
                   : 'bg-slate-200 text-slate-400 cursor-not-allowed'
               } disabled:opacity-50`}
               title="Batch export multiple selected payment slips as a single combined PDF document"
             >
               {isExportingBatchSlips ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin text-purple-200" />
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
                   <span>EXPORTING {selectedIds.length} SLIPS...</span>
                 </>
               ) : (
                 <>
-                  <FileDown className="w-4 h-4 text-amber-300" />
+                  <FileDown className="w-4 h-4 text-[#80cbc4]" />
                   <span>
                     BATCH EXPORT SLIPS .PDF {selectedIds.length > 0 ? `(${selectedIds.length})` : ''}
                   </span>
@@ -1685,10 +2243,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
             type="button"
             data-testid="database-snapshots-btn"
             onClick={openSnapshotModal}
-            className="flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-sm transition bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer"
+            className="flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-sm transition bg-[#1877d2] hover:bg-[#1465b5] text-white cursor-pointer"
             title="Create or Restore Local JSON Database Snapshots"
           >
-            <Archive className="w-3.5 h-3.5 text-amber-300" />
+            <Archive className="w-3.5 h-3.5 text-white" />
             <span>SNAPSHOTS ({snapshots.length})</span>
           </button>
 
@@ -1750,7 +2308,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               onClick={() => setValidationFilter('all')}
               className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
                 validationFilter === 'all'
-                  ? 'bg-[#1b2b44] text-white'
+                  ? 'bg-[#263843] text-white'
                   : 'text-slate-700 hover:bg-slate-100'
               }`}
             >
@@ -1784,23 +2342,181 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
         </div>
       </div>
 
+      {/* Bulk Selection & Batch Operations Toolbar (Status Updates & Deletion) */}
+      <div
+        data-testid="database-bulk-action-bar"
+        className={`rounded-xl px-4 py-3 border-2 shadow-sm flex flex-wrap items-center justify-between gap-3 transition-all ${
+          selectedIds.length > 0
+            ? 'bg-[#273E56] border-[#1D6CE0] text-white'
+            : 'bg-white border-slate-200 text-slate-700'
+        }`}
+      >
+        <div className="flex flex-wrap items-center gap-2.5 text-xs">
+          <button
+            type="button"
+            data-testid="bulk-bar-toggle-select-all-btn"
+            onClick={() => handleSelectAll(activeVisibleIds)}
+            disabled={activeVisibleIds.length === 0}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+              selectedIds.length > 0
+                ? 'bg-[#1F3349] hover:bg-[#152536] text-[#93C5FD] border border-[#3B5572]'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300'
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            {activeSelectionState.allSelected ? (
+              <CheckSquare className="w-4 h-4 text-[#60A5FA]" />
+            ) : (
+              <Square className="w-4 h-4" />
+            )}
+            <span>
+              {activeSelectionState.allSelected
+                ? `Deselect All (${activeVisibleIds.length})`
+                : `Select All (${activeVisibleIds.length})`}
+            </span>
+          </button>
+
+          <span
+            data-testid="bulk-selected-count-badge"
+            className={`px-2.5 py-1 rounded-md font-mono font-black text-xs ${
+              selectedIds.length > 0
+                ? 'bg-[#1D6CE0] text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 border border-slate-200'
+            }`}
+          >
+            {selectedIds.length} Row{selectedIds.length === 1 ? '' : 's'} Selected
+          </span>
+
+          {selectedIds.length > 0 && (
+            <button
+              type="button"
+              data-testid="bulk-clear-selection-btn"
+              onClick={() => setSelectedIds([])}
+              className="text-xs font-semibold text-[#93C5FD] hover:text-white underline cursor-pointer"
+            >
+              Clear Selection
+            </button>
+          )}
+        </div>
+
+        {/* Batch Operations: Status Update & Batch Delete */}
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {/* Batch Status Selector + Apply Button */}
+          <div
+            className={`flex flex-wrap items-center gap-1.5 px-2.5 py-1 rounded-lg border ${
+              selectedIds.length > 0
+                ? 'bg-[#1F3349] border-[#3B5572]'
+                : 'bg-slate-50 border-slate-300'
+            }`}
+          >
+            <span
+              className={`text-[11px] font-bold uppercase ${
+                selectedIds.length > 0 ? 'text-[#93C5FD]' : 'text-slate-500'
+              }`}
+            >
+              Batch Status:
+            </span>
+            <select
+              data-testid="bulk-status-select"
+              aria-label="Batch status for selected rows"
+              value={bulkTargetStatus}
+              onChange={(e) => setBulkTargetStatus(e.target.value)}
+              className={`font-bold text-xs px-2 py-1 rounded border focus:outline-none cursor-pointer ${
+                selectedIds.length > 0
+                  ? 'bg-[#273E56] text-white border-[#3B5572]'
+                  : 'bg-white text-slate-800 border-slate-300'
+              }`}
+            >
+              {BATCH_STATUS_OPTIONS.map((statusOpt) => (
+                <option key={statusOpt} value={statusOpt} className="text-slate-900 bg-white">
+                  {statusOpt}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              data-testid="bulk-status-update-btn"
+              disabled={selectedIds.length === 0}
+              onClick={() => handleBatchStatusUpdate()}
+              className={`inline-flex items-center gap-1 px-3 py-1 rounded-md text-xs font-black uppercase tracking-wide transition ${
+                selectedIds.length > 0
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer shadow-xs'
+                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+              }`}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Update Status ({selectedIds.length})</span>
+            </button>
+          </div>
+
+          {/* Quick Status Action Buttons */}
+          <div className="hidden xl:flex items-center gap-1">
+            <button
+              type="button"
+              data-testid="bulk-quick-mark-paid-btn"
+              disabled={selectedIds.length === 0}
+              onClick={() => handleBatchStatusUpdate('PAID')}
+              className={`px-2.5 py-1.5 rounded-lg text-[11px] font-black uppercase transition ${
+                selectedIds.length > 0
+                  ? 'bg-emerald-700 hover:bg-emerald-600 text-white cursor-pointer'
+                  : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+              }`}
+              title="Mark all selected rows as PAID"
+            >
+              Mark PAID
+            </button>
+            <button
+              type="button"
+              data-testid="bulk-quick-mark-unpaid-btn"
+              disabled={selectedIds.length === 0}
+              onClick={() => handleBatchStatusUpdate('UNPAID')}
+              className={`px-2.5 py-1.5 rounded-lg text-[11px] font-black uppercase transition ${
+                selectedIds.length > 0
+                  ? 'bg-amber-600 hover:bg-amber-500 text-white cursor-pointer'
+                  : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+              }`}
+              title="Mark all selected rows as UNPAID"
+            >
+              Mark UNPAID
+            </button>
+          </div>
+
+          {/* Batch Delete Selected Rows Button */}
+          <button
+            type="button"
+            data-testid="bulk-delete-selected-btn"
+            aria-label={`Delete ${selectedIds.length} selected rows`}
+            disabled={selectedIds.length === 0}
+            onClick={handleBatchDeleteSelected}
+            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-black uppercase tracking-wide shadow-sm transition ${
+              selectedIds.length > 0
+                ? 'bg-rose-600 hover:bg-rose-700 text-white cursor-pointer'
+                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+            }`}
+            title="Batch delete all currently selected rows"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>Delete Selected ({selectedIds.length})</span>
+          </button>
+        </div>
+      </div>
+
       {/* Main Database Content + Secondary Batch Update Sidebar */}
       <div className="flex flex-col lg:flex-row items-start gap-5">
       {/* Database Tables */}
-      <div className="flex-1 min-w-0 w-full bg-white rounded-xl shadow border border-slate-200 overflow-hidden">
+      <div className="flex-1 min-w-0 w-full bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         {/* Active Sort Banner Indicator */}
         {activeSortConfig.column && (
           <div
             data-testid="database-active-sort-banner"
-            className="px-3.5 py-1.5 bg-slate-900 text-white text-xs flex flex-wrap items-center justify-between gap-2 border-b border-slate-700"
+            className="px-3.5 py-1.5 bg-[#273E56] text-white text-xs flex flex-wrap items-center justify-between gap-2 border-b border-[#1F3349]"
           >
             <div className="flex items-center space-x-2">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-amber-400">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-[#93C5FD]">
                 Sorted View:
               </span>
               <span className="text-slate-200 font-medium">
                 <strong className="text-white font-bold">{getColumnHeaderTitle(activeSortConfig.column)}</strong> (
-                <span className="text-amber-300 font-mono font-bold">
+                <span className="text-[#BFDBFE] font-mono font-bold">
                   {activeSortConfig.direction === 'asc' ? 'Ascending ↑' : 'Descending ↓'}
                 </span>
                 )
@@ -1810,7 +2526,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               type="button"
               data-testid="database-reset-sort-btn"
               onClick={handleResetSort}
-              className="text-[11px] text-amber-400 hover:text-amber-300 underline font-semibold cursor-pointer"
+              className="text-[11px] text-[#93C5FD] hover:text-white underline font-semibold cursor-pointer"
             >
               Reset Sort
             </button>
@@ -1818,24 +2534,35 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
         )}
 
         {activeDbType === 'purchase' && (
-          <div className="p-2.5 bg-slate-50/70">
+          <div className="p-2.5 bg-[#EDF2F7]/60">
+            {isPurchaseDbScrollCapped && (
+              <div className="mb-1.5 flex items-center justify-between text-[11px] font-mono text-slate-600 px-1">
+                <span>
+                  Viewport: <strong>31 Rows</strong> visible ({sortedPurchases.length} total rows — scroll vertically to view more)
+                </span>
+              </div>
+            )}
             <div
+              ref={purchaseDbScrollRef}
               data-testid="purchase-db-scroll-box"
-              className="overflow-x-auto border-2 border-blue-200 rounded-lg bg-white"
+              data-visible-row-limit="31"
+              style={purchaseDbScrollMaxHeight ? { maxHeight: `${purchaseDbScrollMaxHeight}px` } : undefined}
+              className="overflow-auto border border-[#CBD8E6] rounded-lg bg-white print:!max-h-none print:!overflow-visible"
             >
             <table className="w-full text-left text-[11px]">
-              <thead className="bg-[#1b73b4] text-white font-bold uppercase text-[10px] tracking-tight border-b border-blue-900">
+              <thead className="sticky top-0 z-10 bg-[#273E56] text-white font-bold uppercase text-[10px] tracking-tight border-b border-[#1F3349]">
                 <tr>
                   <th className="px-1.5 py-2 w-7 text-center">
                     <input
+                      ref={purchaseHeaderCheckboxRef}
                       type="checkbox"
-                      checked={
-                        sortedPurchases.length > 0 &&
-                        selectedIds.length === sortedPurchases.length
-                      }
+                      data-testid="select-all-purchase-checkbox"
+                      aria-label="Select all purchase rows"
+                      checked={activeSelectionState.allSelected}
                       onChange={() =>
                         handleSelectAll(sortedPurchases.map((p) => p.id))
                       }
+                      className="cursor-pointer accent-[#1D6CE0]"
                     />
                   </th>
                   <th className="px-1.5 py-2 w-10 text-center whitespace-nowrap">SL #</th>
@@ -1848,13 +2575,14 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   {renderSortableHeader('totalAmount', 'TOTAL AMOUNT', 'right', 'whitespace-nowrap')}
                   {renderSortableHeader('paidAmount', 'PAID AMOUNT', 'right', 'whitespace-nowrap')}
                   {renderSortableHeader('balance', 'BALANCE', 'right', 'whitespace-nowrap')}
+                  {renderSortableHeader('status', 'STATUS', 'center', 'whitespace-nowrap')}
                   <th className="px-1.5 py-2 text-center whitespace-nowrap">ACTIONS</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 font-medium">
                 {sortedPurchases.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="p-8 text-center text-slate-400">
+                    <td colSpan={13} className="p-8 text-center text-slate-400">
                       No purchase records found.
                     </td>
                   </tr>
@@ -1882,8 +2610,11 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         <td className="px-1.5 py-1.5 text-center">
                           <input
                             type="checkbox"
+                            data-testid={`select-purchase-row-${p.id}`}
+                            aria-label={`Select purchase invoice ${p.invoiceNumber}`}
                             checked={isSelected}
                             onChange={() => toggleSelectOne(p.id)}
+                            className="cursor-pointer accent-[#1D6CE0]"
                           />
                         </td>
                         <td className="px-1.5 py-1.5 text-center whitespace-nowrap">
@@ -1895,7 +2626,19 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                           recordId={p.id}
                           fieldKey="invoiceNumber"
                           rawValue={p.invoiceNumber}
-                          displayNode={p.invoiceNumber}
+                          displayNode={
+                            <div className="flex items-center gap-1">
+                              <span>{p.invoiceNumber}</span>
+                              {p.calculationPending && (
+                                <span
+                                  data-testid={`pending-calc-badge-${p.id}`}
+                                  className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-black uppercase"
+                                >
+                                  Pending Calc
+                                </span>
+                              )}
+                            </div>
+                          }
                           validation={
                             rowValidation.invoiceNumber ||
                             validateDatabaseCellValue('purchase', 'invoiceNumber', p.invoiceNumber)
@@ -1912,8 +2655,8 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         <DatabaseValidatedCell
                           recordId={p.id}
                           fieldKey="date"
-                          rawValue={p.date}
-                          displayNode={formatDate(p.date)}
+                          rawValue={p.rawValues?.date ?? p.date}
+                          displayNode={p.rawValues?.date || formatDate(p.date) || '(Blank)'}
                           validation={
                             rowValidation.date ||
                             validateDatabaseCellValue('purchase', 'date', p.date)
@@ -1930,11 +2673,11 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         <DatabaseValidatedCell
                           recordId={p.id}
                           fieldKey="description"
-                          rawValue={p.description}
-                          displayNode={p.description}
+                          rawValue={p.rawValues?.description ?? p.description}
+                          displayNode={p.rawValues?.description || p.description || '(Blank)'}
                           validation={
                             rowValidation.description ||
-                            validateDatabaseCellValue('purchase', 'description', p.description)
+                            validateDatabaseCellValue('purchase', 'description', p.description || '-')
                           }
                           hasDraftOverride={Object.prototype.hasOwnProperty.call(
                             rowDrafts,
@@ -1948,8 +2691,8 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         <DatabaseValidatedCell
                           recordId={p.id}
                           fieldKey="contactNumber"
-                          rawValue={p.contactNumber}
-                          displayNode={p.contactNumber || '-'}
+                          rawValue={p.rawValues?.contactNumber ?? p.contactNumber}
+                          displayNode={p.rawValues?.contactNumber || p.contactNumber || '-'}
                           validation={
                             rowValidation.contactNumber ||
                             validateDatabaseCellValue('purchase', 'contactNumber', p.contactNumber)
@@ -1971,8 +2714,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         <DatabaseValidatedCell
                           recordId={p.id}
                           fieldKey="totalQty"
-                          rawValue={p.totalQty}
-                          displayNode={p.totalQty}
+                          rawValue={p.rawValues?.totalQty ?? p.totalQty}
+                          displayNode={p.rawValues?.totalQty ? `${p.rawValues.totalQty}` : p.totalQty}
+                          isPendingCalc={Boolean(p.pendingFields?.includes('totalQty'))}
                           align="right"
                           validation={
                             rowValidation.totalQty ||
@@ -1990,8 +2734,12 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         <DatabaseValidatedCell
                           recordId={p.id}
                           fieldKey="totalAmount"
-                          rawValue={p.totalAmount}
-                          displayNode={formatCurrency(p.totalAmount, companyProfile.currency)}
+                          rawValue={p.rawValues?.totalAmount ?? p.totalAmount}
+                          displayNode={
+                            p.rawValues?.totalAmount ||
+                            (p.calculationPending ? 'Pending Calc' : formatCurrency(p.totalAmount, companyProfile.currency))
+                          }
+                          isPendingCalc={Boolean(p.calculationPending)}
                           align="right"
                           validation={
                             rowValidation.totalAmount ||
@@ -2009,8 +2757,11 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         <DatabaseValidatedCell
                           recordId={p.id}
                           fieldKey="paidAmount"
-                          rawValue={p.paidAmount}
-                          displayNode={formatCurrency(p.paidAmount, companyProfile.currency)}
+                          rawValue={p.rawValues?.paidAmount ?? p.paidAmount}
+                          displayNode={
+                            p.rawValues?.paidAmount || formatCurrency(p.paidAmount, companyProfile.currency)
+                          }
+                          isPendingCalc={Boolean(p.pendingFields?.includes('paidAmount'))}
                           align="right"
                           validation={
                             rowValidation.paidAmount ||
@@ -2029,7 +2780,12 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                           recordId={p.id}
                           fieldKey="balance"
                           rawValue={p.balance}
-                          displayNode={formatCurrency(p.balance, companyProfile.currency)}
+                          displayNode={
+                            p.calculationPending
+                              ? 'Pending Calc'
+                              : formatCurrency(p.balance, companyProfile.currency)
+                          }
+                          isPendingCalc={Boolean(p.calculationPending)}
                           align="right"
                           validation={
                             rowValidation.balance ||
@@ -2044,6 +2800,12 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                           onCommitValid={handleCellCommitValid}
                           onClearDraft={handleCellClearDraft}
                         />
+                        <td className="px-1.5 py-1.5 text-center whitespace-nowrap">
+                          {renderStatusBadge(
+                            resolvePurchaseRecordStatus(p),
+                            `purchase-status-badge-${p.id}`
+                          )}
+                        </td>
                         <td className="px-1.5 py-1.5 text-center whitespace-nowrap">
                           <div className="flex items-center justify-center space-x-1">
                             <button
@@ -2096,91 +2858,99 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
 
         {activeDbType === 'packing' && (
           <div>
-            <div className="px-3 py-2 bg-teal-50/70 border-b border-teal-200 flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div className="font-bold text-teal-950">
+            <div className="px-3 py-2 bg-white border-b border-slate-300 flex flex-wrap items-center justify-between gap-2 text-xs text-black">
+              <div className="font-bold text-black">
                 Packing List Ledger — Live BDT Conversion
               </div>
-              <div className="font-mono text-[11px] font-semibold text-teal-900 bg-white px-2.5 py-0.5 rounded border border-teal-200">
+              <div className="font-mono text-[11px] font-semibold text-black bg-white px-2.5 py-0.5 rounded border border-slate-300">
                 Formula: <strong>Total Value (RMB) × RMB Rate = Total Amount (BDT)</strong>
               </div>
             </div>
-            <div className="p-2.5 bg-slate-50/70">
+            <div className="p-2.5 bg-white">
+              {isPackingDbScrollCapped && (
+                <div className="mb-1.5 flex items-center justify-between text-[11px] font-mono text-black px-1">
+                  <span>
+                    Viewport: <strong>31 Rows</strong> visible ({sortedPackings.length} total rows — scroll vertically to view more)
+                  </span>
+                </div>
+              )}
               <div
+                ref={packingDbScrollRef}
                 data-testid="packing-db-scroll-box"
-                className="overflow-x-auto border-2 border-teal-200 rounded-lg bg-white"
+                data-visible-row-limit="31"
+                style={packingDbScrollMaxHeight ? { maxHeight: `${packingDbScrollMaxHeight}px` } : undefined}
+                className="overflow-auto border border-slate-300 rounded-lg bg-white text-black print:!max-h-none print:!overflow-visible"
               >
-              <table className="w-full text-left text-[11px]">
-                <thead className="bg-[#12776c] text-white font-bold uppercase text-[10px] tracking-tight border-b border-teal-900">
-                  <tr>
-                    <th className="px-1 py-2 w-6 text-center">
+              <table
+                data-testid="packing-ledger-live-bdt-table"
+                className="w-full text-left text-[11px] bg-white text-black packing-ledger-plain-table"
+              >
+                <thead className="sticky top-0 z-10 bg-white text-black font-bold uppercase text-[10px] tracking-tight border-b border-slate-300">
+                  <tr className="bg-white text-black">
+                    <th className="px-1 py-2 w-6 text-center bg-white text-black">
                       <input
+                        ref={packingHeaderCheckboxRef}
                         type="checkbox"
-                        checked={
-                          sortedPackings.length > 0 &&
-                          selectedIds.length === sortedPackings.length
-                        }
+                        data-testid="select-all-packing-checkbox"
+                        aria-label="Select all packing rows"
+                        checked={activeSelectionState.allSelected}
                         onChange={() =>
                           handleSelectAll(sortedPackings.map((p) => p.id))
                         }
+                        className="cursor-pointer accent-black"
                       />
                     </th>
-                    <th className="px-1 py-2 w-10 text-center whitespace-nowrap">SL #</th>
-                    {renderSortableHeader('invoiceNumber', 'PACKING NO', 'left', 'whitespace-nowrap')}
-                    {renderSortableHeader('date', 'DATE', 'left', 'whitespace-nowrap')}
-                    {renderSortableHeader('shippingMark', 'SHIPPING MARK', 'left')}
-                    {renderSortableHeader('flight', 'FLIGHT', 'left', 'whitespace-nowrap')}
-                    {renderSortableHeader('destination', 'DESTINATION', 'left')}
-                    {renderSortableHeader('shipper', 'SHIPPER', 'left')}
-                    {renderSortableHeader('items', 'ITEMS', 'left')}
-                    {renderSortableHeader('totalBox', 'TOTAL BOX', 'right')}
-                    {renderSortableHeader('totalWeight', 'TOTAL WEIGHT', 'right')}
-                    {renderSortableHeader('totalAmount', 'TOTAL VALUE', 'right')}
-                    {renderSortableHeader('rmbRate', 'RMB RATE', 'right')}
-                    {renderSortableHeader('amountBDT', 'TOTAL AMOUNT (BDT)', 'right')}
-                    <th className="px-1 py-2 text-center whitespace-nowrap">ACTIONS</th>
+                    <th className="px-1 py-2 w-10 text-center whitespace-nowrap bg-white text-black">SL #</th>
+                    {renderSortableHeader('invoiceNumber', 'PACKING NO', 'left', 'whitespace-nowrap bg-white text-black')}
+                    {renderSortableHeader('date', 'DATE', 'left', 'whitespace-nowrap bg-white text-black')}
+                    {renderSortableHeader('shippingMark', 'SHIPPING MARK', 'left', 'bg-white text-black')}
+                    {renderSortableHeader('flight', 'FLIGHT', 'left', 'whitespace-nowrap bg-white text-black')}
+                    {renderSortableHeader('destination', 'DESTINATION', 'left', 'bg-white text-black')}
+                    {renderSortableHeader('shipper', 'SHIPPER', 'left', 'bg-white text-black')}
+                    {renderSortableHeader('items', 'ITEMS', 'left', 'bg-white text-black')}
+                    {renderSortableHeader('totalBox', 'TOTAL BOX', 'right', 'bg-white text-black')}
+                    {renderSortableHeader('totalWeight', 'TOTAL WEIGHT', 'right', 'bg-white text-black')}
+                    {renderSortableHeader('totalAmount', 'TOTAL VALUE', 'right', 'bg-white text-black')}
+                    {renderSortableHeader('rmbRate', 'RMB RATE', 'right', 'bg-white text-black')}
+                    {renderSortableHeader('amountBDT', 'TOTAL AMOUNT (BDT)', 'right', 'bg-white text-black')}
+                    {renderSortableHeader('status', 'STATUS', 'center', 'whitespace-nowrap bg-white text-black')}
+                    <th className="px-1 py-2 text-center whitespace-nowrap bg-white text-black">ACTIONS</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 font-medium">
+                <tbody className="divide-y divide-slate-200 font-medium bg-white text-black">
                   {sortedPackings.length === 0 ? (
-                    <tr>
-                      <td colSpan={15} className="p-8 text-center text-slate-400">
+                    <tr className="bg-white text-black">
+                      <td colSpan={16} className="p-8 text-center text-black bg-white">
                         No packing list records found.
                       </td>
                     </tr>
                   ) : (
                     sortedPackings.map((pkg, idx) => {
                       const isSelected = selectedIds.includes(pkg.id);
-                      const isEvenRow = idx % 2 === 1;
                       const computedAmountBDT = calculatePackingTotalAmountBDT(
                         pkg.totalAmount,
                         pkg.rmbRate
                       );
                       const rowValidation = validationSummary.resultsByRecordId[pkg.id] || {};
                       const rowDrafts = cellDraftsByDb.packing[pkg.id] || {};
-                      const hasRowValidationError = validationSummary.invalidRecordIds.includes(pkg.id);
                       return (
                       <tr
                         key={pkg.id}
                         data-testid={`packing-row-${pkg.id}`}
-                        className={`transition-colors duration-150 ${
-                          hasRowValidationError
-                            ? 'bg-rose-50/70 hover:bg-rose-50'
-                            : isSelected
-                            ? 'bg-teal-100/85 hover:bg-teal-100'
-                            : isEvenRow
-                            ? 'bg-slate-50/90 hover:bg-teal-50/85'
-                            : 'bg-white hover:bg-teal-50/85'
-                        }`}
+                        className="bg-white text-black"
                       >
-                        <td className="px-1.5 py-1.5 text-center">
+                        <td className="px-1.5 py-1.5 text-center bg-white text-black">
                           <input
                             type="checkbox"
+                            data-testid={`select-packing-row-${pkg.id}`}
+                            aria-label={`Select packing list ${pkg.invoiceNumber}`}
                             checked={isSelected}
                             onChange={() => toggleSelectOne(pkg.id)}
+                            className="cursor-pointer accent-black"
                           />
                         </td>
-                        <td className="px-1 py-1.5 text-center whitespace-nowrap">
-                          <span className="zsb-sl-badge">
+                        <td className="px-1 py-1.5 text-center whitespace-nowrap bg-white text-black">
+                          <span className="font-mono font-bold text-black">
                             {String(idx + 1).padStart(2, '0')}
                           </span>
                         </td>
@@ -2188,7 +2958,19 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                           recordId={pkg.id}
                           fieldKey="invoiceNumber"
                           rawValue={pkg.invoiceNumber}
-                          displayNode={pkg.invoiceNumber}
+                          displayNode={
+                            <div className="flex items-center gap-1 text-black">
+                              <span>{pkg.invoiceNumber}</span>
+                              {pkg.calculationPending && (
+                                <span
+                                  data-testid={`pending-calc-badge-${pkg.id}`}
+                                  className="px-1.5 py-0.5 rounded bg-white text-black border border-slate-300 text-[9px] font-black uppercase"
+                                >
+                                  Pending Calc
+                                </span>
+                              )}
+                            </div>
+                          }
                           validation={
                             rowValidation.invoiceNumber ||
                             validateDatabaseCellValue('packing', 'invoiceNumber', pkg.invoiceNumber)
@@ -2197,7 +2979,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             rowDrafts,
                             'invoiceNumber'
                           )}
-                          className="font-mono font-bold text-teal-900 whitespace-nowrap"
+                          className="font-mono font-bold text-black bg-white whitespace-nowrap"
                           onDraftChange={handleCellDraftChange}
                           onCommitValid={handleCellCommitValid}
                           onClearDraft={handleCellClearDraft}
@@ -2205,8 +2987,8 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         <DatabaseValidatedCell
                           recordId={pkg.id}
                           fieldKey="packingDate"
-                          rawValue={pkg.packingDate}
-                          displayNode={formatDate(pkg.packingDate)}
+                          rawValue={pkg.rawValues?.packingDate ?? pkg.packingDate}
+                          displayNode={pkg.rawValues?.packingDate || formatDate(pkg.packingDate) || '(Blank)'}
                           validation={
                             rowValidation.packingDate ||
                             validateDatabaseCellValue('packing', 'packingDate', pkg.packingDate)
@@ -2215,7 +2997,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             rowDrafts,
                             'packingDate'
                           )}
-                          className="font-mono text-slate-600 whitespace-nowrap"
+                          className="font-mono text-black bg-white whitespace-nowrap"
                           onDraftChange={handleCellDraftChange}
                           onCommitValid={handleCellCommitValid}
                           onClearDraft={handleCellClearDraft}
@@ -2223,17 +3005,17 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         <DatabaseValidatedCell
                           recordId={pkg.id}
                           fieldKey="shippingMark"
-                          rawValue={pkg.shippingMark}
-                          displayNode={pkg.shippingMark}
+                          rawValue={pkg.rawValues?.shippingMark ?? pkg.shippingMark}
+                          displayNode={pkg.rawValues?.shippingMark || pkg.shippingMark || '(Blank)'}
                           validation={
                             rowValidation.shippingMark ||
-                            validateDatabaseCellValue('packing', 'shippingMark', pkg.shippingMark)
+                            validateDatabaseCellValue('packing', 'shippingMark', pkg.shippingMark || '-')
                           }
                           hasDraftOverride={Object.prototype.hasOwnProperty.call(
                             rowDrafts,
                             'shippingMark'
                           )}
-                          className="font-black text-blue-900"
+                          className="font-black text-black bg-white"
                           onDraftChange={handleCellDraftChange}
                           onCommitValid={handleCellCommitValid}
                           onClearDraft={handleCellClearDraft}
@@ -2241,17 +3023,17 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         <DatabaseValidatedCell
                           recordId={pkg.id}
                           fieldKey="flight"
-                          rawValue={pkg.flight}
-                          displayNode={pkg.flight}
+                          rawValue={pkg.rawValues?.flight ?? pkg.flight}
+                          displayNode={pkg.rawValues?.flight || pkg.flight || '(Blank)'}
                           validation={
                             rowValidation.flight ||
-                            validateDatabaseCellValue('packing', 'flight', pkg.flight)
+                            validateDatabaseCellValue('packing', 'flight', pkg.flight || '-')
                           }
                           hasDraftOverride={Object.prototype.hasOwnProperty.call(
                             rowDrafts,
                             'flight'
                           )}
-                          className="font-mono text-slate-700 whitespace-nowrap"
+                          className="font-mono text-black bg-white whitespace-nowrap"
                           onDraftChange={handleCellDraftChange}
                           onCommitValid={handleCellCommitValid}
                           onClearDraft={handleCellClearDraft}
@@ -2259,17 +3041,17 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         <DatabaseValidatedCell
                           recordId={pkg.id}
                           fieldKey="destination"
-                          rawValue={pkg.destination}
-                          displayNode={pkg.destination}
+                          rawValue={pkg.rawValues?.destination ?? pkg.destination}
+                          displayNode={pkg.rawValues?.destination || pkg.destination || '(Blank)'}
                           validation={
                             rowValidation.destination ||
-                            validateDatabaseCellValue('packing', 'destination', pkg.destination)
+                            validateDatabaseCellValue('packing', 'destination', pkg.destination || '-')
                           }
                           hasDraftOverride={Object.prototype.hasOwnProperty.call(
                             rowDrafts,
                             'destination'
                           )}
-                          className="font-bold text-slate-800"
+                          className="font-bold text-black bg-white"
                           onDraftChange={handleCellDraftChange}
                           onCommitValid={handleCellCommitValid}
                           onClearDraft={handleCellClearDraft}
@@ -2277,30 +3059,30 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         <DatabaseValidatedCell
                           recordId={pkg.id}
                           fieldKey="shipper"
-                          rawValue={pkg.shipper}
-                          displayNode={pkg.shipper}
+                          rawValue={pkg.rawValues?.shipper ?? pkg.shipper}
+                          displayNode={pkg.rawValues?.shipper || pkg.shipper || '(Blank)'}
                           validation={
                             rowValidation.shipper ||
-                            validateDatabaseCellValue('packing', 'shipper', pkg.shipper)
+                            validateDatabaseCellValue('packing', 'shipper', pkg.shipper || '-')
                           }
                           hasDraftOverride={Object.prototype.hasOwnProperty.call(
                             rowDrafts,
                             'shipper'
                           )}
-                          className="text-slate-700"
+                          className="font-bold text-black bg-white"
                           onDraftChange={handleCellDraftChange}
                           onCommitValid={handleCellCommitValid}
                           onClearDraft={handleCellClearDraft}
                         />
                         <td
-                          className="px-1.5 py-1.5 font-mono text-[11px] text-slate-700"
+                          className="px-1.5 py-1.5 font-mono text-[11px] text-black bg-white"
                           data-testid={`packing-items-cell-${pkg.id}`}
                         >
-                          <div className="flex flex-wrap items-center gap-1 leading-tight">
-                            <span className="px-1 py-0.5 rounded bg-teal-100 text-teal-900 font-bold text-[10px] whitespace-nowrap">
+                          <div className="flex flex-wrap items-center gap-1 leading-tight text-black">
+                            <span className="px-1 py-0.5 rounded bg-white text-black border border-slate-300 font-bold text-[10px] whitespace-nowrap">
                               {pkg.items?.length || 0} {(pkg.items?.length || 0) === 1 ? 'Item' : 'Items'}
                             </span>
-                            <span className="font-bold text-slate-800">
+                            <span className="font-bold text-black">
                               {(pkg.items || []).map((it) => it.item).join(', ')}
                             </span>
                           </div>
@@ -2308,8 +3090,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         <DatabaseValidatedCell
                           recordId={pkg.id}
                           fieldKey="totalBox"
-                          rawValue={pkg.totalBox}
-                          displayNode={pkg.totalBox}
+                          rawValue={pkg.rawValues?.totalBox ?? pkg.totalBox}
+                          displayNode={pkg.rawValues?.totalBox || pkg.totalBox}
+                          isPendingCalc={Boolean(pkg.pendingFields?.includes('totalBox'))}
                           align="right"
                           validation={
                             rowValidation.totalBox ||
@@ -2319,7 +3102,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             rowDrafts,
                             'totalBox'
                           )}
-                          className="font-mono text-slate-700"
+                          className="font-mono text-black bg-white"
                           onDraftChange={handleCellDraftChange}
                           onCommitValid={handleCellCommitValid}
                           onClearDraft={handleCellClearDraft}
@@ -2327,8 +3110,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         <DatabaseValidatedCell
                           recordId={pkg.id}
                           fieldKey="totalWeight"
-                          rawValue={pkg.totalWeight}
-                          displayNode={`${pkg.totalWeight} KG`}
+                          rawValue={pkg.rawValues?.totalWeight ?? pkg.totalWeight}
+                          displayNode={pkg.rawValues?.totalWeight || `${pkg.totalWeight} KG`}
+                          isPendingCalc={Boolean(pkg.pendingFields?.includes('totalWeight'))}
                           align="right"
                           validation={
                             rowValidation.totalWeight ||
@@ -2338,7 +3122,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             rowDrafts,
                             'totalWeight'
                           )}
-                          className="font-mono font-bold text-teal-800"
+                          className="font-mono font-bold text-black bg-white"
                           onDraftChange={handleCellDraftChange}
                           onCommitValid={handleCellCommitValid}
                           onClearDraft={handleCellClearDraft}
@@ -2346,8 +3130,12 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         <DatabaseValidatedCell
                           recordId={pkg.id}
                           fieldKey="totalAmount"
-                          rawValue={pkg.totalAmount}
-                          displayNode={formatCurrency(pkg.totalAmount, 'RMB')}
+                          rawValue={pkg.rawValues?.totalAmount ?? pkg.totalAmount}
+                          displayNode={
+                            pkg.rawValues?.totalAmount ||
+                            (pkg.calculationPending ? 'Pending Calc' : formatCurrency(pkg.totalAmount, 'RMB'))
+                          }
+                          isPendingCalc={Boolean(pkg.calculationPending)}
                           align="right"
                           validation={
                             rowValidation.totalAmount ||
@@ -2357,7 +3145,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             rowDrafts,
                             'totalAmount'
                           )}
-                          className="font-mono font-bold text-slate-900"
+                          className="font-mono font-bold text-black bg-white"
                           onDraftChange={handleCellDraftChange}
                           onCommitValid={handleCellCommitValid}
                           onClearDraft={handleCellClearDraft}
@@ -2378,14 +3166,21 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             rowDrafts,
                             'rmbRate'
                           )}
+                          className="font-mono font-bold text-black bg-white"
                           onDraftChange={handleCellDraftChange}
                           onCommitValid={handleCellCommitValid}
                           onClearDraft={handleCellClearDraft}
                         />
-                        <td className="px-1.5 py-1.5 text-right font-mono font-black text-emerald-800 bg-emerald-50/40 whitespace-nowrap">
+                        <td className="px-1.5 py-1.5 text-right font-mono font-black text-black bg-white whitespace-nowrap">
                           {formatCurrency(computedAmountBDT, 'BDT')}
                         </td>
-                        <td className="px-1.5 py-1.5 text-center whitespace-nowrap">
+                        <td className="px-1.5 py-1.5 text-center whitespace-nowrap bg-white text-black">
+                          {renderStatusBadge(
+                            resolvePackingRecordStatus(pkg),
+                            `packing-status-badge-${pkg.id}`
+                          )}
+                        </td>
+                        <td className="px-1.5 py-1.5 text-center whitespace-nowrap bg-white text-black">
                           <div className="flex items-center justify-center space-x-1">
                             <button
                               onClick={() => {
@@ -2393,10 +3188,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                                 setActiveTab('packing_form');
                                 showToast(`Loaded manifest ${pkg.invoiceNumber} for editing.`);
                               }}
-                              className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 hover:bg-amber-200 text-amber-900 rounded transition flex items-center space-x-0.5 cursor-pointer"
+                              className="px-1.5 py-0.5 text-[10px] font-bold bg-white text-black border border-slate-300 rounded transition flex items-center space-x-0.5 cursor-pointer"
                               title={`Edit Packing List ${pkg.invoiceNumber}`}
                             >
-                              <Edit2 className="w-2.5 h-2.5 text-amber-700" />
+                              <Edit2 className="w-2.5 h-2.5 text-black" />
                               <span>EDIT</span>
                             </button>
                             <button
@@ -2408,10 +3203,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                                   items: pkg.items,
                                 })
                               }
-                              className="px-1.5 py-0.5 text-[10px] font-bold bg-teal-100 hover:bg-teal-200 text-teal-800 rounded transition flex items-center space-x-0.5 cursor-pointer"
+                              className="px-1.5 py-0.5 text-[10px] font-bold bg-white text-black border border-slate-300 rounded transition flex items-center space-x-0.5 cursor-pointer"
                               title="Print or Save PDF"
                             >
-                              <Printer className="w-2.5 h-2.5" />
+                              <Printer className="w-2.5 h-2.5 text-black" />
                               <span>PDF</span>
                             </button>
                             <button
@@ -2419,10 +3214,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                               data-testid={`delete-packing-btn-${pkg.id}`}
                               aria-label={`Delete packing list ${pkg.invoiceNumber}`}
                               onClick={() => deletePacking(pkg.id)}
-                              className="p-0.5 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
+                              className="p-0.5 bg-white text-black border border-slate-300 rounded transition cursor-pointer"
                               title={`Delete packing list ${pkg.invoiceNumber} (Super Admin Required)`}
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Trash2 className="w-3.5 h-3.5 text-black" />
                             </button>
                           </div>
                         </td>
@@ -2432,31 +3227,31 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 )}
               </tbody>
               {filteredPackings.length > 0 && (
-                <tfoot>
-                  <tr className="bg-teal-50 font-black border-t-2 border-teal-200 text-[11px]">
-                    <td colSpan={9} className="px-1.5 py-2 text-right uppercase text-teal-950">
+                <tfoot className="sticky bottom-0 z-10 bg-white text-black">
+                  <tr className="bg-white text-black font-black border-t-2 border-slate-300 text-[11px]">
+                    <td colSpan={9} className="px-1.5 py-2 text-right uppercase text-black bg-white">
                       PACKING DB TOTALS:
                     </td>
-                    <td className="px-1.5 py-2 text-right font-mono text-slate-900 whitespace-nowrap">
+                    <td className="px-1.5 py-2 text-right font-mono text-black bg-white whitespace-nowrap">
                       {filteredPackings.reduce((acc, p) => acc + (Number(p.totalBox) || 0), 0)}
                     </td>
-                    <td className="px-1.5 py-2 text-right font-mono text-teal-800 whitespace-nowrap">
+                    <td className="px-1.5 py-2 text-right font-mono text-black bg-white whitespace-nowrap">
                       {Math.round(
                         filteredPackings.reduce((acc, p) => acc + (Number(p.totalWeight) || 0), 0) *
                           100
                       ) / 100}{' '}
                       KG
                     </td>
-                    <td className="px-1.5 py-2 text-right font-mono text-slate-900 whitespace-nowrap">
+                    <td className="px-1.5 py-2 text-right font-mono text-black bg-white whitespace-nowrap">
                       {formatCurrency(
                         filteredPackings.reduce((acc, p) => acc + (Number(p.totalAmount) || 0), 0),
                         'RMB'
                       )}
                     </td>
-                    <td className="px-1.5 py-2 text-right font-mono text-slate-500 text-[10px] whitespace-nowrap">
+                    <td className="px-1.5 py-2 text-right font-mono text-black bg-white text-[10px] whitespace-nowrap">
                       × RATE =
                     </td>
-                    <td className="px-1.5 py-2 text-right font-mono text-emerald-800 bg-emerald-100/60 whitespace-nowrap">
+                    <td className="px-1.5 py-2 text-right font-mono text-black bg-white whitespace-nowrap">
                       {formatCurrency(
                         filteredPackings.reduce(
                           (acc, p) =>
@@ -2466,7 +3261,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         'BDT'
                       )}
                     </td>
-                    <td></td>
+                    <td colSpan={2} className="bg-white text-black"></td>
                   </tr>
                 </tfoot>
               )}
@@ -2479,13 +3274,13 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
         {activeDbType === 'payment' && (
           <div>
             {/* Payment Database Real-Time Search & Category Filter Toolbar */}
-            <div className="px-4 py-3 bg-gradient-to-r from-purple-50 via-indigo-50/40 to-slate-50 border-b border-purple-200 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+            <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
               {/* Category Filter Pills */}
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-bold text-purple-950 uppercase text-[11px] shrink-0">
+                <span className="font-bold text-[#263843] uppercase text-[11px] shrink-0">
                   Ledger:
                 </span>
-                <div className="flex items-center space-x-1 bg-white p-1 rounded-lg border border-purple-200 shadow-2xs">
+                <div className="flex items-center space-x-1 bg-white p-1 rounded-lg border border-slate-200 shadow-2xs">
                   <button
                     type="button"
                     onClick={() => {
@@ -2494,7 +3289,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                     }}
                     className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
                       paymentCategoryFilter === 'all'
-                        ? 'bg-purple-700 text-white shadow-xs'
+                        ? 'bg-[#263843] text-white shadow-xs'
                         : 'text-slate-700 hover:bg-slate-100'
                     }`}
                   >
@@ -2508,7 +3303,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                     }}
                     className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
                       paymentCategoryFilter === 'supplier'
-                        ? 'bg-[#8b3858] text-white shadow-xs'
+                        ? 'bg-[#1877d2] text-white shadow-xs'
                         : 'text-slate-700 hover:bg-slate-100'
                     }`}
                   >
@@ -2523,7 +3318,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                     }}
                     className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
                       paymentCategoryFilter === 'exporter'
-                        ? 'bg-[#126b62] text-white shadow-xs'
+                        ? 'bg-[#00897b] text-white shadow-xs'
                         : 'text-slate-700 hover:bg-slate-100'
                     }`}
                   >
@@ -2536,7 +3331,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               {/* Dedicated Real-Time Search Bar for Payment Database */}
               <div className="flex-1 max-w-md w-full relative">
                 <div className="relative flex items-center">
-                  <Search className="w-4 h-4 text-purple-600 absolute left-3 pointer-events-none" />
+                  <Search className="w-4 h-4 text-[#00897b] absolute left-3 pointer-events-none" />
                   <input
                     type="text"
                     data-testid="payment-db-search-input"
@@ -2548,7 +3343,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                       setPaymentSearchQuery(val);
                       setSearchTerm(val);
                     }}
-                    className="w-full pl-9 pr-8 py-2 text-xs font-semibold border-2 border-purple-300 rounded-lg bg-white placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-600 shadow-xs transition"
+                    className="w-full pl-9 pr-8 py-2 text-xs font-semibold border border-slate-300 rounded-lg bg-white placeholder:text-slate-400 placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-[#00897b] focus:border-[#00897b] shadow-2xs transition"
                   />
                   {paymentSearchQuery && (
                     <button
@@ -2572,7 +3367,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 {paymentSearchQuery && (
                   <span
                     data-testid="payment-search-results-badge"
-                    className="px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-900 font-bold border border-purple-300 flex items-center space-x-1 animate-in fade-in"
+                    className="px-2.5 py-0.5 rounded-full bg-teal-50 text-[#00897b] font-bold border border-teal-200 flex items-center space-x-1 animate-in fade-in"
                   >
                     <span>Found {sortedPayments.length} matches</span>
                     <button
@@ -2581,7 +3376,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         setPaymentSearchQuery('');
                         setSearchTerm('');
                       }}
-                      className="hover:text-purple-950 font-black cursor-pointer text-xs"
+                      className="hover:text-[#263843] font-black cursor-pointer text-xs"
                       title="Clear search"
                     >
                       ×
@@ -2589,30 +3384,41 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   </span>
                 )}
                 <span className="text-slate-500 font-mono">
-                  Showing <strong className="text-purple-950">{sortedPayments.length}</strong> of{' '}
+                  Showing <strong className="text-[#263843]">{sortedPayments.length}</strong> of{' '}
                   {payments.length}
                 </span>
               </div>
             </div>
 
             <div className="p-2.5 bg-slate-50/70">
+              {isPaymentDbScrollCapped && (
+                <div className="mb-1.5 flex items-center justify-between text-[11px] font-mono text-slate-600 px-1">
+                  <span>
+                    Viewport: <strong>31 Rows</strong> visible ({sortedPayments.length} total rows — scroll vertically to view more)
+                  </span>
+                </div>
+              )}
               <div
+                ref={paymentDbScrollRef}
                 data-testid="payment-db-scroll-box"
-                className="overflow-x-auto border-2 border-purple-200 rounded-lg bg-white"
+                data-visible-row-limit="31"
+                style={paymentDbScrollMaxHeight ? { maxHeight: `${paymentDbScrollMaxHeight}px` } : undefined}
+                className="overflow-auto border border-slate-200 rounded-lg bg-white print:!max-h-none print:!overflow-visible"
               >
               <table className="w-full text-left text-[11px]">
-                <thead className="bg-[#793282] text-white font-bold uppercase text-[10px] tracking-tight border-b border-purple-900">
+                <thead className="sticky top-0 z-10 bg-[#273E56] text-white font-bold uppercase text-[10px] tracking-tight border-b border-[#1F3349]">
                   <tr>
                     <th className="px-1.5 py-2 w-7 text-center">
                       <input
+                        ref={paymentHeaderCheckboxRef}
                         type="checkbox"
-                        checked={
-                          sortedPayments.length > 0 &&
-                          selectedIds.length === sortedPayments.length
-                        }
+                        data-testid="select-all-payment-checkbox"
+                        aria-label="Select all payment rows"
+                        checked={activeSelectionState.allSelected}
                         onChange={() =>
                           handleSelectAll(sortedPayments.map((p) => p.id))
                         }
+                        className="cursor-pointer accent-[#7C3AED]"
                       />
                     </th>
                     <th className="px-1.5 py-2 w-10 text-center whitespace-nowrap">SL #</th>
@@ -2688,8 +3494,11 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                           <td className="px-1.5 py-1.5 text-center">
                             <input
                               type="checkbox"
+                              data-testid={`select-payment-row-${pm.id}`}
+                              aria-label={`Select payment voucher ${pm.invoiceNumber}`}
                               checked={isSelected}
                               onChange={() => toggleSelectOne(pm.id)}
+                              className="cursor-pointer accent-[#7C3AED]"
                             />
                           </td>
                           <td className="px-1.5 py-1.5 text-center whitespace-nowrap">
@@ -2701,7 +3510,19 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             recordId={pm.id}
                             fieldKey="invoiceNumber"
                             rawValue={pm.invoiceNumber}
-                            displayNode={pm.invoiceNumber}
+                            displayNode={
+                              <div className="flex items-center gap-1">
+                                <span>{pm.invoiceNumber}</span>
+                                {pm.calculationPending && (
+                                  <span
+                                    data-testid={`pending-calc-badge-${pm.id}`}
+                                    className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-black uppercase"
+                                  >
+                                    Pending Calc
+                                  </span>
+                                )}
+                              </div>
+                            }
                             validation={
                               rowValidation.invoiceNumber ||
                               validateDatabaseCellValue('payment', 'invoiceNumber', pm.invoiceNumber)
@@ -2729,8 +3550,8 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                           <DatabaseValidatedCell
                             recordId={pm.id}
                             fieldKey="date"
-                            rawValue={pm.date}
-                            displayNode={formatDate(pm.date)}
+                            rawValue={pm.rawValues?.date ?? pm.date}
+                            displayNode={pm.rawValues?.date || formatDate(pm.date) || '(Blank)'}
                             validation={
                               rowValidation.date ||
                               validateDatabaseCellValue('payment', 'date', pm.date)
@@ -2747,10 +3568,12 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                           <DatabaseValidatedCell
                             recordId={pm.id}
                             fieldKey="description"
-                            rawValue={pm.description}
+                            rawValue={pm.rawValues?.description ?? pm.description}
                             displayNode={
                               <div>
-                                <span className="font-bold text-slate-800">{pm.description}</span>
+                                <span className="font-bold text-slate-800">
+                                  {pm.rawValues?.description || pm.description || '(Blank)'}
+                                </span>
                                 {pm.remarks && (
                                   <span
                                     className="block text-[10px] text-purple-700 font-normal truncate max-w-[220px]"
@@ -2763,7 +3586,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             }
                             validation={
                               rowValidation.description ||
-                              validateDatabaseCellValue('payment', 'description', pm.description)
+                              validateDatabaseCellValue('payment', 'description', pm.description || '-')
                             }
                             hasDraftOverride={Object.prototype.hasOwnProperty.call(
                               rowDrafts,
@@ -2775,23 +3598,23 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             onClearDraft={handleCellClearDraft}
                           />
                           <td className="px-1.5 py-1.5 whitespace-nowrap">
-                            <span
-                              className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
-                                pm.status === 'PAID'
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : pm.status === 'REPORT'
-                                  ? 'bg-blue-100 text-blue-800'
-                                  : 'bg-rose-100 text-rose-800'
-                              }`}
-                            >
-                              {pm.status}
-                            </span>
+                            {renderStatusBadge(
+                              resolvePaymentRecordStatus(pm),
+                              `payment-status-badge-${pm.id}`
+                            )}
                           </td>
                           <DatabaseValidatedCell
                             recordId={pm.id}
                             fieldKey="paidAmount"
-                            rawValue={pm.paidAmount}
-                            displayNode={formatCurrency(pm.paidAmount, companyProfile.currency)}
+                            rawValue={pm.rawValues?.paidAmount ?? pm.rawValues?.totalAmount ?? pm.paidAmount}
+                            displayNode={
+                              pm.rawValues?.paidAmount ||
+                              pm.rawValues?.totalAmount ||
+                              (pm.calculationPending
+                                ? 'Pending Calc'
+                                : formatCurrency(pm.paidAmount, companyProfile.currency))
+                            }
+                            isPendingCalc={Boolean(pm.calculationPending)}
                             align="right"
                             validation={
                               rowValidation.paidAmount ||
@@ -2809,8 +3632,14 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                           <DatabaseValidatedCell
                             recordId={pm.id}
                             fieldKey="balance"
-                            rawValue={pm.balance}
-                            displayNode={formatCurrency(pm.balance, companyProfile.currency)}
+                            rawValue={pm.rawValues?.balance ?? pm.balance}
+                            displayNode={
+                              pm.rawValues?.balance ||
+                              (pm.calculationPending
+                                ? 'Pending Calc'
+                                : formatCurrency(pm.balance, companyProfile.currency))
+                            }
+                            isPendingCalc={Boolean(pm.pendingFields?.includes('balance'))}
                             align="right"
                             validation={
                               rowValidation.balance ||
@@ -2828,8 +3657,8 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                           <DatabaseValidatedCell
                             recordId={pm.id}
                             fieldKey="exportGoodsRef"
-                            rawValue={pm.exportGoodsRef}
-                            displayNode={pm.exportGoodsRef || '-'}
+                            rawValue={pm.rawValues?.exportGoodsRef ?? pm.exportGoodsRef}
+                            displayNode={pm.rawValues?.exportGoodsRef || pm.exportGoodsRef || '-'}
                             validation={
                               rowValidation.exportGoodsRef ||
                               validateDatabaseCellValue(
@@ -2916,6 +3745,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
         onUpdatePurchase={updatePurchase}
         onUpdatePacking={updatePacking}
         onUpdatePayment={updatePayment}
+        onBatchDelete={handleBatchDeleteSelected}
         onSuccess={(msg) => showToast(msg)}
       />
       </div>
@@ -2925,6 +3755,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
         <div
           id="batch-payment-slips-offscreen-host"
           data-testid="batch-payment-slips-offscreen-host"
+          className="zsb-print-paper"
           style={{
             position: 'fixed',
             left: -9999,
@@ -2947,6 +3778,211 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
           ))}
         </div>
       )}
+
+      {/* Offscreen Host for Official Supplier Reconciliation Ledger PDF Export */}
+      <div
+        style={{
+          position: 'fixed',
+          left: -9999,
+          top: 0,
+          opacity: 0,
+          pointerEvents: 'none',
+          width: '760px',
+          zIndex: -1,
+        }}
+      >
+        <div
+          id="supplier-reconciliation-ledger-pdf-canvas"
+          className="zsb-print-paper relative bg-white p-7 space-y-4 text-slate-900 overflow-hidden"
+          style={{
+            backgroundColor: '#ffffff',
+            color: '#0f172a',
+            width: '760px',
+          }}
+        >
+          {/* Watermark */}
+          <div
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+              opacity: 0.06,
+              zIndex: 0,
+            }}
+          >
+            <img
+              src={resolveCompanyLogoSrc(companyProfile.logoUrl) || COMPANY_LOGO_URL}
+              alt=""
+              style={{ width: '280px', height: '280px', objectFit: 'contain', borderRadius: '9999px' }}
+            />
+          </div>
+
+          {/* Header */}
+          <div style={{ borderBottom: '2px solid #0f172a', position: 'relative', zIndex: 10 }} className="pb-3 text-center space-y-1">
+            <div className="flex items-center justify-center gap-3 mb-1">
+              <div
+                style={{
+                  width: '56px',
+                  height: '56px',
+                  borderRadius: '9999px',
+                  overflow: 'hidden',
+                  border: '2px solid #d4af37',
+                  backgroundColor: '#ffffff',
+                  padding: '2px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <img
+                  src={resolveCompanyLogoSrc(companyProfile.logoUrl) || COMPANY_LOGO_URL}
+                  alt={companyProfile.companyName}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '9999px' }}
+                />
+              </div>
+              <div
+                className="text-3xl font-black tracking-widest uppercase"
+                style={{
+                  color: '#f59e0b',
+                  fontFamily: "'Cinzel', Georgia, Cambria, 'Times New Roman', Times, serif",
+                  fontWeight: 900,
+                  letterSpacing: '0.09em',
+                  textShadow: '1px 1px 0px #b45309, 2px 2px 0px #78350f',
+                }}
+              >
+                {companyProfile.companyName}
+              </div>
+            </div>
+            <div className="text-xs font-bold text-slate-900">Address: {companyProfile.address}</div>
+            <div className="text-[11px] font-bold font-mono text-slate-800">
+              Mobile: {companyProfile.mobiles.join(' , ')} | Email:{' '}
+              {companyProfile.email || 'zsbaquatics@gmail.com'}
+            </div>
+            <div
+              className="mt-2 py-1.5 px-4 text-xs font-black uppercase tracking-widest text-white rounded"
+              style={{ backgroundColor: '#263843', display: 'inline-block' }}
+            >
+              SUPPLIER ACCOUNT RECONCILIATION LEDGER
+            </div>
+          </div>
+
+          {/* Filter Metadata Summary */}
+          <div
+            className="grid grid-cols-4 gap-2 text-[11px] bg-slate-50 p-2.5 rounded border border-slate-300 relative z-10"
+            style={{ position: 'relative', zIndex: 10 }}
+          >
+            <div>
+              <span className="font-bold text-slate-500 uppercase block text-[9px]">Supplier</span>
+              <span className="font-black text-slate-900">
+                {syncLedgerSupplier === 'ALL' ? 'ALL SUPPLIERS' : syncLedgerSupplier}
+              </span>
+            </div>
+            <div>
+              <span className="font-bold text-slate-500 uppercase block text-[9px]">Date Period</span>
+              <span className="font-mono font-bold text-slate-900">
+                {syncLedgerFromDate ? formatDate(syncLedgerFromDate) : 'All'} →{' '}
+                {syncLedgerToDate ? formatDate(syncLedgerToDate) : 'Latest'}
+              </span>
+            </div>
+            <div>
+              <span className="font-bold text-slate-500 uppercase block text-[9px]">Order / Entries</span>
+              <span className="font-mono font-bold text-slate-900">
+                {syncLedgerSortDirection === 'asc' ? 'Oldest First' : 'Newest First'} ({syncSupplierLedgerRows.length})
+              </span>
+            </div>
+            <div className="text-right">
+              <span className="font-bold text-slate-500 uppercase block text-[9px]">Net Balance</span>
+              <span className="font-mono font-black text-slate-950">
+                {formatCurrency(syncSupplierLedgerTotals.netEndingBalance, companyProfile.currency)}
+              </span>
+            </div>
+          </div>
+
+          {/* Reconciliation Table */}
+          <div style={{ position: 'relative', zIndex: 10 }}>
+            <table className="w-full border-collapse text-[11px] font-mono border border-slate-400">
+              <thead>
+                <tr style={{ backgroundColor: '#263843', color: '#ffffff' }} className="uppercase font-bold">
+                  <th className="px-2 py-2 border border-slate-500 text-center w-10">SL #</th>
+                  <th className="px-2 py-2 border border-slate-500 text-center w-24">DATE</th>
+                  <th className="px-2.5 py-2 border border-slate-500 text-left">SUPPLIER NAME</th>
+                  <th className="px-2.5 py-2 border border-slate-500 text-right w-28">DEBIT AMOUNT</th>
+                  <th className="px-2.5 py-2 border border-slate-500 text-right w-28">CREDIT AMOUNT</th>
+                  <th className="px-2.5 py-2 border border-slate-500 text-right w-32">BALANCE</th>
+                </tr>
+              </thead>
+              <tbody>
+                {syncSupplierLedgerRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-6 text-center text-slate-500 italic font-sans">
+                      No reconciliation records found for the selected filter criteria.
+                    </td>
+                  </tr>
+                ) : (
+                  syncSupplierLedgerRows.map((row, idx) => (
+                    <tr key={row.id} style={{ backgroundColor: idx % 2 === 1 ? '#f8fafc' : '#ffffff' }}>
+                      <td className="px-2 py-1.5 border border-slate-300 text-center font-bold">
+                        {String(idx + 1).padStart(2, '0')}
+                      </td>
+                      <td className="px-2 py-1.5 border border-slate-300 text-center font-bold text-slate-800">
+                        {formatDateImageStyle(row.date)}
+                      </td>
+                      <td className="px-2.5 py-1.5 border border-slate-300 font-sans font-bold text-slate-900">
+                        {row.supplierName}
+                      </td>
+                      <td className="px-2.5 py-1.5 border border-slate-300 text-right font-bold text-slate-900">
+                        {row.debitAmount !== 0 ? formatCurrency(row.debitAmount, '') : ''}
+                      </td>
+                      <td className="px-2.5 py-1.5 border border-slate-300 text-right font-bold text-slate-900">
+                        {row.creditAmount !== 0 ? formatCurrency(row.creditAmount, '') : ''}
+                      </td>
+                      <td className="px-2.5 py-1.5 border border-slate-300 text-right font-black text-slate-950">
+                        {formatCurrency(row.balance, '')}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              {syncSupplierLedgerRows.length > 0 && (
+                <tfoot>
+                  <tr style={{ backgroundColor: '#f1f5f9', fontWeight: 900 }} className="border-t-2 border-slate-700">
+                    <td colSpan={3} className="px-2.5 py-2 border border-slate-400 text-right font-sans uppercase">
+                      TOTALS ({syncSupplierLedgerRows.length} ENTRIES):
+                    </td>
+                    <td className="px-2.5 py-2 border border-slate-400 text-right">
+                      {formatCurrency(syncSupplierLedgerTotals.totalDebit, '')}
+                    </td>
+                    <td className="px-2.5 py-2 border border-slate-400 text-right text-emerald-800">
+                      {formatCurrency(syncSupplierLedgerTotals.totalCredit, '')}
+                    </td>
+                    <td className="px-2.5 py-2 border border-slate-400 text-right text-slate-950">
+                      {formatCurrency(syncSupplierLedgerTotals.netEndingBalance, companyProfile.currency)}
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+
+          {/* Signature Footer */}
+          <div
+            className="pt-8 grid grid-cols-3 gap-6 text-center text-[10px] font-bold uppercase text-slate-700 relative z-10"
+            style={{ position: 'relative', zIndex: 10 }}
+          >
+            <div className="border-t border-slate-400 pt-1.5">Prepared By</div>
+            <div className="border-t border-slate-400 pt-1.5">Accounts &amp; Audit</div>
+            <div className="border-t border-slate-400 pt-1.5">Managing Director</div>
+          </div>
+        </div>
+      </div>
       {/* Edit Payment Voucher Modal for Fast Maintenance & Corrections */}
       {editingPaymentRecord && (
         <div
@@ -3003,7 +4039,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                     Payment Date *
                   </label>
                   <input
-                    type="date"
+                    type="text"
                     data-testid="edit-payment-date-input"
                     value={paymentEditForm.date}
                     onChange={(e) =>
@@ -3012,7 +4048,8 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         date: e.target.value,
                       }))
                     }
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-purple-500 focus:outline-none cursor-pointer"
+                    placeholder="YYYY-MM-DD or =TODAY()"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-purple-500 focus:outline-none"
                     required
                   />
                 </div>
@@ -3044,36 +4081,34 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 </datalist>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-200">
                   <label className="block font-black text-emerald-900 mb-1 text-[11px] uppercase tracking-wide">
                     Credit / Paid Amount ({companyProfile.currency}) *
                   </label>
                   <input
-                    type="number"
-                    step="any"
-                    min="0"
+                    type="text"
                     data-testid="edit-payment-paid-amount-input"
                     value={paymentEditForm.paidAmount}
                     onChange={(e) => {
-                      const p = parseFloat(e.target.value) || 0;
+                      const raw = e.target.value;
+                      const p = parseFloat(raw);
                       setPaymentEditForm((prev) => {
-                        const tot = parseFloat(prev.totalAmount) || 0;
+                        const tot = parseFloat(prev.totalAmount);
                         return {
                           ...prev,
-                          paidAmount: e.target.value,
+                          paidAmount: raw,
                           balance:
-                            tot > 0
-                              ? String(Math.max(0, tot - p))
+                            Number.isFinite(p) && Number.isFinite(tot) && tot > 0
+                              ? String(tot - p)
                               : prev.balance,
                         };
                       });
                     }}
                     className="w-full px-3 py-1.5 border-2 border-emerald-400 rounded-lg font-mono font-black text-emerald-800 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white"
-                    required
                   />
                   <p className="text-[10px] text-emerald-700 mt-1 font-medium">
-                    Actual cash / bank disbursement
+                    Cash / bank disbursement, negative adjustment, or literal formula
                   </p>
                 </div>
 
@@ -3082,19 +4117,21 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                     Total Billed ({companyProfile.currency})
                   </label>
                   <input
-                    type="number"
-                    step="any"
-                    min="0"
+                    type="text"
                     data-testid="edit-payment-total-amount-input"
                     value={paymentEditForm.totalAmount}
                     onChange={(e) => {
-                      const tot = parseFloat(e.target.value) || 0;
+                      const raw = e.target.value;
+                      const tot = parseFloat(raw);
                       setPaymentEditForm((prev) => {
-                        const p = parseFloat(prev.paidAmount) || 0;
+                        const p = parseFloat(prev.paidAmount);
                         return {
                           ...prev,
-                          totalAmount: e.target.value,
-                          balance: String(Math.max(0, tot - p)),
+                          totalAmount: raw,
+                          balance:
+                            Number.isFinite(tot) && Number.isFinite(p)
+                              ? String(tot - p)
+                              : prev.balance,
                         };
                       });
                     }}
@@ -3110,8 +4147,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                     Due Balance ({companyProfile.currency})
                   </label>
                   <input
-                    type="number"
-                    step="any"
+                    type="text"
                     data-testid="edit-payment-balance-input"
                     value={paymentEditForm.balance}
                     onChange={(e) =>
@@ -3124,6 +4160,27 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   />
                   <p className="text-[10px] text-rose-700 mt-1 font-medium">
                     Remaining after disbursement
+                  </p>
+                </div>
+
+                <div className="bg-amber-50/70 p-2.5 rounded-xl border border-amber-200">
+                  <label className="block font-black text-amber-900 mb-1 text-[11px] uppercase tracking-wide">
+                    Return / Foreign RMB
+                  </label>
+                  <input
+                    type="text"
+                    data-testid="edit-payment-rmb-input"
+                    value={paymentEditForm.returnRMB}
+                    onChange={(e) =>
+                      setPaymentEditForm((prev) => ({
+                        ...prev,
+                        returnRMB: e.target.value,
+                      }))
+                    }
+                    className="w-full px-3 py-1.5 border border-amber-300 rounded-lg font-mono font-bold text-amber-900 text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none bg-white"
+                  />
+                  <p className="text-[10px] text-amber-800 mt-1 font-medium">
+                    Foreign RMB value or formula
                   </p>
                 </div>
               </div>

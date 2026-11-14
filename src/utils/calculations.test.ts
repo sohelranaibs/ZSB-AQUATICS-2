@@ -319,6 +319,31 @@ test('getSupplierLedgerStats aggregates supplier purchase history and latest bal
   const emptyStats = getSupplierLedgerStats(purchases, 'UNKNOWN SUPPLIER');
   assert.equal(emptyStats.invoiceCount, 0);
   assert.equal(emptyStats.latestClosingBalance, 0);
+
+  // Same-date multiple invoices should deterministically return the latest entry (createdAt / later index)
+  const sameDayPurchases = [
+    ...purchases,
+    {
+      id: 'p4',
+      invoiceNumber: 'PUR-4',
+      date: '2026-10-18',
+      description: 'ABDULLAH VAI',
+      contactNumber: '+8801711223344',
+      items: [],
+      totalQty: 50,
+      totalAmount: 25000,
+      previousAmount: 21000,
+      paidAmount: 10000,
+      balance: 36000,
+      createdAt: '2026-10-18T14:30:00Z',
+    },
+  ];
+  const sameDayStats = getSupplierLedgerStats(sameDayPurchases, 'ABDULLAH VAI');
+  assert.equal(sameDayStats.latestClosingBalance, 36000);
+
+  // Excluding current editing invoice returns prior closing balance
+  const editingStats = getSupplierLedgerStats(sameDayPurchases, 'ABDULLAH VAI', 'p4');
+  assert.equal(editingStats.latestClosingBalance, 21000);
 });
 
 test('formatRMB, calculateExporterSlipRowAmount, buildExporterPaymentSlipRows, and calculateExporterSlipTotals compute Weight * RMB = Amount and filter accurately', () => {
@@ -1229,4 +1254,127 @@ test('formatExporterSlipExportFilename creates date range filename when range is
     'ZSB_AQUATICS_Payment_Slip_HM-105_2026-10-20.png'
   );
 });
+
+test('buildExporterPaymentSlipRows collects AMOUNT from Exporter Payment REPORT (RMB) across packing, linked voucher, zero report, and standalone exporter vouchers', () => {
+  const packings = [
+    {
+      id: 'pkg-rep-1',
+      invoiceNumber: 'PKG-2026-9001',
+      shippingMark: 'AAD',
+      flight: 'CAN',
+      destination: 'GUANGZHOU',
+      shipper: 'ZSB AQUATICS',
+      packingDate: '2026-10-19',
+      fromDate: '2026-10-19',
+      toDate: '2026-10-19',
+      items: [],
+      totalBox: 10,
+      totalWeight: 150,
+      totalAmount: 20000,
+      rmbAmount: 90,
+      debitAmount: 20000,
+      reportAmount: 14250,
+      exporterStatus: 'REPORT',
+      createdAt: '',
+    },
+    {
+      id: 'pkg-rep-2',
+      invoiceNumber: 'PKG-2026-9002',
+      shippingMark: 'CHJ-22',
+      flight: 'MU KMG',
+      destination: 'SHANGHAI',
+      shipper: 'SHISHIR MAMA',
+      packingDate: '2026-10-20',
+      fromDate: '2026-10-20',
+      toDate: '2026-10-20',
+      items: [],
+      totalBox: 12,
+      totalWeight: 180,
+      totalAmount: 16000,
+      rmbAmount: 80,
+      reportAmount: 0, // Explicit 0 Report RMB must stay 0, not fall back to 180 * 80
+      exporterStatus: 'NO REPORT',
+      createdAt: '',
+    },
+    {
+      id: 'pkg-rep-3',
+      invoiceNumber: 'PKG-2026-9003',
+      shippingMark: 'LXB-52',
+      flight: 'CZ392',
+      destination: 'GUANGZHOU',
+      shipper: 'ZSB AQUATICS',
+      packingDate: '2026-10-21',
+      fromDate: '2026-10-21',
+      toDate: '2026-10-21',
+      items: [],
+      totalBox: 14,
+      totalWeight: 200,
+      totalAmount: 19000,
+      rmbAmount: 70,
+      exporterStatus: 'REPORT',
+      createdAt: '',
+    },
+  ];
+
+  const payments = [
+    {
+      id: 'exp-linked-3',
+      invoiceNumber: 'EXP-PAY-2026-0003',
+      date: '2026-10-21',
+      description: 'LXB-52 (GUANGZHOU)',
+      shippingMark: 'LXB-52',
+      contactNumber: '',
+      items: [],
+      totalAmount: 19000,
+      previousAmount: 19000,
+      paidAmount: 5000,
+      balance: 12500,
+      status: 'REPORT',
+      reportAmount: 17500,
+      returnRMB: 5000,
+      exportGoodsRef: 'PKG-2026-9003',
+      paymentCategory: 'exporter' as const,
+      createdAt: '',
+    },
+    {
+      id: 'exp-standalone-4',
+      invoiceNumber: 'EXP-PAY-2026-0004',
+      date: '2026-10-22',
+      description: 'ROE Direct Report',
+      shippingMark: 'ROE',
+      contactNumber: '',
+      items: [],
+      totalAmount: 12000,
+      previousAmount: 12000,
+      paidAmount: 2000,
+      balance: 7800,
+      status: 'REPORT',
+      reportAmount: 9800,
+      returnRMB: 2000,
+      paymentCategory: 'exporter' as const,
+      createdAt: '',
+    },
+  ];
+
+  const dbRows = buildExporterPaymentSlipRows(packings, payments, {
+    shippingMark: 'ALL',
+    packingDate: 'ALL',
+  });
+
+  assert.equal(dbRows.length, 4);
+  assert.equal(dbRows[0].amount, 14250);
+  assert.equal(dbRows[1].amount, 0);
+  assert.equal(dbRows[2].amount, 17500);
+  assert.equal(dbRows[3].amount, 9800);
+
+  const merged = mergeExporterPaymentSlipRows(dbRows, [], {
+    shippingMark: 'ALL',
+    packingDate: 'ALL',
+  });
+  assert.equal(merged[1].amount, 0);
+
+  const totals = calculateExporterSlipTotals(merged);
+  assert.equal(totals.totalAmount, 14250 + 0 + 17500 + 9800);
+});
+
 

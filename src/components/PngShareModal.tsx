@@ -177,11 +177,11 @@ export const PngShareModal: React.FC<PngShareModalProps> = ({
       aria-label={`Invoice View - ${title}`}
       data-testid="png-share-modal"
     >
-      <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl border-2 border-slate-300 overflow-hidden my-auto max-h-[95vh] flex flex-col">
+      <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[95vh] flex flex-col">
         {/* Clean Invoice Header */}
-        <div className="bg-[#0f3d4c] text-white px-5 py-3 flex items-center justify-between border-b-2 border-[#07C160] shrink-0">
+        <div className="bg-[#263843] text-white px-5 py-3 flex items-center justify-between border-b-2 border-[#07C160] shrink-0">
           <div className="flex items-center space-x-2.5">
-            <FileText className="w-5 h-5 text-amber-300 shrink-0" />
+            <FileText className="w-5 h-5 text-[#5eead4] shrink-0" />
             <h3 className="font-black text-sm sm:text-base text-white uppercase tracking-wide truncate max-w-xl">
               INVOICE — {title}
             </h3>
@@ -191,7 +191,7 @@ export const PngShareModal: React.FC<PngShareModalProps> = ({
             onClick={onClose}
             aria-label="Close WeChat share dialog"
             data-testid="close-png-share-modal-btn"
-            className="text-slate-300 hover:text-white p-1.5 rounded-lg hover:bg-slate-800/60 transition cursor-pointer"
+            className="text-slate-300 hover:text-white p-1.5 rounded-lg hover:bg-[#1c2a33] transition cursor-pointer"
             title="Close Invoice View"
           >
             <X className="w-5 h-5" />
@@ -199,7 +199,7 @@ export const PngShareModal: React.FC<PngShareModalProps> = ({
         </div>
 
         {/* Invoice-Only Full Preview Body */}
-        <div className="p-3 sm:p-5 overflow-y-auto flex-1 bg-slate-100 flex items-center justify-center">
+        <div className="p-3 sm:p-5 overflow-y-auto flex-1 bg-[#f3f6f9] flex items-center justify-center">
           {isGenerating ? (
             <div className="py-16 flex flex-col items-center justify-center space-y-2 text-slate-600">
               <Loader2 className="w-8 h-8 text-[#07C160] animate-spin" />
@@ -232,8 +232,8 @@ export const PngShareModal: React.FC<PngShareModalProps> = ({
             >
               {copiedClipboard ? (
                 <>
-                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  <span className="text-emerald-700">Invoice Copied!</span>
+                  <Check className="w-3.5 h-3.5 text-[#00897b]" />
+                  <span className="text-[#00897b]">Invoice Copied!</span>
                 </>
               ) : (
                 <>
@@ -248,9 +248,9 @@ export const PngShareModal: React.FC<PngShareModalProps> = ({
               data-testid="share-download-image-btn"
               onClick={handleDownloadOnly}
               disabled={isGenerating || !pngData}
-              className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 rounded-xl border border-amber-300 font-bold text-xs transition cursor-pointer disabled:opacity-50"
+              className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-[#1877d2] hover:bg-[#1465b5] text-white rounded-xl font-bold text-xs shadow-xs transition cursor-pointer disabled:opacity-50"
             >
-              <Download className="w-3.5 h-3.5 text-amber-700" />
+              <Download className="w-3.5 h-3.5 text-white" />
               <span>Download Invoice (.PNG)</span>
             </button>
           </div>

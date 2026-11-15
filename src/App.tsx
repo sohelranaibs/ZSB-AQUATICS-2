@@ -15,11 +15,13 @@ import { PaymentFormView } from './components/PaymentFormView.tsx';
 import { ExporterPaymentFormView } from './components/ExporterPaymentFormView.tsx';
 import { ExporterPaymentSlipView } from './components/ExporterPaymentSlipView.tsx';
 import { ProfitLossView } from './components/ProfitLossView.tsx';
+import { TotalBalanceView } from './components/TotalBalanceView.tsx';
 import { DatabaseView } from './components/DatabaseView.tsx';
 import { SearchReportsView } from './components/SearchReportsView.tsx';
 import { AuditLogsView } from './components/AuditLogsView.tsx';
 import { SettingsView } from './components/SettingsView.tsx';
 import { AdministrationView } from './components/AdministrationView.tsx';
+import { ForgetPasswordView } from './components/ForgetPasswordView.tsx';
 import { LandingLoginView } from './components/LandingLoginView.tsx';
 import { PrintPreviewModal } from './components/PrintPreviewModal.tsx';
 import { QuickEntryModal } from './components/QuickEntryModal.tsx';
@@ -64,6 +66,11 @@ import {
   saveDisplayPreferences,
 } from './utils/displayViewport.ts';
 import { bindGlobalButtonGoldenClickHandler } from './utils/buttonClickHighlight.ts';
+import {
+  initializeSafeClientHmr,
+  runWhenDocumentReady,
+} from './utils/clientRuntimeGuard.ts';
+import { GlobalTableScrollController } from './components/GlobalTableScrollController.tsx';
 
 const MainContent: React.FC = () => {
   const {
@@ -886,6 +893,7 @@ const MainContent: React.FC = () => {
             {activeTab === 'exporter_payment_form' && <ExporterPaymentFormView />}
             {activeTab === 'exporter_payment_slip' && <ExporterPaymentSlipView />}
             {activeTab === 'profit_loss' && <ProfitLossView />}
+            {activeTab === 'total_balance' && <TotalBalanceView />}
             {activeTab === 'purchase_db' && <DatabaseView initialType="purchase" />}
             {activeTab === 'packing_db' && <DatabaseView initialType="packing" />}
             {activeTab === 'payment_db' && <DatabaseView initialType="payment" />}
@@ -893,6 +901,7 @@ const MainContent: React.FC = () => {
             {activeTab === 'audit_logs' && <AuditLogsView />}
             {activeTab === 'settings' && <SettingsView />}
             {activeTab === 'administration' && <AdministrationView />}
+            {activeTab === 'forget_password' && <ForgetPasswordView />}
           </main>
         </div>
       </div>
@@ -988,7 +997,7 @@ const MainContent: React.FC = () => {
           title={isFullScreen ? 'Exit Full Screen' : 'Show Full Screen'}
           className={`flex items-center space-x-1 px-2 py-0.5 rounded-full font-sans font-bold transition cursor-pointer ${
             isFullScreen
-              ? 'bg-[#263843] text-white'
+              ? 'bg-[#273E56] text-white'
               : 'bg-slate-100 hover:bg-slate-200 text-[#00897b]'
           }`}
         >
@@ -1019,6 +1028,9 @@ const MainContent: React.FC = () => {
       {/* Local JSON Database Snapshot & State Recovery Modal */}
       <DatabaseSnapshotModal />
 
+      {/* Global 10-Row Scroll Viewport Controller for All Interactive Tables */}
+      <GlobalTableScrollController />
+
       {/* Global Keyboard Shortcuts Reference & Command Modal */}
       <KeyboardShortcutsModal
         isOpen={shortcutsModalOpen}
@@ -1041,7 +1053,20 @@ const AuthGate: React.FC = () => {
 
 export default function App() {
   useEffect(() => {
-    return bindGlobalButtonGoldenClickHandler(document);
+    return runWhenDocumentReady(() => {
+      const cleanupButtons = bindGlobalButtonGoldenClickHandler(document);
+      const { cleanup: cleanupHmr } = initializeSafeClientHmr({
+        isProduction: import.meta.env.PROD,
+        doc: document,
+        win: typeof window !== 'undefined' ? window : null,
+        hot: import.meta.hot ?? null,
+      });
+
+      return () => {
+        cleanupButtons();
+        cleanupHmr();
+      };
+    }, typeof document !== 'undefined' ? document : undefined);
   }, []);
 
   return (

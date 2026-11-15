@@ -476,7 +476,7 @@ export const PackingListView: React.FC = () => {
   return (
     <div className="p-3 sm:p-5 max-w-[1440px] mx-auto space-y-5">
       {/* Top Banner with Official ZSB Branding */}
-      <div className="bg-[#263843] text-white px-5 py-3.5 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#00897b]">
+      <div className="bg-[#273E56] text-white px-5 py-3.5 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#00897b]">
         <div className="flex flex-wrap items-center gap-3">
           <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
@@ -534,7 +534,7 @@ export const PackingListView: React.FC = () => {
         <div className="lg:col-span-9 space-y-4">
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             {/* Sheet Title Header */}
-            <div className="bg-[#263843] text-white py-3 px-5 flex flex-wrap items-center justify-between gap-3 border-b border-[#1d2c35]">
+            <div className="bg-[#273E56] text-white py-3 px-5 flex flex-wrap items-center justify-between gap-3 border-b border-[#1d2c35]">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
                   <img
@@ -919,7 +919,7 @@ export const PackingListView: React.FC = () => {
                 data-testid="packing-entry-table"
               >
                 <thead>
-                  <tr className="bg-[#263843] text-white uppercase text-[11px] font-bold tracking-wider border-b border-[#1d2c35]">
+                  <tr className="bg-[#273E56] text-white uppercase text-[11px] font-bold tracking-wider border-b border-[#1d2c35]">
                     <th className="px-2 py-2.5 border-r border-[#334b59] w-10 text-center">
                       SL #
                     </th>
@@ -1191,7 +1191,7 @@ export const PackingListView: React.FC = () => {
                       className="px-3 py-2.5 text-right uppercase tracking-wider border-r border-[#334b59]"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-mono font-semibold text-[#5eead4] bg-[#263843] px-1.5 py-0.5 rounded">
+                        <span className="text-[10px] font-mono font-semibold text-[#5eead4] bg-[#273E56] px-1.5 py-0.5 rounded">
                           {populatedRowCount} {populatedRowCount === 1 ? 'Item' : 'Items'}
                         </span>
                         <span className="font-extrabold">TOTAL QUANTITY:</span>
@@ -1199,7 +1199,7 @@ export const PackingListView: React.FC = () => {
                     </td>
                     <td
                       data-testid="packing-footer-box"
-                      className="px-2 py-2.5 text-center font-mono tabular-nums text-[#5eead4] text-sm font-black border-r border-[#334b59] bg-[#263843]/70 whitespace-nowrap"
+                      className="px-2 py-2.5 text-center font-mono tabular-nums text-[#5eead4] text-sm font-black border-r border-[#334b59] bg-[#273E56]/70 whitespace-nowrap"
                     >
                       {totalBox} Boxes
                     </td>
@@ -1208,7 +1208,7 @@ export const PackingListView: React.FC = () => {
                     </td>
                     <td
                       data-testid="packing-footer-weight"
-                      className="px-2.5 py-2.5 text-right font-mono tabular-nums text-[#5eead4] text-sm font-black border-r border-[#334b59] bg-[#263843]/70 whitespace-nowrap"
+                      className="px-2.5 py-2.5 text-right font-mono tabular-nums text-[#5eead4] text-sm font-black border-r border-[#334b59] bg-[#273E56]/70 whitespace-nowrap"
                     >
                       {totalWeight.toLocaleString('en-US', {
                         minimumFractionDigits: 2,
@@ -1232,7 +1232,7 @@ export const PackingListView: React.FC = () => {
                   </tr>
 
                   {/* Row 2: Prominent Shipment Totals Live Summation Banner */}
-                  <tr className="bg-[#263843] text-white border-t border-[#334b59]">
+                  <tr className="bg-[#273E56] text-white border-t border-[#334b59]">
                     <td colSpan={9} className="p-3">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="flex items-center gap-2">
@@ -1369,13 +1369,13 @@ export const PackingListView: React.FC = () => {
                 </div>
 
                 <div className="bg-teal-50/70 p-3 rounded-lg border border-teal-200 shadow-2xs">
-                  <div className="text-[10px] font-bold uppercase text-[#263843] flex items-center justify-between">
+                  <div className="text-[10px] font-bold uppercase text-[#273E56] flex items-center justify-between">
                     <span>TOTAL MANIFEST VALUE</span>
                     <span className="text-[9px] text-[#00897b] bg-teal-100 px-1 rounded font-mono">RMB</span>
                   </div>
                   <div
                     data-testid="packing-summary-total"
-                    className="text-base font-black font-mono tabular-nums text-[#263843] mt-0.5"
+                    className="text-base font-black font-mono tabular-nums text-[#273E56] mt-0.5"
                   >
                     {formatCurrency(totalAmount, 'RMB')}
                   </div>
@@ -1426,7 +1426,7 @@ export const PackingListView: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleCancelEdit}
-                  className="w-full bg-[#263843] hover:bg-[#1c2a33] text-white py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer whitespace-nowrap"
+                  className="w-full bg-[#273E56] hover:bg-[#1c2a33] text-white py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer whitespace-nowrap"
                 >
                   <RotateCcw className="w-3.5 h-3.5 text-slate-300 shrink-0" />
                   <span>CANCEL EDIT (NEW MANIFEST)</span>
@@ -1474,7 +1474,7 @@ export const PackingListView: React.FC = () => {
               type="button"
               data-testid="packing-import-excel-csv-btn"
               onClick={() => openDataCenterModal('import', 'packing')}
-              className="w-full bg-[#263843] hover:bg-[#1c2a33] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
+              className="w-full bg-[#273E56] hover:bg-[#1c2a33] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
               title="Import Packing List rows from Excel (.xlsx) or CSV (.csv) — same Mark, Flight, Destination, Shipper & Date automatically merge into 1 Invoice & Packing No"
             >
               <UploadCloud className="w-4 h-4 stroke-[2.2] text-[#5eead4]" />

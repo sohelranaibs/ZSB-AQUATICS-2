@@ -258,7 +258,7 @@ export const PrintPreviewModal: React.FC = () => {
                       data-testid="print-prev-page-btn"
                       disabled={currentPage <= 1}
                       onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                      className="px-2 py-0.5 rounded bg-[#263843] hover:bg-[#334b59] disabled:opacity-40 text-white font-bold cursor-pointer"
+                      className="px-2 py-0.5 rounded bg-[#273E56] hover:bg-[#334b59] disabled:opacity-40 text-white font-bold cursor-pointer"
                       title="Previous Page"
                     >
                       &larr;
@@ -271,7 +271,7 @@ export const PrintPreviewModal: React.FC = () => {
                       data-testid="print-next-page-btn"
                       disabled={currentPage >= totalPages}
                       onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                      className="px-2 py-0.5 rounded bg-[#263843] hover:bg-[#334b59] disabled:opacity-40 text-white font-bold cursor-pointer"
+                      className="px-2 py-0.5 rounded bg-[#273E56] hover:bg-[#334b59] disabled:opacity-40 text-white font-bold cursor-pointer"
                       title="Next Page"
                     >
                       &rarr;
@@ -1188,7 +1188,7 @@ export const PrintPreviewModal: React.FC = () => {
                           Date &amp; Day
                         </th>
                         <th className="p-2 border-r border-slate-600 text-right">
-                          Export Rev (A)
+                          Export Rev (A · RMB)
                         </th>
                         <th className="p-2 border-r border-slate-600 text-right">
                           Purchase Cost (B)
@@ -1215,7 +1215,7 @@ export const PrintPreviewModal: React.FC = () => {
                             <div className="text-[10px] text-slate-500">{d.topSummaryText}</div>
                           </td>
                           <td className="p-2 border-r border-slate-200 text-right font-bold text-teal-800">
-                            {formatCurrency(d.exportAmountBDT, companyProfile.currency)}
+                            {formatCurrency(d.exportAmountRMB ?? 0, 'RMB')}
                           </td>
                           <td className="p-2 border-r border-slate-200 text-right font-bold text-blue-800">
                             {formatCurrency(d.purchaseAmount, companyProfile.currency)}

@@ -6,11 +6,16 @@ export interface CompanyProfile {
   website?: string;
   managingPartner: string;
   partner: string;
+  partners?: string[];
+  partnerEmails?: Record<string, string>;
+  partnerAlertsEnabled?: boolean;
   currency: string;
   rmbExchangeRate: number;
   logoUrl?: string;
   minInventoryThresholdKg?: number;
   approachingThresholdPercent?: number;
+  minTotalBalanceThreshold?: number;
+  documentAlertWindowDays?: number;
 }
 
 export interface DropdownOptions {
@@ -199,9 +204,53 @@ export interface OtherCostRecord {
   amount: number;
   description: string;
   refInvoice?: string;
+  recurringExpenseId?: string;
+  recurringYearMonth?: string;
   calculationPending?: boolean;
   pendingFields?: string[];
   rawValues?: Record<string, string>;
+  createdAt: string;
+}
+
+export interface RecurringExpenseRecord {
+  id: string;
+  title: string;
+  category: string;
+  amount: number;
+  billingDay: number; // 1 - 31
+  startYearMonth: string; // YYYY-MM
+  lastProcessedYearMonth?: string; // YYYY-MM
+  autoDeduct: boolean;
+  notes?: string;
+  createdAt: string;
+}
+
+export type ExternalDebtFrequency = 'monthly' | 'biweekly' | 'weekly' | 'one_time';
+
+export interface ExternalDebtRepayment {
+  id: string;
+  date: string; // YYYY-MM-DD
+  amount: number;
+  paymentMethod?: string;
+  referenceNo?: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface ExternalDebtRecord {
+  id: string;
+  title: string;
+  lenderName: string;
+  category: string;
+  originationDate: string; // YYYY-MM-DD
+  principalAmount: number;
+  interestAmount: number;
+  frequency: ExternalDebtFrequency;
+  installmentCount: number;
+  firstDueDate: string; // YYYY-MM-DD
+  referenceNo?: string;
+  notes?: string;
+  repayments: ExternalDebtRepayment[];
   createdAt: string;
 }
 
@@ -270,6 +319,97 @@ export interface MortalityRecord {
   createdAt: string;
 }
 
+export type BusinessDocumentCategory =
+  | 'Export License'
+  | 'Trade License'
+  | 'Quarantine / Health Certificate'
+  | 'Airline / Cargo Permit'
+  | 'Customs Bond / Insurance'
+  | 'Other Compliance Document';
+
+export interface BusinessDocumentRecord {
+  id: string;
+  title: string;
+  category: BusinessDocumentCategory | string;
+  referenceNumber?: string;
+  issueDate?: string; // YYYY-MM-DD
+  expiryDate: string; // YYYY-MM-DD
+  notes?: string;
+  createdAt: string;
+}
+
+export interface PartnerDepositRecord {
+  id: string;
+  date: string;
+  partnerName: string;
+  amount: number;
+  paymentMethod?: string;
+  referenceNo?: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface PartnerWithdrawalRecord {
+  id: string;
+  date: string;
+  partnerName: string;
+  amount: number;
+  paymentMethod?: string;
+  referenceNo?: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface BalanceIncomeRecord {
+  id: string;
+  date: string;
+  source: string;
+  amount: number;
+  description: string;
+  refInvoice?: string;
+  createdAt: string;
+}
+
+export interface ProfitDistributionPayoutLine {
+  partnerName: string;
+  equityPercent: number;
+  payoutAmount: number;
+}
+
+export interface ProfitDistributionRecord {
+  id: string;
+  targetYearMonth: string; // YYYY-MM
+  payoutDate: string; // YYYY-MM-DD
+  calculatedNetProfit: number;
+  distributedAmount: number;
+  retainedAmount: number;
+  paymentMethod?: string;
+  referenceNo?: string;
+  notes?: string;
+  allocations: ProfitDistributionPayoutLine[];
+  createdAt: string;
+}
+
+export type PartnerAlertEventType = 'partner_withdrawal' | 'profit_distribution';
+
+export interface PartnerNotificationLogRecord {
+  id: string;
+  eventType: PartnerAlertEventType;
+  eventId: string;
+  triggeredAt: string;
+  subject: string;
+  recipients: Array<{ partnerName: string; email: string }>;
+  status: 'sending' | 'sent_resend' | 'local_dispatch' | 'failed';
+  mode: 'resend_email' | 'local_dispatch' | 'resend_error_fallback' | 'client_error';
+  messageId?: string;
+  errorDetail?: string;
+  amount: number;
+  currency: string;
+  summaryLine: string;
+  previewHtml: string;
+  previewText: string;
+}
+
 export type AuditLogAction =
   | 'CREATE'
   | 'UPDATE'
@@ -284,8 +424,17 @@ export type AuditLogModule =
   | 'Packing'
   | 'Payment'
   | 'OtherCost'
+  | 'RecurringExpense'
+  | 'ExternalDebt'
+  | 'PartnerDeposit'
+  | 'PartnerWithdrawal'
+  | 'ProfitDistribution'
+  | 'PartnerNotification'
+  | 'BalanceIncome'
+  | 'TotalBalance'
   | 'SupplierCredit'
   | 'Mortality'
+  | 'BusinessDocument'
   | 'Settings'
   | 'Database'
   | 'Authentication'
@@ -320,10 +469,12 @@ export type ActiveTab =
   | 'exporter_payment_form'
   | 'exporter_payment_slip'
   | 'profit_loss'
+  | 'total_balance'
   | 'purchase_db'
   | 'packing_db'
   | 'payment_db'
   | 'search_reports'
   | 'audit_logs'
   | 'settings'
-  | 'administration';
+  | 'administration'
+  | 'forget_password';

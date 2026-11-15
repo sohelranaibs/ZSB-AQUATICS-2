@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext.tsx';
-import { Lock, Eye, EyeOff, AlertCircle, ArrowRight } from 'lucide-react';
+import { ForgetPasswordView } from './ForgetPasswordView.tsx';
+import { Lock, Eye, EyeOff, AlertCircle, ArrowRight, KeyRound } from 'lucide-react';
 
 export const LandingLoginView: React.FC = () => {
   const { login } = useApp();
@@ -9,6 +10,11 @@ export const LandingLoginView: React.FC = () => {
   const [password, setPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showForgetPassword, setShowForgetPassword] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') === 'forget_password' || Boolean(params.get('reset_token'));
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,6 +24,23 @@ export const LandingLoginView: React.FC = () => {
       setErrorMessage(result.error || 'Authentication failed. Please check your credentials.');
     }
   };
+
+  if (showForgetPassword) {
+    return (
+      <ForgetPasswordView
+        mode="login_portal"
+        initialIdentifier={username}
+        onBackToLogin={(prefill) => {
+          if (prefill) {
+            setUsername(prefill);
+          }
+          setPassword('');
+          setErrorMessage(null);
+          setShowForgetPassword(false);
+        }}
+      />
+    );
+  }
 
   return (
     <main
@@ -123,6 +146,18 @@ export const LandingLoginView: React.FC = () => {
             <span>Login</span>
             <ArrowRight className="w-4 h-4" aria-hidden="true" />
           </button>
+
+          <div className="pt-1 border-t border-[#CBD8E6]">
+            <button
+              type="button"
+              data-testid="login-forget-password-btn"
+              onClick={() => setShowForgetPassword(true)}
+              className="w-full py-2 px-4 rounded-xl bg-[#273E56] text-white font-bold text-xs transition flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
+            >
+              <KeyRound className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>FORGET PASSWORD</span>
+            </button>
+          </div>
         </form>
       </section>
     </main>

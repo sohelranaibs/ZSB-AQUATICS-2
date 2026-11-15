@@ -405,7 +405,7 @@ export const QuickFinancialPulseSidebar: React.FC<QuickFinancialPulseSidebarProp
 
           {/* Daily Trend Spark-Bars */}
           <div className="border border-slate-200 rounded-xl overflow-hidden">
-            <div className="bg-[#263843] text-white px-3 py-2 flex items-center justify-between text-[11px]">
+            <div className="bg-[#273E56] text-white px-3 py-2 flex items-center justify-between text-[11px]">
               <span className="inline-flex items-center gap-1.5 font-bold uppercase tracking-wide">
                 <BarChart3 className="w-3.5 h-3.5 text-[#5eead4]" />
                 <span>Daily Volume Trend</span>

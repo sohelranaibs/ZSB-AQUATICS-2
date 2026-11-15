@@ -614,7 +614,7 @@ export const DailyFinancialSummaryWidget: React.FC<DailyFinancialSummaryWidgetPr
                   }`}
                 >
                   <div>
-                    <div className="bg-[#263843] text-white px-4 py-2.5 flex items-center justify-between border-b border-[#1d2c35]">
+                    <div className="bg-[#273E56] text-white px-4 py-2.5 flex items-center justify-between border-b border-[#1d2c35]">
                       <div className="flex items-center gap-2">
                         <ShoppingCart className="w-4 h-4 text-sky-400" />
                         <span className="text-xs font-bold uppercase tracking-wide">
@@ -638,7 +638,7 @@ export const DailyFinancialSummaryWidget: React.FC<DailyFinancialSummaryWidgetPr
                       </div>
                     </div>
 
-                    <div className="overflow-x-auto max-h-72">
+                    <div className="overflow-x-auto">
                       <table className="w-full text-left border-collapse text-xs">
                         <thead>
                           <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 font-bold text-[11px] uppercase tracking-wider">
@@ -709,7 +709,7 @@ export const DailyFinancialSummaryWidget: React.FC<DailyFinancialSummaryWidgetPr
                   }`}
                 >
                   <div>
-                    <div className="bg-[#263843] text-white px-4 py-2.5 flex items-center justify-between border-b border-[#1d2c35]">
+                    <div className="bg-[#273E56] text-white px-4 py-2.5 flex items-center justify-between border-b border-[#1d2c35]">
                       <div className="flex items-center gap-2">
                         <CreditCard className="w-4 h-4 text-emerald-400" />
                         <span className="text-xs font-bold uppercase tracking-wide">
@@ -733,7 +733,7 @@ export const DailyFinancialSummaryWidget: React.FC<DailyFinancialSummaryWidgetPr
                       </div>
                     </div>
 
-                    <div className="overflow-x-auto max-h-72">
+                    <div className="overflow-x-auto">
                       <table className="w-full text-left border-collapse text-xs">
                         <thead>
                           <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 font-bold text-[11px] uppercase tracking-wider">

@@ -1479,7 +1479,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   onClick={() => setReconciliationFilter('all')}
                   className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
                     reconciliationFilter === 'all'
-                      ? 'bg-[#263843] text-white'
+                      ? 'bg-[#273E56] text-white'
                       : 'text-slate-700 hover:bg-slate-100'
                   }`}
                 >
@@ -1821,14 +1821,15 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 {isSyncLedgerScrollCapped && (
                   <div className="mb-1.5 flex items-center justify-between text-[11px] font-mono text-slate-600 px-1">
                     <span>
-                      Viewport: <strong>31 Rows</strong> visible ({syncSupplierLedgerRows.length} total rows — scroll vertically to view more)
+                      Viewport: <strong>{MAX_VISIBLE_TABLE_ROWS} Rows</strong> visible ({syncSupplierLedgerRows.length} total rows — scroll vertically to view more)
                     </span>
                   </div>
                 )}
                 <div
                   ref={syncLedgerScrollRef}
                   data-testid="supplier-reconciliation-scroll-box"
-                  data-visible-row-limit="31"
+                  data-row-scroll-managed="true"
+                  data-visible-row-limit={MAX_VISIBLE_TABLE_ROWS}
                   style={syncLedgerScrollMaxHeight ? { maxHeight: `${syncLedgerScrollMaxHeight}px` } : undefined}
                   className="overflow-auto border border-slate-200 rounded-lg bg-white shadow-xs print:!max-h-none print:!overflow-visible"
                 >
@@ -2158,7 +2159,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 ? 'bg-[#00897b] text-white ring-2 ring-[#5eead4]'
                 : selectedIds.length > 0
                 ? 'bg-[#1877d2] hover:bg-[#1465b5] text-white'
-                : 'bg-[#263843] hover:bg-[#1c2a33] text-[#5eead4]'
+                : 'bg-[#273E56] hover:bg-[#1c2a33] text-[#5eead4]'
             }`}
             title="Open Batch Update secondary sidebar to bulk edit multiple selected rows at once"
           >
@@ -2200,7 +2201,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
             disabled={selectedIds.length === 0}
             className={`flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-sm transition ${
               selectedIds.length > 0
-                ? 'bg-[#263843] hover:bg-[#1c2a33] text-white cursor-pointer'
+                ? 'bg-[#273E56] hover:bg-[#1c2a33] text-white cursor-pointer'
                 : 'bg-slate-200 text-slate-400 cursor-not-allowed'
             }`}
           >
@@ -2308,7 +2309,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               onClick={() => setValidationFilter('all')}
               className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
                 validationFilter === 'all'
-                  ? 'bg-[#263843] text-white'
+                  ? 'bg-[#273E56] text-white'
                   : 'text-slate-700 hover:bg-slate-100'
               }`}
             >
@@ -2538,14 +2539,15 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
             {isPurchaseDbScrollCapped && (
               <div className="mb-1.5 flex items-center justify-between text-[11px] font-mono text-slate-600 px-1">
                 <span>
-                  Viewport: <strong>31 Rows</strong> visible ({sortedPurchases.length} total rows — scroll vertically to view more)
+                  Viewport: <strong>{MAX_VISIBLE_TABLE_ROWS} Rows</strong> visible ({sortedPurchases.length} total rows — scroll vertically to view more)
                 </span>
               </div>
             )}
             <div
               ref={purchaseDbScrollRef}
               data-testid="purchase-db-scroll-box"
-              data-visible-row-limit="31"
+              data-row-scroll-managed="true"
+              data-visible-row-limit={MAX_VISIBLE_TABLE_ROWS}
               style={purchaseDbScrollMaxHeight ? { maxHeight: `${purchaseDbScrollMaxHeight}px` } : undefined}
               className="overflow-auto border border-[#CBD8E6] rounded-lg bg-white print:!max-h-none print:!overflow-visible"
             >
@@ -2870,14 +2872,15 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               {isPackingDbScrollCapped && (
                 <div className="mb-1.5 flex items-center justify-between text-[11px] font-mono text-black px-1">
                   <span>
-                    Viewport: <strong>31 Rows</strong> visible ({sortedPackings.length} total rows — scroll vertically to view more)
+                    Viewport: <strong>{MAX_VISIBLE_TABLE_ROWS} Rows</strong> visible ({sortedPackings.length} total rows — scroll vertically to view more)
                   </span>
                 </div>
               )}
               <div
                 ref={packingDbScrollRef}
                 data-testid="packing-db-scroll-box"
-                data-visible-row-limit="31"
+                data-row-scroll-managed="true"
+                data-visible-row-limit={MAX_VISIBLE_TABLE_ROWS}
                 style={packingDbScrollMaxHeight ? { maxHeight: `${packingDbScrollMaxHeight}px` } : undefined}
                 className="overflow-auto border border-slate-300 rounded-lg bg-white text-black print:!max-h-none print:!overflow-visible"
               >
@@ -3277,7 +3280,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
             <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
               {/* Category Filter Pills */}
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-bold text-[#263843] uppercase text-[11px] shrink-0">
+                <span className="font-bold text-[#273E56] uppercase text-[11px] shrink-0">
                   Ledger:
                 </span>
                 <div className="flex items-center space-x-1 bg-white p-1 rounded-lg border border-slate-200 shadow-2xs">
@@ -3289,7 +3292,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                     }}
                     className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
                       paymentCategoryFilter === 'all'
-                        ? 'bg-[#263843] text-white shadow-xs'
+                        ? 'bg-[#273E56] text-white shadow-xs'
                         : 'text-slate-700 hover:bg-slate-100'
                     }`}
                   >
@@ -3376,7 +3379,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         setPaymentSearchQuery('');
                         setSearchTerm('');
                       }}
-                      className="hover:text-[#263843] font-black cursor-pointer text-xs"
+                      className="hover:text-[#273E56] font-black cursor-pointer text-xs"
                       title="Clear search"
                     >
                       ×
@@ -3384,7 +3387,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   </span>
                 )}
                 <span className="text-slate-500 font-mono">
-                  Showing <strong className="text-[#263843]">{sortedPayments.length}</strong> of{' '}
+                  Showing <strong className="text-[#273E56]">{sortedPayments.length}</strong> of{' '}
                   {payments.length}
                 </span>
               </div>
@@ -3394,14 +3397,15 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               {isPaymentDbScrollCapped && (
                 <div className="mb-1.5 flex items-center justify-between text-[11px] font-mono text-slate-600 px-1">
                   <span>
-                    Viewport: <strong>31 Rows</strong> visible ({sortedPayments.length} total rows — scroll vertically to view more)
+                    Viewport: <strong>{MAX_VISIBLE_TABLE_ROWS} Rows</strong> visible ({sortedPayments.length} total rows — scroll vertically to view more)
                   </span>
                 </div>
               )}
               <div
                 ref={paymentDbScrollRef}
                 data-testid="payment-db-scroll-box"
-                data-visible-row-limit="31"
+                data-row-scroll-managed="true"
+                data-visible-row-limit={MAX_VISIBLE_TABLE_ROWS}
                 style={paymentDbScrollMaxHeight ? { maxHeight: `${paymentDbScrollMaxHeight}px` } : undefined}
                 className="overflow-auto border border-slate-200 rounded-lg bg-white print:!max-h-none print:!overflow-visible"
               >
@@ -3868,7 +3872,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
             </div>
             <div
               className="mt-2 py-1.5 px-4 text-xs font-black uppercase tracking-widest text-white rounded"
-              style={{ backgroundColor: '#263843', display: 'inline-block' }}
+              style={{ backgroundColor: '#273E56', display: 'inline-block' }}
             >
               SUPPLIER ACCOUNT RECONCILIATION LEDGER
             </div>
@@ -3910,7 +3914,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
           <div style={{ position: 'relative', zIndex: 10 }}>
             <table className="w-full border-collapse text-[11px] font-mono border border-slate-400">
               <thead>
-                <tr style={{ backgroundColor: '#263843', color: '#ffffff' }} className="uppercase font-bold">
+                <tr style={{ backgroundColor: '#273E56', color: '#ffffff' }} className="uppercase font-bold">
                   <th className="px-2 py-2 border border-slate-500 text-center w-10">SL #</th>
                   <th className="px-2 py-2 border border-slate-500 text-center w-24">DATE</th>
                   <th className="px-2.5 py-2 border border-slate-500 text-left">SUPPLIER NAME</th>

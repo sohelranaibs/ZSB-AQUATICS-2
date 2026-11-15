@@ -16,7 +16,22 @@ import {
   ActiveTab,
   PrivateImportDraft,
   ExporterStatus,
+  PartnerDepositRecord,
+  PartnerWithdrawalRecord,
+  ProfitDistributionRecord,
+  PartnerNotificationLogRecord,
+  BalanceIncomeRecord,
+  RecurringExpenseRecord,
+  ExternalDebtRecord,
+  ExternalDebtRepayment,
+  BusinessDocumentRecord,
 } from '../types/index.ts';
+import { computeExternalDebtTotalObligation } from '../utils/externalDebts.ts';
+import {
+  buildRecurringCostDeductionRecord,
+  getDueRecurringExpenseCycles,
+  hasRecurringDeductionForMonth,
+} from '../utils/recurringExpenses.ts';
 import {
   buildBatchStatusUpdateForPurchase,
   buildBatchStatusUpdateForPacking,
@@ -59,6 +74,21 @@ import {
   applyCreditAmountAcrossSupplierNotes,
 } from '../utils/supplierCredits.ts';
 import {
+  buildPartnerDirectory,
+  calculateTotalBalanceSummary,
+  validateAddPartnerName,
+  addPartnerToCompanyList,
+  removePartnerFromCompanyList,
+} from '../utils/totalBalance.ts';
+import {
+  buildPartnerAlertEmailContent,
+  collectValidPartnerRecipients,
+  PartnerAlertEmailPayload,
+  resolvePartnerEmailDirectory,
+  setPartnerEmailInMap,
+  validatePartnerEmailAddress,
+} from '../utils/partnerNotifications.ts';
+import {
   DEFAULT_SUPER_ADMIN_PASSWORD,
   ClearRecordsScope,
   PendingSingleDeleteRequest,
@@ -94,6 +124,15 @@ import {
   CreateAuditLogInput,
   DEFAULT_ADMIN_ACCOUNTS,
 } from '../utils/auditLogger.ts';
+import {
+  RegisteredAccountMatch,
+  validatePasswordResetNewPassword,
+  applyResetPasswordToTeamMembers,
+} from '../utils/passwordReset.ts';
+import {
+  loadInitialTeamMembers,
+  TEAM_MEMBERS_STORAGE_KEY,
+} from '../utils/administration.ts';
 import { indexedStorageDriver, DB_STORE_NAMES } from '../utils/indexedStorage.ts';
 
 const createEmptyPackingDraftRows = (): PackingItemRow[] =>
@@ -166,6 +205,13 @@ interface AppContextType {
   setActiveTab: (tab: ActiveTab) => void;
   companyProfile: CompanyProfile;
   updateCompanyProfile: (profile: Partial<CompanyProfile>) => void;
+  addCompanyPartner: (
+    name: string,
+    email?: string
+  ) => { valid: boolean; error?: string; cleanName?: string };
+  removeCompanyPartner: (name: string, options?: { purgeEntries?: boolean }) => void;
+  setPartnerEmail: (partnerName: string, email: string) => { valid: boolean; error?: string };
+  setPartnerAlertsEnabled: (enabled: boolean) => void;
   dropdownOptions: DropdownOptions;
   addDropdownItem: (category: keyof DropdownOptions, item: string) => void;
   editDropdownItem: (category: keyof DropdownOptions, oldItem: string, newItem: string) => void;
@@ -222,6 +268,46 @@ interface AppContextType {
     mode?: 'append' | 'replace'
   ) => number;
 
+  partnerDeposits: PartnerDepositRecord[];
+  addPartnerDeposit: (record: Omit<PartnerDepositRecord, 'id' | 'createdAt'>) => string;
+  updatePartnerDeposit: (id: string, record: Partial<PartnerDepositRecord>) => void;
+  deletePartnerDeposit: (id: string) => void;
+
+  partnerWithdrawals: PartnerWithdrawalRecord[];
+  addPartnerWithdrawal: (record: Omit<PartnerWithdrawalRecord, 'id' | 'createdAt'>) => string;
+  deletePartnerWithdrawal: (id: string) => void;
+
+  profitDistributions: ProfitDistributionRecord[];
+  issueProfitDistribution: (record: Omit<ProfitDistributionRecord, 'id' | 'createdAt'>) => string;
+  deleteProfitDistribution: (id: string) => void;
+
+  partnerNotifications: PartnerNotificationLogRecord[];
+  clearPartnerNotifications: () => void;
+
+  balanceIncomes: BalanceIncomeRecord[];
+  addBalanceIncome: (record: Omit<BalanceIncomeRecord, 'id' | 'createdAt'>) => string;
+  deleteBalanceIncome: (id: string) => void;
+
+  recurringExpenses: RecurringExpenseRecord[];
+  addRecurringExpense: (
+    record: Omit<RecurringExpenseRecord, 'id' | 'createdAt' | 'lastProcessedYearMonth'>
+  ) => { id: string; autoDeductedCount: number };
+  toggleRecurringExpenseAutoDeduct: (ruleId: string) => void;
+  deleteRecurringExpense: (ruleId: string) => void;
+  runDueRecurringExpensesNow: (silent?: boolean) => number;
+  deductRecurringExpenseNow: (ruleId: string) => boolean;
+
+  externalDebts: ExternalDebtRecord[];
+  addExternalDebt: (
+    record: Omit<ExternalDebtRecord, 'id' | 'createdAt' | 'repayments'>
+  ) => string;
+  recordExternalDebtRepayment: (
+    debtId: string,
+    repayment: Omit<ExternalDebtRepayment, 'id' | 'createdAt'>
+  ) => string;
+  deleteExternalDebtRepayment: (debtId: string, repaymentId: string) => void;
+  deleteExternalDebt: (debtId: string) => void;
+
   supplierCredits: SupplierCreditRecord[];
   addSupplierCredit: (input: {
     creditNoteNumber?: string;
@@ -260,6 +346,11 @@ interface AppContextType {
   updateMortality: (id: string, record: Partial<MortalityRecord>) => void;
   deleteMortality: (id: string) => void;
 
+  businessDocuments: BusinessDocumentRecord[];
+  addBusinessDocument: (record: Omit<BusinessDocumentRecord, 'id' | 'createdAt'>) => string;
+  updateBusinessDocument: (id: string, record: Partial<BusinessDocumentRecord>) => void;
+  deleteBusinessDocument: (id: string) => void;
+
   // Print & PDF modal state + Global View PDF Export
   printModalData: PrintModalData;
   openPrintModal: (modal: Omit<PrintModalData, 'isOpen'>) => void;
@@ -284,6 +375,11 @@ interface AppContextType {
   superAdminPassword: string;
   updateSuperAdminPassword: (
     currentPasswordInput: string,
+    newPassword: string,
+    confirmPassword: string
+  ) => { valid: boolean; error?: string };
+  resetAccountPasswordViaEmail: (
+    account: RegisteredAccountMatch,
     newPassword: string,
     confirmPassword: string
   ) => { valid: boolean; error?: string };
@@ -360,8 +456,16 @@ const STORAGE_KEYS = {
   PACKING_DRAFT: 'zsb_packing_draft_v8',
   PAYMENTS: 'zsb_payments_v8',
   OTHER_COSTS: 'zsb_other_costs_v8',
+  PARTNER_DEPOSITS: 'zsb_partner_deposits_v1',
+  PARTNER_WITHDRAWALS: 'zsb_partner_withdrawals_v1',
+  PROFIT_DISTRIBUTIONS: 'zsb_profit_distributions_v1',
+  PARTNER_NOTIFICATIONS: 'zsb_partner_notifications_v1',
+  BALANCE_INCOMES: 'zsb_balance_incomes_v1',
+  RECURRING_EXPENSES: 'zsb_recurring_expenses_v1',
+  EXTERNAL_DEBTS: 'zsb_external_debts_v1',
   SUPPLIER_CREDITS: 'zsb_supplier_credits_v6',
   MORTALITIES: 'zsb_mortalities_v6',
+  BUSINESS_DOCUMENTS: 'zsb_business_documents_v1',
   SUPER_ADMIN_PASSWORD: 'zsb_super_admin_password_v1',
   SNAPSHOTS: 'zsb_database_snapshots_v2',
   AUTH_USER: 'zsb_auth_user_v2',
@@ -484,6 +588,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         'exporter_payment_form',
         'exporter_payment_slip',
         'profit_loss',
+        'total_balance',
         'purchase_db',
         'packing_db',
         'payment_db',
@@ -491,9 +596,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         'audit_logs',
         'settings',
         'administration',
+        'forget_password',
       ];
       if (tabParam && validTabs.includes(tabParam)) {
         return tabParam;
+      }
+      if (searchParams.get('reset_token')) {
+        return 'forget_password';
       }
       if (searchParams.get('wechat_tx') || searchParams.get('wechat_tmp_token')) {
         return 'exporter_payment_form';
@@ -536,11 +645,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           parsed.approachingThresholdPercent !== undefined
             ? Number(parsed.approachingThresholdPercent)
             : initialCompanyProfile.approachingThresholdPercent,
+        minTotalBalanceThreshold:
+          parsed.minTotalBalanceThreshold !== undefined
+            ? Number(parsed.minTotalBalanceThreshold)
+            : initialCompanyProfile.minTotalBalanceThreshold,
+        documentAlertWindowDays:
+          parsed.documentAlertWindowDays !== undefined
+            ? Number(parsed.documentAlertWindowDays)
+            : initialCompanyProfile.documentAlertWindowDays,
       };
       if (parsed.partner === 'Md. Faisal Ahmed' || parsed.managingPartner === 'Md. Sohel Rana') {
         merged.managingPartner = 'Md. Mizanur Rahman';
         merged.partner = 'Md. Sohel Rana';
       }
+      merged.partners = buildPartnerDirectory(merged, []);
       return merged;
     } catch {
       return initialCompanyProfile;
@@ -725,6 +843,96 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
+  const [partnerDeposits, setPartnerDeposits] = useState<PartnerDepositRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.PARTNER_DEPOSITS);
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'pdep') : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [partnerWithdrawals, setPartnerWithdrawals] = useState<PartnerWithdrawalRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.PARTNER_WITHDRAWALS);
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'pwdr') : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [profitDistributions, setProfitDistributions] = useState<ProfitDistributionRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.PROFIT_DISTRIBUTIONS);
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'pdist') : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [balanceIncomes, setBalanceIncomes] = useState<BalanceIncomeRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.BALANCE_INCOMES);
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'binc') : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpenseRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.RECURRING_EXPENSES);
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'rexp') : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [externalDebts, setExternalDebts] = useState<ExternalDebtRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.EXTERNAL_DEBTS);
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'edebt') : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [businessDocuments, setBusinessDocuments] = useState<BusinessDocumentRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.BUSINESS_DOCUMENTS);
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'bdoc') : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [partnerNotifications, setPartnerNotifications] = useState<PartnerNotificationLogRecord[]>(
+    () => {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEYS.PARTNER_NOTIFICATIONS);
+        if (!saved) return [];
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed) ? parsed.slice(0, 100) : [];
+      } catch {
+        return [];
+      }
+    }
+  );
+
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const [printModalData, setPrintModalData] = useState<PrintModalData>({
@@ -893,8 +1101,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem(STORAGE_KEYS.PACKING_DRAFT, JSON.stringify(packingDraft));
       localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
       localStorage.setItem(STORAGE_KEYS.OTHER_COSTS, JSON.stringify(otherCosts));
+      localStorage.setItem(STORAGE_KEYS.PARTNER_DEPOSITS, JSON.stringify(partnerDeposits));
+      localStorage.setItem(STORAGE_KEYS.PARTNER_WITHDRAWALS, JSON.stringify(partnerWithdrawals));
+      localStorage.setItem(STORAGE_KEYS.PROFIT_DISTRIBUTIONS, JSON.stringify(profitDistributions));
+      localStorage.setItem(STORAGE_KEYS.BALANCE_INCOMES, JSON.stringify(balanceIncomes));
+      localStorage.setItem(STORAGE_KEYS.RECURRING_EXPENSES, JSON.stringify(recurringExpenses));
+      localStorage.setItem(STORAGE_KEYS.EXTERNAL_DEBTS, JSON.stringify(externalDebts));
       localStorage.setItem(STORAGE_KEYS.SUPPLIER_CREDITS, JSON.stringify(supplierCredits));
       localStorage.setItem(STORAGE_KEYS.MORTALITIES, JSON.stringify(mortalities));
+      localStorage.setItem(STORAGE_KEYS.BUSINESS_DOCUMENTS, JSON.stringify(businessDocuments));
       localStorage.setItem(STORAGE_KEYS.SNAPSHOTS, JSON.stringify(snapshots));
       setHasUnsyncedChanges(false);
       if (syncTimerRef.current) {
@@ -1052,6 +1267,112 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem(STORAGE_KEYS.MORTALITIES, JSON.stringify(mortalities));
     });
   }, [mortalities]);
+
+  useEffect(() => {
+    persistWithSyncIndicator('Partner Deposit Shares', () => {
+      localStorage.setItem(STORAGE_KEYS.PARTNER_DEPOSITS, JSON.stringify(partnerDeposits));
+    });
+  }, [partnerDeposits]);
+
+  useEffect(() => {
+    persistWithSyncIndicator('Partner Withdrawals', () => {
+      localStorage.setItem(STORAGE_KEYS.PARTNER_WITHDRAWALS, JSON.stringify(partnerWithdrawals));
+    });
+  }, [partnerWithdrawals]);
+
+  useEffect(() => {
+    persistWithSyncIndicator('Profit Distributions', () => {
+      localStorage.setItem(STORAGE_KEYS.PROFIT_DISTRIBUTIONS, JSON.stringify(profitDistributions));
+    });
+  }, [profitDistributions]);
+
+  useEffect(() => {
+    persistWithSyncIndicator('Balance Income Ledger', () => {
+      localStorage.setItem(STORAGE_KEYS.BALANCE_INCOMES, JSON.stringify(balanceIncomes));
+    });
+  }, [balanceIncomes]);
+
+  useEffect(() => {
+    persistWithSyncIndicator('Recurring Expenses', () => {
+      localStorage.setItem(STORAGE_KEYS.RECURRING_EXPENSES, JSON.stringify(recurringExpenses));
+    });
+  }, [recurringExpenses]);
+
+  useEffect(() => {
+    persistWithSyncIndicator('External Debts', () => {
+      localStorage.setItem(STORAGE_KEYS.EXTERNAL_DEBTS, JSON.stringify(externalDebts));
+    });
+  }, [externalDebts]);
+
+  useEffect(() => {
+    persistWithSyncIndicator('Business Documents', () => {
+      localStorage.setItem(STORAGE_KEYS.BUSINESS_DOCUMENTS, JSON.stringify(businessDocuments));
+    });
+  }, [businessDocuments]);
+
+  // Automated Monthly Recurring Expense Deduction Engine (idempotent per ruleId + YYYY-MM)
+  useEffect(() => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const dueCycles = getDueRecurringExpenseCycles(recurringExpenses, otherCosts, todayStr);
+    if (dueCycles.length === 0) return;
+
+    const nowIso = new Date().toISOString();
+    const generatedCosts: OtherCostRecord[] = [];
+    const latestMonthByRule = new Map<string, string>();
+
+    for (const cycle of dueCycles) {
+      const existsInBatch = generatedCosts.some(
+        (c) =>
+          c.recurringExpenseId === cycle.rule.id &&
+          c.recurringYearMonth === cycle.yearMonth
+      );
+      if (existsInBatch) continue;
+
+      generatedCosts.push({
+        ...buildRecurringCostDeductionRecord(cycle.rule, cycle.yearMonth),
+        id: generateRecordId('cost'),
+        createdAt: nowIso,
+      });
+
+      const prevLatest = latestMonthByRule.get(cycle.rule.id);
+      if (!prevLatest || cycle.yearMonth > prevLatest) {
+        latestMonthByRule.set(cycle.rule.id, cycle.yearMonth);
+      }
+    }
+
+    if (generatedCosts.length === 0) return;
+
+    setOtherCosts((prev) => [...generatedCosts.reverse(), ...prev]);
+    setRecurringExpenses((prev) =>
+      prev.map((rule) => {
+        const processedYm = latestMonthByRule.get(rule.id);
+        if (!processedYm) return rule;
+        if (rule.lastProcessedYearMonth && rule.lastProcessedYearMonth >= processedYm) {
+          return rule;
+        }
+        return { ...rule, lastProcessedYearMonth: processedYm };
+      })
+    );
+    const totalAutoAmount = generatedCosts.reduce((sum, c) => sum + c.amount, 0);
+    addAuditLog({
+      action: 'CREATE',
+      module: 'RecurringExpense',
+      entityId: generatedCosts[0]?.id,
+      summary: `Auto-deducted ${generatedCosts.length} scheduled monthly recurring expense(s) from Total Balance`,
+      details: `Total Deducted: ${companyProfile.currency} ${totalAutoAmount.toLocaleString()}`,
+    });
+  }, [recurringExpenses, otherCosts]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        STORAGE_KEYS.PARTNER_NOTIFICATIONS,
+        JSON.stringify(partnerNotifications.slice(0, 100))
+      );
+    } catch (e) {
+      console.error(e);
+    }
+  }, [partnerNotifications]);
 
   useEffect(() => {
     persistWithSyncIndicator('Security Config', () => {
@@ -1227,7 +1548,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateCompanyProfile = (profile: Partial<CompanyProfile>) => {
-    setCompanyProfile((prev) => ({ ...prev, ...profile }));
+    setCompanyProfile((prev) => {
+      const merged = { ...prev, ...profile };
+      merged.partners = buildPartnerDirectory(merged, []);
+      return merged;
+    });
     addAuditLog({
       action: 'UPDATE',
       module: 'Settings',
@@ -1236,6 +1561,124 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       details: `Company: ${profile.companyName || companyProfile.companyName}`,
     });
     showToast('Company profile updated successfully.');
+  };
+
+  const addCompanyPartner = (
+    name: string,
+    email?: string
+  ): { valid: boolean; error?: string; cleanName?: string } => {
+    const existing = buildPartnerDirectory(companyProfile, []);
+    const check = validateAddPartnerName(name, existing);
+    if (!check.valid || !check.cleanName) {
+      return check;
+    }
+    const emailCheck = validatePartnerEmailAddress(email || '');
+    if (!emailCheck.valid) {
+      return { valid: false, error: emailCheck.error };
+    }
+    const nextList = addPartnerToCompanyList(companyProfile, check.cleanName);
+    setCompanyProfile((prev) => ({
+      ...prev,
+      partners: addPartnerToCompanyList(prev, check.cleanName!),
+      partnerEmails: emailCheck.cleanEmail
+        ? setPartnerEmailInMap(prev.partnerEmails, check.cleanName!, emailCheck.cleanEmail)
+        : prev.partnerEmails,
+    }));
+    addAuditLog({
+      action: 'CREATE',
+      module: 'Settings',
+      entityId: 'CFG-PARTNER',
+      summary: `Added company partner "${check.cleanName}" (${nextList.length} registered partners)`,
+      details: emailCheck.cleanEmail
+        ? `Partners: ${nextList.join(', ')} · Alert Email: ${emailCheck.cleanEmail}`
+        : `Partners: ${nextList.join(', ')}`,
+    });
+    showToast(`Added partner "${check.cleanName}" to company partners.`);
+    return check;
+  };
+
+  const setPartnerEmail = (
+    partnerName: string,
+    email: string
+  ): { valid: boolean; error?: string } => {
+    const cleanName = (partnerName || '').trim();
+    if (!cleanName) {
+      return { valid: false, error: 'Partner name is required.' };
+    }
+    const check = validatePartnerEmailAddress(email);
+    if (!check.valid) {
+      return { valid: false, error: check.error };
+    }
+    setCompanyProfile((prev) => ({
+      ...prev,
+      partnerEmails: setPartnerEmailInMap(prev.partnerEmails, cleanName, check.cleanEmail),
+    }));
+    addAuditLog({
+      action: 'UPDATE',
+      module: 'PartnerNotification',
+      entityId: 'PARTNER-EMAIL',
+      summary: check.cleanEmail
+        ? `Updated notification email for "${cleanName}" to ${check.cleanEmail}`
+        : `Cleared custom notification email for "${cleanName}"`,
+    });
+    showToast(
+      check.cleanEmail
+        ? `Saved alert email for ${cleanName}: ${check.cleanEmail}`
+        : `Cleared custom email for ${cleanName}.`
+    );
+    return { valid: true };
+  };
+
+  const setPartnerAlertsEnabled = (enabled: boolean) => {
+    setCompanyProfile((prev) => ({
+      ...prev,
+      partnerAlertsEnabled: enabled,
+    }));
+    addAuditLog({
+      action: 'UPDATE',
+      module: 'PartnerNotification',
+      entityId: 'AUTO-ALERTS',
+      summary: enabled
+        ? 'Enabled automated Resend partner email alerts for Withdrawals & Profit Distributions'
+        : 'Paused automated Resend partner email alerts',
+    });
+    showToast(
+      enabled
+        ? 'Automated partner email alerts enabled.'
+        : 'Automated partner email alerts paused.'
+    );
+  };
+
+  const clearPartnerNotifications = () => {
+    setPartnerNotifications([]);
+    showToast('Partner email notification history cleared.');
+  };
+
+  const removeCompanyPartner = (name: string, options?: { purgeEntries?: boolean }) => {
+    const cleanTarget = (name || '').trim();
+    if (!cleanTarget) return;
+    const targetKey = cleanTarget.toLowerCase();
+    setCompanyProfile((prev) => ({
+      ...prev,
+      partners: removePartnerFromCompanyList(prev, cleanTarget),
+    }));
+    if (options?.purgeEntries) {
+      setPartnerDeposits((prev) =>
+        prev.filter((d) => (d.partnerName || '').trim().toLowerCase() !== targetKey)
+      );
+      setPartnerWithdrawals((prev) =>
+        prev.filter((w) => (w.partnerName || '').trim().toLowerCase() !== targetKey)
+      );
+    }
+    addAuditLog({
+      action: 'DELETE',
+      module: 'Settings',
+      entityId: 'CFG-PARTNER',
+      summary: options?.purgeEntries
+        ? `Deleted partner "${cleanTarget}" and removed associated deposit/withdrawal entries`
+        : `Deleted partner "${cleanTarget}" from company list`,
+    });
+    showToast(`Deleted partner "${cleanTarget}" successfully.`);
   };
 
   const addDropdownItem = (category: keyof DropdownOptions, item: string) => {
@@ -1934,6 +2377,793 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return upsertResult.insertedCount + upsertResult.updatedCount;
   };
 
+  // Partner Deposit Share CRUD (Total Balance Capital)
+  const addPartnerDeposit = (
+    record: Omit<PartnerDepositRecord, 'id' | 'createdAt'>
+  ): string => {
+    const id = generateRecordId('pdep');
+    const newRecord: PartnerDepositRecord = {
+      ...record,
+      id,
+      createdAt: new Date().toISOString(),
+    };
+    setPartnerDeposits((prev) => [newRecord, ...prev]);
+    addAuditLog({
+      action: 'CREATE',
+      module: 'PartnerDeposit',
+      entityId: id,
+      summary: `Recorded Partner Deposit Share for "${newRecord.partnerName}"`,
+      details: `Date: ${newRecord.date} · Amount: ${companyProfile.currency} ${newRecord.amount.toLocaleString()}`,
+    });
+    showToast(
+      `Partner deposit share (${companyProfile.currency} ${newRecord.amount.toLocaleString()}) added to Total Balance.`
+    );
+    return id;
+  };
+
+  const updatePartnerDeposit = (id: string, record: Partial<PartnerDepositRecord>) => {
+    const target = partnerDeposits.find((d) => d.id === id);
+    setPartnerDeposits((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, ...record } : d))
+    );
+    addAuditLog({
+      action: 'UPDATE',
+      module: 'PartnerDeposit',
+      entityId: id,
+      summary: `Updated partner deposit for "${record.partnerName || target?.partnerName || id}"`,
+      details: `Amount: ${companyProfile.currency} ${(record.amount ?? target?.amount ?? 0).toLocaleString()}`,
+    });
+    showToast('Partner deposit share entry updated.');
+  };
+
+  const deletePartnerDeposit = (id: string) => {
+    const target = partnerDeposits.find((d) => d.id === id);
+    requestSuperAdminSingleDelete(
+      {
+        recordType: 'partner_deposit',
+        recordId: id,
+        recordTitle: target
+          ? `${target.partnerName} (${companyProfile.currency} ${(target.amount ?? 0).toLocaleString()})`
+          : id,
+        recordSubtitle: target
+          ? `Date: ${target.date}${target.paymentMethod ? ` · ${target.paymentMethod}` : ''}`
+          : undefined,
+      },
+      () => {
+        setPartnerDeposits((prev) => prev.filter((d) => d.id !== id));
+        addAuditLog({
+          action: 'DELETE',
+          module: 'PartnerDeposit',
+          entityId: id,
+          summary: `Super Admin verified & deleted partner deposit for "${target?.partnerName || id}"`,
+          details: `Amount: ${companyProfile.currency} ${(target?.amount ?? 0).toLocaleString()}`,
+        });
+        showToast('Super Admin verified: Partner deposit deleted.');
+      }
+    );
+  };
+
+  const triggerAutomatedPartnerAlert = async (input: {
+    eventType: 'partner_withdrawal' | 'profit_distribution';
+    eventId: string;
+    amount: number;
+    withdrawal?: PartnerAlertEmailPayload['withdrawal'];
+    profitDistribution?: PartnerAlertEmailPayload['profitDistribution'];
+    nextWithdrawals?: PartnerWithdrawalRecord[];
+  }) => {
+    if (companyProfile.partnerAlertsEnabled === false) {
+      return;
+    }
+
+    const activeWithdrawals = input.nextWithdrawals ?? partnerWithdrawals;
+    const directory = buildPartnerDirectory(
+      companyProfile,
+      partnerDeposits,
+      activeWithdrawals
+    );
+    const resolvedEntries = resolvePartnerEmailDirectory(
+      directory,
+      companyProfile.partnerEmails,
+      loadInitialTeamMembers()
+    );
+    const recipients = collectValidPartnerRecipients(resolvedEntries);
+
+    const payload: PartnerAlertEmailPayload = {
+      eventType: input.eventType,
+      companyName: companyProfile.companyName || 'ZSB AQUATICS',
+      currency: companyProfile.currency || 'TK',
+      triggeredBy: currentUser
+        ? `${currentUser.displayName} (${currentUser.role})`
+        : 'Md. Sohel Rana (Partner & Administrator)',
+      recipients,
+      withdrawal: input.withdrawal,
+      profitDistribution: input.profitDistribution,
+    };
+
+    const preview = buildPartnerAlertEmailContent(payload);
+    const logId = generateRecordId('palert');
+    const triggeredAt = new Date().toISOString();
+
+    if (recipients.length === 0) {
+      const noRecipientLog: PartnerNotificationLogRecord = {
+        id: logId,
+        eventType: input.eventType,
+        eventId: input.eventId,
+        triggeredAt,
+        subject: preview.subject,
+        recipients: [],
+        status: 'failed',
+        mode: 'client_error',
+        errorDetail: 'No partner email addresses configured in Total Balance alerts.',
+        amount: input.amount,
+        currency: companyProfile.currency || 'TK',
+        summaryLine: preview.summaryLine,
+        previewHtml: preview.html,
+        previewText: preview.text,
+      };
+      setPartnerNotifications((prev) => [noRecipientLog, ...prev].slice(0, 100));
+      addAuditLog({
+        action: 'UPDATE',
+        module: 'PartnerNotification',
+        entityId: input.eventId,
+        summary: `Skipped partner email alert (${input.eventType}): no partner email recipients configured`,
+      });
+      return;
+    }
+
+    const pendingLog: PartnerNotificationLogRecord = {
+      id: logId,
+      eventType: input.eventType,
+      eventId: input.eventId,
+      triggeredAt,
+      subject: preview.subject,
+      recipients,
+      status: 'sending',
+      mode: 'local_dispatch',
+      amount: input.amount,
+      currency: companyProfile.currency || 'TK',
+      summaryLine: preview.summaryLine,
+      previewHtml: preview.html,
+      previewText: preview.text,
+    };
+    setPartnerNotifications((prev) => [pendingLog, ...prev].slice(0, 100));
+
+    try {
+      const response = await fetch('/api/notifications/partner-alert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        mode?: 'resend_email' | 'local_dispatch' | 'resend_error_fallback';
+        messageId?: string;
+        errorDetail?: string;
+        error?: string;
+      };
+
+      const ok = response.ok && Boolean(data.ok);
+      const resolvedMode =
+        data.mode === 'resend_email'
+          ? 'resend_email'
+          : data.mode === 'resend_error_fallback'
+            ? 'resend_error_fallback'
+            : ok
+              ? 'local_dispatch'
+              : 'client_error';
+
+      const status: PartnerNotificationLogRecord['status'] =
+        resolvedMode === 'resend_email'
+          ? 'sent_resend'
+          : ok && resolvedMode !== 'resend_error_fallback'
+            ? 'local_dispatch'
+            : 'failed';
+
+      setPartnerNotifications((prev) =>
+        prev.map((item) =>
+          item.id === logId
+            ? {
+                ...item,
+                status,
+                mode: resolvedMode,
+                messageId: data.messageId || item.messageId,
+                errorDetail: data.errorDetail || (!ok ? data.error || `HTTP ${response.status}` : undefined),
+              }
+            : item
+        )
+      );
+
+      addAuditLog({
+        action: 'CREATE',
+        module: 'PartnerNotification',
+        entityId: data.messageId || logId,
+        summary:
+          status === 'sent_resend'
+            ? `Sent Resend email alert to ${recipients.length} partner(s): ${preview.subject}`
+            : status === 'local_dispatch'
+              ? `Dispatched partner alert locally (${recipients.length} recipient(s), RESEND_API_KEY not configured): ${preview.subject}`
+              : `Partner email alert fallback (${data.errorDetail || data.error || 'Dispatch error'})`,
+        details: `To: ${recipients.map((r) => r.email).join(', ')}`,
+      });
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'Network error sending alert';
+      setPartnerNotifications((prev) =>
+        prev.map((item) =>
+          item.id === logId
+            ? {
+                ...item,
+                status: 'failed',
+                mode: 'client_error',
+                errorDetail: errMsg,
+              }
+            : item
+        )
+      );
+      addAuditLog({
+        action: 'UPDATE',
+        module: 'PartnerNotification',
+        entityId: logId,
+        summary: `Failed to dispatch partner email alert: ${errMsg}`,
+      });
+    }
+  };
+
+  // Partner Withdrawal CRUD (Deducted from Total Balance & Partner Equity)
+  const addPartnerWithdrawal = (
+    record: Omit<PartnerWithdrawalRecord, 'id' | 'createdAt'>
+  ): string => {
+    const id = generateRecordId('pwdr');
+    const newRecord: PartnerWithdrawalRecord = {
+      ...record,
+      id,
+      createdAt: new Date().toISOString(),
+    };
+    const nextWithdrawals = [newRecord, ...partnerWithdrawals];
+    setPartnerWithdrawals(nextWithdrawals);
+    addAuditLog({
+      action: 'CREATE',
+      module: 'PartnerWithdrawal',
+      entityId: id,
+      summary: `Logged Partner Withdrawal for "${newRecord.partnerName}"`,
+      details: `Date: ${newRecord.date} · Amount: ${companyProfile.currency} ${newRecord.amount.toLocaleString()}`,
+    });
+
+    const updatedSummary = calculateTotalBalanceSummary({
+      partnerDeposits,
+      partnerWithdrawals: nextWithdrawals,
+      profitDistributions,
+      balanceIncomes,
+      purchases,
+      packings,
+      otherCosts,
+    });
+
+    void triggerAutomatedPartnerAlert({
+      eventType: 'partner_withdrawal',
+      eventId: id,
+      amount: newRecord.amount,
+      nextWithdrawals,
+      withdrawal: {
+        id,
+        date: newRecord.date,
+        partnerName: newRecord.partnerName,
+        amount: newRecord.amount,
+        paymentMethod: newRecord.paymentMethod,
+        referenceNo: newRecord.referenceNo,
+        notes: newRecord.notes,
+        updatedTotalBalance: updatedSummary.totalBalance,
+        partnerShares: updatedSummary.partnerShares.map((s) => ({
+          partnerName: s.partnerName,
+          equityPercent: s.sharePercent,
+          netCapital: s.netContribution,
+        })),
+      },
+    });
+
+    const recipientCount = collectValidPartnerRecipients(
+      resolvePartnerEmailDirectory(
+        buildPartnerDirectory(companyProfile, partnerDeposits, nextWithdrawals),
+        companyProfile.partnerEmails,
+        loadInitialTeamMembers()
+      )
+    ).length;
+
+    showToast(
+      companyProfile.partnerAlertsEnabled !== false && recipientCount > 0
+        ? `Partner withdrawal (${companyProfile.currency} ${newRecord.amount.toLocaleString()}) deducted & email alert triggered for ${recipientCount} partner(s).`
+        : `Partner withdrawal (${companyProfile.currency} ${newRecord.amount.toLocaleString()}) deducted from Total Balance.`
+    );
+    return id;
+  };
+
+  const deletePartnerWithdrawal = (id: string) => {
+    const target = partnerWithdrawals.find((w) => w.id === id);
+    requestSuperAdminSingleDelete(
+      {
+        recordType: 'partner_withdrawal',
+        recordId: id,
+        recordTitle: target
+          ? `${target.partnerName} (${companyProfile.currency} ${(target.amount ?? 0).toLocaleString()})`
+          : id,
+        recordSubtitle: target
+          ? `Date: ${target.date}${target.paymentMethod ? ` · ${target.paymentMethod}` : ''}`
+          : undefined,
+      },
+      () => {
+        setPartnerWithdrawals((prev) => prev.filter((w) => w.id !== id));
+        addAuditLog({
+          action: 'DELETE',
+          module: 'PartnerWithdrawal',
+          entityId: id,
+          summary: `Super Admin verified & deleted partner withdrawal for "${target?.partnerName || id}"`,
+          details: `Amount: ${companyProfile.currency} ${(target?.amount ?? 0).toLocaleString()}`,
+        });
+        showToast('Super Admin verified: Partner withdrawal deleted.');
+      }
+    );
+  };
+
+  // Monthly Profit Distribution & Partner Payout CRUD
+  const issueProfitDistribution = (
+    record: Omit<ProfitDistributionRecord, 'id' | 'createdAt'>
+  ): string => {
+    const id = generateRecordId('pdist');
+    const newRecord: ProfitDistributionRecord = {
+      ...record,
+      id,
+      createdAt: new Date().toISOString(),
+    };
+    const nextDistributions = [newRecord, ...profitDistributions];
+    setProfitDistributions(nextDistributions);
+    const splitSummary = (newRecord.allocations || [])
+      .filter((a) => Number(a.payoutAmount) > 0)
+      .map((a) => `${a.partnerName}: ${companyProfile.currency} ${a.payoutAmount.toLocaleString()} (${a.equityPercent.toFixed(2)}%)`)
+      .join(' · ');
+    addAuditLog({
+      action: 'CREATE',
+      module: 'ProfitDistribution',
+      entityId: id,
+      summary: `Issued profit distribution payout for ${newRecord.targetYearMonth} (${companyProfile.currency} ${newRecord.distributedAmount.toLocaleString()})`,
+      details: splitSummary || `Payout Date: ${newRecord.payoutDate}`,
+    });
+
+    const updatedSummary = calculateTotalBalanceSummary({
+      partnerDeposits,
+      partnerWithdrawals,
+      profitDistributions: nextDistributions,
+      balanceIncomes,
+      purchases,
+      packings,
+      otherCosts,
+    });
+
+    void triggerAutomatedPartnerAlert({
+      eventType: 'profit_distribution',
+      eventId: id,
+      amount: newRecord.distributedAmount,
+      profitDistribution: {
+        id,
+        targetYearMonth: newRecord.targetYearMonth,
+        payoutDate: newRecord.payoutDate,
+        calculatedNetProfit: newRecord.calculatedNetProfit,
+        distributedAmount: newRecord.distributedAmount,
+        retainedAmount: newRecord.retainedAmount,
+        paymentMethod: newRecord.paymentMethod,
+        referenceNo: newRecord.referenceNo,
+        notes: newRecord.notes,
+        updatedTotalBalance: updatedSummary.totalBalance,
+        allocations: newRecord.allocations,
+      },
+    });
+
+    const recipientCount = collectValidPartnerRecipients(
+      resolvePartnerEmailDirectory(
+        buildPartnerDirectory(companyProfile, partnerDeposits, partnerWithdrawals),
+        companyProfile.partnerEmails,
+        loadInitialTeamMembers()
+      )
+    ).length;
+
+    showToast(
+      companyProfile.partnerAlertsEnabled !== false && recipientCount > 0
+        ? `Profit payout (${companyProfile.currency} ${newRecord.distributedAmount.toLocaleString()}) issued & email alert triggered for ${recipientCount} partner(s).`
+        : `Profit payout (${companyProfile.currency} ${newRecord.distributedAmount.toLocaleString()}) issued for ${newRecord.targetYearMonth} and deducted from Total Balance.`
+    );
+    return id;
+  };
+
+  const deleteProfitDistribution = (id: string) => {
+    const target = profitDistributions.find((d) => d.id === id);
+    requestSuperAdminSingleDelete(
+      {
+        recordType: 'profit_distribution',
+        recordId: id,
+        recordTitle: target
+          ? `${target.targetYearMonth} Profit Payout (${companyProfile.currency} ${(target.distributedAmount ?? 0).toLocaleString()})`
+          : id,
+        recordSubtitle: target
+          ? `Payout Date: ${target.payoutDate} · ${(target.allocations || []).filter((a) => a.payoutAmount > 0).length} partner(s)`
+          : undefined,
+      },
+      () => {
+        setProfitDistributions((prev) => prev.filter((d) => d.id !== id));
+        addAuditLog({
+          action: 'DELETE',
+          module: 'ProfitDistribution',
+          entityId: id,
+          summary: `Super Admin verified & deleted profit distribution payout (${target?.targetYearMonth || id})`,
+          details: `Amount: ${companyProfile.currency} ${(target?.distributedAmount ?? 0).toLocaleString()}`,
+        });
+        showToast('Super Admin verified: Profit distribution payout deleted.');
+      }
+    );
+  };
+
+  // Direct Income CRUD (Total Balance Income)
+  const addBalanceIncome = (
+    record: Omit<BalanceIncomeRecord, 'id' | 'createdAt'>
+  ): string => {
+    const id = generateRecordId('binc');
+    const newRecord: BalanceIncomeRecord = {
+      ...record,
+      id,
+      createdAt: new Date().toISOString(),
+    };
+    setBalanceIncomes((prev) => [newRecord, ...prev]);
+    addAuditLog({
+      action: 'CREATE',
+      module: 'BalanceIncome',
+      entityId: id,
+      summary: `Added income "${newRecord.source}" to Total Balance`,
+      details: `Date: ${newRecord.date} · Amount: ${companyProfile.currency} ${newRecord.amount.toLocaleString()}`,
+    });
+    showToast(
+      `Income (${companyProfile.currency} ${newRecord.amount.toLocaleString()}) added to Total Balance.`
+    );
+    return id;
+  };
+
+  // Recurring Monthly Fixed Expenses CRUD & Automation
+  const addRecurringExpense = (
+    record: Omit<RecurringExpenseRecord, 'id' | 'createdAt' | 'lastProcessedYearMonth'>
+  ): { id: string; autoDeductedCount: number } => {
+    const id = generateRecordId('rexp');
+    const nowIso = new Date().toISOString();
+    const todayStr = nowIso.slice(0, 10);
+
+    const baseRule: RecurringExpenseRecord = {
+      ...record,
+      id,
+      createdAt: nowIso,
+    };
+
+    const dueCycles = baseRule.autoDeduct
+      ? getDueRecurringExpenseCycles([baseRule], otherCosts, todayStr)
+      : [];
+
+    let lastProcessedYearMonth: string | undefined;
+    const generatedCosts: OtherCostRecord[] = dueCycles.map((cycle) => {
+      if (!lastProcessedYearMonth || cycle.yearMonth > lastProcessedYearMonth) {
+        lastProcessedYearMonth = cycle.yearMonth;
+      }
+      return {
+        ...buildRecurringCostDeductionRecord(baseRule, cycle.yearMonth),
+        id: generateRecordId('cost'),
+        createdAt: nowIso,
+      };
+    });
+
+    const finalRule: RecurringExpenseRecord = lastProcessedYearMonth
+      ? { ...baseRule, lastProcessedYearMonth }
+      : baseRule;
+
+    setRecurringExpenses((prev) => [finalRule, ...prev]);
+    if (generatedCosts.length > 0) {
+      setOtherCosts((prev) => [...generatedCosts.reverse(), ...prev]);
+    }
+
+    const autoSum = generatedCosts.reduce((s, c) => s + c.amount, 0);
+    addAuditLog({
+      action: 'CREATE',
+      module: 'RecurringExpense',
+      entityId: id,
+      summary: `Created monthly recurring expense "${finalRule.title}" (${companyProfile.currency} ${finalRule.amount.toLocaleString()}/mo, Day ${finalRule.billingDay})`,
+      details:
+        generatedCosts.length > 0
+          ? `Auto-deducted ${generatedCosts.length} due cycle(s) totaling ${companyProfile.currency} ${autoSum.toLocaleString()} from Total Balance`
+          : `Auto-Deduct: ${finalRule.autoDeduct ? 'ON' : 'PAUSED'} · Start: ${finalRule.startYearMonth}`,
+    });
+
+    showToast(
+      generatedCosts.length > 0
+        ? `Saved "${finalRule.title}" & auto-deducted ${generatedCosts.length} due payment(s) (${companyProfile.currency} ${autoSum.toLocaleString()}) from Total Balance.`
+        : `Recurring fixed expense "${finalRule.title}" scheduled (Day ${finalRule.billingDay} monthly).`
+    );
+
+    return { id, autoDeductedCount: generatedCosts.length };
+  };
+
+  const toggleRecurringExpenseAutoDeduct = (ruleId: string) => {
+    const target = recurringExpenses.find((r) => r.id === ruleId);
+    if (!target) return;
+    const nextAuto = !target.autoDeduct;
+    setRecurringExpenses((prev) =>
+      prev.map((r) => (r.id === ruleId ? { ...r, autoDeduct: nextAuto } : r))
+    );
+    addAuditLog({
+      action: 'UPDATE',
+      module: 'RecurringExpense',
+      entityId: ruleId,
+      summary: `${nextAuto ? 'Resumed' : 'Paused'} auto-deduction for "${target.title}"`,
+    });
+    showToast(
+      nextAuto
+        ? `Auto-deduction resumed for "${target.title}".`
+        : `Auto-deduction paused for "${target.title}".`
+    );
+  };
+
+  const deleteRecurringExpense = (ruleId: string) => {
+    const target = recurringExpenses.find((r) => r.id === ruleId);
+    if (!target) return;
+    setRecurringExpenses((prev) => prev.filter((r) => r.id !== ruleId));
+    addAuditLog({
+      action: 'DELETE',
+      module: 'RecurringExpense',
+      entityId: ruleId,
+      summary: `Deleted recurring expense rule "${target.title}"`,
+      details: `Monthly Fixed Cost was ${companyProfile.currency} ${target.amount.toLocaleString()}`,
+    });
+    showToast(`Deleted recurring expense rule "${target.title}".`);
+  };
+
+  const runDueRecurringExpensesNow = (silent: boolean = false): number => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const dueCycles = getDueRecurringExpenseCycles(recurringExpenses, otherCosts, todayStr);
+    if (dueCycles.length === 0) {
+      if (!silent) {
+        showToast('All active monthly recurring expenses are already deducted through today.');
+      }
+      return 0;
+    }
+
+    const nowIso = new Date().toISOString();
+    const generatedCosts: OtherCostRecord[] = [];
+    const latestMonthByRule = new Map<string, string>();
+
+    for (const cycle of dueCycles) {
+      const dup = generatedCosts.some(
+        (c) =>
+          c.recurringExpenseId === cycle.rule.id &&
+          c.recurringYearMonth === cycle.yearMonth
+      );
+      if (dup) continue;
+
+      generatedCosts.push({
+        ...buildRecurringCostDeductionRecord(cycle.rule, cycle.yearMonth),
+        id: generateRecordId('cost'),
+        createdAt: nowIso,
+      });
+
+      const prevLatest = latestMonthByRule.get(cycle.rule.id);
+      if (!prevLatest || cycle.yearMonth > prevLatest) {
+        latestMonthByRule.set(cycle.rule.id, cycle.yearMonth);
+      }
+    }
+
+    if (generatedCosts.length === 0) return 0;
+
+    setOtherCosts((prev) => [...generatedCosts.reverse(), ...prev]);
+    setRecurringExpenses((prev) =>
+      prev.map((rule) => {
+        const processedYm = latestMonthByRule.get(rule.id);
+        if (!processedYm) return rule;
+        if (rule.lastProcessedYearMonth && rule.lastProcessedYearMonth >= processedYm) {
+          return rule;
+        }
+        return { ...rule, lastProcessedYearMonth: processedYm };
+      })
+    );
+
+    const totalDeducted = generatedCosts.reduce((sum, c) => sum + c.amount, 0);
+    addAuditLog({
+      action: 'CREATE',
+      module: 'RecurringExpense',
+      entityId: generatedCosts[0]?.id,
+      summary: `Processed ${generatedCosts.length} scheduled recurring expense deduction(s)`,
+      details: `Total Deducted: ${companyProfile.currency} ${totalDeducted.toLocaleString()}`,
+    });
+    if (!silent) {
+      showToast(
+        `Deducted ${generatedCosts.length} due recurring expense(s) totaling ${companyProfile.currency} ${totalDeducted.toLocaleString()} from Total Balance.`
+      );
+    }
+    return generatedCosts.length;
+  };
+
+  const deductRecurringExpenseNow = (ruleId: string): boolean => {
+    const rule = recurringExpenses.find((r) => r.id === ruleId);
+    if (!rule) return false;
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const currentYearMonth = todayStr.slice(0, 7);
+
+    if (hasRecurringDeductionForMonth(otherCosts, rule.id, currentYearMonth)) {
+      showToast(`"${rule.title}" has already been deducted for ${currentYearMonth}.`);
+      return false;
+    }
+
+    const nowIso = new Date().toISOString();
+    const newCost: OtherCostRecord = {
+      ...buildRecurringCostDeductionRecord(rule, currentYearMonth, todayStr),
+      id: generateRecordId('cost'),
+      createdAt: nowIso,
+    };
+
+    setOtherCosts((prev) => [newCost, ...prev]);
+    setRecurringExpenses((prev) =>
+      prev.map((r) =>
+        r.id === rule.id
+          ? {
+              ...r,
+              lastProcessedYearMonth:
+                r.lastProcessedYearMonth && r.lastProcessedYearMonth >= currentYearMonth
+                  ? r.lastProcessedYearMonth
+                  : currentYearMonth,
+            }
+          : r
+      )
+    );
+
+    addAuditLog({
+      action: 'CREATE',
+      module: 'RecurringExpense',
+      entityId: newCost.id,
+      summary: `Manually deducted monthly fixed expense "${rule.title}" for ${currentYearMonth}`,
+      details: `Amount: ${companyProfile.currency} ${rule.amount.toLocaleString()}`,
+    });
+    showToast(
+      `Deducted "${rule.title}" (${companyProfile.currency} ${rule.amount.toLocaleString()}) for ${currentYearMonth} from Total Balance.`
+    );
+    return true;
+  };
+
+  const addExternalDebt = (
+    record: Omit<ExternalDebtRecord, 'id' | 'createdAt' | 'repayments'>
+  ): string => {
+    const id = generateRecordId('edebt');
+    const createdAt = new Date().toISOString();
+    const newDebt: ExternalDebtRecord = {
+      ...record,
+      id,
+      repayments: [],
+      createdAt,
+    };
+    const totalObligation = computeExternalDebtTotalObligation(newDebt);
+    setExternalDebts((prev) => [newDebt, ...prev]);
+
+    addAuditLog({
+      action: 'CREATE',
+      module: 'ExternalDebt',
+      entityId: id,
+      summary: `Recorded External Debt "${newDebt.title}" (${newDebt.lenderName}) — ${companyProfile.currency} ${totalObligation.toLocaleString()} automatically deducted from Total Balance`,
+      details: `Principal: ${companyProfile.currency} ${newDebt.principalAmount.toLocaleString()} · Interest/Fee: ${companyProfile.currency} ${newDebt.interestAmount.toLocaleString()} · Schedule: ${newDebt.installmentCount}x (${newDebt.frequency}) starting ${newDebt.firstDueDate}`,
+    });
+    showToast(
+      `External Debt "${newDebt.title}" added (${companyProfile.currency} ${totalObligation.toLocaleString()} deducted from Total Balance).`
+    );
+    return id;
+  };
+
+  const recordExternalDebtRepayment = (
+    debtId: string,
+    repayment: Omit<ExternalDebtRepayment, 'id' | 'createdAt'>
+  ): string => {
+    const target = externalDebts.find((d) => d.id === debtId);
+    const id = generateRecordId('erep');
+    const newRepayment: ExternalDebtRepayment = {
+      ...repayment,
+      id,
+      createdAt: new Date().toISOString(),
+    };
+    setExternalDebts((prev) =>
+      prev.map((debt) =>
+        debt.id === debtId
+          ? { ...debt, repayments: [newRepayment, ...(debt.repayments || [])] }
+          : debt
+      )
+    );
+    addAuditLog({
+      action: 'UPDATE',
+      module: 'ExternalDebt',
+      entityId: debtId,
+      summary: `Recorded repayment of ${companyProfile.currency} ${newRepayment.amount.toLocaleString()} toward "${target?.title || debtId}"`,
+      details: `Date: ${newRepayment.date} · Method: ${newRepayment.paymentMethod || 'Bank Transfer'}${newRepayment.referenceNo ? ` · Ref: ${newRepayment.referenceNo}` : ''}`,
+    });
+    showToast(
+      `Recorded ${companyProfile.currency} ${newRepayment.amount.toLocaleString()} repayment for "${target?.title || 'External Debt'}".`
+    );
+    return id;
+  };
+
+  const deleteExternalDebtRepayment = (debtId: string, repaymentId: string) => {
+    const targetDebt = externalDebts.find((d) => d.id === debtId);
+    const targetRep = targetDebt?.repayments?.find((r) => r.id === repaymentId);
+    setExternalDebts((prev) =>
+      prev.map((debt) =>
+        debt.id === debtId
+          ? {
+              ...debt,
+              repayments: (debt.repayments || []).filter((r) => r.id !== repaymentId),
+            }
+          : debt
+      )
+    );
+    addAuditLog({
+      action: 'DELETE',
+      module: 'ExternalDebt',
+      entityId: repaymentId,
+      summary: `Removed repayment (${companyProfile.currency} ${(targetRep?.amount ?? 0).toLocaleString()}) from "${targetDebt?.title || debtId}"`,
+    });
+    showToast('External debt repayment removed and schedule updated.');
+  };
+
+  const deleteExternalDebt = (debtId: string) => {
+    const target = externalDebts.find((d) => d.id === debtId);
+    const obligation = target ? computeExternalDebtTotalObligation(target) : 0;
+    requestSuperAdminSingleDelete(
+      {
+        recordType: 'other_cost',
+        recordId: debtId,
+        recordTitle: target
+          ? `${target.title} (${target.lenderName}) — ${companyProfile.currency} ${obligation.toLocaleString()}`
+          : debtId,
+        recordSubtitle: target
+          ? `Originated: ${target.originationDate} · ${target.installmentCount} installment(s)`
+          : undefined,
+      },
+      () => {
+        setExternalDebts((prev) => prev.filter((d) => d.id !== debtId));
+        addAuditLog({
+          action: 'DELETE',
+          module: 'ExternalDebt',
+          entityId: debtId,
+          summary: `Super Admin verified & deleted External Debt "${target?.title || debtId}"`,
+          details: `Restored ${companyProfile.currency} ${obligation.toLocaleString()} back to Total Balance`,
+        });
+        showToast('Super Admin verified: External Debt deleted & Total Balance updated.');
+      }
+    );
+  };
+
+  const deleteBalanceIncome = (id: string) => {
+    const target = balanceIncomes.find((inc) => inc.id === id);
+    requestSuperAdminSingleDelete(
+      {
+        recordType: 'balance_income',
+        recordId: id,
+        recordTitle: target
+          ? `${target.source} (${companyProfile.currency} ${(target.amount ?? 0).toLocaleString()})`
+          : id,
+        recordSubtitle: target
+          ? `Date: ${target.date}${target.description ? ` · ${target.description}` : ''}`
+          : undefined,
+      },
+      () => {
+        setBalanceIncomes((prev) => prev.filter((inc) => inc.id !== id));
+        addAuditLog({
+          action: 'DELETE',
+          module: 'BalanceIncome',
+          entityId: id,
+          summary: `Super Admin verified & deleted Total Balance income "${target?.source || id}"`,
+          details: `Amount: ${companyProfile.currency} ${(target?.amount ?? 0).toLocaleString()}`,
+        });
+        showToast('Super Admin verified: Income entry deleted.');
+      }
+    );
+  };
+
   // Supplier Credits CRUD & Application
   const addSupplierCredit = (input: {
     creditNoteNumber?: string;
@@ -2116,6 +3346,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  const addBusinessDocument = (
+    record: Omit<BusinessDocumentRecord, 'id' | 'createdAt'>
+  ): string => {
+    const newId = generateRecordId('bdoc');
+    const newDoc: BusinessDocumentRecord = {
+      ...record,
+      id: newId,
+      createdAt: new Date().toISOString(),
+    };
+    setBusinessDocuments((prev) => [newDoc, ...prev]);
+    addAuditLog({
+      action: 'CREATE',
+      module: 'BusinessDocument',
+      entityId: newId,
+      summary: `Tracked compliance document "${newDoc.title}" (${newDoc.category}) expiring ${newDoc.expiryDate}`,
+      details: newDoc.referenceNumber ? `Ref: ${newDoc.referenceNumber}` : undefined,
+    });
+    showToast(`Added "${newDoc.title}" (Expires ${newDoc.expiryDate}) to document expiry monitor.`);
+    return newId;
+  };
+
+  const updateBusinessDocument = (
+    id: string,
+    record: Partial<BusinessDocumentRecord>
+  ) => {
+    const target = businessDocuments.find((d) => d.id === id);
+    setBusinessDocuments((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, ...record } : d))
+    );
+    addAuditLog({
+      action: 'UPDATE',
+      module: 'BusinessDocument',
+      entityId: id,
+      summary: `Updated compliance document "${record.title || target?.title || id}"`,
+      details: record.expiryDate ? `New Expiry Date: ${record.expiryDate}` : undefined,
+    });
+    showToast(
+      record.expiryDate
+        ? `Updated expiry for "${record.title || target?.title || 'Document'}" to ${record.expiryDate}.`
+        : 'Updated tracked document details.'
+    );
+  };
+
+  const deleteBusinessDocument = (id: string) => {
+    const target = businessDocuments.find((d) => d.id === id);
+    setBusinessDocuments((prev) => prev.filter((d) => d.id !== id));
+    addAuditLog({
+      action: 'DELETE',
+      module: 'BusinessDocument',
+      entityId: id,
+      summary: `Removed tracked compliance document "${target?.title || id}"`,
+    });
+    showToast(`Removed "${target?.title || 'Document'}" from document expiry tracker.`);
+  };
+
   // Print modal & Global View Table PDF Export
   const [isExportingGlobalPdf, setIsExportingGlobalPdf] = useState<boolean>(false);
   const [lastExportedPdfFilename, setLastExportedPdfFilename] = useState<string | null>(null);
@@ -2132,6 +3417,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         packings,
         payments,
         otherCosts,
+        partnerDeposits,
+        partnerWithdrawals,
+        profitDistributions,
+        balanceIncomes,
         supplierCredits,
         packingDraft,
         dropdownOptions,
@@ -2144,6 +3433,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       packings,
       payments,
       otherCosts,
+      partnerDeposits,
+      partnerWithdrawals,
+      profitDistributions,
+      balanceIncomes,
       supplierCredits,
       packingDraft,
       dropdownOptions,
@@ -2184,6 +3477,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       packings,
       payments,
       otherCosts,
+      partnerDeposits,
+      partnerWithdrawals,
+      profitDistributions,
+      balanceIncomes,
       supplierCredits,
       packingDraft,
       dropdownOptions,
@@ -2249,7 +3546,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { valid: false, error: check.error };
     }
     setSuperAdminPassword(check.normalizedNewPassword);
+    try {
+      localStorage.setItem(STORAGE_KEYS.SUPER_ADMIN_PASSWORD, check.normalizedNewPassword);
+      const members = loadInitialTeamMembers();
+      const updatedMembers = members.map((m) =>
+        m.isRoot || m.role === 'Super Admin'
+          ? { ...m, password: check.normalizedNewPassword }
+          : m
+      );
+      localStorage.setItem(TEAM_MEMBERS_STORAGE_KEY, JSON.stringify(updatedMembers));
+    } catch {
+      // Ignore storage error
+    }
     showToast('Super Admin password updated successfully.');
+    return { valid: true };
+  };
+
+  const resetAccountPasswordViaEmail = (
+    account: RegisteredAccountMatch,
+    newPassword: string,
+    confirmPassword: string
+  ): { valid: boolean; error?: string } => {
+    const check = validatePasswordResetNewPassword(newPassword, confirmPassword);
+    if (!check.valid || !check.normalizedPassword) {
+      return { valid: false, error: check.error };
+    }
+
+    const currentMembers = loadInitialTeamMembers();
+    const applied = applyResetPasswordToTeamMembers(
+      currentMembers,
+      account,
+      check.normalizedPassword
+    );
+
+    try {
+      localStorage.setItem(TEAM_MEMBERS_STORAGE_KEY, JSON.stringify(applied.updatedMembers));
+      if (applied.shouldUpdateSuperAdminPassword) {
+        setSuperAdminPassword(check.normalizedPassword);
+        localStorage.setItem(STORAGE_KEYS.SUPER_ADMIN_PASSWORD, check.normalizedPassword);
+      }
+    } catch {
+      // Ignore storage error
+    }
+
+    addAuditLog({
+      action: 'AUTH',
+      module: 'Authentication',
+      entityId: 'FORGET-PASSWORD-RESET',
+      summary: `Password reset via Email Confirmation for "${account.displayName}" (${account.email})`,
+      details: `Account: @${account.username} · Verified email confirmation`,
+      actor: `${account.displayName} (${account.role})`,
+    });
+
+    showToast(`Password reset successfully for ${account.email}.`);
     return { valid: true };
   };
 
@@ -2275,6 +3624,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setPackings([]);
     setPayments([]);
     setOtherCosts([]);
+    setPartnerDeposits([]);
+    setPartnerWithdrawals([]);
+    setProfitDistributions([]);
+    setPartnerNotifications([]);
+    setBalanceIncomes([]);
+    setRecurringExpenses([]);
     setSupplierCredits([]);
     setMortalities([]);
     setEditingPackingId(null);
@@ -2286,6 +3641,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem(STORAGE_KEYS.PACKINGS, JSON.stringify([]));
       localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify([]));
       localStorage.setItem(STORAGE_KEYS.OTHER_COSTS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.PARTNER_DEPOSITS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.PARTNER_WITHDRAWALS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.PROFIT_DISTRIBUTIONS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.PARTNER_NOTIFICATIONS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.BALANCE_INCOMES, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.RECURRING_EXPENSES, JSON.stringify([]));
       localStorage.setItem(STORAGE_KEYS.SUPPLIER_CREDITS, JSON.stringify([]));
       localStorage.setItem(STORAGE_KEYS.MORTALITIES, JSON.stringify([]));
       localStorage.setItem(STORAGE_KEYS.PACKING_DRAFT, JSON.stringify(freshDraft));
@@ -2355,6 +3716,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         packings,
         payments,
         otherCosts,
+        partnerDeposits,
+        partnerWithdrawals,
+        profitDistributions,
+        balanceIncomes,
         companyProfile,
         dropdownOptions,
         packingDraft,
@@ -2397,6 +3762,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setPackings(nextPackings);
     setPayments(nextPayments);
     setOtherCosts(nextOtherCosts);
+    if (Array.isArray(p.partnerDeposits)) {
+      const nextPartnerDeposits = deduplicateRecords(p.partnerDeposits, 'pdep');
+      setPartnerDeposits(nextPartnerDeposits);
+      try {
+        localStorage.setItem(STORAGE_KEYS.PARTNER_DEPOSITS, JSON.stringify(nextPartnerDeposits));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    if (Array.isArray(p.partnerWithdrawals)) {
+      const nextPartnerWithdrawals = deduplicateRecords(p.partnerWithdrawals, 'pwdr');
+      setPartnerWithdrawals(nextPartnerWithdrawals);
+      try {
+        localStorage.setItem(
+          STORAGE_KEYS.PARTNER_WITHDRAWALS,
+          JSON.stringify(nextPartnerWithdrawals)
+        );
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    if (Array.isArray(p.profitDistributions)) {
+      const nextProfitDistributions = deduplicateRecords(p.profitDistributions, 'pdist');
+      setProfitDistributions(nextProfitDistributions);
+      try {
+        localStorage.setItem(
+          STORAGE_KEYS.PROFIT_DISTRIBUTIONS,
+          JSON.stringify(nextProfitDistributions)
+        );
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    if (Array.isArray(p.balanceIncomes)) {
+      const nextBalanceIncomes = deduplicateRecords(p.balanceIncomes, 'inc');
+      setBalanceIncomes(nextBalanceIncomes);
+      try {
+        localStorage.setItem(STORAGE_KEYS.BALANCE_INCOMES, JSON.stringify(nextBalanceIncomes));
+      } catch (e) {
+        console.error(e);
+      }
+    }
     setPackingDraft(nextDraft);
     setEditingPurchaseId(null);
     setEditingPackingId(null);
@@ -2691,6 +4098,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActiveTab,
         companyProfile,
         updateCompanyProfile,
+        addCompanyPartner,
+        removeCompanyPartner,
+        setPartnerEmail,
+        setPartnerAlertsEnabled,
         dropdownOptions,
         addDropdownItem,
         editDropdownItem,
@@ -2730,6 +4141,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addOtherCost,
         deleteOtherCost,
         bulkImportOtherCosts,
+        partnerDeposits,
+        addPartnerDeposit,
+        updatePartnerDeposit,
+        deletePartnerDeposit,
+        partnerWithdrawals,
+        addPartnerWithdrawal,
+        deletePartnerWithdrawal,
+        profitDistributions,
+        issueProfitDistribution,
+        deleteProfitDistribution,
+        partnerNotifications,
+        clearPartnerNotifications,
+        balanceIncomes,
+        addBalanceIncome,
+        deleteBalanceIncome,
+        recurringExpenses,
+        addRecurringExpense,
+        toggleRecurringExpenseAutoDeduct,
+        deleteRecurringExpense,
+        runDueRecurringExpensesNow,
+        deductRecurringExpenseNow,
+        externalDebts,
+        addExternalDebt,
+        recordExternalDebtRepayment,
+        deleteExternalDebtRepayment,
+        deleteExternalDebt,
         supplierCredits,
         addSupplierCredit,
         applySupplierCredit,
@@ -2739,6 +4176,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addMortality,
         updateMortality,
         deleteMortality,
+        businessDocuments,
+        addBusinessDocument,
+        updateBusinessDocument,
+        deleteBusinessDocument,
         printModalData,
         openPrintModal,
         closePrintModal,
@@ -2754,6 +4195,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         clearPrivateImportDraft,
         superAdminPassword,
         updateSuperAdminPassword,
+        resetAccountPasswordViaEmail,
         resetSuperAdminPasswordToDefault,
         superAdminClearModal,
         openSuperAdminClearModal,

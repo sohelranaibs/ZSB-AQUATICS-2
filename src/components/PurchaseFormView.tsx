@@ -477,7 +477,7 @@ export const PurchaseFormView: React.FC = () => {
   return (
     <div className="p-3 sm:p-5 max-w-[1440px] mx-auto space-y-5">
       {/* Top Banner */}
-      <div className="bg-[#263843] text-white px-5 py-3.5 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#00897b]">
+      <div className="bg-[#273E56] text-white px-5 py-3.5 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#00897b]">
         <div className="flex flex-wrap items-center gap-3">
           <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
@@ -522,7 +522,7 @@ export const PurchaseFormView: React.FC = () => {
         <div className="lg:col-span-9 space-y-4">
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             {/* Sheet Title Header */}
-            <div className="bg-[#263843] text-white py-3 px-5 flex flex-wrap items-center justify-between gap-3 border-b border-[#1d2c35]">
+            <div className="bg-[#273E56] text-white py-3 px-5 flex flex-wrap items-center justify-between gap-3 border-b border-[#1d2c35]">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
                   <img
@@ -850,7 +850,7 @@ export const PurchaseFormView: React.FC = () => {
                 data-testid="purchase-entry-table"
               >
                 <thead>
-                  <tr className="bg-[#263843] text-white uppercase text-[11px] font-bold tracking-wider border-b border-[#1d2c35]">
+                  <tr className="bg-[#273E56] text-white uppercase text-[11px] font-bold tracking-wider border-b border-[#1d2c35]">
                     <th className="px-2.5 py-2.5 border-r border-[#334b59] w-12 text-center whitespace-nowrap">
                       SL #
                     </th>
@@ -1025,7 +1025,7 @@ export const PurchaseFormView: React.FC = () => {
 
                 {/* Clean 6-Column Aligned Subtotal Footer */}
                 <tfoot>
-                  <tr className="bg-[#263843] text-white font-bold border-t-2 border-[#00897b]">
+                  <tr className="bg-[#273E56] text-white font-bold border-t-2 border-[#00897b]">
                     <td colSpan={2} className="px-3 py-2.5">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <button
@@ -1143,7 +1143,7 @@ export const PurchaseFormView: React.FC = () => {
                 <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-2">
                   <div className="flex items-center gap-1.5 whitespace-nowrap">
                     <Receipt className="w-4 h-4 text-[#00897b] shrink-0" />
-                    <span className="text-xs font-black uppercase tracking-wider text-[#263843]">
+                    <span className="text-xs font-black uppercase tracking-wider text-[#273E56]">
                       REVIEW &amp; SETTLEMENT
                     </span>
                   </div>
@@ -1259,7 +1259,7 @@ export const PurchaseFormView: React.FC = () => {
                 {/* Net Closing Balance Banner */}
                 <div className="pt-2.5 border-t-2 border-slate-200 flex items-center justify-between">
                   <div>
-                    <span className="text-xs font-black uppercase tracking-wider text-[#263843] block">
+                    <span className="text-xs font-black uppercase tracking-wider text-[#273E56] block">
                       BALANCE ({companyProfile.currency}):
                     </span>
                     <span className="text-[11px] font-medium text-slate-600">
@@ -1311,7 +1311,7 @@ export const PurchaseFormView: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleCancelEdit}
-                  className="w-full bg-[#263843] hover:bg-[#1c2a33] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer whitespace-nowrap"
+                  className="w-full bg-[#273E56] hover:bg-[#1c2a33] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer whitespace-nowrap"
                 >
                   <RotateCcw className="w-4 h-4 shrink-0" />
                   <span>CANCEL EDIT (NEW BILL)</span>
@@ -1349,7 +1349,7 @@ export const PurchaseFormView: React.FC = () => {
             <button
               type="button"
               onClick={handleMonthlyStatement}
-              className="w-full bg-[#263843] hover:bg-[#1c2a33] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer whitespace-nowrap"
+              className="w-full bg-[#273E56] hover:bg-[#1c2a33] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer whitespace-nowrap"
             >
               <FileText className="w-4 h-4 shrink-0 text-[#5eead4]" />
               <span>MONTHLY STATEMENT (PDF)</span>

@@ -184,7 +184,7 @@ export const DatabaseSnapshotModal: React.FC = () => {
     >
       <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
         {/* Modal Header */}
-        <div className="bg-[#263843] text-white px-5 py-4 flex items-center justify-between border-b-2 border-[#00897b] shrink-0">
+        <div className="bg-[#273E56] text-white px-5 py-4 flex items-center justify-between border-b-2 border-[#00897b] shrink-0">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-xl bg-[#00897b] flex items-center justify-center shrink-0">
               <Archive className="w-5 h-5 text-white" />
@@ -237,7 +237,7 @@ export const DatabaseSnapshotModal: React.FC = () => {
           </div>
 
           {/* Segmented Control Tabs */}
-          <div className="flex items-center gap-1 p-1 bg-[#263843] rounded-lg border border-[#334b59]">
+          <div className="flex items-center gap-1 p-1 bg-[#273E56] rounded-lg border border-[#334b59]">
             <button
               type="button"
               data-testid="snapshot-tab-archive"
@@ -334,7 +334,7 @@ export const DatabaseSnapshotModal: React.FC = () => {
                     type="button"
                     data-testid="download-current-snapshot-btn"
                     onClick={() => downloadSnapshotJSON()}
-                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-[#263843] hover:bg-[#1c2a33] text-[#5eead4] border border-[#334b59] transition whitespace-nowrap shrink-0 cursor-pointer"
+                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-[#273E56] hover:bg-[#1c2a33] text-[#5eead4] border border-[#334b59] transition whitespace-nowrap shrink-0 cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>Download Current .JSON File</span>

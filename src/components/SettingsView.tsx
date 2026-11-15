@@ -3,6 +3,10 @@ import { useApp } from '../context/AppContext.tsx';
 import { DropdownOptions } from '../types/index.ts';
 import { DEFAULT_SUPER_ADMIN_PASSWORD } from '../utils/superAdminAuth.ts';
 import {
+  buildPartnerDirectory,
+  DEFAULT_TARGET_PARTNER_COUNT,
+} from '../utils/totalBalance.ts';
+import {
   Settings,
   Plus,
   Trash2,
@@ -22,12 +26,15 @@ import {
   Globe,
   Archive,
   Download,
+  UserPlus,
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
   const {
     companyProfile,
     updateCompanyProfile,
+    addCompanyPartner,
+    removeCompanyPartner,
     dropdownOptions,
     addDropdownItem,
     editDropdownItem,
@@ -55,6 +62,15 @@ export const SettingsView: React.FC = () => {
   const [website, setWebsite] = useState(companyProfile.website || 'www.zsbaquatics.com');
   const [managingPartner, setManagingPartner] = useState(companyProfile.managingPartner);
   const [partner, setPartner] = useState(companyProfile.partner);
+  const [newPartnerName, setNewPartnerName] = useState('');
+  const [partnerError, setPartnerError] = useState('');
+
+  const registeredPartners = buildPartnerDirectory(companyProfile, []);
+  const primaryPartnerKeys = new Set(
+    [companyProfile.managingPartner, companyProfile.partner]
+      .map((p) => (p || '').trim().toLowerCase())
+      .filter(Boolean)
+  );
 
   // Active Category for Dropdown Management
   const [activeCategory, setActiveCategory] = useState<keyof DropdownOptions>('shippingMarks');
@@ -116,6 +132,16 @@ export const SettingsView: React.FC = () => {
     });
   };
 
+  const handleAddPartnerInSettings = () => {
+    const res = addCompanyPartner(newPartnerName);
+    if (!res.valid) {
+      setPartnerError(res.error || 'Please enter a valid partner name.');
+      return;
+    }
+    setPartnerError('');
+    setNewPartnerName('');
+  };
+
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItemText.trim()) return;
@@ -132,7 +158,7 @@ export const SettingsView: React.FC = () => {
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
       {/* Top Banner */}
-      <div className="bg-[#263843] text-white px-5 py-3 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#00897b]">
+      <div className="bg-[#273E56] text-white px-5 py-3 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#00897b]">
         <div className="flex items-center space-x-3">
           <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
@@ -184,7 +210,7 @@ export const SettingsView: React.FC = () => {
         {/* Left: Company Profile & Signatures Settings (5 Cols) */}
         <div className="lg:col-span-5 space-y-4">
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="bg-[#263843] text-white px-4 py-3 font-bold text-xs uppercase flex items-center justify-between border-b border-[#1d2c35]">
+            <div className="bg-[#273E56] text-white px-4 py-3 font-bold text-xs uppercase flex items-center justify-between border-b border-[#1d2c35]">
               <span className="flex items-center space-x-2">
                 <Building className="w-4 h-4 text-[#5eead4]" />
                 <span>COMPANY &amp; SIGNATURE DETAILS</span>
@@ -198,7 +224,7 @@ export const SettingsView: React.FC = () => {
               {/* Brand Name & Official Logo */}
               <div>
                 <label className="font-bold text-slate-700 block mb-1">Company Brand &amp; Logo</label>
-                <div className="p-3 bg-[#263843] rounded-lg border border-[#1d2c35] flex items-center gap-3.5">
+                <div className="p-3 bg-[#273E56] rounded-lg border border-[#1d2c35] flex items-center gap-3.5">
                   <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-md flex items-center justify-center">
                     <img
                       src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
@@ -316,6 +342,71 @@ export const SettingsView: React.FC = () => {
                     onChange={(e) => setPartner(e.target.value)}
                     className="w-full bg-white border border-slate-300 rounded px-2 py-1 font-bold text-slate-900"
                   />
+                </div>
+
+                {/* Additional Partners (4-Partner Support + ADD PARTNER) */}
+                <div className="pt-2 border-t border-amber-200/80 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-amber-950 uppercase text-[11px]">
+                      Company Partners ({registeredPartners.length}/{Math.max(DEFAULT_TARGET_PARTNER_COUNT, registeredPartners.length)})
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {registeredPartners.map((pName) => {
+                      const isCustom = !primaryPartnerKeys.has(pName.trim().toLowerCase());
+                      return (
+                        <span
+                          key={pName}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded bg-white border border-amber-300 text-slate-900 font-semibold text-[11px]"
+                        >
+                          <span>{pName}</span>
+                          {isCustom && (
+                            <button
+                              type="button"
+                              onClick={() => removeCompanyPartner(pName)}
+                              aria-label={`Remove partner ${pName}`}
+                              className="p-0.5 rounded text-[10px] cursor-pointer"
+                            >
+                              <X className="w-3 h-3 shrink-0" />
+                            </button>
+                          )}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  {partnerError && (
+                    <div
+                      role="alert"
+                      className="p-2 rounded bg-rose-50 border border-rose-200 text-[11px] font-medium text-rose-700"
+                    >
+                      {partnerError}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      data-testid="settings-new-partner-input"
+                      value={newPartnerName}
+                      onChange={(e) => setNewPartnerName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddPartnerInSettings();
+                        }
+                      }}
+                      placeholder={`Enter Partner ${registeredPartners.length + 1} name`}
+                      className="flex-1 bg-white border border-slate-300 rounded px-2 py-1 font-semibold text-slate-900"
+                    />
+                    <button
+                      type="button"
+                      data-testid="settings-add-partner-btn"
+                      onClick={handleAddPartnerInSettings}
+                      className="px-2.5 py-1 rounded font-bold text-[11px] inline-flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
+                    >
+                      <UserPlus className="w-3.5 h-3.5 shrink-0" />
+                      <span>ADD PARTNER</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -453,7 +544,7 @@ export const SettingsView: React.FC = () => {
 
           {/* Database Snapshot & Local JSON Recovery Card */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="bg-[#263843] text-white px-4 py-3 font-bold text-xs uppercase flex items-center justify-between border-b border-[#1d2c35]">
+            <div className="bg-[#273E56] text-white px-4 py-3 font-bold text-xs uppercase flex items-center justify-between border-b border-[#1d2c35]">
               <span className="flex items-center space-x-2">
                 <Archive className="w-4 h-4 text-[#5eead4]" />
                 <span>DATABASE SNAPSHOT &amp; JSON RECOVERY</span>
@@ -482,7 +573,7 @@ export const SettingsView: React.FC = () => {
                   type="button"
                   data-testid="settings-download-snapshot-btn"
                   onClick={() => downloadSnapshotJSON()}
-                  className="flex items-center justify-center space-x-1.5 px-3 py-2 rounded-lg bg-[#263843] hover:bg-[#1c2a33] text-[#5eead4] font-bold text-xs transition cursor-pointer"
+                  className="flex items-center justify-center space-x-1.5 px-3 py-2 rounded-lg bg-[#273E56] hover:bg-[#1c2a33] text-[#5eead4] font-bold text-xs transition cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Download .JSON</span>
@@ -514,7 +605,7 @@ export const SettingsView: React.FC = () => {
                 type="button"
                 data-testid="settings-manage-snapshots-btn"
                 onClick={openSnapshotModal}
-                className="w-full py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-[#263843] font-bold text-xs uppercase transition flex items-center justify-center space-x-1.5 cursor-pointer"
+                className="w-full py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-[#273E56] font-bold text-xs uppercase transition flex items-center justify-center space-x-1.5 cursor-pointer"
               >
                 <Archive className="w-3.5 h-3.5 text-[#00897b]" />
                 <span>Open Snapshot &amp; Recovery Manager ({snapshots.length})</span>
@@ -526,7 +617,7 @@ export const SettingsView: React.FC = () => {
         {/* Right: Master Dropdown Editor (7 Cols) */}
         <div className="lg:col-span-7 space-y-4">
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="bg-[#263843] text-white px-4 py-3 font-bold text-xs uppercase flex items-center justify-between border-b border-[#1d2c35]">
+            <div className="bg-[#273E56] text-white px-4 py-3 font-bold text-xs uppercase flex items-center justify-between border-b border-[#1d2c35]">
               <span className="flex items-center space-x-2">
                 <Settings className="w-4 h-4 text-[#5eead4]" />
                 <span>DROPDOWN MANAGER (ADD / EDIT / DELETE)</span>

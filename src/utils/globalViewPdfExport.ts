@@ -9,6 +9,10 @@ import {
   PurchaseRecord,
   SupplierCreditRecord,
   ExporterPaymentSlipRow,
+  PartnerDepositRecord,
+  PartnerWithdrawalRecord,
+  ProfitDistributionRecord,
+  BalanceIncomeRecord,
 } from '../types/index.ts';
 import {
   buildExporterPaymentSlipRows,
@@ -28,6 +32,11 @@ import {
   buildExporterRecordHistory,
   calculateExporterHistoryTotals,
 } from './exporterHistory.ts';
+import {
+  buildPartnerDirectory,
+  calculateTotalBalanceSummary,
+  buildTotalBalanceLedgerEntries,
+} from './totalBalance.ts';
 
 export interface GlobalTableColumn {
   key: string;
@@ -83,6 +92,10 @@ export interface GlobalViewReportInput {
   packings: PackingRecord[];
   payments: PaymentRecord[];
   otherCosts: OtherCostRecord[];
+  partnerDeposits?: PartnerDepositRecord[];
+  partnerWithdrawals?: PartnerWithdrawalRecord[];
+  profitDistributions?: ProfitDistributionRecord[];
+  balanceIncomes?: BalanceIncomeRecord[];
   supplierCredits?: SupplierCreditRecord[];
   packingDraft?: PackingFormDraft | null;
   dropdownOptions?: DropdownOptions;
@@ -159,6 +172,13 @@ const TAB_METADATA: Record<
     sheetReference: 'PL_SUMMARY',
     slug: 'PROFIT_LOSS_TABLE',
   },
+  total_balance: {
+    viewLabel: 'TOTAL BALANCE',
+    documentTitle: 'TOTAL BALANCE — Partner Deposit Share, Income & Costing Statement',
+    documentBadge: 'TOTAL BALANCE — PARTNER DEPOSIT SHARE, INCOME & ALL COSTING STATEMENT',
+    sheetReference: 'TOTAL_BAL',
+    slug: 'TOTAL_BALANCE_LEDGER',
+  },
   purchase_db: {
     viewLabel: 'Purchase DB',
     documentTitle: 'Master Purchase Database Ledger — Complete Table Report',
@@ -207,6 +227,13 @@ const TAB_METADATA: Record<
     documentBadge: 'ACCOUNTS & ADMINISTRATION — SECURITY & GOVERNANCE REPORT',
     sheetReference: 'ADMIN_VAULT',
     slug: 'ADMINISTRATION_REPORT',
+  },
+  forget_password: {
+    viewLabel: 'FORGET PASSWORD',
+    documentTitle: 'FORGET PASSWORD — Email Confirmation Recovery Sheet',
+    documentBadge: 'FORGET PASSWORD — EMAIL CONFIRMATION & CREDENTIAL RECOVERY',
+    sheetReference: 'AUTH_RESET',
+    slug: 'FORGET_PASSWORD_REPORT',
   },
 };
 
@@ -1149,6 +1176,82 @@ export function buildGlobalViewTableReport(
       break;
     }
 
+    case 'total_balance': {
+      const pDeposits = input.partnerDeposits || [];
+      const pWithdrawals = input.partnerWithdrawals || [];
+      const pDistributions = input.profitDistributions || [];
+      const bIncomes = input.balanceIncomes || [];
+      const tbSummary = calculateTotalBalanceSummary({
+        partnerDeposits: pDeposits,
+        partnerWithdrawals: pWithdrawals,
+        profitDistributions: pDistributions,
+        balanceIncomes: bIncomes,
+        purchases,
+        packings: allPackings,
+        otherCosts,
+      });
+      const tbEntries = buildTotalBalanceLedgerEntries({
+        partnerDeposits: pDeposits,
+        partnerWithdrawals: pWithdrawals,
+        profitDistributions: pDistributions,
+        balanceIncomes: bIncomes,
+        purchases,
+        packings: allPackings,
+        otherCosts,
+        order: 'newest',
+      });
+
+      stateSections = [
+        {
+          id: 'partner-share-summary',
+          title: 'Partner Capital & Equity Share Breakdown',
+          subtitle: `Net Partner Capital: ${formatCurrency(tbSummary.netPartnerCapital, currency)} (Deposits: ${formatCurrency(tbSummary.totalPartnerDeposit, currency)} − Withdrawals: ${formatCurrency(tbSummary.totalPartnerWithdrawal, currency)})`,
+          columns: [
+            { key: 'sl', label: 'SL', align: 'center' },
+            { key: 'partnerName', label: 'PARTNER NAME', align: 'left' },
+            { key: 'depositCount', label: 'DEPOSITS', align: 'center' },
+            { key: 'sharePercent', label: 'EQUITY %', align: 'right' },
+            { key: 'totalDeposited', label: `DEPOSITED (${currency})`, align: 'right' },
+            { key: 'totalWithdrawn', label: `WITHDRAWN (${currency})`, align: 'right' },
+            { key: 'netContribution', label: `NET EQUITY (${currency})`, align: 'right' },
+          ],
+          rows: tbSummary.partnerShares.map((p, idx) => ({
+            sl: idx + 1,
+            partnerName: p.partnerName,
+            depositCount: p.depositCount,
+            sharePercent: `${p.sharePercent.toFixed(2)}%`,
+            totalDeposited: formatCurrency(p.totalDeposited, ''),
+            totalWithdrawn: formatCurrency(p.totalWithdrawn, ''),
+            netContribution: formatCurrency(p.netContribution, ''),
+          })),
+        },
+        {
+          id: 'total-balance-ledger',
+          title: 'Total Balance Statement (Deposits + Income - Costing & Profit Payouts)',
+          subtitle: `Net Total Balance: ${formatCurrency(tbSummary.totalBalance, currency)}${tbSummary.totalProfitDistributed > 0 ? ` · Profit Payouts Issued: ${formatCurrency(tbSummary.totalProfitDistributed, currency)}` : ''}`,
+          columns: [
+            { key: 'sl', label: 'SL', align: 'center' },
+            { key: 'date', label: 'DATE', align: 'center' },
+            { key: 'effectLabel', label: 'TYPE', align: 'left' },
+            { key: 'title', label: 'PARTICULARS', align: 'left' },
+            { key: 'credit', label: `CREDIT (+ ${currency})`, align: 'right' },
+            { key: 'debit', label: `COSTING (- ${currency})`, align: 'right' },
+            { key: 'running', label: `BALANCE (${currency})`, align: 'right' },
+          ],
+          rows: tbEntries.map((row, idx) => ({
+            sl: idx + 1,
+            date: formatDate(row.date),
+            effectLabel: row.effectLabel,
+            title: row.title,
+            credit: row.creditAmount > 0 ? formatCurrency(row.creditAmount, '') : '-',
+            debit: row.debitAmount > 0 ? formatCurrency(row.debitAmount, '') : '-',
+            running: formatCurrency(row.runningBalance, ''),
+          })),
+        },
+      ];
+      break;
+    }
+
     case 'purchase_db': {
       stateSections = [buildPurchaseSection(purchases, 'Master Purchase Database Ledger')];
       break;
@@ -1220,9 +1323,9 @@ export function buildGlobalViewTableReport(
         },
         {
           sl: 3,
-          category: 'Managing Partner & Partner',
-          count: 2,
-          values: `${companyProfile.managingPartner} | ${companyProfile.partner}`,
+          category: 'Registered Company Partners',
+          count: buildPartnerDirectory(companyProfile, []).length,
+          values: buildPartnerDirectory(companyProfile, []).join(' | '),
         },
         {
           sl: 4,

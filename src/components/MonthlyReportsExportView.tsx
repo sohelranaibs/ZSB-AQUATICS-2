@@ -190,7 +190,7 @@ export const MonthlyReportsExportView: React.FC<MonthlyReportsExportViewProps> =
       {/* View Header & Action Controls Bar */}
       <section
         aria-label="Monthly Summary Reports Header"
-        className="bg-[#263843] rounded-xl p-5 sm:p-6 border border-[#1d2c35] text-white shadow-sm"
+        className="bg-[#273E56] rounded-xl p-5 sm:p-6 border border-[#1d2c35] text-white shadow-sm"
       >
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
           <div className="flex items-center gap-4">
@@ -393,7 +393,7 @@ export const MonthlyReportsExportView: React.FC<MonthlyReportsExportViewProps> =
           <div className="overflow-x-auto border-2 border-slate-300 rounded-lg bg-white">
           <table className="w-full text-xs text-left border-collapse min-w-[950px]">
             <thead>
-              <tr className="bg-[#263843] text-white uppercase text-[11px] font-bold border-b border-[#1d2c35]">
+              <tr className="bg-[#273E56] text-white uppercase text-[11px] font-bold border-b border-[#1d2c35]">
                 <th className="py-3 px-2 text-center w-12">SL #</th>
                 <th className="py-3 px-4 w-44">Month / Period</th>
                 <th className="py-3 px-3 text-right">

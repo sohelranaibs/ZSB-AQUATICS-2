@@ -6,6 +6,10 @@ import {
   PaymentRecord,
   PurchaseRecord,
   OtherCostRecord,
+  PartnerDepositRecord,
+  PartnerWithdrawalRecord,
+  ProfitDistributionRecord,
+  BalanceIncomeRecord,
 } from '../types/index.ts';
 import { deduplicateRecords, generateRecordId } from './idGenerator.ts';
 import { calculatePackingTotalAmountBDT } from './calculations.ts';
@@ -21,6 +25,10 @@ export interface SnapshotPayload {
   packings: PackingRecord[];
   payments: PaymentRecord[];
   otherCosts: OtherCostRecord[];
+  partnerDeposits?: PartnerDepositRecord[];
+  partnerWithdrawals?: PartnerWithdrawalRecord[];
+  profitDistributions?: ProfitDistributionRecord[];
+  balanceIncomes?: BalanceIncomeRecord[];
   companyProfile?: CompanyProfile;
   dropdownOptions?: DropdownOptions;
   packingDraft?: PackingFormDraft;
@@ -421,6 +429,18 @@ export function createDatabaseSnapshot(
       Array.isArray(cloned.otherCosts) ? cloned.otherCosts : [],
       warnings
     ),
+    partnerDeposits: Array.isArray(cloned.partnerDeposits)
+      ? deduplicateRecords(cloned.partnerDeposits, 'pdep')
+      : undefined,
+    partnerWithdrawals: Array.isArray(cloned.partnerWithdrawals)
+      ? deduplicateRecords(cloned.partnerWithdrawals, 'pwdr')
+      : undefined,
+    profitDistributions: Array.isArray(cloned.profitDistributions)
+      ? deduplicateRecords(cloned.profitDistributions, 'pdist')
+      : undefined,
+    balanceIncomes: Array.isArray(cloned.balanceIncomes)
+      ? deduplicateRecords(cloned.balanceIncomes, 'inc')
+      : undefined,
     companyProfile: cloned.companyProfile ? { ...cloned.companyProfile } : undefined,
     dropdownOptions: cloned.dropdownOptions ? { ...cloned.dropdownOptions } : undefined,
     packingDraft: cloned.packingDraft ? { ...cloned.packingDraft } : undefined,
@@ -547,6 +567,18 @@ export function validateAndParseSnapshotJSON(rawJson: string): SnapshotValidatio
       Array.isArray(sourcePayload.otherCosts) ? sourcePayload.otherCosts : [],
       warnings
     ),
+    partnerDeposits: Array.isArray(sourcePayload.partnerDeposits)
+      ? sourcePayload.partnerDeposits
+      : undefined,
+    partnerWithdrawals: Array.isArray(sourcePayload.partnerWithdrawals)
+      ? sourcePayload.partnerWithdrawals
+      : undefined,
+    profitDistributions: Array.isArray(sourcePayload.profitDistributions)
+      ? sourcePayload.profitDistributions
+      : undefined,
+    balanceIncomes: Array.isArray(sourcePayload.balanceIncomes)
+      ? sourcePayload.balanceIncomes
+      : undefined,
     companyProfile:
       sourcePayload.companyProfile && typeof sourcePayload.companyProfile === 'object'
         ? sourcePayload.companyProfile

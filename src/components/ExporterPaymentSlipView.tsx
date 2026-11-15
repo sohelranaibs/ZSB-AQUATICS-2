@@ -694,7 +694,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
       </datalist>
 
       {/* Top Action & Filter Bar */}
-      <div className="bg-[#263843] text-white px-5 py-3.5 rounded-xl shadow-sm border-b-2 border-[#00897b] flex flex-wrap items-center justify-between gap-4">
+      <div className="bg-[#273E56] text-white px-5 py-3.5 rounded-xl shadow-sm border-b-2 border-[#00897b] flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center space-x-3">
           <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
@@ -1143,14 +1143,15 @@ export const ExporterPaymentSlipView: React.FC = () => {
               {isSlipScrollCapped && (
                 <div className="mb-1.5 flex items-center justify-between text-[11px] font-mono text-slate-800 px-1">
                   <span>
-                    Viewport: <strong>31 Rows</strong> visible ({slipRows.length} total rows — scroll vertically to view more)
+                    Viewport: <strong>{MAX_VISIBLE_TABLE_ROWS} Rows</strong> visible ({slipRows.length} total rows — scroll vertically to view more)
                   </span>
                 </div>
               )}
               <div
                 ref={slipScrollRef}
                 data-testid="exporter-payment-slip-scroll-box"
-                data-visible-row-limit="31"
+                data-row-scroll-managed="true"
+                data-visible-row-limit={MAX_VISIBLE_TABLE_ROWS}
                 style={slipScrollMaxHeight ? { maxHeight: `${slipScrollMaxHeight}px` } : undefined}
                 className="overflow-auto border-2 border-black rounded-lg bg-[#faefd0] print:!max-h-none print:!overflow-visible"
               >

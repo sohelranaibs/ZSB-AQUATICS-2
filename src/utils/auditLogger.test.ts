@@ -6,6 +6,9 @@ import {
   filterAuditLogs,
   calculateAuditLogStats,
   formatAuditLogsCSV,
+  getRelativeTimeInterval,
+  isAuditIntervalInverted,
+  isAuditTimestampInInterval,
 } from './auditLogger.ts';
 
 test('authenticateUser validates admin credentials and rejects empty or wrong inputs', () => {
@@ -108,4 +111,130 @@ test('createAuditLogEntry, filterAuditLogs, and calculateAuditLogStats track ent
   const csv = formatAuditLogsCSV(logs);
   assert.ok(csv.includes('INV-2026-0001'));
   assert.ok(csv.includes('Created Purchase Challan'));
+});
+
+test('filterAuditLogs filters accurately by local calendar date range and intraday time interval', () => {
+  const localTs = (y: number, m: number, d: number, hh: number, mm: number) =>
+    new Date(y, m - 1, d, hh, mm, 0, 0).toISOString();
+
+  const logs = [
+    createAuditLogEntry({
+      id: 't-1',
+      timestamp: localTs(2026, 11, 10, 8, 30),
+      action: 'CREATE',
+      module: 'Purchase',
+      entityId: 'PUR-10',
+      summary: 'Morning purchase on Nov 10',
+      actor: 'Md. Sohel Rana',
+    }),
+    createAuditLogEntry({
+      id: 't-2',
+      timestamp: localTs(2026, 11, 14, 14, 15),
+      action: 'UPDATE',
+      module: 'Packing',
+      entityId: 'PKG-14',
+      summary: 'Afternoon edit on Nov 14',
+      actor: 'Md. Sohel Rana',
+    }),
+    createAuditLogEntry({
+      id: 't-3',
+      timestamp: localTs(2026, 11, 15, 9, 45),
+      action: 'CREATE',
+      module: 'Payment',
+      entityId: 'PAY-15-AM',
+      summary: 'Morning payment on Nov 15',
+      actor: 'Md. Sohel Rana',
+    }),
+    createAuditLogEntry({
+      id: 't-4',
+      timestamp: localTs(2026, 11, 15, 23, 30),
+      action: 'DELETE',
+      module: 'Payment',
+      entityId: 'PAY-15-PM',
+      summary: 'Late night deletion on Nov 15',
+      actor: 'Md. Sohel Rana',
+    }),
+  ];
+
+  // Inclusive single-day local calendar range includes late-night local event regardless of UTC offset
+  const nov15Only = filterAuditLogs(logs, {
+    startDate: '2026-11-15',
+    endDate: '2026-11-15',
+  });
+  assert.deepEqual(nov15Only.map((l) => l.id), ['t-3', 't-4']);
+
+  // Specific intraday time interval: Nov 14 14:00 -> Nov 15 10:00
+  const intradayWindow = filterAuditLogs(logs, {
+    startDate: '2026-11-14',
+    startTime: '14:00',
+    endDate: '2026-11-15',
+    endTime: '10:00',
+  });
+  assert.deepEqual(intradayWindow.map((l) => l.id), ['t-2', 't-3']);
+
+  // Time-of-day only filter across all dates (08:00 - 10:00)
+  const morningOnly = filterAuditLogs(logs, {
+    startTime: '08:00',
+    endTime: '10:00',
+  });
+  assert.deepEqual(morningOnly.map((l) => l.id), ['t-1', 't-3']);
+
+  // Open-ended startDate + module + action combined
+  const nov14OnwardPayment = filterAuditLogs(logs, {
+    startDate: '2026-11-14',
+    moduleFilter: 'Payment',
+    actionFilter: 'ENTRY',
+  });
+  assert.deepEqual(nov14OnwardPayment.map((l) => l.id), ['t-3']);
+
+  // Date-only string matches same calendar day
+  assert.equal(
+    isAuditTimestampInInterval('2026-11-15', {
+      startDate: '2026-11-15',
+      endDate: '2026-11-15',
+    }),
+    true
+  );
+  assert.equal(isAuditTimestampInInterval('invalid-ts', { startDate: '2026-11-15' }), false);
+});
+
+test('getRelativeTimeInterval and isAuditIntervalInverted handle rolling intervals and boundary validation', () => {
+  // Reference local time: 2026-11-15 00:30 (checks midnight rollover for 1h and 24h)
+  const ref = new Date(2026, 10, 15, 0, 30, 0, 0);
+
+  const last1h = getRelativeTimeInterval(1, ref);
+  assert.equal(last1h.startDate, '2026-11-14');
+  assert.equal(last1h.startTime, '23:30');
+  assert.equal(last1h.endDate, '2026-11-15');
+  assert.equal(last1h.endTime, '00:30');
+
+  const last24h = getRelativeTimeInterval(24, ref);
+  assert.equal(last24h.startDate, '2026-11-14');
+  assert.equal(last24h.startTime, '00:30');
+  assert.equal(last24h.endDate, '2026-11-15');
+  assert.equal(last24h.endTime, '00:30');
+
+  // Inverted range detection
+  assert.equal(
+    isAuditIntervalInverted({ startDate: '2026-11-16', endDate: '2026-11-15' }),
+    true
+  );
+  assert.equal(
+    isAuditIntervalInverted({
+      startDate: '2026-11-15',
+      endDate: '2026-11-15',
+      startTime: '14:00',
+      endTime: '09:00',
+    }),
+    true
+  );
+  assert.equal(
+    isAuditIntervalInverted({
+      startDate: '2026-11-15',
+      endDate: '2026-11-15',
+      startTime: '09:00',
+      endTime: '14:00',
+    }),
+    false
+  );
 });

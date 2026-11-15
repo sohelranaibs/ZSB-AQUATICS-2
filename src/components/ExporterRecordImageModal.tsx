@@ -133,7 +133,7 @@ export const ExporterRecordImageModal: React.FC<ExporterRecordImageModalProps> =
     >
       <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[95vh] flex flex-col">
         {/* Clean Invoice Header */}
-        <div className="bg-[#263843] text-white px-5 py-3 flex items-center justify-between border-b-2 border-[#00897b] shrink-0">
+        <div className="bg-[#273E56] text-white px-5 py-3 flex items-center justify-between border-b-2 border-[#00897b] shrink-0">
           <div className="flex items-center space-x-2.5">
             <FileText className="w-5 h-5 text-[#5eead4] shrink-0" />
             <div>

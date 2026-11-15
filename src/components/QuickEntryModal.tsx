@@ -628,7 +628,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                     onClick={() => handleTypeChange('all')}
                     className={`px-3 py-1.5 rounded text-xs font-bold transition cursor-pointer ${
                       activeType === 'all'
-                        ? 'bg-[#263843] text-[#5eead4] shadow'
+                        ? 'bg-[#273E56] text-[#5eead4] shadow'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
@@ -779,7 +779,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
               {/* Template Download Box */}
               <div className="lg:col-span-5 bg-teal-50/60 border border-teal-200 rounded-xl p-4 flex flex-col justify-between">
                 <div className="space-y-1">
-                  <div className="text-xs font-extrabold uppercase text-[#263843] flex items-center space-x-1.5">
+                  <div className="text-xs font-extrabold uppercase text-[#273E56] flex items-center space-x-1.5">
                     <Sparkles className="w-4 h-4 text-[#00897b]" />
                     <span>Download Ready-to-Fill Templates</span>
                   </div>
@@ -792,7 +792,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                   <button
                     type="button"
                     onClick={handleDownloadSampleXLSX}
-                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-[#263843] hover:bg-[#1c2a33] text-[#5eead4] rounded-lg text-xs font-bold transition cursor-pointer"
+                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-[#273E56] hover:bg-[#1c2a33] text-[#5eead4] rounded-lg text-xs font-bold transition cursor-pointer"
                   >
                     <FileSpreadsheet className="w-3.5 h-3.5" />
                     <span>Template (.XLSX)</span>
@@ -801,7 +801,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                     <button
                       type="button"
                       onClick={handleDownloadSampleCSV}
-                      className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-teal-100 text-[#263843] border border-teal-300 rounded-lg text-xs font-bold transition cursor-pointer"
+                      className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-teal-100 text-[#273E56] border border-teal-300 rounded-lg text-xs font-bold transition cursor-pointer"
                     >
                       <FileText className="w-3.5 h-3.5 text-[#00897b]" />
                       <span>Template (.CSV)</span>
@@ -995,7 +995,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                   </span>
                 </div>
 
-                <div className="border border-slate-200 rounded-lg overflow-x-auto max-h-52">
+                <div className="border border-slate-200 rounded-lg overflow-x-auto">
                   <table className="w-full text-left text-xs" data-testid="import-preview-table">
                     <thead className="bg-slate-100 text-slate-800 uppercase font-bold text-[10px] border-b">
                       <tr>
@@ -1124,7 +1124,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
           /* EXPORT DATA TAB */
           <div className="p-5 sm:p-6 overflow-y-auto space-y-5">
             {/* Master Multi-Sheet Excel Workbook Card */}
-            <div className="bg-[#263843] text-white rounded-xl p-5 border-b-2 border-[#00897b] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="bg-[#273E56] text-white rounded-xl p-5 border-b-2 border-[#00897b] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="space-y-1">
                 <div className="flex items-center space-x-2 text-[#5eead4] text-xs font-bold uppercase tracking-wide">
                   <Layers className="w-4 h-4" />

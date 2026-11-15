@@ -5,7 +5,7 @@ import {
   AuthUser,
 } from '../types/index.ts';
 import { DEFAULT_SUPER_ADMIN_PASSWORD } from './superAdminAuth.ts';
-import { isDateInRange } from './dateFilters.ts';
+import { toISODateString } from './dateFilters.ts';
 
 export const ZSB_BANNER_IMAGE_URL =
   '/assets/aistudio/WhatsApp_Image_2026-10-30_at_12.38.58_70038e4b.jpeg';
@@ -103,15 +103,24 @@ export function authenticateUser(
       customSuperAdminPassword!.trim().length > 0 &&
       customSuperAdminPassword!.trim() !== DEFAULT_SUPER_ADMIN_PASSWORD;
 
+    const memberPwd = matchedDynamic.password ? matchedDynamic.password.trim() : '';
+    const hasMemberCustomPassword =
+      memberPwd.length > 0 && memberPwd !== DEFAULT_SUPER_ADMIN_PASSWORD;
+
     const validPasswords = new Set<string>();
-    if (isCustomPasswordActive) {
+    if (hasMemberCustomPassword) {
+      validPasswords.add(memberPwd);
+      if (isCustomPasswordActive) {
+        validPasswords.add(customSuperAdminPassword!.trim());
+      }
+    } else if (isCustomPasswordActive) {
       // Password updated: Previous default passwords will NOT work!
       validPasswords.add(customSuperAdminPassword!.trim());
-      if (matchedDynamic.password && matchedDynamic.password.trim().length > 0) {
-        validPasswords.add(matchedDynamic.password.trim());
+      if (memberPwd.length > 0 && memberPwd !== DEFAULT_SUPER_ADMIN_PASSWORD) {
+        validPasswords.add(memberPwd);
       }
     } else {
-      validPasswords.add(matchedDynamic.password || 'admin123');
+      validPasswords.add(memberPwd || 'admin123');
       validPasswords.add(DEFAULT_SUPER_ADMIN_PASSWORD);
       validPasswords.add('ZSB@Admin2026');
     }
@@ -119,9 +128,10 @@ export function authenticateUser(
     if (!validPasswords.has(cleanPass)) {
       return {
         valid: false,
-        error: isCustomPasswordActive
-          ? 'Invalid password. The administrator password was updated — all previous passwords no longer work.'
-          : 'Invalid password. Please verify your administrator credentials.',
+        error:
+          isCustomPasswordActive || hasMemberCustomPassword
+            ? 'Invalid password. The administrator password was updated — all previous passwords no longer work.'
+            : 'Invalid password. Please verify your administrator credentials.',
       };
     }
 
@@ -220,12 +230,181 @@ export interface AuditLogFilterOptions {
   actionFilter?: 'ALL' | 'ENTRY' | 'EDIT' | 'DELETE' | 'AUTH';
   moduleFilter?: 'ALL' | AuditLogModule;
   dateFilter?: string; // YYYY-MM-DD or YYYY-MM
-  startDate?: string;
-  endDate?: string;
+  startDate?: string; // YYYY-MM-DD
+  endDate?: string; // YYYY-MM-DD
+  startTime?: string; // HH:mm
+  endTime?: string; // HH:mm
+}
+
+export interface TimeIntervalRange {
+  startDate: string;
+  endDate: string;
+  startTime: string;
+  endTime: string;
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+export function toLocalTimeHHMM(d: Date): string {
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
 /**
- * Filters audit logs by search query, action category, module, and date range.
+ * Computes a rolling [now - hoursAgo, now] date+time interval in local calendar time.
+ */
+export function getRelativeTimeInterval(
+  hoursAgo: number,
+  referenceDate: Date = new Date()
+): TimeIntervalRange {
+  const safeHours = Number.isFinite(hoursAgo) && hoursAgo > 0 ? hoursAgo : 1;
+  const end = new Date(referenceDate.getTime());
+  const start = new Date(referenceDate.getTime() - safeHours * 60 * 60 * 1000);
+  return {
+    startDate: toISODateString(start),
+    endDate: toISODateString(end),
+    startTime: toLocalTimeHHMM(start),
+    endTime: toLocalTimeHHMM(end),
+  };
+}
+
+/**
+ * Returns true if the start date/time comes chronologically after the end date/time.
+ */
+export function isAuditIntervalInverted(options: {
+  startDate?: string;
+  endDate?: string;
+  startTime?: string;
+  endTime?: string;
+}): boolean {
+  const startDate = (options.startDate || '').trim();
+  const endDate = (options.endDate || '').trim();
+  const startTime = (options.startTime || '').trim();
+  const endTime = (options.endTime || '').trim();
+
+  if (startDate && endDate) {
+    if (startDate > endDate) return true;
+    if (startDate === endDate && startTime && endTime && startTime > endTime) {
+      return true;
+    }
+    return false;
+  }
+
+  if (!startDate && !endDate && startTime && endTime && startTime > endTime) {
+    return true;
+  }
+
+  return false;
+}
+
+function parseLocalBoundaryMs(
+  dateStr: string,
+  timeStr: string | undefined,
+  isEndBoundary: boolean
+): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  const day = Number(match[3]);
+
+  const timeMatch = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec((timeStr || '').trim());
+  if (timeMatch) {
+    const hours = Number(timeMatch[1]);
+    const mins = Number(timeMatch[2]);
+    const secs = timeMatch[3] ? Number(timeMatch[3]) : isEndBoundary ? 59 : 0;
+    const ms = isEndBoundary ? 999 : 0;
+    return new Date(year, month, day, hours, mins, secs, ms).getTime();
+  }
+
+  return isEndBoundary
+    ? new Date(year, month, day, 23, 59, 59, 999).getTime()
+    : new Date(year, month, day, 0, 0, 0, 0).getTime();
+}
+
+/**
+ * Checks whether an audit log timestamp falls within the specified [startDate/startTime, endDate/endTime] interval.
+ * Full ISO timestamps are evaluated in local calendar time so filtering matches the displayed table timestamps.
+ * Date-only strings (YYYY-MM-DD) are treated as local calendar days.
+ */
+export function isAuditTimestampInInterval(
+  timestamp: string | null | undefined,
+  options: {
+    startDate?: string;
+    endDate?: string;
+    startTime?: string;
+    endTime?: string;
+  } = {}
+): boolean {
+  const startDate = (options.startDate || '').trim();
+  const endDate = (options.endDate || '').trim();
+  const startTime = (options.startTime || '').trim();
+  const endTime = (options.endTime || '').trim();
+
+  if (!startDate && !endDate && !startTime && !endTime) {
+    return true;
+  }
+  if (!timestamp) return false;
+
+  const cleanTs = timestamp.trim();
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(cleanTs);
+
+  let logEpochMs: number;
+  let logLocalHHMM: string;
+
+  if (dateOnlyMatch) {
+    const y = Number(dateOnlyMatch[1]);
+    const m = Number(dateOnlyMatch[2]) - 1;
+    const d = Number(dateOnlyMatch[3]);
+    logEpochMs = new Date(y, m, d, 12, 0, 0, 0).getTime();
+    logLocalHHMM = '12:00';
+  } else {
+    const parsed = new Date(cleanTs);
+    if (isNaN(parsed.getTime())) {
+      return false;
+    }
+    logEpochMs = parsed.getTime();
+    logLocalHHMM = toLocalTimeHHMM(parsed);
+  }
+
+  // Date-bounded interval (with optional startTime/endTime precision)
+  if (startDate || endDate) {
+    if (startDate) {
+      const minMs = parseLocalBoundaryMs(startDate, startTime, false);
+      if (minMs !== null && logEpochMs < minMs) {
+        return false;
+      }
+    }
+    if (endDate) {
+      const maxMs = parseLocalBoundaryMs(endDate, endTime, true);
+      if (maxMs !== null && logEpochMs > maxMs) {
+        return false;
+      }
+    }
+    // If only one date bound is set AND an unanchored opposite time bound is set, enforce intraday time-of-day
+    if (!startDate && startTime && logLocalHHMM < startTime) {
+      return false;
+    }
+    if (!endDate && endTime && logLocalHHMM > endTime) {
+      return false;
+    }
+    return true;
+  }
+
+  // Time-of-day only filter (across all dates)
+  if (startTime && logLocalHHMM < startTime) {
+    return false;
+  }
+  if (endTime && logLocalHHMM > endTime) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Filters audit logs by search query, action category, module, and date/time interval.
  */
 export function filterAuditLogs(
   logs: AuditLogRecord[],
@@ -238,6 +417,8 @@ export function filterAuditLogs(
     dateFilter = '',
     startDate = '',
     endDate = '',
+    startTime = '',
+    endTime = '',
   } = options;
 
   const q = searchQuery.trim().toLowerCase();
@@ -265,7 +446,15 @@ export function filterAuditLogs(
       return false;
     }
 
-    if ((startDate || endDate) && !isDateInRange(log.timestamp, startDate, endDate)) {
+    if (
+      (startDate || endDate || startTime || endTime) &&
+      !isAuditTimestampInInterval(log.timestamp, {
+        startDate,
+        endDate,
+        startTime,
+        endTime,
+      })
+    ) {
       return false;
     }
 

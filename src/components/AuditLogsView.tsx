@@ -8,6 +8,7 @@ import {
   filterAuditLogs,
   calculateAuditLogStats,
   formatAuditLogsCSV,
+  getRelativeTimeInterval,
 } from '../utils/auditLogger.ts';
 import {
   ShieldCheck,
@@ -57,7 +58,10 @@ export const AuditLogsView: React.FC = () => {
   const [dateFilter, setDateFilter] = useState<string>('');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+  const [startTime, setStartTime] = useState<string>('');
+  const [endTime, setEndTime] = useState<string>('');
   const [activePreset, setActivePreset] = useState<DatePresetKey>('all');
+  const [quickHoursActive, setQuickHoursActive] = useState<'none' | '1h' | '24h'>('none');
 
   // Manual Admin Audit Entry Form state
   const [manualAction, setManualAction] = useState<AuditLogAction>('CREATE');
@@ -68,18 +72,61 @@ export const AuditLogsView: React.FC = () => {
 
   const stats = useMemo(() => calculateAuditLogStats(auditLogs), [auditLogs]);
 
-  const filteredLogs = useMemo(
+  const intervalMatchedLogs = useMemo(
     () =>
       filterAuditLogs(auditLogs, {
         searchQuery,
-        actionFilter,
+        actionFilter: 'ALL',
         moduleFilter,
         dateFilter,
         startDate,
         endDate,
+        startTime,
+        endTime,
       }),
-    [auditLogs, searchQuery, actionFilter, moduleFilter, dateFilter, startDate, endDate]
+    [auditLogs, searchQuery, moduleFilter, dateFilter, startDate, endDate, startTime, endTime]
   );
+
+  const intervalStats = useMemo(
+    () => calculateAuditLogStats(intervalMatchedLogs),
+    [intervalMatchedLogs]
+  );
+
+  const filteredLogs = useMemo(
+    () =>
+      filterAuditLogs(intervalMatchedLogs, {
+        actionFilter,
+      }),
+    [intervalMatchedLogs, actionFilter]
+  );
+
+  const hasDateOrTimeFilter = Boolean(dateFilter || startDate || endDate || startTime || endTime);
+  const hasAnyFilter = Boolean(
+    searchQuery || actionFilter !== 'ALL' || moduleFilter !== 'ALL' || hasDateOrTimeFilter
+  );
+
+  const handleResetAllFilters = () => {
+    setSearchQuery('');
+    setActionFilter('ALL');
+    setModuleFilter('ALL');
+    setDateFilter('');
+    setStartDate('');
+    setEndDate('');
+    setStartTime('');
+    setEndTime('');
+    setActivePreset('all');
+    setQuickHoursActive('none');
+  };
+
+  const handleSelectQuickHours = (hours: 1 | 24) => {
+    const interval = getRelativeTimeInterval(hours);
+    setStartDate(interval.startDate);
+    setEndDate(interval.endDate);
+    setStartTime(interval.startTime);
+    setEndTime(interval.endTime);
+    setActivePreset('custom');
+    setQuickHoursActive(hours === 1 ? '1h' : '24h');
+  };
 
   const handleExportCSV = () => {
     const csvContent = formatAuditLogsCSV(filteredLogs);
@@ -88,7 +135,11 @@ export const AuditLogsView: React.FC = () => {
     const a = document.createElement('a');
     a.href = url;
     const safeDate = new Date().toISOString().slice(0, 10);
-    a.download = `ZSB_AQUATICS_AUDIT_LOGS_${safeDate}.csv`;
+    const rangeTag =
+      startDate || endDate
+        ? `_${startDate || 'start'}_to_${endDate || 'now'}`
+        : `_${safeDate}`;
+    a.download = `ZSB_AQUATICS_AUDIT_LOGS${rangeTag}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     showToast(`Exported ${filteredLogs.length} audit log records to CSV.`);
@@ -167,7 +218,7 @@ export const AuditLogsView: React.FC = () => {
       {/* Top Executive Header */}
       <section
         aria-label="System Audit Logs Header"
-        className="bg-[#263843] text-white rounded-xl p-5 border-b-2 border-[#00897b] shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+        className="bg-[#273E56] text-white rounded-xl p-5 border-b-2 border-[#00897b] shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4"
       >
         <div className="flex items-start sm:items-center gap-3.5">
           <div className="w-12 h-12 rounded-full bg-white p-0.5 border-2 border-[#5eead4] shadow-md flex items-center justify-center overflow-hidden shrink-0">
@@ -305,7 +356,7 @@ export const AuditLogsView: React.FC = () => {
           aria-label="Record Administrator Audit Entry"
           className="lg:col-span-4 bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden"
         >
-          <div className="bg-[#263843] text-white px-4 py-3 border-b border-[#1d2c35] flex items-center gap-2">
+          <div className="bg-[#273E56] text-white px-4 py-3 border-b border-[#1d2c35] flex items-center gap-2">
             <PlusCircle className="w-4 h-4 text-[#5eead4] shrink-0" />
             <h2 className="text-xs font-bold uppercase tracking-wide">
               Log Manual Audit Event
@@ -447,43 +498,37 @@ export const AuditLogsView: React.FC = () => {
               >
                 {(
                   [
-                    { id: 'ALL', label: `All (${stats.totalCount})` },
-                    { id: 'ENTRY', label: `Entries (${stats.entriesCount})` },
-                    { id: 'EDIT', label: `Edits (${stats.editsCount})` },
-                    { id: 'DELETE', label: `Deletions (${stats.deletionsCount})` },
-                    { id: 'AUTH', label: `Auth (${stats.authCount})` },
+                    { id: 'ALL', label: `All (${intervalStats.totalCount})` },
+                    { id: 'ENTRY', label: `Entries (${intervalStats.entriesCount})` },
+                    { id: 'EDIT', label: `Edits (${intervalStats.editsCount})` },
+                    { id: 'DELETE', label: `Deletions (${intervalStats.deletionsCount})` },
+                    { id: 'AUTH', label: `Auth (${intervalStats.authCount})` },
                   ] as const
-                ).map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    data-testid={`audit-filter-action-${tab.id.toLowerCase()}`}
-                    onClick={() => setActionFilter(tab.id)}
-                    className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
-                      actionFilter === tab.id
-                        ? 'bg-[#00897b] text-white font-bold shadow-2xs'
-                        : 'text-slate-700 hover:text-slate-900'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
+                ).map((tab) => {
+                  const isActive = actionFilter === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      aria-pressed={isActive}
+                      data-testid={`audit-filter-action-${tab.id.toLowerCase()}`}
+                      onClick={() => setActionFilter(tab.id)}
+                      className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
+                        isActive ? 'font-bold shadow-2xs' : ''
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
               </div>
 
-              {(searchQuery || actionFilter !== 'ALL' || moduleFilter !== 'ALL' || dateFilter || startDate || endDate) && (
+              {hasAnyFilter && (
                 <button
                   type="button"
                   data-testid="audit-reset-filters-btn"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setActionFilter('ALL');
-                    setModuleFilter('ALL');
-                    setDateFilter('');
-                    setStartDate('');
-                    setEndDate('');
-                    setActivePreset('all');
-                  }}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
+                  onClick={handleResetAllFilters}
+                  className="inline-flex items-center gap-1 text-xs font-semibold cursor-pointer px-2.5 py-1 rounded-md"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>Reset Filters</span>
@@ -491,18 +536,62 @@ export const AuditLogsView: React.FC = () => {
               )}
             </div>
 
-            {/* Date Range Picker Filter */}
+            {/* Date & Time Range Picker Filter */}
             <DateRangePicker
               startDate={startDate}
               endDate={endDate}
+              startTime={startTime}
+              endTime={endTime}
+              showTimeInputs={true}
               activePreset={activePreset}
-              onPresetChange={(p) => setActivePreset(p)}
+              onPresetChange={(p) => {
+                setActivePreset(p);
+                if (p !== 'custom') {
+                  setQuickHoursActive('none');
+                }
+              }}
               onDateRangeChange={(start, end, preset) => {
                 setStartDate(start);
                 setEndDate(end);
                 if (preset) setActivePreset(preset);
+                if (preset !== 'custom') {
+                  setQuickHoursActive('none');
+                }
               }}
-              label="Audit Log Time Range"
+              onTimeRangeChange={(sTime, eTime) => {
+                setStartTime(sTime);
+                setEndTime(eTime);
+                setQuickHoursActive('none');
+              }}
+              extraPresetControls={
+                <>
+                  <button
+                    type="button"
+                    aria-pressed={quickHoursActive === '1h'}
+                    data-testid="audit-preset-last-1h"
+                    onClick={() => handleSelectQuickHours(1)}
+                    className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer flex items-center space-x-1 ${
+                      quickHoursActive === '1h' ? 'font-bold shadow-2xs' : ''
+                    }`}
+                  >
+                    <Clock className="w-3 h-3 shrink-0" />
+                    <span>Last 1 Hour</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={quickHoursActive === '24h'}
+                    data-testid="audit-preset-last-24h"
+                    onClick={() => handleSelectQuickHours(24)}
+                    className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer flex items-center space-x-1 ${
+                      quickHoursActive === '24h' ? 'font-bold shadow-2xs' : ''
+                    }`}
+                  >
+                    <Clock className="w-3 h-3 shrink-0" />
+                    <span>Last 24 Hours</span>
+                  </button>
+                </>
+              }
+              label="Filter Audit Logs by Date & Time Interval"
             />
 
             {/* Search & Module Filter Row */}
@@ -511,6 +600,7 @@ export const AuditLogsView: React.FC = () => {
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
+                  aria-label="Search audit logs"
                   data-testid="audit-search-input"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -540,6 +630,29 @@ export const AuditLogsView: React.FC = () => {
             </div>
           </div>
 
+          {/* Live Interval Match Status Strip */}
+          <div
+            data-testid="audit-filter-summary-bar"
+            className="px-4 py-2 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-slate-600"
+          >
+            <span>
+              Showing <strong className="text-slate-900">{filteredLogs.length}</strong> of{' '}
+              <strong className="text-slate-900">{auditLogs.length}</strong> audit{' '}
+              {auditLogs.length === 1 ? 'event' : 'events'}
+              {hasDateOrTimeFilter && (
+                <span className="ml-2 text-teal-800 font-semibold">
+                  · Interval: {startDate || 'Start'}{startTime ? ` ${startTime}` : ''} →{' '}
+                  {endDate || 'Present'}{endTime ? ` ${endTime}` : ''}
+                </span>
+              )}
+            </span>
+            {filteredLogs.length > 10 && (
+              <span className="text-slate-500">
+                10-row viewport (scroll vertically to inspect history)
+              </span>
+            )}
+          </div>
+
           {/* Audit Logs Table */}
           <div className="p-3 bg-slate-50/70">
             <div
@@ -550,8 +663,8 @@ export const AuditLogsView: React.FC = () => {
               data-testid="audit-logs-table"
               className="w-full text-left text-xs border-collapse"
             >
-              <thead>
-                <tr className="bg-[#263843] text-white font-bold uppercase text-[11px] border-b border-[#1d2c35]">
+              <thead className="sticky top-0 z-10">
+                <tr className="bg-[#273E56] text-white font-bold uppercase text-[11px] border-b border-[#1d2c35]">
                   <th className="py-2.5 px-2 text-center w-12">SL #</th>
                   <th className="py-2.5 px-3.5">TIMESTAMP</th>
                   <th className="py-2.5 px-3 text-center">ACTION</th>

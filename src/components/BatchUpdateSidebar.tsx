@@ -217,7 +217,7 @@ export const BatchUpdateSidebar: React.FC<BatchUpdateSidebarProps> = ({
     >
       {/* Top Header */}
       <div>
-        <div className="bg-[#263843] text-white px-4 py-3.5 border-b-2 border-[#00897b] flex items-center justify-between gap-2">
+        <div className="bg-[#273E56] text-white px-4 py-3.5 border-b-2 border-[#00897b] flex items-center justify-between gap-2">
           <div className="flex items-center space-x-2.5">
             <div className="p-1.5 rounded-lg bg-[#00897b] text-white shrink-0">
               <Layers className="w-4 h-4 stroke-[2.4]" />

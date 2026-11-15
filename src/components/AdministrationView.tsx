@@ -541,7 +541,7 @@ export const AdministrationView: React.FC = () => {
             <p className="text-xs text-slate-600 mt-2 leading-relaxed">
               You are currently signed in as{' '}
               <strong className="text-slate-900">{currentUser?.displayName || 'User'}</strong>{' '}
-              with the role <span className="px-2 py-0.5 rounded bg-slate-100 text-[#263843] border border-slate-200 font-mono text-[11px]">{currentUser?.role || 'Staff'}</span>.
+              with the role <span className="px-2 py-0.5 rounded bg-slate-100 text-[#273E56] border border-slate-200 font-mono text-[11px]">{currentUser?.role || 'Staff'}</span>.
             </p>
             <p className="text-xs text-rose-700 mt-2 font-medium">
               Only verified Super Administrators have authorization to enter the Administration sheet and control database records.
@@ -551,7 +551,7 @@ export const AdministrationView: React.FC = () => {
             type="button"
             data-testid="admin-return-dashboard-btn"
             onClick={() => setActiveTab('dashboard')}
-            className="w-full bg-[#263843] hover:bg-[#1c2a33] text-white font-bold py-2.5 px-4 rounded-xl text-xs transition cursor-pointer"
+            className="w-full bg-[#273E56] hover:bg-[#1c2a33] text-white font-bold py-2.5 px-4 rounded-xl text-xs transition cursor-pointer"
           >
             Return to Executive Overview (Sheet 01)
           </button>
@@ -568,7 +568,7 @@ export const AdministrationView: React.FC = () => {
       >
         <div className="w-full max-w-xl bg-white border border-slate-200 rounded-2xl shadow-lg overflow-hidden">
           {/* Header Bar with Slate-Teal Branding */}
-          <div className="bg-[#263843] px-6 py-5 border-b-2 border-[#00897b] flex items-center justify-between">
+          <div className="bg-[#273E56] px-6 py-5 border-b-2 border-[#00897b] flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 flex items-center justify-center shadow-sm">
                 <img
@@ -606,7 +606,7 @@ export const AdministrationView: React.FC = () => {
             <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 flex items-start space-x-3">
               <ShieldAlert className="w-6 h-6 text-[#00897b] shrink-0 mt-0.5" />
               <div className="text-xs space-y-1">
-                <div className="font-black text-[#263843] uppercase tracking-wider text-[11px]">
+                <div className="font-black text-[#273E56] uppercase tracking-wider text-[11px]">
                   Super Admin Authorization Required
                 </div>
                 <p className="text-slate-700 font-medium leading-relaxed">
@@ -696,7 +696,7 @@ export const AdministrationView: React.FC = () => {
       data-testid="administration-view"
     >
       {/* Executive Command Banner */}
-      <div className="bg-[#263843] text-white p-5 sm:p-6 rounded-xl shadow-sm border-b-2 border-[#00897b] relative overflow-hidden">
+      <div className="bg-[#273E56] text-white p-5 sm:p-6 rounded-xl shadow-sm border-b-2 border-[#00897b] relative overflow-hidden">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 relative z-10">
           <div className="flex items-center space-x-4">
             <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
@@ -1752,7 +1752,7 @@ export const AdministrationView: React.FC = () => {
       {activeAdminTab === 'database_clear' && (
         <div className="space-y-6" data-testid="admin-database-clear-panel">
           {/* Header Banner */}
-          <div className="bg-[#263843] border-b-2 border-rose-500 rounded-xl p-6 text-white shadow-sm relative overflow-hidden">
+          <div className="bg-[#273E56] border-b-2 border-rose-500 rounded-xl p-6 text-white shadow-sm relative overflow-hidden">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 relative z-10">
               <div className="flex items-center space-x-3.5">
                 <div className="p-3 bg-rose-500/20 border border-rose-400/60 rounded-xl text-rose-300 shrink-0">
@@ -2065,7 +2065,7 @@ export const AdministrationView: React.FC = () => {
           aria-modal="true"
         >
           <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-300 overflow-hidden">
-            <div className="bg-[#263843] text-white px-5 py-4 flex items-center justify-between border-b-2 border-[#00897b]">
+            <div className="bg-[#273E56] text-white px-5 py-4 flex items-center justify-between border-b-2 border-[#00897b]">
               <h3 className="font-bold text-sm text-white flex items-center space-x-2">
                 <UserPlus className="w-4 h-4 text-[#5eead4]" />
                 <span>{editingMemberId ? 'Edit Team Member' : 'Add New Team Member'}</span>
@@ -2181,7 +2181,7 @@ export const AdministrationView: React.FC = () => {
         >
           <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-300 overflow-hidden my-auto max-h-[92vh] flex flex-col">
             {/* Modal Header */}
-            <div className="bg-[#263843] text-white px-5 py-4 flex items-center justify-between border-b-2 border-[#00897b] shrink-0">
+            <div className="bg-[#273E56] text-white px-5 py-4 flex items-center justify-between border-b-2 border-[#00897b] shrink-0">
               <div className="flex items-center space-x-3">
                 <div className="p-2 rounded-lg bg-[#00897b]/25 border border-[#5eead4]/40 text-[#5eead4]">
                   <ShieldCheck className="w-5 h-5" />

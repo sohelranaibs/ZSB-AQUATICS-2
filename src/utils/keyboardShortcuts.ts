@@ -65,6 +65,8 @@ export const ORDERED_WORKBOOK_TABS: { id: ActiveTab; label: string; number: numb
   { id: 'settings', label: 'Settings & Config', number: 13 },
   { id: 'audit_logs', label: 'Audit Logs', number: 14 },
   { id: 'administration', label: 'Administration', number: 15 },
+  { id: 'forget_password', label: 'FORGET PASSWORD', number: 16 },
+  { id: 'total_balance', label: 'TOTAL BALANCE', number: 17 },
 ];
 
 export const GLOBAL_SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [

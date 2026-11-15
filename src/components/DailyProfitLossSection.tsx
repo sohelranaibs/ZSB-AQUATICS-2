@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   PurchaseRecord,
   PackingRecord,
@@ -11,6 +11,10 @@ import {
   calculateDailyProfitLossReport,
   DailyPLStatusFilter,
   DailyProfitLossEntry,
+  DAILY_PL_ROW_BATCH_SIZE,
+  getVisibleDailyProfitLossWindow,
+  shouldLoadMoreOnScroll,
+  getNextDailyProfitLossRowLimit,
 } from '../utils/dailyProfitLoss.ts';
 import {
   formatCurrency,
@@ -60,6 +64,8 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
   const [statusFilter, setStatusFilter] = useState<DailyPLStatusFilter>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [visibleRowLimit, setVisibleRowLimit] = useState<number>(DAILY_PL_ROW_BATCH_SIZE);
+  const scrollBoxRef = useRef<HTMLDivElement | null>(null);
 
   const dailyReport = useMemo(
     () =>
@@ -84,6 +90,45 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
       companyProfile.rmbExchangeRate,
     ]
   );
+
+  // Reset to 10-row window and top scroll position whenever filter inputs change
+  useEffect(() => {
+    setVisibleRowLimit(DAILY_PL_ROW_BATCH_SIZE);
+    if (scrollBoxRef.current) {
+      scrollBoxRef.current.scrollTop = 0;
+    }
+  }, [selectedMonth, fromDate, toDate, statusFilter, searchQuery]);
+
+  const visibleWindow = useMemo(
+    () => getVisibleDailyProfitLossWindow(dailyReport.entries, visibleRowLimit),
+    [dailyReport.entries, visibleRowLimit]
+  );
+
+  const handleTableScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      const el = e.currentTarget;
+      if (
+        shouldLoadMoreOnScroll({
+          scrollTop: el.scrollTop,
+          clientHeight: el.clientHeight,
+          scrollHeight: el.scrollHeight,
+          hasMore: visibleWindow.hasMore,
+        })
+      ) {
+        setVisibleRowLimit((prev) =>
+          getNextDailyProfitLossRowLimit(prev, dailyReport.entries.length)
+        );
+      }
+    },
+    [visibleWindow.hasMore, dailyReport.entries.length]
+  );
+
+  const handleResetToTop10 = () => {
+    setVisibleRowLimit(DAILY_PL_ROW_BATCH_SIZE);
+    if (scrollBoxRef.current) {
+      scrollBoxRef.current.scrollTop = 0;
+    }
+  };
 
   // Resolve the active day for the itemized drill-down panel
   const activeDayEntry: DailyProfitLossEntry | null = useMemo(() => {
@@ -116,6 +161,7 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
       ? {
           totalPurchasing: singleEntry.purchaseAmount,
           totalExportValue: singleEntry.exportAmountBDT,
+          totalExportValueRMB: singleEntry.exportAmountRMB,
           totalWeightExported: singleEntry.exportWeightKg,
           totalPaymentMade: singleEntry.supplierPaymentAmount,
           totalReturnRMB: singleEntry.returnRmbAmount,
@@ -128,6 +174,7 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
       : {
           totalPurchasing: dailyReport.totals.totalPurchaseAmount,
           totalExportValue: dailyReport.totals.totalExportAmountBDT,
+          totalExportValueRMB: dailyReport.totals.totalExportAmountRMB,
           totalWeightExported: dailyReport.totals.totalExportWeightKg,
           totalPaymentMade: dailyReport.totals.totalSupplierPaymentAmount,
           totalReturnRMB: dailyReport.totals.totalReturnRmbAmount,
@@ -172,7 +219,7 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
       className="bg-white rounded-xl shadow border border-slate-200 overflow-hidden"
     >
       {/* Top Section Header Bar */}
-      <div className="bg-[#263843] text-white px-5 py-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b-2 border-[#00897b]">
+      <div className="bg-[#273E56] text-white px-5 py-3.5 flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b-2 border-[#00897b]">
         <div className="flex items-center gap-2.5 min-w-0">
           <Calendar className="w-4 h-4 text-[#5eead4] shrink-0" />
           <div>
@@ -442,26 +489,32 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
       </div>
 
       {/* Main Chronological Daily Profit & Loss Statement Table */}
-      <div className="p-3 bg-slate-50/70">
+      <div className="p-3 bg-slate-50/70 space-y-2">
         <div
+          ref={scrollBoxRef}
+          onScroll={handleTableScroll}
+          tabIndex={0}
+          aria-label="Scrollable Daily Report Details of Profit and Loss Table"
           data-testid="pl-daily-report-scroll-box"
-          className="overflow-x-auto border-2 border-slate-300 rounded-lg bg-white"
+          className="h-[400px] overflow-y-auto overflow-x-auto border-2 border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#00897b]/50 print:!h-auto print:!max-h-none print:!overflow-visible"
         >
         <table
-          className="w-full text-xs border-collapse"
+          className="w-full text-[11px] border-collapse"
           data-testid="pl-daily-report-table"
         >
-          <thead className="bg-slate-800 text-white uppercase text-[10px] font-bold tracking-wider border-b border-slate-700 whitespace-nowrap">
+          <thead className="sticky top-0 z-10 bg-slate-800 text-white uppercase text-[10px] font-bold tracking-tight border-b border-slate-700 whitespace-nowrap shadow-2xs">
             <tr>
-              <th className="py-2.5 px-2 text-center w-12">SL #</th>
-              <th className="py-2.5 px-3 text-left">Date &amp; Particulars</th>
-              <th className="py-2.5 px-2.5 text-right">Export Revenue (A)</th>
-              <th className="py-2.5 px-2.5 text-right">Purchase Cost (B)</th>
-              <th className="py-2.5 px-2.5 text-right">Gross Profit (A-B)</th>
-              <th className="py-2.5 px-2.5 text-right">Other Costing (C)</th>
-              <th className="py-2.5 px-2.5 text-right">Net Profit / Loss</th>
-              <th className="py-2.5 px-2.5 text-right">Running P&amp;L</th>
-              <th className="py-2.5 px-3 text-center">Details</th>
+              <th className="sticky top-0 z-10 bg-slate-800 py-2.5 px-1.5 text-center w-10">SL #</th>
+              <th className="sticky top-0 z-10 bg-slate-800 py-2.5 px-2 text-left">Date &amp; Particulars</th>
+              <th className="sticky top-0 z-10 bg-slate-800 py-2.5 px-1.5 text-right" data-testid="pl-daily-export-col-header">
+                Export Revenue (A · RMB)
+              </th>
+              <th className="sticky top-0 z-10 bg-slate-800 py-2.5 px-1.5 text-right">Purchase Cost (B)</th>
+              <th className="sticky top-0 z-10 bg-slate-800 py-2.5 px-1.5 text-right">Gross Profit (A-B)</th>
+              <th className="sticky top-0 z-10 bg-slate-800 py-2.5 px-1.5 text-right">Other Costing (C)</th>
+              <th className="sticky top-0 z-10 bg-slate-800 py-2.5 px-1.5 text-right">Net Profit / Loss</th>
+              <th className="sticky top-0 z-10 bg-slate-800 py-2.5 px-1.5 text-right">Running P&amp;L</th>
+              <th className="sticky top-0 z-10 bg-slate-800 py-2.5 px-2 text-center">Details</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 font-mono tabular-nums">
@@ -472,7 +525,7 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
                 </td>
               </tr>
             ) : (
-              dailyReport.entries.map((entry, idx) => {
+              visibleWindow.visibleEntries.map((entry, idx) => {
                 const isSelected = activeDayEntry?.date === entry.date;
                 const isProfit = entry.netProfit > 0;
                 const isLoss = entry.netProfit < 0;
@@ -491,21 +544,21 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
                     }`}
                   >
                     {/* SL # */}
-                    <td className="py-2.5 px-2 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    <td className="py-2 px-1.5 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       <span className="zsb-sl-badge">{String(idx + 1).padStart(2, '0')}</span>
                     </td>
 
                     {/* Date & Activity Summary */}
-                    <td className="py-2.5 px-3 font-sans whitespace-nowrap">
-                      <div className="flex items-center gap-1.5">
+                    <td className="py-2 px-2 font-sans whitespace-nowrap">
+                      <div className="flex items-center gap-1">
                         <span className="font-mono font-black text-slate-900 text-xs">
                           {entry.formattedDate}
                         </span>
-                        <span className="px-1.5 py-0.5 text-[10px] font-mono font-bold uppercase rounded bg-slate-200 text-slate-700">
+                        <span className="px-1 py-0.5 text-[10px] font-mono font-bold uppercase rounded bg-slate-200 text-slate-700">
                           {entry.weekdayLabel}
                         </span>
                         <span
-                          className={`px-1.5 py-0.5 text-[10px] font-mono font-bold uppercase rounded ${
+                          className={`px-1 py-0.5 text-[10px] font-mono font-bold uppercase rounded ${
                             isProfit
                               ? 'bg-emerald-100 text-emerald-800'
                               : isLoss
@@ -516,25 +569,31 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
                           {entry.status}
                         </span>
                       </div>
-                      <div className="text-[11px] text-slate-500 mt-0.5 truncate max-w-[230px]">
+                      <div className="text-[10px] text-slate-500 mt-0.5 truncate max-w-[175px]">
                         {entry.topSummaryText}
                       </div>
                     </td>
 
-                    {/* Export Revenue (A) */}
-                    <td className="py-2.5 px-2.5 text-right whitespace-nowrap">
+                    {/* Export Revenue (A) in RMB */}
+                    <td
+                      className="py-2 px-1.5 text-right whitespace-nowrap"
+                      data-testid={`pl-daily-export-${entry.date}`}
+                    >
                       <div className="font-bold text-teal-800">
-                        {formatCurrency(entry.exportAmountBDT, companyProfile.currency)}
+                        {formatCurrency(entry.exportAmountRMB, 'RMB')}
                       </div>
                       <div className="text-[10px] text-slate-500">
                         {entry.exportCount > 0
-                          ? `${formatRMB(entry.exportAmountRMB)} · ${entry.exportWeightKg} KG`
+                          ? `${entry.exportWeightKg} KG · ${formatCurrency(
+                              entry.exportAmountBDT,
+                              companyProfile.currency
+                            )}`
                           : '0 Shipments'}
                       </div>
                     </td>
 
                     {/* Purchase Cost (B) */}
-                    <td className="py-2.5 px-2.5 text-right whitespace-nowrap">
+                    <td className="py-2 px-1.5 text-right whitespace-nowrap">
                       <div className="font-bold text-blue-800">
                         {formatCurrency(entry.purchaseAmount, companyProfile.currency)}
                       </div>
@@ -548,7 +607,7 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
                     </td>
 
                     {/* Gross Profit (A - B) */}
-                    <td className="py-2.5 px-2.5 text-right whitespace-nowrap">
+                    <td className="py-2 px-1.5 text-right whitespace-nowrap">
                       <div
                         className={`font-bold ${
                           entry.grossProfit > 0
@@ -565,7 +624,7 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
                     </td>
 
                     {/* Other Costing (C) */}
-                    <td className="py-2.5 px-2.5 text-right whitespace-nowrap">
+                    <td className="py-2 px-1.5 text-right whitespace-nowrap">
                       <div className="font-bold text-amber-700">
                         {formatCurrency(entry.otherCostAmount, companyProfile.currency)}
                       </div>
@@ -579,7 +638,7 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
                     </td>
 
                     {/* Net Profit / Loss (A - B - C) */}
-                    <td className="py-2.5 px-2.5 text-right whitespace-nowrap">
+                    <td className="py-2 px-1.5 text-right whitespace-nowrap">
                       <div
                         data-testid={`pl-daily-net-${entry.date}`}
                         className={`font-black text-xs inline-flex items-center justify-end gap-1 ${
@@ -606,7 +665,7 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
                     </td>
 
                     {/* Running Cumulative Net P&L */}
-                    <td className="py-2.5 px-2.5 text-right whitespace-nowrap">
+                    <td className="py-2 px-1.5 text-right whitespace-nowrap">
                       <div
                         className={`font-bold ${
                           entry.runningCumulativeNetProfit >= 0
@@ -625,7 +684,7 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
 
                     {/* Action / Inspect Day */}
                     <td
-                      className="py-2.5 px-3 text-center font-sans whitespace-nowrap"
+                      className="py-2 px-2 text-center font-sans whitespace-nowrap"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <div className="inline-flex items-center gap-1">
@@ -668,44 +727,84 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
             )}
           </tbody>
           {dailyReport.entries.length > 0 && (
-            <tfoot className="bg-slate-900 text-white font-mono text-xs font-black border-t-2 border-amber-500 whitespace-nowrap">
+            <tfoot className="sticky bottom-0 z-10 bg-slate-900 text-white font-mono text-[11px] font-black border-t-2 border-amber-500 whitespace-nowrap shadow-[0_-2px_6px_rgba(15,23,42,0.2)]">
               <tr>
-                <td className="py-3 px-2 text-center text-amber-400 font-mono text-[11px] font-black">
+                <td className="py-2.5 px-1.5 text-center text-amber-400 font-mono text-[11px] font-black">
                   Σ
                 </td>
-                <td className="py-3 px-3 font-sans uppercase">
+                <td className="py-2.5 px-2 font-sans uppercase">
                   TOTAL ({totals.totalDays} {totals.totalDays === 1 ? 'DAY' : 'DAYS'}):
                 </td>
-                <td className="py-3 px-2.5 text-right text-teal-300">
-                  {formatCurrency(totals.totalExportAmountBDT, companyProfile.currency)}
+                <td
+                  className="py-2.5 px-1.5 text-right text-teal-300"
+                  data-testid="pl-daily-total-export-rmb"
+                  title={`Converted BDT Eq: ${formatCurrency(
+                    totals.totalExportAmountBDT,
+                    companyProfile.currency
+                  )}`}
+                >
+                  {formatCurrency(totals.totalExportAmountRMB, 'RMB')}
                 </td>
-                <td className="py-3 px-2.5 text-right text-blue-300">
+                <td className="py-2.5 px-1.5 text-right text-blue-300">
                   {formatCurrency(totals.totalPurchaseAmount, companyProfile.currency)}
                 </td>
-                <td className="py-3 px-2.5 text-right text-amber-300">
+                <td className="py-2.5 px-1.5 text-right text-amber-300">
                   {totals.totalGrossProfit >= 0 ? '+' : ''}
                   {formatCurrency(totals.totalGrossProfit, companyProfile.currency)}
                 </td>
-                <td className="py-3 px-2.5 text-right text-orange-300">
+                <td className="py-2.5 px-1.5 text-right text-orange-300">
                   {formatCurrency(totals.totalOtherCostAmount, companyProfile.currency)}
                 </td>
                 <td
-                  className={`py-3 px-2.5 text-right ${
+                  className={`py-2.5 px-1.5 text-right ${
                     totals.totalNetProfit >= 0 ? 'text-emerald-300' : 'text-rose-300'
                   }`}
                 >
                   {totals.totalNetProfit >= 0 ? '+' : ''}
                   {formatCurrency(totals.totalNetProfit, companyProfile.currency)}
                 </td>
-                <td className="py-3 px-2.5 text-right text-slate-300">
+                <td className="py-2.5 px-1.5 text-right text-slate-300">
                   Margin: {totals.overallMarginPercent}%
                 </td>
-                <td className="py-3 px-3 text-center"></td>
+                <td className="py-2.5 px-2 text-center"></td>
               </tr>
             </tfoot>
           )}
         </table>
         </div>
+        {dailyReport.entries.length > 0 && (
+          <div
+            data-testid="pl-daily-scroll-status"
+            className="flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] text-slate-600 font-mono print:hidden"
+          >
+            <span>
+              Showing <strong className="text-slate-900">{visibleWindow.shownCount}</strong> of{' '}
+              <strong className="text-slate-900">{visibleWindow.totalCount}</strong>{' '}
+              {visibleWindow.totalCount === 1 ? 'row' : 'rows'} ({DAILY_PL_ROW_BATCH_SIZE}-row scroll window)
+            </span>
+            <div className="flex items-center gap-3">
+              {visibleWindow.hasMore ? (
+                <span className="text-teal-700 font-semibold">
+                  Scroll down in table to load next{' '}
+                  {Math.min(DAILY_PL_ROW_BATCH_SIZE, visibleWindow.remainingCount)} of{' '}
+                  {visibleWindow.remainingCount} remaining
+                </span>
+              ) : (
+                <span className="text-slate-500">Scroll inside table to browse rows</span>
+              )}
+              {visibleWindow.shownCount > DAILY_PL_ROW_BATCH_SIZE && (
+                <button
+                  type="button"
+                  data-testid="pl-daily-reset-10-rows"
+                  onClick={handleResetToTop10}
+                  className="px-2 py-0.5 rounded bg-slate-200 hover:bg-slate-300 text-slate-800 font-sans font-bold text-[11px] transition cursor-pointer"
+                >
+                  Reset to top {DAILY_PL_ROW_BATCH_SIZE}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Selected Day Itemized Drill-Down Breakdown Panel */}
@@ -741,8 +840,11 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
                 <p className="text-[11px] font-mono text-slate-600 mt-0.5">
                   Export Rev (A):{' '}
                   <strong>
-                    {formatCurrency(activeDayEntry.exportAmountBDT, companyProfile.currency)}
+                    {formatCurrency(activeDayEntry.exportAmountRMB, 'RMB')}
                   </strong>{' '}
+                  <span className="text-slate-500">
+                    ({formatCurrency(activeDayEntry.exportAmountBDT, companyProfile.currency)})
+                  </span>{' '}
                   − Purchase Cost (B):{' '}
                   <strong>
                     {formatCurrency(activeDayEntry.purchaseAmount, companyProfile.currency)}
@@ -786,7 +888,7 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
                   </span>
                 </div>
                 <span className="font-mono text-teal-200">
-                  {formatCurrency(activeDayEntry.exportAmountBDT, companyProfile.currency)}
+                  {formatCurrency(activeDayEntry.exportAmountRMB, 'RMB')}
                 </span>
               </div>
               <div className="overflow-x-auto">
@@ -836,10 +938,10 @@ export const DailyProfitLossSection: React.FC<DailyProfitLossSectionProps> = ({
                             </td>
                             <td className="py-1.5 px-2.5 text-right">
                               <div className="font-bold text-teal-800">
-                                {formatCurrency(bdtVal, companyProfile.currency)}
+                                {formatCurrency(pk.totalAmount, 'RMB')}
                               </div>
                               <div className="text-[10px] text-slate-500">
-                                {formatRMB(pk.totalAmount)}
+                                {formatCurrency(bdtVal, companyProfile.currency)}
                               </div>
                             </td>
                           </tr>

@@ -329,7 +329,7 @@ export const PaymentFormView: React.FC = () => {
   return (
     <div className="space-y-5 pb-10">
       {/* Top Banner & Control Ribbon */}
-      <div className="bg-[#263843] text-white rounded-xl shadow-sm border-b-2 border-[#00897b] p-4 sm:p-5">
+      <div className="bg-[#273E56] text-white rounded-xl shadow-sm border-b-2 border-[#00897b] p-4 sm:p-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center space-x-3.5">
             <div className="w-12 h-12 rounded-xl bg-[#1c2a33] border border-[#00897b]/50 flex items-center justify-center shrink-0">
@@ -798,7 +798,7 @@ export const PaymentFormView: React.FC = () => {
 
       {/* Recent Supplier Payments Today (Fast Audit Strip) */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="bg-[#263843] px-5 py-3 border-b border-[#1d2c35] flex items-center justify-between text-white">
+        <div className="bg-[#273E56] px-5 py-3 border-b border-[#1d2c35] flex items-center justify-between text-white">
           <div className="flex items-center space-x-2">
             <Clock className="w-4 h-4 text-[#5eead4]" />
             <h3 className="text-xs font-black uppercase tracking-wider text-white">

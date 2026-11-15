@@ -11,9 +11,14 @@ export interface UseRowScrollViewportOptions {
   depsKey?: unknown;
 }
 
+function measureElementHeight(el: HTMLElement | null): number {
+  if (!el) return 0;
+  return el.offsetHeight > 0 ? el.offsetHeight : el.getBoundingClientRect().height;
+}
+
 /**
- * Dynamically locks a scrollable table container's maxHeight to display `maxVisibleRows` (31)
- * body rows + sticky thead (+ optional sticky tfoot), enabling vertical scroll when rowCount > 31.
+ * Dynamically locks a scrollable table container's maxHeight to display `maxVisibleRows` (10)
+ * body rows + sticky thead (+ optional sticky tfoot), enabling vertical scroll when rowCount > 10.
  */
 export function useRowScrollViewport(
   scrollContainerRef: RefObject<HTMLDivElement | null>,
@@ -43,19 +48,19 @@ export function useRowScrollViewport(
         return;
       }
 
-      const thead = table.querySelector('thead');
-      const tfoot = includeFooter ? table.querySelector('tfoot') : null;
-      const tbodyRows = Array.from(table.querySelectorAll('tbody > tr'));
+      const thead = table.querySelector('thead') as HTMLElement | null;
+      const tfoot = includeFooter ? (table.querySelector('tfoot') as HTMLElement | null) : null;
+      const tbodyRows = Array.from(table.querySelectorAll('tbody > tr')) as HTMLElement[];
 
       if (tbodyRows.length <= maxVisibleRows) {
         setMaxHeight(undefined);
         return;
       }
 
-      const rowHeights = tbodyRows.map((tr) => tr.getBoundingClientRect().height);
+      const rowHeights = tbodyRows.map((tr) => measureElementHeight(tr));
       const nextHeight = calculateScrollViewportMaxHeight({
-        theadHeight: thead ? thead.getBoundingClientRect().height : 0,
-        tfootHeight: tfoot ? tfoot.getBoundingClientRect().height : 0,
+        theadHeight: measureElementHeight(thead),
+        tfootHeight: measureElementHeight(tfoot),
         rowHeights,
         maxVisibleRows,
       });

@@ -873,7 +873,7 @@ export const ExporterPaymentFormView: React.FC = () => {
   return (
     <div className="p-3 sm:p-5 max-w-7xl mx-auto space-y-5">
       {/* Top Banner (Sheet #04 - Dedicated Exporter Payment) */}
-      <div className="bg-[#263843] text-white px-5 py-3 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#00897b]">
+      <div className="bg-[#273E56] text-white px-5 py-3 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#00897b]">
         <div className="flex flex-wrap items-center gap-3">
           <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
@@ -1109,7 +1109,7 @@ export const ExporterPaymentFormView: React.FC = () => {
         <div className="lg:col-span-8 space-y-4">
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             {/* Slate-Teal Sheet Header Box */}
-            <div className="bg-[#263843] text-white py-3 px-4 text-center border-b border-[#1d2c35] space-y-1.5">
+            <div className="bg-[#273E56] text-white py-3 px-4 text-center border-b border-[#1d2c35] space-y-1.5">
               <div className="flex items-center justify-center gap-2.5">
                 <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
                   <img
@@ -1378,19 +1378,20 @@ export const ExporterPaymentFormView: React.FC = () => {
               </div>
             </div>
 
-            {/* Data Entry & Record History Table Grid (31-Row Scroll Viewport) */}
+            {/* Data Entry & Record History Table Grid (10-Row Scroll Viewport) */}
             <div className="p-2.5 bg-slate-50/70">
               {isHistoryScrollCapped && (
                 <div className="mb-1.5 flex items-center justify-between text-[11px] font-mono text-slate-600 px-1">
                   <span>
-                    Viewport: <strong>31 Rows</strong> visible ({rows.length} total rows — scroll vertically to view more)
+                    Viewport: <strong>{MAX_VISIBLE_TABLE_ROWS} Rows</strong> visible ({rows.length} total rows — scroll vertically to view more)
                   </span>
                 </div>
               )}
               <div
                 ref={historyScrollRef}
                 data-testid="exporter-payment-history-scroll-box"
-                data-visible-row-limit="31"
+                data-row-scroll-managed="true"
+                data-visible-row-limit={MAX_VISIBLE_TABLE_ROWS}
                 style={historyScrollMaxHeight ? { maxHeight: `${historyScrollMaxHeight}px` } : undefined}
                 className="overflow-auto border border-slate-200 rounded-lg bg-white print:!max-h-none print:!overflow-visible"
               >
@@ -1399,7 +1400,7 @@ export const ExporterPaymentFormView: React.FC = () => {
                 className="w-full border-collapse text-xs"
               >
                 <thead className="sticky top-0 z-10 shadow-xs">
-                  <tr className="bg-[#263843] text-white uppercase text-[10px] font-bold tracking-wide text-center border-b border-[#1d2c35]">
+                  <tr className="bg-[#273E56] text-white uppercase text-[10px] font-bold tracking-wide text-center border-b border-[#1d2c35]">
                     <th className="px-1.5 py-2 border-r border-[#334b59] w-8">SL</th>
                     <th className="px-2 py-2 border-r border-[#334b59] text-left min-w-[130px]">
                       RECORD HISTORY / PARTICULARS
@@ -1679,7 +1680,7 @@ export const ExporterPaymentFormView: React.FC = () => {
                 <tfoot data-testid="exporter-payment-history-footer">
                   <tr
                     data-testid="exporter-history-summary-footer-row"
-                    className="bg-[#263843] text-white font-black border-t-2 border-[#00897b]"
+                    className="bg-[#273E56] text-white font-black border-t-2 border-[#00897b]"
                   >
                     <td
                       colSpan={2}
@@ -1759,7 +1760,7 @@ export const ExporterPaymentFormView: React.FC = () => {
                     <td
                       colSpan={2}
                       rowSpan={4}
-                      className="px-3 py-2 text-center uppercase font-black tracking-widest text-[#263843] border-r border-slate-200"
+                      className="px-3 py-2 text-center uppercase font-black tracking-widest text-[#273E56] border-r border-slate-200"
                     >
                       EXPORTER BALANCE REVIEW
                     </td>
@@ -1831,7 +1832,7 @@ export const ExporterPaymentFormView: React.FC = () => {
                   <tr className="bg-teal-50/80 text-slate-900 font-black border-t border-teal-200">
                     <td
                       colSpan={2}
-                      className="px-2 py-1.5 text-right font-extrabold uppercase text-[#263843]"
+                      className="px-2 py-1.5 text-right font-extrabold uppercase text-[#273E56]"
                     >
                       OUTSTANDING EXPORTER BALANCE (REPORT − CREDIT) (RMB):
                     </td>
@@ -1891,7 +1892,7 @@ export const ExporterPaymentFormView: React.FC = () => {
             <button
               type="button"
               onClick={() => setActiveTab('exporter_payment_slip')}
-              className="w-full bg-[#263843] hover:bg-[#1c2a33] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
+              className="w-full bg-[#273E56] hover:bg-[#1c2a33] text-white py-2.5 px-4 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
             >
               <Receipt className="w-4 h-4 text-[#5eead4]" />
               <span>EXPORTER PAYMENT SLIP (付款单)</span>

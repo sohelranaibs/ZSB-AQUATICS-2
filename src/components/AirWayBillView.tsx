@@ -355,7 +355,7 @@ export const AirWayBillView: React.FC = () => {
       data-testid="air-way-bill-view"
     >
       {/* Top Executive Banner */}
-      <div className="bg-[#263843] text-white px-5 py-3 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#00897b]">
+      <div className="bg-[#273E56] text-white px-5 py-3 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#00897b]">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
@@ -580,7 +580,7 @@ export const AirWayBillView: React.FC = () => {
             type="button"
             data-testid="awb-add-row-btn"
             onClick={handleAddRow}
-            className="px-2.5 py-1.5 bg-[#263843] hover:bg-[#1c2a33] text-white font-bold rounded-lg shadow-2xs transition inline-flex items-center gap-1 cursor-pointer"
+            className="px-2.5 py-1.5 bg-[#273E56] hover:bg-[#1c2a33] text-white font-bold rounded-lg shadow-2xs transition inline-flex items-center gap-1 cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>+ Row</span>
@@ -677,14 +677,15 @@ export const AirWayBillView: React.FC = () => {
         {isAwbScrollCapped && (
           <div className="text-[11px] font-mono text-slate-600 flex items-center justify-between px-1">
             <span>
-              Viewport: <strong>31 Rows</strong> visible ({displayRows.length} total rows — scroll vertically to view more)
+              Viewport: <strong>{MAX_VISIBLE_TABLE_ROWS} Rows</strong> visible ({displayRows.length} total rows — scroll vertically to view more)
             </span>
           </div>
         )}
         <div
           ref={awbScrollRef}
           data-testid="awb-statement-scroll-box"
-          data-visible-row-limit="31"
+          data-row-scroll-managed="true"
+          data-visible-row-limit={MAX_VISIBLE_TABLE_ROWS}
           style={awbScrollMaxHeight ? { maxHeight: `${awbScrollMaxHeight}px` } : undefined}
           className="overflow-auto border-2 border-slate-800 rounded-lg bg-white my-1 print:!max-h-none print:!overflow-visible"
         >

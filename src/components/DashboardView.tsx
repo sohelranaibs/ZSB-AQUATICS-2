@@ -21,6 +21,7 @@ import {
   DEFAULT_MIN_INVENTORY_THRESHOLD_KG,
   DEFAULT_APPROACHING_THRESHOLD_PERCENT,
 } from '../utils/inventoryStock.ts';
+import { calculateTotalBalanceSummary } from '../utils/totalBalance.ts';
 import {
   ArrowRight,
   ArrowUpRight,
@@ -58,6 +59,7 @@ import { TopSuppliersChart } from './TopSuppliersChart.tsx';
 import { MonthlyReportsExportView } from './MonthlyReportsExportView.tsx';
 import { DailyFinancialSummaryWidget } from './DailyFinancialSummaryWidget.tsx';
 import { QuickFinancialPulseSidebar } from './QuickFinancialPulseSidebar.tsx';
+import { DashboardAlertsWidget } from './DashboardAlertsWidget.tsx';
 
 export const DashboardView: React.FC = () => {
   const {
@@ -68,6 +70,11 @@ export const DashboardView: React.FC = () => {
     payments,
     updatePayment,
     otherCosts,
+    partnerDeposits,
+    partnerWithdrawals,
+    profitDistributions,
+    externalDebts,
+    balanceIncomes,
     companyProfile,
     mortalities,
     addMortality,
@@ -186,6 +193,21 @@ export const DashboardView: React.FC = () => {
   const totalBoxes = consignmentSummary.totalBoxes;
   const totalPaymentsMade = payments.reduce((acc, p) => acc + (Number(p.paidAmount) || 0), 0);
   const totalRmbSettled = calculateForeignRmbRemittanceValue(packings);
+
+  const totalBalanceSummary = useMemo(
+    () =>
+      calculateTotalBalanceSummary({
+        partnerDeposits,
+        partnerWithdrawals,
+        profitDistributions,
+        externalDebts,
+        balanceIncomes,
+        purchases,
+        packings,
+        otherCosts,
+      }),
+    [partnerDeposits, partnerWithdrawals, profitDistributions, externalDebts, balanceIncomes, purchases, packings, otherCosts]
+  );
 
   const activePartiesCount = useMemo(() => {
     const set = new Set<string>();
@@ -631,6 +653,9 @@ export const DashboardView: React.FC = () => {
         </div>
       </div>
 
+      {/* Unified Operational & Financial Alerts Widget */}
+      <DashboardAlertsWidget totalBalance={totalBalanceSummary.totalBalance} />
+
       {/* Low-Stock & Minimum Inventory Threshold Notification Panel */}
       <section
         id="dashboard-low-stock-monitor"
@@ -877,7 +902,7 @@ export const DashboardView: React.FC = () => {
           </div>
 
           {/* Formula calculation banner */}
-          <div className="bg-[#263843] text-white rounded-lg px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono">
+          <div className="bg-[#273E56] text-white rounded-lg px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono">
             <div className="flex items-center gap-2">
               <span className="px-2 py-0.5 rounded bg-[#1c2a33] text-[#5eead4] font-bold uppercase text-[10px]">
                 Inventory Formula
@@ -1227,7 +1252,7 @@ export const DashboardView: React.FC = () => {
         data-testid="upcoming-recurring-payments-section"
         className="bg-white rounded-xl shadow-xs border border-slate-200 overflow-hidden"
       >
-        <div className="bg-[#263843] text-white px-5 py-3.5 border-b border-[#1d2c35] flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="bg-[#273E56] text-white px-5 py-3.5 border-b border-[#1d2c35] flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5">
             <span className="w-7 h-7 rounded-lg bg-[#00897b]/25 border border-[#00897b]/50 flex items-center justify-center shrink-0">
               <Repeat className="w-4 h-4 text-[#5eead4]" />
@@ -1476,7 +1501,7 @@ export const DashboardView: React.FC = () => {
         data-testid="dashboard-export-consignments-summary"
         className="bg-white rounded-xl shadow-xs border border-slate-200/90 overflow-hidden"
       >
-        <div className="bg-[#263843] text-white px-5 py-3.5 border-b border-[#1d2c35] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="bg-[#273E56] text-white px-5 py-3.5 border-b border-[#1d2c35] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5">
             <Scale className="w-4 h-4 text-[#5eead4] shrink-0" />
             <h2 className="text-sm font-bold tracking-wide text-white">
@@ -1617,7 +1642,7 @@ export const DashboardView: React.FC = () => {
                 </h2>
               </div>
               <span className="text-xs text-slate-500 font-mono tabular-nums">
-                Sheets 02 – 06
+                Sheets 02 – 17
               </span>
             </div>
 
@@ -1744,6 +1769,30 @@ export const DashboardView: React.FC = () => {
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
                     Filter by Shipping Mark &amp; Packing Date to print official 付款单.
+                  </p>
+                </div>
+              </button>
+
+              {/* Sheet 17: TOTAL BALANCE */}
+              <button
+                type="button"
+                data-testid="dashboard-sheet-total-balance-btn"
+                onClick={() => setActiveTab('total_balance')}
+                className="group text-left p-4 rounded-xl border border-slate-200 hover:border-emerald-600/70 bg-white hover:bg-emerald-50/25 transition cursor-pointer flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between text-xs text-slate-500 font-mono">
+                    <span>Sheet 17 · Capital &amp; Cash</span>
+                    <span className="text-emerald-700 font-semibold">
+                      {formatCurrency(totalBalanceSummary.totalBalance, companyProfile.currency)}
+                    </span>
+                  </div>
+                  <div className="text-sm font-bold text-slate-900 group-hover:text-emerald-800 mt-1 flex items-center justify-between">
+                    <span>TOTAL BALANCE</span>
+                    <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-700 group-hover:translate-x-0.5 transition-transform shrink-0" />
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Partner deposit shares + income added &minus; all costing deductions.
                   </p>
                 </div>
               </button>
@@ -1903,6 +1952,36 @@ export const DashboardView: React.FC = () => {
                 </div>
               </div>
 
+              {/* Row 4b: TOTAL BALANCE */}
+              <div className="p-4 hover:bg-slate-50/70 transition flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-bold text-slate-900 text-sm">
+                    TOTAL BALANCE (Sheet 17)
+                  </div>
+                  <div className="text-slate-500 font-mono tabular-nums mt-0.5">
+                    Partner Shares ({partnerDeposits.length}) + Income &minus; All Costing
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div
+                    className={`font-mono tabular-nums font-bold text-sm ${
+                      totalBalanceSummary.totalBalance >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                    }`}
+                  >
+                    {formatCurrency(totalBalanceSummary.totalBalance, companyProfile.currency)}
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="dashboard-open-total-balance-btn"
+                    onClick={() => setActiveTab('total_balance')}
+                    className="text-sky-700 hover:text-sky-900 font-semibold inline-flex items-center gap-0.5 mt-0.5 cursor-pointer"
+                  >
+                    <span>Open TOTAL BALANCE</span>
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
               {/* Row 5: Search & Audit Reports */}
               <div className="p-4 bg-slate-50/50 hover:bg-slate-50 transition flex items-center justify-between gap-3">
                 <div>
@@ -1968,7 +2047,7 @@ export const DashboardView: React.FC = () => {
         aria-label="Recent System Activities"
         className="bg-white rounded-xl shadow-xs border border-slate-200/90 overflow-hidden"
       >
-        <div className="px-5 py-3.5 bg-[#263843] text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="px-5 py-3.5 bg-[#273E56] text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-sm font-bold tracking-wide text-white">
               Recent System Activities

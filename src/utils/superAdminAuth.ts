@@ -19,6 +19,10 @@ export type SingleDeleteRecordType =
   | 'audit_logs'
   | 'audit_log'
   | 'team_member'
+  | 'partner_deposit'
+  | 'partner_withdrawal'
+  | 'profit_distribution'
+  | 'balance_income'
   | 'custom_row';
 
 export interface PendingSingleDeleteRequest {
@@ -222,6 +226,46 @@ export function describeSingleDeleteTarget(request: PendingSingleDeleteRequest):
         badgeLabel: 'Team / Admin Account',
         heading: 'Super Admin Permission Required to Delete Team Account',
         identifierLabel: 'Username / Role',
+        identifier: displayIdentifier,
+        summaryText: request.recordTitle
+          ? safeDetails || `Record ID: ${safeId}`
+          : `${safeTitle}${safeDetails ? ` · ${safeDetails}` : ''}`,
+      };
+    case 'partner_deposit':
+      return {
+        badgeLabel: 'Partner Deposit Share Entry',
+        heading: 'Super Admin Permission Required to Delete Partner Deposit',
+        identifierLabel: 'Partner / Deposit',
+        identifier: displayIdentifier,
+        summaryText: request.recordTitle
+          ? safeDetails || `Record ID: ${safeId}`
+          : `${safeTitle}${safeDetails ? ` · ${safeDetails}` : ''}`,
+      };
+    case 'partner_withdrawal':
+      return {
+        badgeLabel: 'Partner Withdrawal Entry',
+        heading: 'Super Admin Permission Required to Delete Partner Withdrawal',
+        identifierLabel: 'Partner / Withdrawal',
+        identifier: displayIdentifier,
+        summaryText: request.recordTitle
+          ? safeDetails || `Record ID: ${safeId}`
+          : `${safeTitle}${safeDetails ? ` · ${safeDetails}` : ''}`,
+      };
+    case 'profit_distribution':
+      return {
+        badgeLabel: 'Profit Distribution Payout',
+        heading: 'Super Admin Permission Required to Delete Profit Payout',
+        identifierLabel: 'Distribution Period',
+        identifier: displayIdentifier,
+        summaryText: request.recordTitle
+          ? safeDetails || `Record ID: ${safeId}`
+          : `${safeTitle}${safeDetails ? ` · ${safeDetails}` : ''}`,
+      };
+    case 'balance_income':
+      return {
+        badgeLabel: 'Total Balance Income Entry',
+        heading: 'Super Admin Permission Required to Delete Income Entry',
+        identifierLabel: 'Income Source',
         identifier: displayIdentifier,
         summaryText: request.recordTitle
           ? safeDetails || `Record ID: ${safeId}`

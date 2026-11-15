@@ -20,6 +20,8 @@ import {
   Settings,
   ShieldCheck,
   Lock,
+  KeyRound,
+  Scale,
 } from 'lucide-react';
 
 export interface WorkbookSheetNavItem {
@@ -131,6 +133,18 @@ export function buildWorkbookSheets(counts: {
       label: 'Administration (Super Admin)',
       shortLabel: 'Admin Control',
     },
+    {
+      id: 'forget_password',
+      num: '16',
+      label: 'FORGET PASSWORD',
+      shortLabel: 'FORGET PASSWORD',
+    },
+    {
+      id: 'total_balance',
+      num: '17',
+      label: 'TOTAL BALANCE',
+      shortLabel: 'TOTAL BALANCE',
+    },
   ];
 }
 
@@ -153,6 +167,8 @@ function renderSheetIcon(id: ActiveTab, isActive: boolean) {
       return <Receipt className={cls} />;
     case 'profit_loss':
       return <TrendingUp className={cls} />;
+    case 'total_balance':
+      return <Scale className={cls} />;
     case 'purchase_db':
       return <Database className={cls} />;
     case 'packing_db':
@@ -167,6 +183,8 @@ function renderSheetIcon(id: ActiveTab, isActive: boolean) {
       return <ShieldCheck className={cls} />;
     case 'administration':
       return <Lock className={cls} />;
+    case 'forget_password':
+      return <KeyRound className={cls} />;
   }
 }
 

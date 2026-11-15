@@ -93,7 +93,7 @@ export const SuperAdminClearModal: React.FC = () => {
       >
         <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-rose-300 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
           {/* Top Security Header */}
-          <div className="bg-[#263843] text-white px-5 py-4 flex items-center justify-between border-b-2 border-rose-500">
+          <div className="bg-[#273E56] text-white px-5 py-4 flex items-center justify-between border-b-2 border-rose-500">
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 rounded-full bg-rose-500/20 border border-rose-400/50 flex items-center justify-center shrink-0">
                 <ShieldAlert className="w-5 h-5 text-rose-300" />
@@ -324,7 +324,7 @@ export const SuperAdminClearModal: React.FC = () => {
     >
       <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-rose-300 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Top Security Header */}
-        <div className="bg-[#263843] text-white px-5 py-4 flex items-center justify-between border-b-2 border-rose-500">
+        <div className="bg-[#273E56] text-white px-5 py-4 flex items-center justify-between border-b-2 border-rose-500">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-full bg-rose-500/20 border border-rose-400/50 flex items-center justify-center shrink-0">
               <ShieldAlert className="w-5 h-5 text-rose-300" />

@@ -164,7 +164,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
     if (activeTab === 'payment_form' || activeTab === 'exporter_payment_form' || activeTab === 'payment_db') {
       return 'payment' as const;
     }
-    if (activeTab === 'profit_loss') {
+    if (activeTab === 'profit_loss' || activeTab === 'total_balance') {
       return 'other_cost' as const;
     }
     return 'purchase' as const;
@@ -188,10 +188,14 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
         return '=Weight * RMB = Amount | FILTER(EXPORTER_DB!A:H, (MARK=Selected_Mark) * (DATE=Selected_Packing_Date))';
       case 'profit_loss':
         return '=Total_Export_Value - Total_Purchases - Total_Other_Costing = NET_PROFIT';
+      case 'total_balance':
+        return '=SUM(PARTNER_DEPOSIT_SHARES) + SUM(EXPORT_&_OTHER_INCOME) - SUM(ALL_COSTING) [TOTAL BALANCE]';
       case 'audit_logs':
         return `=COUNTIF(AUDIT_TRAIL!A:G, "ENTRY | EDIT | DELETE") [TOTAL_LOGGED: ${auditLogs.length}]`;
       case 'administration':
         return '=AUTH.ROLE("SUPER_ADMIN") & VAULT.MANAGE("ACCOUNTS", "TEAM", "AUDIT", "BACKUPS") [SUPER ADMIN SECURE CONSOLE]';
+      case 'forget_password':
+        return '=AUTH.RESET("EMAIL_CONFIRMATION", "VERIFY_CODE", "RESET_PASSWORD") [FORGET PASSWORD]';
       case 'settings':
         return '=CONFIG.SYSTEM("COMPANY_PROFILE", "DROPDOWNS", "THRESHOLDS") [SETTINGS & CONFIGURATION]';
       default:
@@ -291,7 +295,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
                 className="text-base sm:text-lg font-black tracking-tight text-amber-400 hover:text-amber-300 zsb-golden-brand cursor-pointer text-left leading-tight transition-colors"
                 title="Go to Executive Overview (Sheet 01)"
               >
-                {companyProfile.companyName}
+                <span className="zsb-golden-brand">{companyProfile.companyName}</span>
               </button>
               <span className="hidden 2xl:inline-block text-[10px] font-mono uppercase tracking-widest text-sky-200 border-l border-white/20 pl-2">
                 Export Ledger

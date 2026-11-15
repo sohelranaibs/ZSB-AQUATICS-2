@@ -68,7 +68,7 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
     >
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[88vh] flex flex-col overflow-hidden">
         {/* Top Modal Header */}
-        <div className="bg-[#263843] text-white px-5 py-4 border-b-2 border-[#00897b] flex items-center justify-between gap-3">
+        <div className="bg-[#273E56] text-white px-5 py-4 border-b-2 border-[#00897b] flex items-center justify-between gap-3">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-xl bg-[#00897b] flex items-center justify-center text-white shrink-0">
               <Keyboard className="w-5 h-5" />
@@ -136,7 +136,7 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
         </div>
 
         {/* Shortcut Highlight Banner */}
-        <div className="px-5 py-2.5 bg-teal-50/90 border-b border-teal-200 flex flex-wrap items-center justify-between gap-2 text-xs text-[#263843]">
+        <div className="px-5 py-2.5 bg-teal-50/90 border-b border-teal-200 flex flex-wrap items-center justify-between gap-2 text-xs text-[#273E56]">
           <div className="flex items-center gap-2 font-semibold">
             <Sparkles className="w-4 h-4 text-[#00897b] shrink-0" />
             <span>
@@ -207,7 +207,7 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
                           onClick={() => handleTrigger(item)}
                           title={`Execute "${item.label}" now`}
                           aria-label={`Run ${item.label}`}
-                          className="p-1.5 rounded-lg bg-[#263843] hover:bg-[#00897b] text-[#5eead4] hover:text-white transition cursor-pointer"
+                          className="p-1.5 rounded-lg bg-[#273E56] hover:bg-[#00897b] text-[#5eead4] hover:text-white transition cursor-pointer"
                         >
                           <Play className="w-3 h-3 fill-current" />
                         </button>

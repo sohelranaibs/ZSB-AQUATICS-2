@@ -277,7 +277,7 @@ export const SearchReportsView: React.FC = () => {
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
       {/* Top Banner */}
-      <div className="bg-[#263843] text-white px-5 py-3 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-4 border-b-2 border-[#00897b]">
+      <div className="bg-[#273E56] text-white px-5 py-3 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-4 border-b-2 border-[#00897b]">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
@@ -325,7 +325,7 @@ export const SearchReportsView: React.FC = () => {
       {/* Global Date Range Picker Box */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         {/* Date Filter Header Bar */}
-        <div className="bg-[#263843] text-white px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-[#1d2c35]">
+        <div className="bg-[#273E56] text-white px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-[#1d2c35]">
           <div className="flex items-center space-x-2.5">
             <div className="w-7 h-7 rounded-md bg-[#1c2a33] flex items-center justify-center border border-[#334b59]">
               <Calendar className="w-4 h-4 text-[#5eead4]" />
@@ -651,7 +651,7 @@ export const SearchReportsView: React.FC = () => {
             onClick={() => setActiveKindTab('all')}
             className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center space-x-1.5 cursor-pointer ${
               activeKindTab === 'all'
-                ? 'bg-[#263843] text-white shadow-sm'
+                ? 'bg-[#273E56] text-white shadow-sm'
                 : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
             }`}
           >
@@ -711,7 +711,7 @@ export const SearchReportsView: React.FC = () => {
         {/* Monthly Statement Quick Box */}
         <div className="flex items-center space-x-2 bg-white border border-slate-200 px-3 py-1 rounded-lg">
           <Calendar className="w-3.5 h-3.5 text-[#00897b]" />
-          <span className="text-[11px] font-bold text-[#263843] uppercase hidden sm:inline">
+          <span className="text-[11px] font-bold text-[#273E56] uppercase hidden sm:inline">
             Statement:
           </span>
           <input
@@ -733,7 +733,7 @@ export const SearchReportsView: React.FC = () => {
       {/* Main Transactions Table */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         {/* Table Title Bar */}
-        <div className="px-5 py-3 bg-[#263843] text-white font-bold text-xs uppercase flex items-center justify-between border-b border-[#1d2c35]">
+        <div className="px-5 py-3 bg-[#273E56] text-white font-bold text-xs uppercase flex items-center justify-between border-b border-[#1d2c35]">
           <div className="flex items-center space-x-2">
             <ArrowDownUp className="w-4 h-4 text-[#5eead4]" />
             <span>

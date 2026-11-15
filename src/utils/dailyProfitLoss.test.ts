@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateDailyProfitLossReport, getWeekdayShortLabel } from './dailyProfitLoss.ts';
+import {
+  calculateDailyProfitLossReport,
+  getWeekdayShortLabel,
+  DAILY_PL_ROW_BATCH_SIZE,
+  getVisibleDailyProfitLossWindow,
+  shouldLoadMoreOnScroll,
+  getNextDailyProfitLossRowLimit,
+} from './dailyProfitLoss.ts';
 import {
   PurchaseRecord,
   PackingRecord,
@@ -160,8 +167,9 @@ test('calculateDailyProfitLossReport aggregates daily profit, loss, and running 
   assert.equal(report.entries[1].date, '2026-10-29');
   assert.equal(report.entries[2].date, '2026-10-28');
 
-  // Check 2026-10-28: Export 82,500 - Purchase 50,000 = Gross 32,500; - OtherCost 7,500 = Net +25,000 (PROFIT)
+  // Check 2026-10-28: Export 5,000 RMB / 82,500 BDT - Purchase 50,000 = Gross 32,500; - OtherCost 7,500 = Net +25,000 (PROFIT)
   const day28 = report.entries[2];
+  assert.equal(day28.exportAmountRMB, 5000);
   assert.equal(day28.exportAmountBDT, 82500);
   assert.equal(day28.purchaseAmount, 50000);
   assert.equal(day28.grossProfit, 32500);
@@ -172,13 +180,15 @@ test('calculateDailyProfitLossReport aggregates daily profit, loss, and running 
 
   // Check 2026-10-29: Only supplier payment voucher (15,000), so P&L is 0 (BREAKEVEN), running net stays 25,000
   const day29 = report.entries[1];
+  assert.equal(day29.exportAmountRMB, 0);
   assert.equal(day29.netProfit, 0);
   assert.equal(day29.supplierPaymentAmount, 15000);
   assert.equal(day29.runningCumulativeNetProfit, 25000);
   assert.equal(day29.status, 'BREAKEVEN');
 
-  // Check 2026-10-30: Export 33,000 - Purchase 48,000 = Gross -15,000; - OtherCost 5,000 = Net -20,000 (LOSS)
+  // Check 2026-10-30: Export 2,000 RMB / 33,000 BDT - Purchase 48,000 = Gross -15,000; - OtherCost 5,000 = Net -20,000 (LOSS)
   const day30 = report.entries[0];
+  assert.equal(day30.exportAmountRMB, 2000);
   assert.equal(day30.exportAmountBDT, 33000);
   assert.equal(day30.purchaseAmount, 48000);
   assert.equal(day30.grossProfit, -15000);
@@ -189,6 +199,7 @@ test('calculateDailyProfitLossReport aggregates daily profit, loss, and running 
 
   // Summary totals across all 3 days
   assert.equal(report.totals.totalPurchaseAmount, 98000);
+  assert.equal(report.totals.totalExportAmountRMB, 7000);
   assert.equal(report.totals.totalExportAmountBDT, 115500);
   assert.equal(report.totals.totalOtherCostAmount, 12500);
   assert.equal(report.totals.totalGrossProfit, 17500);
@@ -210,6 +221,7 @@ test('calculateDailyProfitLossReport filters by status, date range, and search q
   );
   assert.equal(profitOnly.entries.length, 1);
   assert.equal(profitOnly.entries[0].date, '2026-10-28');
+  assert.equal(profitOnly.totals.totalExportAmountRMB, 5000);
 
   const lossOnly = calculateDailyProfitLossReport(
     samplePurchases,
@@ -220,6 +232,7 @@ test('calculateDailyProfitLossReport filters by status, date range, and search q
   );
   assert.equal(lossOnly.entries.length, 1);
   assert.equal(lossOnly.entries[0].date, '2026-10-30');
+  assert.equal(lossOnly.totals.totalExportAmountRMB, 2000);
 
   const searchResult = calculateDailyProfitLossReport(
     samplePurchases,
@@ -230,4 +243,91 @@ test('calculateDailyProfitLossReport filters by status, date range, and search q
   );
   assert.equal(searchResult.entries.length, 1);
   assert.equal(searchResult.entries[0].date, '2026-10-30');
+});
+
+test('calculateDailyProfitLossReport sums multiple shipments per day accurately in RMB', () => {
+  const sameDayPackings: PackingRecord[] = [
+    ...samplePackings,
+    {
+      ...samplePackings[0],
+      id: 'pkg-3',
+      invoiceNumber: 'PKG-2026-0003',
+      totalAmount: 1250.45,
+      rmbRate: 16.5,
+      totalAmountBDT: 20632.43,
+    },
+  ];
+  const report = calculateDailyProfitLossReport(
+    samplePurchases,
+    sameDayPackings,
+    samplePayments,
+    sampleOtherCosts
+  );
+  const day28 = report.entries.find((e) => e.date === '2026-10-28');
+  assert.ok(day28);
+  assert.equal(day28.exportAmountRMB, 6250.45);
+  assert.equal(report.totals.totalExportAmountRMB, 8250.45);
+});
+
+test('getVisibleDailyProfitLossWindow defaults to 10 rows and tracks remaining count', () => {
+  assert.equal(DAILY_PL_ROW_BATCH_SIZE, 10);
+  const rows = Array.from({ length: 25 }, (_, i) => ({ id: i + 1 }));
+
+  const initialWindow = getVisibleDailyProfitLossWindow(rows);
+  assert.equal(initialWindow.shownCount, 10);
+  assert.equal(initialWindow.totalCount, 25);
+  assert.equal(initialWindow.remainingCount, 15);
+  assert.equal(initialWindow.hasMore, true);
+  assert.equal(initialWindow.visibleEntries.length, 10);
+  assert.equal(initialWindow.visibleEntries[0].id, 1);
+  assert.equal(initialWindow.visibleEntries[9].id, 10);
+
+  const secondWindow = getVisibleDailyProfitLossWindow(rows, 20);
+  assert.equal(secondWindow.shownCount, 20);
+  assert.equal(secondWindow.remainingCount, 5);
+  assert.equal(secondWindow.hasMore, true);
+
+  const fullWindow = getVisibleDailyProfitLossWindow(rows, 50);
+  assert.equal(fullWindow.shownCount, 25);
+  assert.equal(fullWindow.remainingCount, 0);
+  assert.equal(fullWindow.hasMore, false);
+});
+
+test('shouldLoadMoreOnScroll triggers only when near bottom and more rows exist', () => {
+  assert.equal(
+    shouldLoadMoreOnScroll({
+      scrollTop: 0,
+      clientHeight: 400,
+      scrollHeight: 600,
+      hasMore: true,
+    }),
+    false
+  );
+
+  assert.equal(
+    shouldLoadMoreOnScroll({
+      scrollTop: 120,
+      clientHeight: 400,
+      scrollHeight: 600,
+      hasMore: true,
+    }),
+    true
+  );
+
+  assert.equal(
+    shouldLoadMoreOnScroll({
+      scrollTop: 200,
+      clientHeight: 400,
+      scrollHeight: 600,
+      hasMore: false,
+    }),
+    false
+  );
+});
+
+test('getNextDailyProfitLossRowLimit increments in batches of 10 and caps at totalCount', () => {
+  assert.equal(getNextDailyProfitLossRowLimit(10, 25), 20);
+  assert.equal(getNextDailyProfitLossRowLimit(20, 25), 25);
+  assert.equal(getNextDailyProfitLossRowLimit(25, 25), 25);
+  assert.equal(getNextDailyProfitLossRowLimit(10, 0), 10);
 });

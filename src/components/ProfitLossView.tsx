@@ -230,7 +230,7 @@ export const ProfitLossView: React.FC = () => {
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
       {/* Top Banner */}
-      <div className="bg-[#263843] text-white px-5 py-3.5 rounded-xl shadow-xs flex items-center justify-between border-b-2 border-[#00897b]">
+      <div className="bg-[#273E56] text-white px-5 py-3.5 rounded-xl shadow-xs flex items-center justify-between border-b-2 border-[#00897b]">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-[#00897b] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
             <img
@@ -255,13 +255,24 @@ export const ProfitLossView: React.FC = () => {
           </div>
         </div>
 
-        <button
-          onClick={handlePrintProfitLoss}
-          className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold bg-[#00897b] hover:bg-[#00796b] text-white rounded-lg shadow transition cursor-pointer"
-        >
-          <Printer className="w-3.5 h-3.5" />
-          <span>Print P&amp;L Statement</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            data-testid="pl-open-total-balance-btn"
+            onClick={() => setActiveTab('total_balance')}
+            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold bg-[#1F3349] hover:bg-[#162739] text-white rounded-lg border border-white/20 shadow transition cursor-pointer whitespace-nowrap"
+          >
+            <Scale className="w-3.5 h-3.5" />
+            <span>TOTAL BALANCE</span>
+          </button>
+          <button
+            onClick={handlePrintProfitLoss}
+            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold bg-[#00897b] hover:bg-[#00796b] text-white rounded-lg shadow transition cursor-pointer whitespace-nowrap"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>Print P&amp;L Statement</span>
+          </button>
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -359,7 +370,7 @@ export const ProfitLossView: React.FC = () => {
         className="bg-white rounded-xl shadow border border-slate-200 overflow-hidden"
       >
         {/* Trends Header Bar */}
-        <div className="bg-[#263843] text-white px-5 py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-[#1d2c35]">
+        <div className="bg-[#273E56] text-white px-5 py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-[#1d2c35]">
           <div className="flex items-center gap-2.5 min-w-0">
             <BarChart3 className="w-4 h-4 text-[#5eead4] shrink-0" />
             <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-white truncate">
@@ -1381,7 +1392,7 @@ export const ProfitLossView: React.FC = () => {
         className="bg-white rounded-xl shadow border border-slate-200 overflow-hidden"
       >
         {/* Module Header Bar */}
-        <div className="bg-[#263843] text-white px-5 py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-[#1d2c35]">
+        <div className="bg-[#273E56] text-white px-5 py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-[#1d2c35]">
           <div className="flex items-center gap-2.5 min-w-0">
             <BadgePercent className="w-4 h-4 text-[#5eead4] shrink-0" />
             <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-white whitespace-nowrap">
@@ -1813,7 +1824,7 @@ export const ProfitLossView: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left: Financial Statement Table (7 Cols) */}
         <div className="lg:col-span-7 bg-white rounded-xl shadow border border-slate-200 overflow-hidden">
-          <div className="bg-[#263843] text-white px-5 py-3 font-bold text-xs uppercase tracking-wider flex items-center justify-between">
+          <div className="bg-[#273E56] text-white px-5 py-3 font-bold text-xs uppercase tracking-wider flex items-center justify-between">
             <span>FINANCIAL SUMMARY LEDGER</span>
             <Scale className="w-4 h-4 text-[#5eead4]" />
           </div>

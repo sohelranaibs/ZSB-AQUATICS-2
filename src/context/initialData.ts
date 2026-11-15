@@ -10,11 +10,14 @@ export const initialCompanyProfile: CompanyProfile = {
   website: 'www.zsbaquatics.com',
   managingPartner: 'Md. Mizanur Rahman',
   partner: 'Md. Sohel Rana',
+  partners: ['Md. Mizanur Rahman', 'Md. Sohel Rana'],
   currency: 'TK',
   rmbExchangeRate: 16.5,
   logoUrl: COMPANY_LOGO_URL,
   minInventoryThresholdKg: 100,
   approachingThresholdPercent: 25,
+  minTotalBalanceThreshold: 100000,
+  documentAlertWindowDays: 30,
 };
 
 export const initialDropdownOptions: DropdownOptions = {

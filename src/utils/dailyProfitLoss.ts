@@ -93,6 +93,82 @@ export interface DailyProfitLossReportResult {
   totals: DailyProfitLossSummaryTotals;
 }
 
+export const DAILY_PL_ROW_BATCH_SIZE = 10;
+export const DAILY_PL_SCROLL_LOAD_THRESHOLD_PX = 96;
+
+export interface DailyProfitLossWindowResult<T> {
+  visibleEntries: T[];
+  totalCount: number;
+  shownCount: number;
+  remainingCount: number;
+  hasMore: boolean;
+}
+
+/**
+ * Slices daily P&L entries to the active scroll-controlled row limit (defaults to 10 rows).
+ */
+export function getVisibleDailyProfitLossWindow<T>(
+  entries: T[],
+  visibleLimit: number = DAILY_PL_ROW_BATCH_SIZE
+): DailyProfitLossWindowResult<T> {
+  const safeEntries = Array.isArray(entries) ? entries : [];
+  const totalCount = safeEntries.length;
+  const normalizedLimit =
+    Number.isFinite(visibleLimit) && visibleLimit > 0
+      ? Math.floor(visibleLimit)
+      : DAILY_PL_ROW_BATCH_SIZE;
+  const visibleEntries = safeEntries.slice(0, normalizedLimit);
+  const shownCount = visibleEntries.length;
+  const remainingCount = Math.max(0, totalCount - shownCount);
+
+  return {
+    visibleEntries,
+    totalCount,
+    shownCount,
+    remainingCount,
+    hasMore: remainingCount > 0,
+  };
+}
+
+export interface DailyProfitLossScrollMetrics {
+  scrollTop: number;
+  clientHeight: number;
+  scrollHeight: number;
+  hasMore: boolean;
+  thresholdPx?: number;
+}
+
+/**
+ * Determines whether scrolling inside the Daily P&L table container has reached the load threshold.
+ */
+export function shouldLoadMoreOnScroll(
+  metrics: DailyProfitLossScrollMetrics
+): boolean {
+  if (!metrics.hasMore) return false;
+  if (metrics.scrollHeight <= 0 || metrics.clientHeight <= 0) return false;
+  const threshold =
+    typeof metrics.thresholdPx === 'number' && metrics.thresholdPx >= 0
+      ? metrics.thresholdPx
+      : DAILY_PL_SCROLL_LOAD_THRESHOLD_PX;
+  return metrics.scrollTop + metrics.clientHeight >= metrics.scrollHeight - threshold;
+}
+
+/**
+ * Computes the next row batch limit in increments of DAILY_PL_ROW_BATCH_SIZE (10), capped at totalCount.
+ */
+export function getNextDailyProfitLossRowLimit(
+  currentLimit: number,
+  totalCount: number,
+  batchSize: number = DAILY_PL_ROW_BATCH_SIZE
+): number {
+  const safeBatch = batchSize > 0 ? Math.floor(batchSize) : DAILY_PL_ROW_BATCH_SIZE;
+  const safeTotal = Math.max(0, Math.floor(totalCount));
+  const safeCurrent =
+    Number.isFinite(currentLimit) && currentLimit > 0 ? Math.floor(currentLimit) : safeBatch;
+  if (safeTotal === 0) return safeBatch;
+  return Math.min(safeTotal, safeCurrent + safeBatch);
+}
+
 function round2(val: number): number {
   return Math.round((Number(val) || 0) * 100) / 100;
 }

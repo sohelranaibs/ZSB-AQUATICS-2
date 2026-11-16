@@ -107,12 +107,14 @@ test('calculatePackingTotalAmountBDT, calculateCumulativeExportValueBDT, and cal
   assert.equal(calculateForeignRmbRemittanceValue([]), 0);
 });
 
-test('calculatePaymentRow calculates debit - credit', () => {
+test('calculatePaymentRow calculates debit - credit including negative credit deduction', () => {
   assert.equal(calculatePaymentRow(50000, 20000), 30000);
   assert.equal(calculatePaymentRow(0, 10000), -10000);
+  assert.equal(calculatePaymentRow(0, -5000), 5000);
+  assert.equal(calculatePaymentRow(20000, -5000), 25000);
 });
 
-test('calculatePaymentTotals calculates balance correctly', () => {
+test('calculatePaymentTotals calculates balance correctly for positive and negative credit', () => {
   const rows = [
     { id: '1', description: 'ABDULLAH VAI', debitAmount: 50000, creditAmount: 20000, balance: 30000 },
   ];
@@ -120,6 +122,14 @@ test('calculatePaymentTotals calculates balance correctly', () => {
   assert.equal(totals.totalDebit, 50000);
   assert.equal(totals.totalCredit, 20000);
   assert.equal(totals.balance, 110000); // previous 100000 + debit 50000 - paid 40000
+
+  const deductionRows = [
+    { id: '1', description: 'Deduct supplier payment', debitAmount: 0, creditAmount: -5000, balance: 5000 },
+  ];
+  const deductionTotals = calculatePaymentTotals(deductionRows, 30000, -5000);
+  assert.equal(deductionTotals.totalCredit, -5000);
+  assert.equal(deductionTotals.paidAmount, -5000);
+  assert.equal(deductionTotals.balance, 35000); // previous 30000 + debit 0 - (-5000) = 35000
 });
 
 test('calculateProfitLoss calculates gross profit, net profit and margin', () => {

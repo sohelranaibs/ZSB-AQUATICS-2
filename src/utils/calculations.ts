@@ -148,7 +148,7 @@ export function calculatePaymentTotals(
   const totalAmount = totalDebit;
   const prev = Number(previousAmount) || 0;
   const paid = Number(paidAmount) || 0;
-  const effectivePaid = paid > 0 ? paid : totalCredit;
+  const effectivePaid = paid !== 0 ? paid : totalCredit;
   const balance = Math.round((prev + totalDebit - effectivePaid) * 100) / 100;
 
   return {

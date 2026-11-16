@@ -44,6 +44,7 @@ export const PaymentFormView: React.FC = () => {
     purchases,
     payments,
     addPayment,
+    updatePayment,
     supplierCredits,
     openPrintModal,
     setActiveTab,
@@ -93,7 +94,7 @@ export const PaymentFormView: React.FC = () => {
         setInvoiceNumber(pm.invoiceNumber || nextInvoiceNo);
         setDate(pm.date || new Date().toISOString().slice(0, 10));
         setSupplierName(pm.description || '');
-        setCreditAmount(String(pm.paidAmount || ''));
+        setCreditAmount(pm.paidAmount !== undefined && pm.paidAmount !== 0 ? String(pm.paidAmount) : '');
         setVoucherStatus((pm.status as ExporterStatus) || 'PAID');
         setRemarks(pm.remarks || '');
         setRefPurchaseInvoice(pm.exportGoodsRef || '');
@@ -152,7 +153,8 @@ export const PaymentFormView: React.FC = () => {
   };
 
   // Calculated values
-  const numericCredit = Math.round((parseFloat(creditAmount) || 0) * 100) / 100;
+  const parsedCredit = parseFloat(creditAmount);
+  const numericCredit = Number.isFinite(parsedCredit) ? Math.round(parsedCredit * 100) / 100 : 0;
   const currentSupplierDue = supplierStats.latestBalance;
   const totalPurchased = supplierStats.totalPurchasedValue;
   const totalPaid = supplierStats.totalPaidInPurchases + supplierStats.totalPaidInVouchers;
@@ -193,17 +195,20 @@ export const PaymentFormView: React.FC = () => {
       showToast('Please select or enter a Supplier Name.');
       return;
     }
-    if (isNaN(numericCredit) || numericCredit <= 0) {
-      showToast('Please enter a valid Credit Amount greater than 0.');
+    if (!Number.isFinite(parsedCredit) || numericCredit === 0) {
+      showToast('Please enter a valid non-zero Credit Amount (+ to pay, - to deduct).');
       creditInputRef.current?.focus();
       return;
     }
 
-    const effectiveTotal = currentSupplierDue > 0 ? currentSupplierDue : numericCredit;
+    const effectiveTotal =
+      currentSupplierDue > 0 ? currentSupplierDue : numericCredit > 0 ? numericCredit : 0;
     const effectiveBalance = balanceAfterThisPayment;
 
     const itemDescription = remarks.trim()
       ? `${remarks.trim()}${paymentMode ? ` via ${paymentMode}` : ''}`
+      : numericCredit < 0
+      ? `Payment deduction from ${supplierName.trim()}${paymentMode ? ` via ${paymentMode}` : ''}`
       : `Payment to ${supplierName.trim()}${paymentMode ? ` via ${paymentMode}` : ''}`;
 
     const recordPayload = {
@@ -238,6 +243,7 @@ export const PaymentFormView: React.FC = () => {
     if (editingPaymentId) {
       // We are updating an existing voucher
       savedId = editingPaymentId;
+      updatePayment(editingPaymentId, recordPayload);
       showToast(`Payment voucher ${invoiceNumber.trim()} updated successfully!`);
       setEditingPaymentId(null);
     } else {
@@ -597,7 +603,7 @@ export const PaymentFormView: React.FC = () => {
                   <span>2. Credit Amount Disbursed *</span>
                 </span>
                 <p className="text-[11px] text-emerald-800">
-                  Enter the exact cash or bank disbursement amount paid to this supplier
+                  Enter a positive amount to pay the supplier, or a negative amount (below 0, e.g. -5000) to deduct supplier payment
                 </p>
               </div>
 
@@ -624,12 +630,15 @@ export const PaymentFormView: React.FC = () => {
                     ref={creditInputRef}
                     type="number"
                     step="any"
-                    min="0"
                     data-testid="supplier-payment-credit-amount-input"
                     value={creditAmount}
                     onChange={(e) => setCreditAmount(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full pl-14 pr-4 py-3 border-2 border-emerald-500 rounded-xl font-mono font-black text-2xl sm:text-3xl text-emerald-800 bg-white focus:ring-4 focus:ring-emerald-400/30 focus:outline-none tracking-tight"
+                    placeholder="0.00 (or -amount to deduct)"
+                    className={`w-full pl-14 pr-4 py-3 border-2 rounded-xl font-mono font-black text-2xl sm:text-3xl bg-white focus:ring-4 focus:outline-none tracking-tight ${
+                      numericCredit < 0
+                        ? 'border-rose-500 text-rose-700 focus:ring-rose-400/30'
+                        : 'border-emerald-500 text-emerald-800 focus:ring-emerald-400/30'
+                    }`}
                     required
                   />
                 </div>
@@ -732,16 +741,30 @@ export const PaymentFormView: React.FC = () => {
             </div>
 
             {/* Live Impact Calculation Preview */}
-            {supplierName.trim() && numericCredit > 0 && (
-              <div className="bg-white/90 p-3 rounded-xl border border-emerald-300 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+            {supplierName.trim() && numericCredit !== 0 && (
+              <div
+                data-testid="supplier-payment-live-impact"
+                className={`bg-white/90 p-3 rounded-xl border flex flex-wrap items-center justify-between gap-3 text-xs font-mono ${
+                  numericCredit < 0 ? 'border-rose-300' : 'border-emerald-300'
+                }`}
+              >
                 <div>
                   <span className="text-slate-500">Current Due:</span>{' '}
                   <strong className="text-slate-900">{formatCurrency(currentSupplierDue, currency)}</strong>
                 </div>
-                <div className="text-emerald-700">
-                  <span>Paying (Credit):</span>{' '}
-                  <strong className="text-emerald-800 font-black">− {formatCurrency(numericCredit, currency)}</strong>
-                </div>
+                {numericCredit < 0 ? (
+                  <div className="text-rose-700">
+                    <span>Deducting Payment:</span>{' '}
+                    <strong className="text-rose-800 font-black">
+                      + {formatCurrency(Math.abs(numericCredit), currency)} (Credit: {formatCurrency(numericCredit, currency)})
+                    </strong>
+                  </div>
+                ) : (
+                  <div className="text-emerald-700">
+                    <span>Paying (Credit):</span>{' '}
+                    <strong className="text-emerald-800 font-black">− {formatCurrency(numericCredit, currency)}</strong>
+                  </div>
+                )}
                 <div>
                   <span className="text-slate-500">Remaining Balance:</span>{' '}
                   <strong
@@ -851,7 +874,11 @@ export const PaymentFormView: React.FC = () => {
                     <td className="p-2.5 font-bold text-slate-800">
                       {pm.description}
                     </td>
-                    <td className="p-2.5 text-right font-mono font-black text-emerald-700 whitespace-nowrap">
+                    <td
+                      className={`p-2.5 text-right font-mono font-black whitespace-nowrap ${
+                        pm.paidAmount < 0 ? 'text-rose-700' : 'text-emerald-700'
+                      }`}
+                    >
                       {formatCurrency(pm.paidAmount, currency)}
                     </td>
                     <td className="p-2.5 text-slate-600 text-[11px] truncate max-w-xs">

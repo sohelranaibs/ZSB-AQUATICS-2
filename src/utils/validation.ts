@@ -317,8 +317,8 @@ export function validateSupplierPaymentForm(
     errors.push(msg);
   }
 
-  if (!isValidNumber(input.overallPaidAmount) || input.overallPaidAmount < 0) {
-    const msg = 'Paid Amount must be a valid non-negative number (≥ 0).';
+  if (!isValidNumber(input.overallPaidAmount)) {
+    const msg = 'Paid Amount must be a valid number.';
     fieldErrors.overallPaidAmount = msg;
     errors.push(msg);
   }
@@ -334,7 +334,7 @@ export function validateSupplierPaymentForm(
 
   if (touchedRows.length === 0) {
     const msg =
-      'At least one supplier payment row must be filled with Particulars/Description and a Debit or Credit amount (> 0).';
+      'At least one supplier payment row must be filled with Particulars/Description and a non-zero Debit or Credit amount.';
     fieldErrors.rows = msg;
     errors.push(msg);
   } else {
@@ -352,9 +352,9 @@ export function validateSupplierPaymentForm(
         rowIssues.push('enter a non-negative Debit Amount');
       }
 
-      if (!isValidNumber(row.creditAmount) || row.creditAmount < 0) {
+      if (!isValidNumber(row.creditAmount)) {
         rErr.creditAmount = true;
-        rowIssues.push('enter a non-negative Credit Amount');
+        rowIssues.push('enter a valid Credit Amount');
       }
 
       if (
@@ -365,7 +365,7 @@ export function validateSupplierPaymentForm(
       ) {
         rErr.debitAmount = true;
         rErr.creditAmount = true;
-        rowIssues.push('enter a Debit or Credit amount greater than 0');
+        rowIssues.push('enter a non-zero Debit or Credit amount');
       }
 
       if (rowIssues.length > 0) {

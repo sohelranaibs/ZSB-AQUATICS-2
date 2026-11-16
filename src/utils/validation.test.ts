@@ -345,6 +345,30 @@ describe('validateSupplierPaymentForm', () => {
     assert.equal(result.rowErrors['1']?.creditAmount, true);
     assert.equal(result.rowErrors['2']?.description, true);
   });
+
+  it('allows negative Credit Amount and Paid Amount when deducting a supplier payment', () => {
+    const result = validateSupplierPaymentForm({
+      invoiceNumber: 'PAY-2026-0005',
+      date: '2026-03-15',
+      supplierName: 'ABDULLAH VAI',
+      overallPreviousAmount: 50000,
+      overallPaidAmount: -5000,
+      rows: [
+        {
+          id: '1',
+          description: 'Payment deduction from ABDULLAH VAI via Cash',
+          debitAmount: 0,
+          creditAmount: -5000,
+          balance: 55000,
+        },
+      ],
+    });
+
+    assert.equal(result.isValid, true);
+    assert.equal(result.errors.length, 0);
+    assert.equal(result.validItems.length, 1);
+    assert.equal(result.validItems[0].creditAmount, -5000);
+  });
 });
 
 describe('validateExporterPaymentForm', () => {

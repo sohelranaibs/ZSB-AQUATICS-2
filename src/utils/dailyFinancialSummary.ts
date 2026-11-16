@@ -64,7 +64,7 @@ export function normalizeToIsoDate(dateStr: string | null | undefined): string {
  */
 export function getEffectivePaymentAmount(payment: PaymentRecord): number {
   const explicitPaid = Number(payment.paidAmount) || 0;
-  if (explicitPaid > 0) {
+  if (explicitPaid !== 0) {
     return Math.round(explicitPaid * 100) / 100;
   }
 
@@ -72,7 +72,7 @@ export function getEffectivePaymentAmount(payment: PaymentRecord): number {
     (sum, item) => sum + (Number(item.creditAmount) || 0),
     0
   );
-  if (itemsCredit > 0) {
+  if (itemsCredit !== 0) {
     return Math.round(itemsCredit * 100) / 100;
   }
 

@@ -18,6 +18,10 @@ test('validateDatabaseCellValue flags non-numeric input in price/amount columns'
   const validPrice = validateDatabaseCellValue('purchase', 'totalAmount', '125,000.50');
   assert.equal(validPrice.isValid, true);
   assert.equal(validPrice.parsedValue, 125000.5);
+
+  const negativePaymentDeduction = validateDatabaseCellValue('payment', 'paidAmount', '-5000');
+  assert.equal(negativePaymentDeduction.isValid, true);
+  assert.equal(negativePaymentDeduction.parsedValue, -5000);
 });
 
 test('validateDatabaseCellValue validates optional RMB rate and integer boxes in packing DB', () => {

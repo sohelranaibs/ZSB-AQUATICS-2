@@ -58,6 +58,15 @@ describe('dailyFinancialSummary utility', () => {
       createdAt: '2026-11-02T10:00:00Z',
     };
     assert.equal(getEffectivePaymentAmount(voucherWithItemsCredit), 30000);
+
+    const voucherWithNegativeDeduction: PaymentRecord = {
+      ...voucherWithPaid,
+      id: 'pm-3',
+      invoiceNumber: 'PAY-003',
+      paidAmount: -5000,
+      balance: 55000,
+    };
+    assert.equal(getEffectivePaymentAmount(voucherWithNegativeDeduction), -5000);
   });
 
   it('calculates total purchases and total payments for the current day accurately without double-counting synced vouchers', () => {

@@ -173,8 +173,8 @@ const PAYMENT_SCHEMA: Record<string, ColumnValidationSchema> = {
   paidAmount: {
     fieldKey: 'paidAmount',
     label: 'Paid Amount (Price)',
-    expectedType: 'currency',
-    expectedFormatLabel: 'Numeric amount >= 0',
+    expectedType: 'signed_currency',
+    expectedFormatLabel: 'Numeric amount (positive or negative deduction)',
   },
   balance: {
     fieldKey: 'balance',

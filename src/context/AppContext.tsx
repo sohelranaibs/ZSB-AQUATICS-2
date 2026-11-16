@@ -783,7 +783,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const nextTotal = Math.round((Number(pm.totalAmount) || rowDebit || 0) * 100) / 100;
         const nextPaid = Math.round((Number(pm.paidAmount) || rowCredit || 0) * 100) / 100;
         const nextBal =
-          Number(pm.paidAmount) === 0 && (rowCredit > 0 || rowDebit > 0)
+          Number(pm.paidAmount) === 0 && (rowCredit !== 0 || rowDebit > 0)
             ? Math.round((nextTotal - nextPaid) * 100) / 100
             : Number(pm.balance) || Math.round((nextTotal - nextPaid) * 100) / 100;
         return {
@@ -2100,7 +2100,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ? Math.round((Number(record.paidAmount) || rowCredit || 0) * 100) / 100
       : record.paidAmount;
     const normalizedBalance =
-      isSupplier && Number(record.paidAmount) === 0 && (rowCredit > 0 || rowDebit > 0)
+      isSupplier && Number(record.paidAmount) === 0 && (rowCredit !== 0 || rowDebit > 0)
         ? Math.round((normalizedTotal - normalizedPaid) * 100) / 100
         : record.balance;
 

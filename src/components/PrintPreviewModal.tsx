@@ -492,14 +492,16 @@ export const PrintPreviewModal: React.FC = () => {
                       ? 'SUPPLIER PAYMENT VOUCHER'
                       : 'SUPPLIER & EXPORTER PAYMENT VOUCHER'
                     : type === 'monthly_statement'
-                    ? 'MONTHLY STATEMENT REPORT'
+                    ? 'MONTHLY BUSINESS & FINANCIAL STATEMENT REPORT'
                     : type === 'profit_loss'
-                    ? 'LOSS & PROFIT STATEMENT'
+                    ? data?.isSingleExpenseVoucher || (!data?.summary && data?.category)
+                      ? 'OPERATIONAL EXPENSE & COSTING VOUCHER'
+                      : 'LOSS & PROFIT STATEMENT'
                     : type === 'mortality_report'
                     ? `MONTHLY INVENTORY MORTALITY & STOCK LOSS REPORT (${data?.monthLabel || 'CURRENT MONTH'})`
                     : type === 'global_view_table'
                     ? data?.documentBadge || 'OFFICIAL VIEW TABLE REPORT'
-                    : 'CONSOLIDATED BATCH REPORT'}
+                    : 'CONSOLIDATED FINANCIAL STATEMENT REPORT'}
                 </div>
               </div>
             )}
@@ -1027,55 +1029,384 @@ export const PrintPreviewModal: React.FC = () => {
           )}
 
           {/* Type 4: Monthly Statement or Batch Print */}
-          {(type === 'monthly_statement' || type === 'batch_print') && data && (
-            <div className="space-y-4">
-              <div className="p-3 bg-slate-50 rounded border border-slate-200 text-xs flex justify-between items-center">
-                <div>
-                  <span className="font-bold text-slate-800">Statement Period / Selection:</span>{' '}
-                  <span className="font-mono text-slate-600">{data.statementMonth || title}</span>
-                </div>
-                <div>
-                  <span className="font-bold text-slate-800">Total Entries:</span>{' '}
-                  <span className="font-mono text-slate-900 font-bold">
-                    {data.records?.length || 0} Records
-                  </span>
-                </div>
-              </div>
+          {(type === 'monthly_statement' || type === 'batch_print') && data && (() => {
+            const fallbackMergedRecords = [
+              ...(Array.isArray(data.purchases)
+                ? data.purchases.map((p: any) => ({
+                    ...p,
+                    _kind: 'Purchase',
+                    kind: 'purchase',
+                    invoiceNumber: p.invoiceNumber,
+                    date: p.date,
+                    description: p.description,
+                    secondaryInfo: `${p.items?.length || 0} line items (${p.totalQty || 0} KG)`,
+                    totalAmountBDT: Number(p.totalAmount) || 0,
+                    status: Number(p.balance) <= 0 ? 'PAID IN FULL' : `DUE: ${p.balance}`,
+                  }))
+                : []),
+              ...(Array.isArray(data.packings)
+                ? data.packings.map((pkg: any) => {
+                    const rate = Number(pkg.rmbRate) || Number(companyProfile.rmbExchangeRate) || 16.5;
+                    const bdt =
+                      Number(pkg.totalAmountBDT) ||
+                      Math.round((Number(pkg.totalAmount) || 0) * rate * 100) / 100;
+                    return {
+                      ...pkg,
+                      _kind: 'Packing',
+                      kind: 'packing',
+                      invoiceNumber: pkg.invoiceNumber,
+                      date: pkg.packingDate || pkg.date,
+                      description: pkg.shippingMark || pkg.shipper || 'Export Cargo',
+                      secondaryInfo: `${pkg.flight || 'Flight'} → ${pkg.destination || 'Dest'} (${pkg.totalBox || 0} boxes)`,
+                      totalAmountBDT: bdt,
+                      amountRMB: Number(pkg.totalAmount) || 0,
+                      status: pkg.paymentStatus || pkg.exporterStatus || 'NO REPORT',
+                    };
+                  })
+                : []),
+              ...(Array.isArray(data.payments)
+                ? data.payments.map((pm: any) => ({
+                    ...pm,
+                    _kind: 'Payment',
+                    kind: 'payment',
+                    invoiceNumber: pm.invoiceNumber,
+                    date: pm.date,
+                    description: pm.description || 'Party Voucher',
+                    secondaryInfo: pm.exportGoodsRef
+                      ? `Ref: ${pm.exportGoodsRef}`
+                      : `${pm.items?.length || 0} allocation rows`,
+                    totalAmountBDT: Number(pm.paidAmount) || Number(pm.totalAmount) || 0,
+                    status: pm.status || 'PAID',
+                  }))
+                : []),
+              ...(Array.isArray(data.otherCosts)
+                ? data.otherCosts.map((c: any) => ({
+                    ...c,
+                    _kind: 'OtherCost',
+                    kind: 'other_cost',
+                    invoiceNumber: c.refInvoice || 'EXPENSE',
+                    date: c.date,
+                    description: c.category || 'Operational Cost',
+                    secondaryInfo: c.description || 'Operational overhead',
+                    totalAmount: Number(c.amount) || 0,
+                    totalAmountBDT: Number(c.amount) || 0,
+                    status: 'DISBURSED',
+                  }))
+                : []),
+            ];
 
-              {data.records && data.records.length > 0 ? (
+            const resolvedRecords: any[] =
+              Array.isArray(data.records) && data.records.length > 0
+                ? data.records
+                : fallbackMergedRecords;
+
+            const isConsolidatedStatement = Boolean(
+              data.summary ||
+                data.dbType === 'filtered_multi' ||
+                data.dbType === 'monthly_statement' ||
+                data.totalPurchases !== undefined ||
+                data.totalExport !== undefined
+            );
+
+            const summaryPurchasesBDT =
+              data.summary?.totalPurchasesBDT ??
+              data.totalPurchases ??
+              resolvedRecords
+                .filter((r) => r._kind === 'Purchase' || r.kind === 'purchase')
+                .reduce((s, r) => s + (Number(r.totalAmountBDT ?? r.totalAmount) || 0), 0);
+
+            const summaryExportRMB =
+              data.summary?.totalExportRMB ??
+              data.totalExport ??
+              resolvedRecords
+                .filter((r) => r._kind === 'Packing' || r.kind === 'packing')
+                .reduce((s, r) => s + (Number(r.amountRMB ?? r.totalAmount) || 0), 0);
+
+            const summaryExportBDT =
+              data.summary?.totalExportBDT ??
+              data.totalExportBDT ??
+              Math.round(summaryExportRMB * (Number(companyProfile.rmbExchangeRate) || 16.5) * 100) /
+                100;
+
+            const summaryWeightKG =
+              data.summary?.totalExportWeightKG ??
+              data.totalWeight ??
+              resolvedRecords.reduce((s, r) => s + (Number(r.totalWeight) || 0), 0);
+
+            const summaryPaymentsBDT =
+              data.summary?.totalPaymentsBDT ??
+              data.totalPayments ??
+              resolvedRecords
+                .filter((r) => r._kind === 'Payment' || r.kind === 'payment')
+                .reduce((s, r) => s + (Number(r.totalAmountBDT ?? r.paidAmount ?? r.totalAmount) || 0), 0);
+
+            const summaryOtherCostsBDT =
+              data.summary?.totalOtherCostsBDT ??
+              data.totalOtherCosts ??
+              resolvedRecords
+                .filter((r) => r._kind === 'OtherCost' || r.kind === 'other_cost')
+                .reduce((s, r) => s + (Number(r.totalAmountBDT ?? r.amount ?? r.totalAmount) || 0), 0);
+
+            const summaryNetMarginBDT =
+              data.summary?.netOperatingMarginBDT ??
+              data.netOperatingMarginBDT ??
+              summaryExportBDT - summaryPurchasesBDT - summaryOtherCostsBDT;
+
+            const grandTotalAmount = resolvedRecords.reduce((sum, rec) => {
+              const amt =
+                Number(
+                  rec.totalAmountBDT ??
+                    rec.totalAmount ??
+                    rec.paidAmount ??
+                    rec.amount ??
+                    0
+                ) || 0;
+              return sum + amt;
+            }, 0);
+
+            const grandTotalWeightOrQty = resolvedRecords.reduce((sum, rec) => {
+              const w = Number(rec.totalWeight || rec.totalQty || 0) || 0;
+              return sum + w;
+            }, 0);
+
+            return (
+              <div className="space-y-4" data-testid="printable-monthly-statement-report">
+                {/* Statement Metadata Bar */}
+                <div className="p-3 bg-slate-50 rounded border border-slate-300 text-xs flex flex-wrap justify-between items-center gap-2">
+                  <div>
+                    <span className="font-bold text-slate-800 uppercase">
+                      Statement Period / Selection:
+                    </span>{' '}
+                    <span className="font-mono font-bold text-slate-900">
+                      {data.periodLabel || data.party || data.statementMonth || title}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    {data.date && (
+                      <div>
+                        <span className="font-bold text-slate-700">Date:</span>{' '}
+                        <span className="font-mono text-slate-900">{formatDate(data.date)}</span>
+                      </div>
+                    )}
+                    <div>
+                      <span className="font-bold text-slate-800 uppercase">Total Entries:</span>{' '}
+                      <span
+                        data-testid="statement-report-total-entries"
+                        className="font-mono text-slate-950 font-black"
+                      >
+                        {resolvedRecords.length} Records
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Consolidated Executive Summary Cards (shown for Consolidated / Monthly Statements) */}
+                {isConsolidatedStatement && (
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px]">
+                    <div className="p-2.5 rounded border border-blue-200 bg-blue-50/60">
+                      <div className="text-[10px] font-bold uppercase text-blue-900">
+                        Purchases ({companyProfile.currency})
+                      </div>
+                      <div className="font-mono font-black text-blue-800 text-xs mt-0.5">
+                        {formatCurrency(summaryPurchasesBDT, companyProfile.currency)}
+                      </div>
+                    </div>
+
+                    <div className="p-2.5 rounded border border-teal-200 bg-teal-50/60">
+                      <div className="text-[10px] font-bold uppercase text-teal-900">
+                        Export Cargo ({companyProfile.currency})
+                      </div>
+                      <div className="font-mono font-black text-teal-800 text-xs mt-0.5">
+                        {formatCurrency(summaryExportBDT, companyProfile.currency)}
+                      </div>
+                      <div className="text-[10px] font-mono text-amber-800 font-bold">
+                        ¥{summaryExportRMB.toLocaleString()} RMB
+                      </div>
+                    </div>
+
+                    <div className="p-2.5 rounded border border-amber-200 bg-amber-50/60">
+                      <div className="text-[10px] font-bold uppercase text-amber-900">
+                        Export Volume
+                      </div>
+                      <div className="font-mono font-black text-amber-800 text-xs mt-0.5">
+                        {summaryWeightKG.toLocaleString()} KG
+                      </div>
+                    </div>
+
+                    <div className="p-2.5 rounded border border-purple-200 bg-purple-50/60">
+                      <div className="text-[10px] font-bold uppercase text-purple-900">
+                        Payments Disbursed
+                      </div>
+                      <div className="font-mono font-black text-purple-800 text-xs mt-0.5">
+                        {formatCurrency(summaryPaymentsBDT, companyProfile.currency)}
+                      </div>
+                    </div>
+
+                    <div
+                      className={`p-2.5 rounded border ${
+                        summaryNetMarginBDT >= 0
+                          ? 'border-emerald-300 bg-emerald-50/60'
+                          : 'border-rose-300 bg-rose-50/60'
+                      }`}
+                    >
+                      <div className="text-[10px] font-bold uppercase text-slate-800">
+                        Net Operating Margin
+                      </div>
+                      <div
+                        className={`font-mono font-black text-xs mt-0.5 ${
+                          summaryNetMarginBDT >= 0 ? 'text-emerald-800' : 'text-rose-700'
+                        }`}
+                      >
+                        {formatCurrency(summaryNetMarginBDT, companyProfile.currency)}
+                      </div>
+                      <div className="text-[10px] font-mono text-slate-600">
+                        Costs: {formatCurrency(summaryOtherCostsBDT, companyProfile.currency)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Statement Records Table */}
                 <table className="w-full text-xs border border-slate-300 border-collapse">
                   <thead>
                     <tr className="bg-slate-100 text-slate-800 uppercase font-bold text-[10px] border-b border-slate-300">
                       <th className="p-2 border-r border-slate-300 text-center w-10">SL</th>
-                      <th className="p-2 border-r border-slate-300">DOC NO</th>
-                      <th className="p-2 border-r border-slate-300">DATE</th>
-                      <th className="p-2 border-r border-slate-300">PARTY / MARK</th>
+                      <th className="p-2 border-r border-slate-300 text-left">DOC / REF NO</th>
+                      <th className="p-2 border-r border-slate-300 text-center">DATE</th>
+                      {isConsolidatedStatement && (
+                        <th className="p-2 border-r border-slate-300 text-center">TYPE</th>
+                      )}
+                      <th className="p-2 border-r border-slate-300 text-left">PARTY / MARK</th>
                       <th className="p-2 border-r border-slate-300 text-right">WEIGHT / QTY</th>
-                      <th className="p-2 text-right">AMOUNT ({companyProfile.currency})</th>
+                      <th className="p-2 border-r border-slate-300 text-right">
+                        AMOUNT ({companyProfile.currency})
+                      </th>
+                      <th className="p-2 text-center">STATUS</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {data.records.map((rec: any, idx: number) => (
-                      <tr key={idx} className="font-medium">
-                        <td className="p-2 border-r border-slate-200 text-center whitespace-nowrap">
-                          <span className="zsb-sl-badge">{String(idx + 1).padStart(2, '0')}</span>
-                        </td>
-                        <td className="p-2 border-r border-slate-200 font-mono font-bold">{rec.invoiceNumber}</td>
-                        <td className="p-2 border-r border-slate-200 font-mono">{formatDate(rec.date || rec.packingDate)}</td>
-                        <td className="p-2 border-r border-slate-200 font-semibold">{rec.description || rec.shippingMark}</td>
-                        <td className="p-2 border-r border-slate-200 text-right font-mono">
-                          {rec.totalWeight ? `${rec.totalWeight} KG` : rec.totalQty || '-'}
-                        </td>
-                        <td className="p-2 text-right font-mono font-bold">
-                          {formatCurrency(rec.totalAmount || rec.paidAmount, '')}
+                    {resolvedRecords.length > 0 ? (
+                      resolvedRecords.map((rec: any, idx: number) => {
+                        const rowDocNo = rec.invoiceNumber || rec.refInvoice || '-';
+                        const rowDate = rec.date || rec.packingDate || '';
+                        const rowParty =
+                          rec.description || rec.shippingMark || rec.category || '-';
+                        const rowType =
+                          rec._kind === 'Packing' || rec.kind === 'packing'
+                            ? 'EXPORT CARGO'
+                            : rec._kind === 'Purchase' || rec.kind === 'purchase'
+                            ? 'PURCHASE'
+                            : rec._kind === 'Payment' || rec.kind === 'payment'
+                            ? 'PAYMENT'
+                            : rec._kind === 'OtherCost' || rec.kind === 'other_cost'
+                            ? 'OTHER COST'
+                            : rec.paymentCategory
+                            ? String(rec.paymentCategory).toUpperCase()
+                            : 'RECORD';
+                        const rowWeightQty = rec.totalWeight
+                          ? `${rec.totalWeight} KG`
+                          : rec.totalQty
+                          ? `${rec.totalQty} KG`
+                          : rec.secondaryInfo || '-';
+                        const rowAmount =
+                          Number(
+                            rec.totalAmountBDT ??
+                              rec.totalAmount ??
+                              rec.paidAmount ??
+                              rec.amount ??
+                              0
+                          ) || 0;
+                        const rowStatus =
+                          rec.status ||
+                          rec.paymentStatus ||
+                          rec.exporterStatus ||
+                          (rec.balance !== undefined
+                            ? Number(rec.balance) <= 0
+                              ? 'PAID'
+                              : `DUE: ${rec.balance}`
+                            : 'RECORDED');
+
+                        return (
+                          <tr key={rec.id || idx} className="font-medium">
+                            <td className="p-2 border-r border-slate-200 text-center whitespace-nowrap">
+                              <span className="zsb-sl-badge">
+                                {String(idx + 1).padStart(2, '0')}
+                              </span>
+                            </td>
+                            <td className="p-2 border-r border-slate-200 font-mono font-bold">
+                              {rowDocNo}
+                            </td>
+                            <td className="p-2 border-r border-slate-200 font-mono text-center whitespace-nowrap">
+                              {rowDate ? formatDate(rowDate) : '-'}
+                            </td>
+                            {isConsolidatedStatement && (
+                              <td className="p-2 border-r border-slate-200 text-center font-bold text-[10px] whitespace-nowrap">
+                                {rowType}
+                              </td>
+                            )}
+                            <td className="p-2 border-r border-slate-200 font-semibold">
+                              <div>{rowParty}</div>
+                              {rec.secondaryInfo && (rec.totalWeight || rec.totalQty) && (
+                                <div className="text-[10px] text-slate-500 font-normal">
+                                  {rec.secondaryInfo}
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-2 border-r border-slate-200 text-right font-mono">
+                              <div>{rowWeightQty}</div>
+                              {rec.amountRMB !== undefined && Number(rec.amountRMB) > 0 && (
+                                <div className="text-[10px] text-amber-800 font-bold">
+                                  ¥{Number(rec.amountRMB).toLocaleString()} RMB
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-2 border-r border-slate-200 text-right font-mono font-bold">
+                              {formatCurrency(rowAmount, '')}
+                            </td>
+                            <td className="p-2 text-center font-mono font-bold text-[10px] uppercase">
+                              {rowStatus}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td
+                          colSpan={isConsolidatedStatement ? 8 : 7}
+                          className="p-6 text-center text-slate-500 font-medium"
+                        >
+                          No financial transactions recorded in the selected statement period.
                         </td>
                       </tr>
-                    ))}
+                    )}
                   </tbody>
+                  {resolvedRecords.length > 0 && (
+                    <tfoot>
+                      <tr className="bg-slate-100 font-black border-t-2 border-slate-400 text-xs">
+                        <td
+                          colSpan={isConsolidatedStatement ? 5 : 4}
+                          className="p-2 text-right uppercase border-r border-slate-300"
+                        >
+                          STATEMENT GRAND TOTAL ({resolvedRecords.length} RECORDS):
+                        </td>
+                        <td className="p-2 text-right font-mono border-r border-slate-300 text-teal-900">
+                          {grandTotalWeightOrQty > 0
+                            ? `${grandTotalWeightOrQty.toLocaleString()} KG`
+                            : '-'}
+                        </td>
+                        <td className="p-2 text-right font-mono text-slate-950 border-r border-slate-300">
+                          {formatCurrency(grandTotalAmount, companyProfile.currency)}
+                        </td>
+                        <td className="p-2 text-center font-mono text-[10px] text-emerald-800 uppercase">
+                          VERIFIED
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
                 </table>
-              ) : null}
-            </div>
-          )}
+              </div>
+            );
+          })()}
 
           {/* Type 4B: Batch Payment Slips Combined Export */}
           {type === 'batch_payment_slips' && data?.records && (
@@ -1114,62 +1445,130 @@ export const PrintPreviewModal: React.FC = () => {
             </div>
           )}
 
-          {/* Type 5: Profit & Loss Statement & Daily Report Details */}
+          {/* Type 5: Profit & Loss Statement & Daily Report Details (or Single Operational Expense Voucher) */}
           {type === 'profit_loss' && data && (
             <div className="space-y-4 text-xs" data-testid="printable-profit-loss-report">
-              {data.periodLabel && (
-                <div className="flex items-center justify-between bg-slate-100 px-3 py-2 rounded border border-slate-300 font-mono text-[11px]">
-                  <span>
-                    <strong>REPORT SCOPE:</strong> {data.periodLabel}
-                  </span>
-                  <span>
-                    <strong>GENERATED:</strong> {formatDate(new Date().toISOString())}
-                  </span>
-                </div>
-              )}
+              {data.isSingleExpenseVoucher || (!data.summary && (data.category || data.amount !== undefined)) ? (
+                <div className="space-y-4" data-testid="printable-expense-voucher">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs bg-slate-50 p-3 rounded border border-slate-300">
+                    <div>
+                      <span className="text-slate-500 block">REF / INVOICE NO:</span>
+                      <span className="font-mono font-black text-slate-900 text-sm">
+                        {data.refInvoice || 'EXPENSE'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">DATE:</span>
+                      <span className="font-semibold text-slate-800">
+                        {data.date ? formatDate(data.date) : '-'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">COST CATEGORY:</span>
+                      <span className="font-black text-amber-900">
+                        {data.category || 'Operational Cost'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">VOUCHER STATUS:</span>
+                      <span className="font-mono font-bold text-emerald-800">DISBURSED</span>
+                    </div>
+                  </div>
 
-              {/* Executive Summary Block */}
-              <div className="p-4 bg-slate-50 rounded border border-slate-300 text-xs space-y-2">
-                <div className="font-black text-slate-900 uppercase tracking-wider border-b border-slate-300 pb-1.5">
-                  Executive Profit &amp; Loss Summary
+                  <table className="w-full text-xs border border-slate-300 border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-800 uppercase font-bold text-[11px] border-b border-slate-300">
+                        <th className="p-2 border-r border-slate-300 text-center w-12">SL</th>
+                        <th className="p-2 border-r border-slate-300 text-left">EXPENSE CATEGORY</th>
+                        <th className="p-2 border-r border-slate-300 text-left">DESCRIPTION / PARTICULARS</th>
+                        <th className="p-2 text-right w-36">AMOUNT ({companyProfile.currency})</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="font-medium">
+                        <td className="p-2 border-r border-slate-200 text-center">
+                          <span className="zsb-sl-badge">01</span>
+                        </td>
+                        <td className="p-2 border-r border-slate-200 font-bold text-slate-900">
+                          {data.category || 'Operational Cost'}
+                        </td>
+                        <td className="p-2 border-r border-slate-200 text-slate-700">
+                          {data.description || 'Operational overhead expense'}
+                        </td>
+                        <td className="p-2 text-right font-mono font-bold text-slate-900">
+                          {formatCurrency(Number(data.amount) || 0, '')}
+                        </td>
+                      </tr>
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-100 font-black border-t-2 border-slate-400">
+                        <td colSpan={3} className="p-2 text-right uppercase border-r border-slate-300">
+                          TOTAL OPERATIONAL EXPENSE DISBURSED:
+                        </td>
+                        <td className="p-2 text-right font-mono text-rose-700 text-sm">
+                          {formatCurrency(Number(data.amount) || 0, companyProfile.currency)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
                 </div>
-                <div className="flex justify-between border-b pb-1.5 font-bold">
-                  <span>Gross Export Sales / Invoiced Value (A)</span>
-                  <span className="font-mono text-teal-800">
-                    {formatCurrency(data.summary.totalExportValue, companyProfile.currency)}
-                  </span>
-                </div>
-                <div className="flex justify-between border-b pb-1.5 font-bold">
-                  <span>Less: Total Purchase Cost — Live Fish (B)</span>
-                  <span className="font-mono text-rose-700">
-                    - {formatCurrency(data.summary.totalPurchasing, companyProfile.currency)}
-                  </span>
-                </div>
-                <div className="flex justify-between border-b pb-1.5 font-bold bg-amber-50/70 px-2 py-1 rounded">
-                  <span>Gross Profit / Margin (A - B)</span>
-                  <span className="font-mono text-slate-900">
-                    {formatCurrency(data.summary.grossProfit, companyProfile.currency)}
-                  </span>
-                </div>
-                <div className="flex justify-between border-b pb-1.5 font-bold">
-                  <span>Less: Total Other Operating Costs — Freight / Cargo / Customs (C)</span>
-                  <span className="font-mono text-rose-700">
-                    - {formatCurrency(data.summary.totalOtherCosting, companyProfile.currency)}
-                  </span>
-                </div>
-                <div className="flex justify-between pt-1 font-black text-sm">
-                  <span>NET BUSINESS PROFIT / (LOSS) (A - B - C)</span>
-                  <span
-                    className={`font-mono ${
-                      data.summary.netProfit >= 0 ? 'text-emerald-800' : 'text-rose-700'
-                    }`}
-                  >
-                    {data.summary.netProfit >= 0 ? '+' : ''}
-                    {formatCurrency(data.summary.netProfit, companyProfile.currency)} (
-                    {data.summary.marginPercent}%)
-                  </span>
-                </div>
-              </div>
+              ) : (
+                <>
+                  {data.periodLabel && (
+                    <div className="flex items-center justify-between bg-slate-100 px-3 py-2 rounded border border-slate-300 font-mono text-[11px]">
+                      <span>
+                        <strong>REPORT SCOPE:</strong> {data.periodLabel}
+                      </span>
+                      <span>
+                        <strong>GENERATED:</strong> {formatDate(new Date().toISOString())}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Executive Summary Block */}
+                  <div className="p-4 bg-slate-50 rounded border border-slate-300 text-xs space-y-2">
+                    <div className="font-black text-slate-900 uppercase tracking-wider border-b border-slate-300 pb-1.5">
+                      Executive Profit &amp; Loss Summary
+                    </div>
+                    <div className="flex justify-between border-b pb-1.5 font-bold">
+                      <span>Gross Export Sales / Invoiced Value (A)</span>
+                      <span className="font-mono text-teal-800">
+                        {formatCurrency(data.summary?.totalExportValue || 0, companyProfile.currency)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between border-b pb-1.5 font-bold">
+                      <span>Less: Total Purchase Cost — Live Fish (B)</span>
+                      <span className="font-mono text-rose-700">
+                        - {formatCurrency(data.summary?.totalPurchasing || 0, companyProfile.currency)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between border-b pb-1.5 font-bold bg-amber-50/70 px-2 py-1 rounded">
+                      <span>Gross Profit / Margin (A - B)</span>
+                      <span className="font-mono text-slate-900">
+                        {formatCurrency(data.summary?.grossProfit || 0, companyProfile.currency)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between border-b pb-1.5 font-bold">
+                      <span>Less: Total Other Operating Costs — Freight / Cargo / Customs (C)</span>
+                      <span className="font-mono text-rose-700">
+                        - {formatCurrency(data.summary?.totalOtherCosting || 0, companyProfile.currency)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between pt-1 font-black text-sm">
+                      <span>NET BUSINESS PROFIT / (LOSS) (A - B - C)</span>
+                      <span
+                        className={`font-mono ${
+                          (data.summary?.netProfit || 0) >= 0 ? 'text-emerald-800' : 'text-rose-700'
+                        }`}
+                      >
+                        {(data.summary?.netProfit || 0) >= 0 ? '+' : ''}
+                        {formatCurrency(data.summary?.netProfit || 0, companyProfile.currency)} (
+                        {data.summary?.marginPercent || 0}%)
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
 
               {/* Daily Report Details of Profit & Loss Table */}
               {Array.isArray(data.dailyEntries) && data.dailyEntries.length > 0 && (

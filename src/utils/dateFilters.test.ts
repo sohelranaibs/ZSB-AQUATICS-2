@@ -9,6 +9,10 @@ import {
   formatDateRangeLabel,
   filterFinancialTransactions,
   calculateConsolidatedFinancials,
+  extractYearMonth,
+  getMonthDateBounds,
+  resolveDefaultStatementMonth,
+  buildMonthlyStatementReport,
 } from './dateFilters.ts';
 import {
   PurchaseRecord,
@@ -36,6 +40,8 @@ test('isDateInRange: boundary, inclusive, open-ended, and edge conditions', () =
 
   // Date with timestamp
   assert.equal(isDateInRange('2026-05-15T10:30:00.000Z', '2026-05-10', '2026-05-20'), true);
+  // DD-MM-YYYY format normalization
+  assert.equal(isDateInRange('15-05-2026', '2026-05-10', '2026-05-20'), true);
 
   // Null, undefined, empty
   assert.equal(isDateInRange(null, '2026-05-10', '2026-05-20'), false);
@@ -288,3 +294,136 @@ test('filterFinancialTransactions: filters all 4 transaction types and builds un
   assert.equal(summary.netOperatingMarginBDT, 88000);
   assert.equal(summary.totalTransactionsCount, 4);
 });
+
+test('extractYearMonth, getMonthDateBounds, resolveDefaultStatementMonth, and buildMonthlyStatementReport', () => {
+  assert.equal(extractYearMonth('2026-10-15'), '2026-10');
+  assert.equal(extractYearMonth('15-10-2026'), '2026-10');
+  assert.equal(extractYearMonth('2026-10-15T12:00:00Z'), '2026-10');
+  assert.equal(extractYearMonth(''), '');
+
+  assert.deepEqual(getMonthDateBounds('2026-10'), {
+    startDate: '2026-10-01',
+    endDate: '2026-10-31',
+  });
+  assert.deepEqual(getMonthDateBounds('2024-02'), {
+    startDate: '2024-02-01',
+    endDate: '2024-02-29',
+  });
+
+  const purchases: PurchaseRecord[] = [
+    {
+      id: 'p1',
+      invoiceNumber: 'INV-1001',
+      date: '2026-10-05',
+      description: 'ABDULLAH VAI',
+      contactNumber: '01711',
+      items: [],
+      totalQty: 150,
+      totalAmount: 125000,
+      previousAmount: 0,
+      paidAmount: 100000,
+      balance: 25000,
+      createdAt: '2026-10-05T08:00:00Z',
+    },
+  ];
+  const packings: PackingRecord[] = [
+    {
+      id: 'pk1',
+      invoiceNumber: 'PKG-1001',
+      shippingMark: 'AAD',
+      flight: 'CZ392',
+      destination: 'GUANGZHOU',
+      shipper: 'ZSB AQUATICS',
+      packingDate: '2026-10-08',
+      fromDate: '2026-10-01',
+      toDate: '2026-10-08',
+      items: [],
+      totalBox: 25,
+      totalWeight: 400,
+      totalAmount: 15000,
+      rmbRate: 16.5,
+      totalAmountBDT: 247500,
+      paymentStatus: 'REPORT',
+      createdAt: '2026-10-08T10:00:00Z',
+    },
+  ];
+  const payments: PaymentRecord[] = [
+    {
+      id: 'pm1',
+      invoiceNumber: 'PAY-1001',
+      date: '2026-10-06',
+      description: 'ABDULLAH VAI',
+      contactNumber: '01711',
+      items: [],
+      totalAmount: 100000,
+      previousAmount: 0,
+      paidAmount: 100000,
+      balance: 25000,
+      status: 'PAID',
+      returnRMB: 0,
+      createdAt: '2026-10-06T09:00:00Z',
+    },
+  ];
+  const otherCosts: OtherCostRecord[] = [
+    {
+      id: 'c1',
+      date: '2026-10-07',
+      category: 'Air Freight & Cargo',
+      amount: 35000,
+      description: 'Air freight booking',
+      refInvoice: 'PKG-1001',
+      createdAt: '2026-10-07T07:00:00Z',
+    },
+  ];
+
+  // When referenceDate is Nov 2026 (no records in Nov), resolves to latest available month 2026-10
+  const resolvedMonth = resolveDefaultStatementMonth(
+    purchases,
+    packings,
+    payments,
+    otherCosts,
+    new Date(2026, 10, 16)
+  );
+  assert.equal(resolvedMonth, '2026-10');
+
+  // Build statement report for 2026-10
+  const report = buildMonthlyStatementReport({
+    statementMonth: '2026-10',
+    purchases,
+    packings,
+    payments,
+    otherCosts,
+    rmbExchangeRate: 16.5,
+  });
+
+  assert.equal(report.records.length, 4);
+  assert.equal(report.unifiedTransactions.length, 4);
+  assert.equal(report.totalPurchases, 125000);
+  assert.equal(report.totalExport, 15000);
+  assert.equal(report.totalExportBDT, 247500);
+  assert.equal(report.totalPayments, 100000);
+  assert.equal(report.totalOtherCosts, 35000);
+  assert.equal(report.netOperatingMarginBDT, 247500 - 125000 - 35000);
+
+  // Verify fallback when statementMonth has 0 records but active stream has records
+  const fallbackReport = buildMonthlyStatementReport({
+    statementMonth: '2026-11',
+    purchases,
+    packings,
+    payments,
+    otherCosts,
+    rmbExchangeRate: 16.5,
+    fallbackFiltered: {
+      filteredPurchases: purchases,
+      filteredPackings: packings,
+      filteredPayments: payments,
+      filteredOtherCosts: otherCosts,
+      startDate: '',
+      endDate: '',
+    },
+  });
+
+  assert.equal(fallbackReport.usedFallbackStream, true);
+  assert.equal(fallbackReport.records.length, 4);
+});
+

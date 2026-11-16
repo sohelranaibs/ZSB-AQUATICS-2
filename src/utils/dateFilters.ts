@@ -48,7 +48,11 @@ export function isDateInRange(
 ): boolean {
   if (!startDate && !endDate) return true;
   if (!dateStr) return false;
-  const target = dateStr.slice(0, 10);
+  const raw = String(dateStr).trim();
+  const dmyMatch = raw.match(/^(\d{2})[-/](\d{2})[-/](\d{4})/);
+  const target = dmyMatch
+    ? `${dmyMatch[3]}-${dmyMatch[2]}-${dmyMatch[1]}`
+    : raw.slice(0, 10);
   if (startDate && target < startDate) {
     return false;
   }
@@ -532,3 +536,263 @@ export function calculateConsolidatedFinancials(
       purchases.length + packings.length + payments.length + otherCosts.length,
   };
 }
+
+/**
+ * Extracts YYYY-MM from a date string in YYYY-MM-DD, DD-MM-YYYY, or ISO format.
+ */
+export function extractYearMonth(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  const trimmed = String(dateStr).trim();
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{2})/);
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2]}`;
+  }
+  const dmyMatch = trimmed.match(/^(\d{2})[-/](\d{2})[-/](\d{4})/);
+  if (dmyMatch) {
+    return `${dmyMatch[3]}-${dmyMatch[2]}`;
+  }
+  return '';
+}
+
+/**
+ * Computes inclusive startDate (YYYY-MM-01) and endDate (YYYY-MM-lastDay) for a YYYY-MM month string.
+ */
+export function getMonthDateBounds(yearMonth: string): DateRangeState {
+  if (!yearMonth || !/^\d{4}-\d{2}$/.test(yearMonth.trim())) {
+    return { startDate: '', endDate: '' };
+  }
+  const [yearStr, monthStr] = yearMonth.trim().split('-');
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  if (!year || month < 1 || month > 12) {
+    return { startDate: '', endDate: '' };
+  }
+  const lastDay = new Date(year, month, 0).getDate();
+  return {
+    startDate: `${yearStr}-${monthStr}-01`,
+    endDate: `${yearStr}-${monthStr}-${String(lastDay).padStart(2, '0')}`,
+  };
+}
+
+/**
+ * Resolves the default YYYY-MM statement month. If the reference calendar month has records,
+ * returns it; otherwise returns the most recent YYYY-MM found across all 4 ledgers.
+ */
+export function resolveDefaultStatementMonth(
+  purchases: PurchaseRecord[],
+  packings: PackingRecord[],
+  payments: PaymentRecord[],
+  otherCosts: OtherCostRecord[],
+  referenceDate: Date = new Date()
+): string {
+  const currentMonth = toISODateString(referenceDate).slice(0, 7);
+  const monthsSet = new Set<string>();
+
+  for (const p of purchases) {
+    const ym = extractYearMonth(p.date);
+    if (ym) monthsSet.add(ym);
+  }
+  for (const pkg of packings) {
+    const ym = extractYearMonth(pkg.packingDate);
+    if (ym) monthsSet.add(ym);
+  }
+  for (const pm of payments) {
+    const ym = extractYearMonth(pm.date);
+    if (ym) monthsSet.add(ym);
+  }
+  for (const c of otherCosts) {
+    const ym = extractYearMonth(c.date);
+    if (ym) monthsSet.add(ym);
+  }
+
+  if (monthsSet.has(currentMonth)) {
+    return currentMonth;
+  }
+
+  const sortedMonths = Array.from(monthsSet).sort((a, b) => b.localeCompare(a));
+  return sortedMonths.length > 0 ? sortedMonths[0] : currentMonth;
+}
+
+export interface PrintableStatementRecordRow {
+  id: string;
+  _kind: 'Purchase' | 'Packing' | 'Payment' | 'OtherCost';
+  kind: TransactionKind;
+  invoiceNumber: string;
+  date: string;
+  description: string;
+  secondaryInfo: string;
+  totalWeight?: number;
+  totalQty?: number;
+  totalAmount: number;
+  totalAmountBDT: number;
+  amountRMB?: number;
+  status: string;
+}
+
+export interface MonthlyStatementReportPayload {
+  dbType: 'monthly_statement' | 'filtered_multi';
+  statementMonth: string;
+  periodLabel: string;
+  usedFallbackStream: boolean;
+  purchases: PurchaseRecord[];
+  packings: PackingRecord[];
+  payments: PaymentRecord[];
+  otherCosts: OtherCostRecord[];
+  unifiedTransactions: UnifiedTransactionItem[];
+  records: PrintableStatementRecordRow[];
+  summary: ConsolidatedFinancialSummary;
+  totalPurchases: number;
+  totalExport: number;
+  totalExportBDT: number;
+  totalWeight: number;
+  totalPayments: number;
+  totalOtherCosts: number;
+  netOperatingMarginBDT: number;
+}
+
+/**
+ * Converts UnifiedTransactionItems into normalized PrintableStatementRecordRows for PrintPreviewModal.
+ */
+export function mapUnifiedTransactionsToPrintableRecords(
+  unifiedTransactions: UnifiedTransactionItem[]
+): PrintableStatementRecordRow[] {
+  return unifiedTransactions.map((tx) => {
+    const kindMap: Record<TransactionKind, 'Purchase' | 'Packing' | 'Payment' | 'OtherCost'> = {
+      purchase: 'Purchase',
+      packing: 'Packing',
+      payment: 'Payment',
+      other_cost: 'OtherCost',
+    };
+    const raw = tx.rawRecord as any;
+    return {
+      id: tx.id,
+      _kind: kindMap[tx.kind],
+      kind: tx.kind,
+      invoiceNumber: tx.referenceNo,
+      date: tx.date,
+      description: tx.primaryParty,
+      secondaryInfo: tx.secondaryInfo,
+      totalWeight: tx.weightKG || raw?.totalWeight || undefined,
+      totalQty: raw?.totalQty || undefined,
+      totalAmount: tx.amountBDT,
+      totalAmountBDT: tx.amountBDT,
+      amountRMB: tx.amountRMB,
+      status: tx.status || 'RECORDED',
+    };
+  });
+}
+
+/**
+ * Builds a complete, self-contained Monthly or Consolidated Statement Report payload
+ * for the Consolidated Financial Transactions Stream and PrintPreviewModal.
+ */
+export function buildMonthlyStatementReport(params: {
+  statementMonth: string;
+  purchases: PurchaseRecord[];
+  packings: PackingRecord[];
+  payments: PaymentRecord[];
+  otherCosts: OtherCostRecord[];
+  rmbExchangeRate?: number;
+  fallbackFiltered?: {
+    filteredPurchases: PurchaseRecord[];
+    filteredPackings: PackingRecord[];
+    filteredPayments: PaymentRecord[];
+    filteredOtherCosts: OtherCostRecord[];
+    startDate?: string;
+    endDate?: string;
+  };
+}): MonthlyStatementReportPayload {
+  const {
+    statementMonth,
+    purchases,
+    packings,
+    payments,
+    otherCosts,
+    rmbExchangeRate = 18.0,
+    fallbackFiltered,
+  } = params;
+
+  const targetMonth = (statementMonth || '').trim();
+  let monthPurchases = targetMonth
+    ? purchases.filter((p) => extractYearMonth(p.date) === targetMonth)
+    : purchases;
+  let monthPackings = targetMonth
+    ? packings.filter((p) => extractYearMonth(p.packingDate) === targetMonth)
+    : packings;
+  let monthPayments = targetMonth
+    ? payments.filter((p) => extractYearMonth(p.date) === targetMonth)
+    : payments;
+  let monthOtherCosts = targetMonth
+    ? otherCosts.filter((c) => extractYearMonth(c.date) === targetMonth)
+    : otherCosts;
+
+  const monthTotalCount =
+    monthPurchases.length +
+    monthPackings.length +
+    monthPayments.length +
+    monthOtherCosts.length;
+
+  let usedFallbackStream = false;
+  let periodLabel = targetMonth || 'All Time';
+
+  if (monthTotalCount === 0 && fallbackFiltered) {
+    const fbCount =
+      fallbackFiltered.filteredPurchases.length +
+      fallbackFiltered.filteredPackings.length +
+      fallbackFiltered.filteredPayments.length +
+      fallbackFiltered.filteredOtherCosts.length;
+
+    if (fbCount > 0) {
+      monthPurchases = fallbackFiltered.filteredPurchases;
+      monthPackings = fallbackFiltered.filteredPackings;
+      monthPayments = fallbackFiltered.filteredPayments;
+      monthOtherCosts = fallbackFiltered.filteredOtherCosts;
+      usedFallbackStream = true;
+      periodLabel = formatDateRangeLabel(
+        fallbackFiltered.startDate,
+        fallbackFiltered.endDate
+      );
+    }
+  }
+
+  const { unifiedTransactions } = filterFinancialTransactions(
+    monthPurchases,
+    monthPackings,
+    monthPayments,
+    monthOtherCosts,
+    { kind: 'all' },
+    rmbExchangeRate
+  );
+
+  const summary = calculateConsolidatedFinancials(
+    monthPurchases,
+    monthPackings,
+    monthPayments,
+    monthOtherCosts,
+    rmbExchangeRate
+  );
+
+  const records = mapUnifiedTransactionsToPrintableRecords(unifiedTransactions);
+
+  return {
+    dbType: 'monthly_statement',
+    statementMonth: targetMonth || periodLabel,
+    periodLabel,
+    usedFallbackStream,
+    purchases: monthPurchases,
+    packings: monthPackings,
+    payments: monthPayments,
+    otherCosts: monthOtherCosts,
+    unifiedTransactions,
+    records,
+    summary,
+    totalPurchases: summary.totalPurchasesBDT,
+    totalExport: summary.totalExportRMB,
+    totalExportBDT: summary.totalExportBDT,
+    totalWeight: summary.totalExportWeightKG,
+    totalPayments: summary.totalPaymentsBDT,
+    totalOtherCosts: summary.totalOtherCostsBDT,
+    netOperatingMarginBDT: summary.netOperatingMarginBDT,
+  };
+}
+

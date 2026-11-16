@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import { formatCurrency, formatDate } from '../utils/calculations.ts';
 import {
@@ -12,6 +12,10 @@ import {
   filterFinancialTransactions,
   calculateConsolidatedFinancials,
   TransactionKind,
+  resolveDefaultStatementMonth,
+  getMonthDateBounds,
+  buildMonthlyStatementReport,
+  mapUnifiedTransactionsToPrintableRecords,
 } from '../utils/dateFilters.ts';
 import {
   generateDateFilteredFinancialTransactionsCSV,
@@ -64,9 +68,41 @@ export const SearchReportsView: React.FC = () => {
   const [activeKindTab, setActiveKindTab] = useState<TransactionKind | 'all'>('all');
 
   // Statement Month State for PDF generation
-  const [statementMonth, setStatementMonth] = useState<string>(
-    () => new Date().toISOString().slice(0, 7) // YYYY-MM
+  const [statementMonth, setStatementMonth] = useState<string>(() =>
+    resolveDefaultStatementMonth(purchases, packings, payments, otherCosts)
   );
+
+  // Keep default statementMonth aligned with available ledger months if current selection has 0 records
+  useEffect(() => {
+    const resolved = resolveDefaultStatementMonth(purchases, packings, payments, otherCosts);
+    if (resolved && resolved !== statementMonth) {
+      const hasCurrentMonthData =
+        purchases.some((p) => p.date.startsWith(statementMonth)) ||
+        packings.some((p) => p.packingDate.startsWith(statementMonth)) ||
+        payments.some((p) => p.date.startsWith(statementMonth)) ||
+        otherCosts.some((c) => c.date.startsWith(statementMonth));
+      if (!hasCurrentMonthData) {
+        setStatementMonth(resolved);
+      }
+    }
+  }, [purchases, packings, payments, otherCosts]);
+
+  // Handle Statement Month input change
+  const handleStatementMonthChange = (val: string) => {
+    setStatementMonth(val);
+    if (val) {
+      const bounds = getMonthDateBounds(val);
+      if (bounds.startDate && bounds.endDate) {
+        setStartDate(bounds.startDate);
+        setEndDate(bounds.endDate);
+        setActivePreset(detectMatchingPreset(bounds.startDate, bounds.endDate));
+      }
+    } else {
+      setStartDate('');
+      setEndDate('');
+      setActivePreset('all');
+    }
+  };
 
   // Handle Preset selection
   const handleSelectPreset = (preset: DatePresetKey) => {
@@ -74,12 +110,18 @@ export const SearchReportsView: React.FC = () => {
     const range = getDateRangePreset(preset);
     setStartDate(range.startDate);
     setEndDate(range.endDate);
+    if (range.startDate && range.startDate.length >= 7) {
+      setStatementMonth(range.startDate.slice(0, 7));
+    }
   };
 
   // Handle manual date input changes
   const handleStartDateChange = (val: string) => {
     setStartDate(val);
     setActivePreset(detectMatchingPreset(val, endDate));
+    if (val && val.length >= 7) {
+      setStatementMonth(val.slice(0, 7));
+    }
   };
 
   const handleEndDateChange = (val: string) => {
@@ -96,6 +138,7 @@ export const SearchReportsView: React.FC = () => {
     setSupplierFilter('ALL');
     setShippingMarkFilter('ALL');
     setActiveKindTab('all');
+    setStatementMonth(resolveDefaultStatementMonth(purchases, packings, payments, otherCosts));
     showToast('Filters cleared — displaying all records.');
   };
 
@@ -217,41 +260,56 @@ export const SearchReportsView: React.FC = () => {
 
   // Handle Monthly Statement Generation (PDF)
   const handleGenerateMonthlyStatement = () => {
-    const monthPurchases = purchases.filter((p) => p.date.startsWith(statementMonth));
-    const monthPackings = packings.filter((p) => p.packingDate.startsWith(statementMonth));
-    const monthPayments = payments.filter((p) => p.date.startsWith(statementMonth));
+    const reportPayload = buildMonthlyStatementReport({
+      statementMonth,
+      purchases,
+      packings,
+      payments,
+      otherCosts,
+      rmbExchangeRate: companyProfile.rmbExchangeRate || 18.0,
+      fallbackFiltered: {
+        filteredPurchases,
+        filteredPackings,
+        filteredPayments,
+        filteredOtherCosts,
+        startDate,
+        endDate,
+      },
+    });
 
     openPrintModal({
       type: 'monthly_statement',
-      title: `Monthly Business & Export Statement - ${statementMonth}`,
-      data: {
-        statementMonth,
-        purchases: monthPurchases,
-        packings: monthPackings,
-        payments: monthPayments,
-        totalPurchases: monthPurchases.reduce((a, b) => a + b.totalAmount, 0),
-        totalExport: monthPackings.reduce((a, b) => a + b.totalAmount, 0),
-        totalWeight: monthPackings.reduce((a, b) => a + b.totalWeight, 0),
-        totalPayments: monthPayments.reduce((a, b) => a + b.paidAmount, 0),
-      },
+      title: `Monthly Business & Export Statement - ${reportPayload.periodLabel}`,
+      data: reportPayload,
     });
   };
 
   // Handle Batch Print of Filtered Transactions
   const handlePrintFilteredReport = () => {
     const activeRangeDescription = formatDateRangeLabel(startDate, endDate);
+    const printableRecords = mapUnifiedTransactionsToPrintableRecords(unifiedTransactions);
 
     openPrintModal({
       type: 'batch_print',
       title: `Consolidated Financial Report — ${activeRangeDescription}`,
       data: {
         dbType: 'filtered_multi',
-        records: [
-          ...filteredPurchases.map((p) => ({ ...p, _kind: 'Purchase' })),
-          ...filteredPackings.map((p) => ({ ...p, _kind: 'Packing' })),
-          ...filteredPayments.map((p) => ({ ...p, _kind: 'Payment' })),
-          ...filteredOtherCosts.map((c) => ({ ...c, _kind: 'OtherCost' })),
-        ],
+        statementMonth: activeRangeDescription,
+        periodLabel: activeRangeDescription,
+        purchases: filteredPurchases,
+        packings: filteredPackings,
+        payments: filteredPayments,
+        otherCosts: filteredOtherCosts,
+        unifiedTransactions,
+        records: printableRecords,
+        summary: financialSummary,
+        totalPurchases: financialSummary.totalPurchasesBDT,
+        totalExport: financialSummary.totalExportRMB,
+        totalExportBDT: financialSummary.totalExportBDT,
+        totalWeight: financialSummary.totalExportWeightKG,
+        totalPayments: financialSummary.totalPaymentsBDT,
+        totalOtherCosts: financialSummary.totalOtherCostsBDT,
+        netOperatingMarginBDT: financialSummary.netOperatingMarginBDT,
         filters: {
           shipper: shipperFilter,
           supplier: supplierFilter,
@@ -716,11 +774,15 @@ export const SearchReportsView: React.FC = () => {
           </span>
           <input
             type="month"
+            data-testid="statement-month-input"
+            aria-label="Statement Month"
             value={statementMonth}
-            onChange={(e) => setStatementMonth(e.target.value)}
+            onChange={(e) => handleStatementMonthChange(e.target.value)}
             className="border border-slate-300 rounded px-2 py-0.5 text-xs font-mono font-bold text-slate-800 bg-slate-50"
           />
           <button
+            type="button"
+            data-testid="statement-pdf-btn"
             onClick={handleGenerateMonthlyStatement}
             className="flex items-center space-x-1 px-2.5 py-1 bg-[#1877d2] hover:bg-[#1465b5] text-white rounded text-[11px] font-bold uppercase transition cursor-pointer"
           >
@@ -874,17 +936,30 @@ export const SearchReportsView: React.FC = () => {
 
                       {/* Status */}
                       <td className="p-2.5 whitespace-nowrap">
-                        <span
-                          className={`px-2 py-0.5 text-[10px] font-bold rounded ${
-                            String(tx.status).includes('PAID')
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : String(tx.status).includes('DUE')
-                              ? 'bg-rose-100 text-rose-800'
-                              : 'bg-slate-100 text-slate-700'
-                          }`}
-                        >
-                          {tx.status}
-                        </span>
+                        {(() => {
+                          const upperStatus = String(tx.status || '').toUpperCase();
+                          const isUnpaidOrDue =
+                            upperStatus.includes('UNPAID') ||
+                            upperStatus.includes('DUE') ||
+                            upperStatus.includes('NO REPORT');
+                          const isPaid = !isUnpaidOrDue && upperStatus.includes('PAID');
+                          const isReport = !isUnpaidOrDue && upperStatus.includes('REPORT');
+                          return (
+                            <span
+                              className={`px-2 py-0.5 text-[10px] font-bold rounded ${
+                                isPaid
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : isReport
+                                  ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                  : isUnpaidOrDue
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : 'bg-slate-100 text-slate-700'
+                              }`}
+                            >
+                              {tx.status}
+                            </span>
+                          );
+                        })()}
                       </td>
 
                       {/* Action */}
@@ -919,7 +994,10 @@ export const SearchReportsView: React.FC = () => {
                               openPrintModal({
                                 type: 'profit_loss',
                                 title: `Operational Expense - ${tx.referenceNo}`,
-                                data: tx.rawRecord,
+                                data: {
+                                  ...(tx.rawRecord as any),
+                                  isSingleExpenseVoucher: true,
+                                },
                               });
                             }
                           }}
@@ -932,6 +1010,32 @@ export const SearchReportsView: React.FC = () => {
                   );
                 })}
               </tbody>
+              <tfoot className="bg-slate-100 border-t-2 border-slate-300 font-bold text-xs text-slate-900">
+                <tr>
+                  <td colSpan={6} className="p-2.5 text-right uppercase tracking-wider text-slate-700">
+                    Consolidated Stream Totals ({unifiedTransactions.length} Records):
+                  </td>
+                  <td className="p-2.5 text-right font-mono font-black text-slate-950 whitespace-nowrap">
+                    {formatCurrency(
+                      unifiedTransactions.reduce((sum, tx) => sum + (Number(tx.amountBDT) || 0), 0),
+                      companyProfile.currency
+                    )}
+                  </td>
+                  <td className="p-2.5 text-right font-mono font-bold text-amber-800 whitespace-nowrap">
+                    ¥{financialSummary.totalExportRMB.toLocaleString()} ({financialSummary.totalExportWeightKG.toLocaleString()} kg)
+                  </td>
+                  <td colSpan={2} className="p-2.5 text-center">
+                    <button
+                      type="button"
+                      onClick={handleGenerateMonthlyStatement}
+                      className="inline-flex items-center space-x-1 px-2.5 py-1 bg-[#1877d2] hover:bg-[#1465b5] text-white rounded text-[10px] font-bold uppercase transition cursor-pointer"
+                    >
+                      <FileText className="w-3 h-3" />
+                      <span>Statement Report</span>
+                    </button>
+                  </td>
+                </tr>
+              </tfoot>
             </table>
             </div>
           </div>

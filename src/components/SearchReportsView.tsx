@@ -467,8 +467,9 @@ export const SearchReportsView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleStartDateChange('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                    className="zsb-clear-icon-btn absolute right-8 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
                     title="Clear start date"
+                    aria-label="Clear start date"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -492,8 +493,9 @@ export const SearchReportsView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleEndDateChange('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                    className="zsb-clear-icon-btn absolute right-8 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
                     title="Clear end date"
+                    aria-label="Clear end date"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>

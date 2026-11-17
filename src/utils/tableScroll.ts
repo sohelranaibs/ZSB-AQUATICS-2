@@ -91,3 +91,20 @@ export function resolveStickySectionBackground(
   }
   return fallbackBg;
 }
+
+/**
+ * Builds a lightweight layout signature string for a table scroll container
+ * so observers skip expensive style/geometry scans when rows and dimensions have not changed.
+ */
+export function computeTableScrollSignature(params: {
+  rowCount: number;
+  containerWidth: number;
+  theadHeight: number;
+  tfootHeight: number;
+}): string {
+  const rows = Math.max(0, Math.floor(Number(params.rowCount) || 0));
+  const widthBucket = Math.round(Number(params.containerWidth) || 0);
+  const headH = Math.round(Number(params.theadHeight) || 0);
+  const footH = Math.round(Number(params.tfootHeight) || 0);
+  return `${rows}:${widthBucket}:${headH}:${footH}`;
+}

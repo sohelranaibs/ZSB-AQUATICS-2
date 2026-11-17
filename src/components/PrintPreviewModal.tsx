@@ -106,9 +106,23 @@ export const PrintPreviewModal: React.FC = () => {
         ext
       );
     }
-    if (type === 'global_view_table' && data?.filename) {
+    if (data?.filename) {
       const base = String(data.filename).replace(/\.(pdf|png)$/i, '');
       return `${base}.${ext}`;
+    }
+    if (type === 'monthly_statement') {
+      const period = String(data?.statementMonth || data?.periodLabel || 'MONTHLY').replace(
+        /[^a-zA-Z0-9_-]/g,
+        '_'
+      );
+      return `ZSB_AQUATICS_MONTHLY_STATEMENT_${period}_${new Date().toISOString().slice(0, 10)}.${ext}`;
+    }
+    if (type === 'batch_print') {
+      const period = String(data?.statementMonth || data?.periodLabel || 'REPORT').replace(
+        /[^a-zA-Z0-9_-]/g,
+        '_'
+      );
+      return `ZSB_AQUATICS_CONSOLIDATED_REPORT_${period}_${new Date().toISOString().slice(0, 10)}.${ext}`;
     }
     if (type === 'mortality_report') {
       return formatMortalityReportFilename(data?.targetMonth || '', ext);

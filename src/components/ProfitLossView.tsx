@@ -20,6 +20,7 @@ import {
   buildProfitLossFiscalSummaryReportPayload,
 } from '../utils/dailyProfitLoss.ts';
 import { exportElementToPdf, resolveCompanyLogoSrc } from '../utils/pdfGenerator.ts';
+import { yieldForDomFrame } from '../utils/pdfExportStyles.ts';
 import { DailyProfitLossSection } from './DailyProfitLossSection.tsx';
 import { SupplierCreditRecord } from '../types/index.ts';
 import {
@@ -232,7 +233,7 @@ export const ProfitLossView: React.FC = () => {
     if (isDownloadingPdf) return;
     setIsDownloadingPdf(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 40));
+      await yieldForDomFrame();
       const success = await exportElementToPdf(
         'profit-loss-fiscal-summary-printable',
         fiscalSummaryPayload.filename

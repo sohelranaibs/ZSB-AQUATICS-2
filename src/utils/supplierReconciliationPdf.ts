@@ -7,6 +7,7 @@ import {
 } from './calculations.ts';
 import { SupplierRecordHistoryRow } from './supplierHistory.ts';
 import { getCachedCompanyLogoDataUrl } from './pdfGenerator.ts';
+import { getJsPdfImageFormat } from './pdfExportStyles.ts';
 
 export interface SupplierReconciliationPdfInput {
   companyProfile: CompanyProfile;
@@ -159,6 +160,7 @@ export function buildSupplierReconciliationPdfDocument(
   const colWidths = [14, 26, 56, 30, 30, 30];
 
   const logoDataUrl = getCachedCompanyLogoDataUrl();
+  const logoFormat = logoDataUrl ? getJsPdfImageFormat(logoDataUrl) : 'JPEG';
 
   const drawWatermarkOnCurrentPage = () => {
     if (!logoDataUrl) return;
@@ -172,7 +174,16 @@ export function buildSupplierReconciliationPdfDocument(
       if (pdfAny.saveGraphicsState && pdfAny.setGState && pdfAny.GState) {
         pdfAny.saveGraphicsState();
         pdfAny.setGState(new pdfAny.GState({ opacity: 0.05 }));
-        pdf.addImage(logoDataUrl, 'JPEG', (pageWidth - 72) / 2, (pageHeight - 72) / 2, 72, 72);
+        pdf.addImage(
+          logoDataUrl,
+          logoFormat,
+          (pageWidth - 72) / 2,
+          (pageHeight - 72) / 2,
+          72,
+          72,
+          'zsb-company-logo',
+          'FAST'
+        );
         pdfAny.restoreGraphicsState?.();
       }
     } catch {
@@ -189,7 +200,16 @@ export function buildSupplierReconciliationPdfDocument(
       pdf.setDrawColor(212, 175, 55);
       pdf.setLineWidth(0.5);
       pdf.circle(margin + 36, y + 6, 7, 'S');
-      pdf.addImage(logoDataUrl, 'JPEG', margin + 30.2, y + 0.2, 11.6, 11.6);
+      pdf.addImage(
+        logoDataUrl,
+        logoFormat,
+        margin + 30.2,
+        y + 0.2,
+        11.6,
+        11.6,
+        'zsb-company-logo',
+        'FAST'
+      );
     } catch {
       // Fallback to text-only header if image format unsupported
     }

@@ -6,6 +6,7 @@ import {
   calculateScrollViewportMaxHeight,
   isOpaqueCssColor,
   resolveStickySectionBackground,
+  computeTableScrollSignature,
 } from './tableScroll.ts';
 
 describe('tableScroll 10-row scroll viewport helpers', () => {
@@ -79,5 +80,17 @@ describe('tableScroll 10-row scroll viewport helpers', () => {
     assert.ok(EXCLUDED_TABLE_CONTAINER_SELECTORS.includes('#printable-document'));
     assert.ok(EXCLUDED_TABLE_CONTAINER_SELECTORS.includes('[aria-hidden="true"]'));
     assert.ok(EXCLUDED_TABLE_CONTAINER_SELECTORS.includes('[data-row-scroll-managed="true"]'));
+  });
+
+  it('computes deterministic table scroll layout signatures', () => {
+    assert.equal(
+      computeTableScrollSignature({
+        rowCount: 15,
+        containerWidth: 1120.4,
+        theadHeight: 40,
+        tfootHeight: 36,
+      }),
+      '15:1120:40:36'
+    );
   });
 });

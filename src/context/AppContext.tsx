@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import {
   CompanyProfile,
   DropdownOptions,
@@ -58,6 +58,7 @@ import {
   calculatePurchaseTotals,
   calculatePackingTotals,
 } from '../utils/calculations.ts';
+import { yieldForDomFrame } from '../utils/pdfExportStyles.ts';
 import {
   mergePurchaseRecordsBySupplierAndDate,
   mergePackingRecordsByShipmentGroup,
@@ -970,18 +971,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     (PendingSingleDeleteRequest & { onConfirm: () => void }) | null
   >(null);
 
-  const openSuperAdminClearModal = (scope: ClearRecordsScope = 'all') => {
+  const openSuperAdminClearModal = useCallback((scope: ClearRecordsScope = 'all') => {
     setSuperAdminClearModal({
       isOpen: true,
       initialScope: scope,
     });
-  };
+  }, []);
 
-  const closeSuperAdminClearModal = () => {
+  const closeSuperAdminClearModal = useCallback(() => {
     setSuperAdminClearModal((prev) => ({ ...prev, isOpen: false }));
-  };
+  }, []);
 
-  const requestSuperAdminSingleDelete = (
+  const requestSuperAdminSingleDelete = useCallback((
     request: PendingSingleDeleteRequest,
     onConfirm: () => void
   ) => {
@@ -989,11 +990,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...request,
       onConfirm,
     });
-  };
+  }, []);
 
-  const cancelSingleDelete = () => {
+  const cancelSingleDelete = useCallback(() => {
     setPendingSingleDeleteState(null);
-  };
+  }, []);
 
   const confirmSingleDeleteWithSuperAdmin = (
     passwordInput: string
@@ -1013,7 +1014,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { valid: true };
   };
 
-  const openDataCenterModal = (
+  const openDataCenterModal = useCallback((
     initialTab: 'import' | 'export' = 'import',
     initialDataset: 'purchase' | 'packing' | 'payment' | 'other_cost' | 'all' = 'purchase'
   ) => {
@@ -1022,21 +1023,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       initialTab,
       initialDataset,
     });
-  };
+  }, []);
 
-  const closeDataCenterModal = () => {
+  const closeDataCenterModal = useCallback(() => {
     setDataCenterModal((prev) => ({ ...prev, isOpen: false }));
-  };
+  }, []);
 
   const [snapshotModalOpen, setSnapshotModalOpen] = useState<boolean>(false);
 
-  const openSnapshotModal = () => {
+  const openSnapshotModal = useCallback(() => {
     setSnapshotModalOpen(true);
-  };
+  }, []);
 
-  const closeSnapshotModal = () => {
+  const closeSnapshotModal = useCallback(() => {
     setSnapshotModalOpen(false);
-  };
+  }, []);
 
   const [snapshots, setSnapshots] = useState<DatabaseSnapshot[]>(() => {
     try {
@@ -1125,7 +1126,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       syncTimerRef.current = setTimeout(() => {
         setSyncStatus(finalStatus);
         setLastSyncedAt(new Date().toISOString());
-      }, 550);
+      }, 80);
     } catch (e) {
       console.error(e);
       setSyncStatus('error');
@@ -1193,12 +1194,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           syncTimerRef.current = setTimeout(() => {
             setSyncStatus('synced');
             setLastSyncedAt(new Date().toISOString());
-          }, 300);
+          }, 50);
         } catch (e) {
           console.error(e);
           setSyncStatus('error');
         }
-      }, 250);
+      }, 80);
 
       debouncedSaveTimersRef.current.set(entityLabel, timer);
     } catch (e) {
@@ -1465,12 +1466,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
-  const showToast = (msg: string) => {
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => {
       setToastMessage((curr) => (curr === msg ? null : curr));
-    }, 3500);
-  };
+    }, 3200);
+  }, []);
 
   const addAuditLog = (input: CreateAuditLogInput): AuditLogRecord => {
     const entry = createAuditLogEntry({
@@ -3450,16 +3455,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLiveDomTablesSnapshot([]);
   }, [activeTab]);
 
-  const openPrintModal = (modal: Omit<PrintModalData, 'isOpen'>) => {
+  const openPrintModal = useCallback((modal: Omit<PrintModalData, 'isOpen'>) => {
     setPrintModalData({
       ...modal,
       isOpen: true,
     });
-  };
+  }, []);
 
-  const closePrintModal = () => {
+  const closePrintModal = useCallback(() => {
     setPrintModalData((prev) => ({ ...prev, isOpen: false }));
-  };
+  }, []);
 
   const exportCurrentViewToPdf = async (options?: {
     openPreviewOnly?: boolean;
@@ -3508,8 +3513,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setIsExportingGlobalPdf(true);
     try {
-      // Wait briefly so the offscreen #global-printable-document updates with freshReport
-      await new Promise((resolve) => setTimeout(resolve, 60));
+      // Yield a single animation frame so #global-printable-document paints cleanly without fixed delay
+      await yieldForDomFrame();
       const targetElementId = printModalData.isOpen
         ? 'printable-document'
         : 'global-printable-document';

@@ -453,6 +453,8 @@ export function resolveGlobalKeyboardShortcut(
       digit = Number(key);
     } else if (/^Digit[0-9]$/.test(code)) {
       digit = Number(code.replace('Digit', ''));
+    } else if (/^Numpad[0-9]$/.test(code)) {
+      digit = Number(code.replace('Numpad', ''));
     }
 
     if (digit !== null) {

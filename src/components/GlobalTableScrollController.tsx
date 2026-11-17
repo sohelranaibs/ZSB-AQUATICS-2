@@ -3,6 +3,7 @@ import {
   MAX_VISIBLE_TABLE_ROWS,
   EXCLUDED_TABLE_CONTAINER_SELECTOR,
   calculateScrollViewportMaxHeight,
+  computeTableScrollSignature,
   isOpaqueCssColor,
   resolveStickySectionBackground,
 } from '../utils/tableScroll.ts';
@@ -18,6 +19,12 @@ function ensureStickySectionOpacity(
   fallbackBg: string
 ): void {
   if (!section) return;
+  const rows = Array.from(section.querySelectorAll('tr')) as HTMLElement[];
+  const stickySig = `${edge}:${rows.length}`;
+  if (section.getAttribute('data-sticky-sig') === stickySig) {
+    return;
+  }
+
   const computedSection = window.getComputedStyle(section);
   if (computedSection.position !== 'sticky') {
     section.style.position = 'sticky';
@@ -31,7 +38,6 @@ function ensureStickySectionOpacity(
     section.style.zIndex = '10';
   }
 
-  const rows = Array.from(section.querySelectorAll('tr')) as HTMLElement[];
   for (const row of rows) {
     const rowBg = window.getComputedStyle(row).backgroundColor;
     const resolvedSectionBg = resolveStickySectionBackground(
@@ -46,6 +52,7 @@ function ensureStickySectionOpacity(
       }
     }
   }
+  section.setAttribute('data-sticky-sig', stickySig);
 }
 
 function clearScrollCap(container: HTMLElement): void {
@@ -55,6 +62,7 @@ function clearScrollCap(container: HTMLElement): void {
     container.removeAttribute('data-ten-row-scroll');
     container.removeAttribute('data-visible-row-limit');
   }
+  container.removeAttribute('data-ten-row-sig');
 }
 
 export const GlobalTableScrollController: React.FC = () => {
@@ -95,11 +103,31 @@ export const GlobalTableScrollController: React.FC = () => {
 
         const thead = table.querySelector(':scope > thead') as HTMLElement | null;
         const tfoot = table.querySelector(':scope > tfoot') as HTMLElement | null;
-        const rowHeights = tbodyRows.map((tr) => measureLocalHeight(tr));
+        const theadHeight = measureLocalHeight(thead);
+        const tfootHeight = measureLocalHeight(tfoot);
+        const nextSig = computeTableScrollSignature({
+          rowCount: tbodyRows.length,
+          containerWidth: container.clientWidth,
+          theadHeight,
+          tfootHeight,
+        });
+
+        if (
+          container.getAttribute('data-ten-row-scroll') === 'active' &&
+          container.getAttribute('data-ten-row-sig') === nextSig
+        ) {
+          continue;
+        }
+
+        const rowHeights = tbodyRows.slice(0, MAX_VISIBLE_TABLE_ROWS).map((tr) => measureLocalHeight(tr));
+        // Push sentinel items to preserve row count > maxVisibleRows check
+        while (rowHeights.length < tbodyRows.length) {
+          rowHeights.push(0);
+        }
 
         const nextMaxHeight = calculateScrollViewportMaxHeight({
-          theadHeight: measureLocalHeight(thead),
-          tfootHeight: measureLocalHeight(tfoot),
+          theadHeight,
+          tfootHeight,
           rowHeights,
           maxVisibleRows: MAX_VISIBLE_TABLE_ROWS,
         });
@@ -127,6 +155,7 @@ export const GlobalTableScrollController: React.FC = () => {
             String(MAX_VISIBLE_TABLE_ROWS)
           );
         }
+        container.setAttribute('data-ten-row-sig', nextSig);
 
         ensureStickySectionOpacity(thead, 'top', '#f8fafc');
         ensureStickySectionOpacity(tfoot, 'bottom', '#f8fafc');

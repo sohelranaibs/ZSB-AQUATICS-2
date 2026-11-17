@@ -8,6 +8,7 @@ import {
 } from '../utils/calculations.ts';
 import { useRowScrollViewport } from '../hooks/useRowScrollViewport.ts';
 import { MAX_VISIBLE_TABLE_ROWS } from '../utils/tableScroll.ts';
+import { yieldForDomFrame } from '../utils/pdfExportStyles.ts';
 import {
   FileSpreadsheet,
   Printer,
@@ -804,8 +805,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     showToast(`Generating combined PDF for ${targetPayments.length} payment slips...`);
 
     try {
-      // Allow React DOM to mount and flush the offscreen elements
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      // Allow React DOM to flush offscreen batch slip elements without artificial 150ms sleep
+      await yieldForDomFrame();
+      await yieldForDomFrame();
 
       const elementIds = targetPayments.map((_, idx) => `batch-db-slip-${idx}`);
       const success = await exportElementsToCombinedPdf(elementIds, filename, 800);

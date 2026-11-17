@@ -296,27 +296,36 @@ export const AirWayBillView: React.FC = () => {
     }
   };
 
+  const shortcutHandlerRef = useRef<(action: ViewShortcutEventDetail['action']) => void>(() => {});
+  shortcutHandlerRef.current = (action) => {
+    if (action === 'PRINT_ACTIVE_VIEW') {
+      handleOpenPrintPreview();
+    } else if (action === 'SAVE_ACTIVE_VIEW') {
+      void handleDirectExport('pdf');
+    } else if (action === 'ADD_FORM_ROW') {
+      handleAddRow();
+    } else if (action === 'RESET_FORM') {
+      handleResetFiltersAndOverrides();
+    }
+  };
+
   useEffect(() => {
     const onShortcut = (e: Event) => {
       const customEvent = e as CustomEvent<ViewShortcutEventDetail>;
       const action = customEvent.detail?.action;
-      if (action === 'PRINT_ACTIVE_VIEW') {
+      if (
+        action === 'PRINT_ACTIVE_VIEW' ||
+        action === 'SAVE_ACTIVE_VIEW' ||
+        action === 'ADD_FORM_ROW' ||
+        action === 'RESET_FORM'
+      ) {
         customEvent.detail.handled = true;
-        handleOpenPrintPreview();
-      } else if (action === 'SAVE_ACTIVE_VIEW') {
-        customEvent.detail.handled = true;
-        void handleDirectExport('pdf');
-      } else if (action === 'ADD_FORM_ROW') {
-        customEvent.detail.handled = true;
-        handleAddRow();
-      } else if (action === 'RESET_FORM') {
-        customEvent.detail.handled = true;
-        handleResetFiltersAndOverrides();
+        shortcutHandlerRef.current(action);
       }
     };
     window.addEventListener(ZSB_VIEW_SHORTCUT_EVENT, onShortcut);
     return () => window.removeEventListener(ZSB_VIEW_SHORTCUT_EVENT, onShortcut);
-  });
+  }, []);
 
   useEffect(() => {
     const handleClearDb = () => {

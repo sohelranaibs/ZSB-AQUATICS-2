@@ -621,35 +621,36 @@ export const ExporterPaymentSlipView: React.FC = () => {
     });
   };
 
+  const shortcutHandlerRef = useRef<(action: ViewShortcutEventDetail['action']) => void>(() => {});
+  shortcutHandlerRef.current = (action) => {
+    if (action === 'SAVE_ACTIVE_VIEW') {
+      if (populatedCustomRows.length > 0) {
+        handleSaveCustomRowToDb(populatedCustomRows[0]);
+      } else {
+        showToast('Exporter Payment Slip synced — opening Print / Save PDF preview (Ctrl+S).');
+        handlePrintSlip();
+      }
+    } else if (action === 'PRINT_ACTIVE_VIEW') {
+      handlePrintSlip();
+    } else if (action === 'ADD_FORM_ROW') {
+      handleAddRow();
+    } else if (action === 'RESET_FORM') {
+      handleResetFilters();
+    }
+  };
+
   useEffect(() => {
     const onShortcut = (event: Event) => {
       const customEvent = event as CustomEvent<ViewShortcutEventDetail>;
       const action = customEvent.detail?.action;
       if (!action) return;
-
-      if (action === 'SAVE_ACTIVE_VIEW') {
-        customEvent.detail.handled = true;
-        if (populatedCustomRows.length > 0) {
-          handleSaveCustomRowToDb(populatedCustomRows[0]);
-        } else {
-          showToast('Exporter Payment Slip synced — opening Print / Save PDF preview (Ctrl+S).');
-          handlePrintSlip();
-        }
-      } else if (action === 'PRINT_ACTIVE_VIEW') {
-        customEvent.detail.handled = true;
-        handlePrintSlip();
-      } else if (action === 'ADD_FORM_ROW') {
-        customEvent.detail.handled = true;
-        handleAddRow();
-      } else if (action === 'RESET_FORM') {
-        customEvent.detail.handled = true;
-        handleResetFilters();
-      }
+      customEvent.detail.handled = true;
+      shortcutHandlerRef.current(action);
     };
 
     window.addEventListener(ZSB_VIEW_SHORTCUT_EVENT, onShortcut);
     return () => window.removeEventListener(ZSB_VIEW_SHORTCUT_EVENT, onShortcut);
-  });
+  }, []);
 
   const handleSavePngSlip = async () => {
     setIsExportingPng(true);

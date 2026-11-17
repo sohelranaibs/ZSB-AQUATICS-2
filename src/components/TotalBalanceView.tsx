@@ -19,6 +19,7 @@ import {
   validatePartnerWithdrawalInput,
 } from '../utils/totalBalance.ts';
 import { exportElementToPdf } from '../utils/pdfGenerator.ts';
+import { yieldForDomFrame } from '../utils/pdfExportStyles.ts';
 import { buildPartnerFinancialStatementData } from '../utils/partnerFinancialStatement.ts';
 import { ExternalDebtsCard } from './ExternalDebtsCard.tsx';
 import { PartnerCapitalChartCard } from './PartnerCapitalChartCard.tsx';
@@ -281,7 +282,7 @@ export const TotalBalanceView: React.FC = () => {
   const handleExportFinancialStatement = async () => {
     setIsExportingFinancialStatement(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 40));
+      await yieldForDomFrame();
       const success = await exportElementToPdf(
         'partner-financial-statement-printable',
         financialStatementData.filename

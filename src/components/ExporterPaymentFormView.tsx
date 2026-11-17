@@ -808,31 +808,32 @@ export const ExporterPaymentFormView: React.FC = () => {
     });
   };
 
+  const shortcutHandlerRef = useRef<(action: ViewShortcutEventDetail['action']) => void>(() => {});
+  shortcutHandlerRef.current = (action) => {
+    if (action === 'SAVE_ACTIVE_VIEW') {
+      handleSavePDF();
+    } else if (action === 'PRINT_ACTIVE_VIEW') {
+      handlePrintSelected();
+    } else if (action === 'ADD_FORM_ROW') {
+      handleAddRow();
+      showToast('Added new line item row to Exporter Payment Form (Alt+N).');
+    } else if (action === 'RESET_FORM') {
+      handleClear();
+    }
+  };
+
   useEffect(() => {
     const onShortcut = (event: Event) => {
       const customEvent = event as CustomEvent<ViewShortcutEventDetail>;
       const action = customEvent.detail?.action;
       if (!action) return;
-
-      if (action === 'SAVE_ACTIVE_VIEW') {
-        customEvent.detail.handled = true;
-        handleSavePDF();
-      } else if (action === 'PRINT_ACTIVE_VIEW') {
-        customEvent.detail.handled = true;
-        handlePrintSelected();
-      } else if (action === 'ADD_FORM_ROW') {
-        customEvent.detail.handled = true;
-        handleAddRow();
-        showToast('Added new line item row to Exporter Payment Form (Alt+N).');
-      } else if (action === 'RESET_FORM') {
-        customEvent.detail.handled = true;
-        handleClear();
-      }
+      customEvent.detail.handled = true;
+      shortcutHandlerRef.current(action);
     };
 
     window.addEventListener(ZSB_VIEW_SHORTCUT_EVENT, onShortcut);
     return () => window.removeEventListener(ZSB_VIEW_SHORTCUT_EVENT, onShortcut);
-  });
+  }, []);
 
   const handleMonthlyStatement = () => {
     const targetMark = shippingMark === 'ALL' ? '' : shippingMark.toLowerCase();

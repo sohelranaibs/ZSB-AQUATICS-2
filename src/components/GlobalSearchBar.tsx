@@ -223,7 +223,7 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
               title="Clear search query"
               aria-label="Clear search query"
               data-testid="clear-global-search-btn"
-              className="p-0.5 text-slate-400 hover:text-slate-700 rounded hover:bg-slate-100 transition cursor-pointer"
+              className="zsb-clear-icon-btn p-0.5 text-slate-400 hover:text-slate-700 rounded hover:bg-slate-100 transition cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
             </button>

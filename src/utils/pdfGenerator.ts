@@ -2,9 +2,64 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { formatDate } from './calculations.ts';
 import { COMPANY_LOGO_URL } from '../context/initialData.ts';
+import {
+  ESSENTIAL_EXPORT_CSS_PROPS,
+  getScaledDimensions,
+  needsLegacyColorConversion,
+  shouldSkipExportCssValue,
+} from './pdfExportStyles.ts';
 
 let cachedCompanyLogoDataUrl: string | null = null;
 let cachedSignatureDataUrl: string | null = null;
+const legacyColorCache = new Map<string, string>();
+let sharedHelperCtx: CanvasRenderingContext2D | null = null;
+
+function getLegacyColorHelperCtx(): CanvasRenderingContext2D | null {
+  if (sharedHelperCtx || typeof document === 'undefined') return sharedHelperCtx;
+  const helperCanvas = document.createElement('canvas');
+  helperCanvas.width = 1;
+  helperCanvas.height = 1;
+  sharedHelperCtx = helperCanvas.getContext('2d', { willReadFrequently: true });
+  return sharedHelperCtx;
+}
+
+function compactDataUrl(rawDataUrl: string, maxDim: number = 256): Promise<string> {
+  if (typeof window === 'undefined' || !rawDataUrl.startsWith('data:image/')) {
+    return Promise.resolve(rawDataUrl);
+  }
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const w = img.naturalWidth || 0;
+        const h = img.naturalHeight || 0;
+        if (w <= 0 || h <= 0) {
+          resolve(rawDataUrl);
+          return;
+        }
+        const scaled = getScaledDimensions(w, h, maxDim);
+        if (scaled.width === w && scaled.height === h && rawDataUrl.length < 40000) {
+          resolve(rawDataUrl);
+          return;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = scaled.width;
+        canvas.height = scaled.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(rawDataUrl);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, scaled.width, scaled.height);
+        resolve(canvas.toDataURL('image/png'));
+      } catch {
+        resolve(rawDataUrl);
+      }
+    };
+    img.onerror = () => resolve(rawDataUrl);
+    img.src = rawDataUrl;
+  });
+}
 
 export function getCachedCompanyLogoDataUrl(): string | null {
   return cachedCompanyLogoDataUrl;
@@ -20,7 +75,7 @@ function preloadAssetAsDataUrl(assetPath: string, onLoaded: (dataUrl: string) =>
         const reader = new FileReader();
         reader.onloadend = () => {
           if (typeof reader.result === 'string' && reader.result.startsWith('data:image/')) {
-            onLoaded(reader.result);
+            compactDataUrl(reader.result, 256).then(onLoaded);
           }
         };
         reader.readAsDataURL(blob);
@@ -98,12 +153,13 @@ function imageElementToDataUrlOrAbsolute(img: HTMLImageElement): string {
   }
   if (img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
     try {
+      const scaled = getScaledDimensions(img.naturalWidth, img.naturalHeight, 256);
       const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
+      canvas.width = scaled.width;
+      canvas.height = scaled.height;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.drawImage(img, 0, 0);
+        ctx.drawImage(img, 0, 0, scaled.width, scaled.height);
         return canvas.toDataURL('image/png');
       }
     } catch {
@@ -125,25 +181,27 @@ function imageElementToDataUrlOrAbsolute(img: HTMLImageElement): string {
  * standard rgb()/rgba() using a 1x1 2D canvas context so html2canvas can parse it cleanly.
  */
 function toLegacyRgbColor(cssValue: string, ctx: CanvasRenderingContext2D | null): string {
-  if (
-    !cssValue ||
-    (!cssValue.includes('oklab') &&
-      !cssValue.includes('oklch') &&
-      !cssValue.includes('color-mix') &&
-      !cssValue.includes('color('))
-  ) {
+  if (!needsLegacyColorConversion(cssValue)) {
     return cssValue;
   }
-  if (!ctx) return '#1e293b';
+  const cached = legacyColorCache.get(cssValue);
+  if (cached !== undefined) return cached;
+  const activeCtx = ctx || getLegacyColorHelperCtx();
+  if (!activeCtx) return '#1e293b';
   try {
-    ctx.clearRect(0, 0, 1, 1);
-    ctx.fillStyle = '#000000';
-    ctx.fillStyle = cssValue;
-    ctx.fillRect(0, 0, 1, 1);
-    const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
-    if (a === 0) return 'transparent';
-    if (a === 255) return `rgb(${r}, ${g}, ${b})`;
-    return `rgba(${r}, ${g}, ${b}, ${(a / 255).toFixed(3)})`;
+    activeCtx.clearRect(0, 0, 1, 1);
+    activeCtx.fillStyle = '#000000';
+    activeCtx.fillStyle = cssValue;
+    activeCtx.fillRect(0, 0, 1, 1);
+    const [r, g, b, a] = activeCtx.getImageData(0, 0, 1, 1).data;
+    const result =
+      a === 0
+        ? 'transparent'
+        : a === 255
+        ? `rgb(${r}, ${g}, ${b})`
+        : `rgba(${r}, ${g}, ${b}, ${(a / 255).toFixed(3)})`;
+    legacyColorCache.set(cssValue, result);
+    return result;
   } catch {
     return '#1e293b';
   }
@@ -204,11 +262,6 @@ async function renderElementViaSvgForeignObject(
   const origNodes = [element, ...Array.from(element.querySelectorAll('*'))];
   const cloneNodes = [clone, ...Array.from(clone.querySelectorAll('*'))];
 
-  const helperCanvas = document.createElement('canvas');
-  helperCanvas.width = 1;
-  helperCanvas.height = 1;
-  const helperCtx = helperCanvas.getContext('2d', { willReadFrequently: true });
-
   origNodes.forEach((orig, idx) => {
     const target = cloneNodes[idx];
     if (!(orig instanceof HTMLElement || orig instanceof SVGElement)) return;
@@ -216,22 +269,12 @@ async function renderElementViaSvgForeignObject(
 
     const cs = window.getComputedStyle(orig);
     let cssText = '';
-    for (let i = 0; i < cs.length; i++) {
-      const prop = cs[i];
-      if (!prop || prop.startsWith('--')) continue;
-      // Skip external url() background images to avoid tainting foreignObject canvas
+    for (let i = 0; i < ESSENTIAL_EXPORT_CSS_PROPS.length; i++) {
+      const prop = ESSENTIAL_EXPORT_CSS_PROPS[i];
       let val = cs.getPropertyValue(prop);
-      if (!val) continue;
-      if (prop === 'background-image' && val.includes('url(') && !val.includes('data:image/')) {
-        continue;
-      }
-      if (
-        val.includes('oklch') ||
-        val.includes('oklab') ||
-        val.includes('color-mix') ||
-        val.includes('color(')
-      ) {
-        val = toLegacyRgbColor(val, helperCtx);
+      if (shouldSkipExportCssValue(prop, val)) continue;
+      if (needsLegacyColorConversion(val)) {
+        val = toLegacyRgbColor(val, null);
       }
       cssText += `${prop}:${val};`;
     }
@@ -250,6 +293,7 @@ async function renderElementViaSvgForeignObject(
       tagName !== 'HR' &&
       tagName !== 'INPUT' &&
       tagName !== 'SELECT' &&
+      tagName !== 'TEXTAREA' &&
       !orig.classList.contains('zsb-sl-badge');
 
     if (isLeafTextElement && target instanceof HTMLElement) {
@@ -276,9 +320,9 @@ async function renderElementViaSvgForeignObject(
     node.remove();
   });
 
-  // Convert <input> and <select> elements into crisp static text nodes
-  clone.querySelectorAll('input, select').forEach((ctrl) => {
-    const el = ctrl as HTMLInputElement | HTMLSelectElement;
+  // Convert <input>, <select>, and <textarea> elements into crisp static text nodes
+  clone.querySelectorAll('input, select, textarea').forEach((ctrl) => {
+    const el = ctrl as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
     let displayVal = el.value || '';
     if (el instanceof HTMLInputElement && el.type === 'date' && displayVal) {
       displayVal = formatDate(displayVal);
@@ -288,7 +332,7 @@ async function renderElementViaSvgForeignObject(
     span.style.cssText = el.style.cssText;
     span.style.display = 'inline-block';
     span.style.width = '100%';
-    span.style.textAlign = 'center';
+    span.style.textAlign = el.tagName === 'TEXTAREA' ? 'left' : 'center';
     span.style.verticalAlign = 'middle';
     span.style.color = '#000000';
     span.style.border = 'none';
@@ -337,8 +381,8 @@ async function renderElementViaSvgForeignObject(
   ctx.scale(scale, scale);
   ctx.drawImage(img, 0, 0, width, height);
 
-  // Verify the canvas is not tainted before returning
-  canvas.toDataURL('image/png', 1.0);
+  // Fast O(1) SecurityError check to verify the canvas is not tainted (avoids extra full-frame PNG encode)
+  ctx.getImageData(0, 0, 1, 1);
   return canvas;
 }
 
@@ -585,6 +629,7 @@ export async function exportElementToPdf(
       orientation: 'portrait',
       unit: 'mm',
       format: 'a4',
+      compress: true,
     });
 
     // Standard A4 dimensions in mm
@@ -599,8 +644,8 @@ export async function exportElementToPdf(
 
     if (totalImgHeightMm <= printableHeight) {
       // Single page voucher: perfectly centered with standard 10mm margins
-      const imgData = canvas.toDataURL('image/png', 1.0);
-      pdf.addImage(imgData, 'PNG', margin, margin, printableWidth, totalImgHeightMm);
+      const imgData = canvas.toDataURL('image/jpeg', 0.92);
+      pdf.addImage(imgData, 'JPEG', margin, margin, printableWidth, totalImgHeightMm, undefined, 'FAST');
     } else {
       // Multi-page document: slice canvas cleanly by page chunks
       const slicePixelHeight = (printableHeight * canvas.width) / printableWidth;
@@ -633,9 +678,9 @@ export async function exportElementToPdf(
             currentSlicePixels
           );
 
-          const sliceData = sliceCanvas.toDataURL('image/png', 1.0);
+          const sliceData = sliceCanvas.toDataURL('image/jpeg', 0.92);
           const currentSliceHeightMm = (currentSlicePixels * printableWidth) / canvas.width;
-          pdf.addImage(sliceData, 'PNG', margin, margin, printableWidth, currentSliceHeightMm);
+          pdf.addImage(sliceData, 'JPEG', margin, margin, printableWidth, currentSliceHeightMm, undefined, 'FAST');
         }
 
         currentSourceY += currentSlicePixels;
@@ -689,6 +734,7 @@ export async function exportElementsToCombinedPdf(
       orientation: 'portrait',
       unit: 'mm',
       format: 'a4',
+      compress: true,
     });
 
     const pageWidth = 210;
@@ -698,10 +744,12 @@ export async function exportElementsToCombinedPdf(
     const printableHeight = pageHeight - margin * 2; // 277mm
 
     let pagesAdded = 0;
+    const renderedCanvases = await Promise.all(
+      targets.map((target) => renderElementToHighResCanvas(target, targetWidth))
+    );
 
-    for (let i = 0; i < targets.length; i++) {
-      const target = targets[i];
-      const canvas = await renderElementToHighResCanvas(target, targetWidth);
+    for (let i = 0; i < renderedCanvases.length; i++) {
+      const canvas = renderedCanvases[i];
       if (!canvas) continue;
 
       if (pagesAdded > 0) {
@@ -712,8 +760,8 @@ export async function exportElementsToCombinedPdf(
       const totalImgHeightMm = (canvas.height * printableWidth) / canvas.width;
 
       if (totalImgHeightMm <= printableHeight) {
-        const imgData = canvas.toDataURL('image/png', 1.0);
-        pdf.addImage(imgData, 'PNG', margin, margin, printableWidth, totalImgHeightMm);
+        const imgData = canvas.toDataURL('image/jpeg', 0.92);
+        pdf.addImage(imgData, 'JPEG', margin, margin, printableWidth, totalImgHeightMm, undefined, 'FAST');
       } else {
         const slicePixelHeight = (printableHeight * canvas.width) / printableWidth;
         let currentSourceY = 0;
@@ -745,9 +793,9 @@ export async function exportElementsToCombinedPdf(
               currentSlicePixels
             );
 
-            const sliceData = sliceCanvas.toDataURL('image/png', 1.0);
+            const sliceData = sliceCanvas.toDataURL('image/jpeg', 0.92);
             const currentSliceHeightMm = (currentSlicePixels * printableWidth) / canvas.width;
-            pdf.addImage(sliceData, 'PNG', margin, margin, printableWidth, currentSliceHeightMm);
+            pdf.addImage(sliceData, 'JPEG', margin, margin, printableWidth, currentSliceHeightMm, undefined, 'FAST');
           }
 
           currentSourceY += currentSlicePixels;

@@ -144,10 +144,16 @@ const MainContent: React.FC = () => {
     };
   }, []);
 
+  const wasNativeFullscreenRef = useRef(false);
+
   useEffect(() => {
     const handleFullscreenChange = () => {
       if (document.fullscreenElement) {
+        wasNativeFullscreenRef.current = true;
         setIsFullScreen(true);
+      } else if (wasNativeFullscreenRef.current) {
+        wasNativeFullscreenRef.current = false;
+        setIsFullScreen(false);
       }
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -390,6 +396,9 @@ const MainContent: React.FC = () => {
     ]
   );
 
+  const executeShortcutActionRef = useRef(executeShortcutAction);
+  executeShortcutActionRef.current = executeShortcutAction;
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -410,12 +419,12 @@ const MainContent: React.FC = () => {
         e.preventDefault();
       }
 
-      executeShortcutAction(resolved.action, resolved.targetTab);
+      executeShortcutActionRef.current(resolved.action, resolved.targetTab);
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [executeShortcutAction]);
+  }, []);
 
   // Horizontal Swipe-to-Scroll State & Gesture Refs for `sheet-viewport-scroll-wrapper` in Smart Mobile Mode
   const sheetScrollWrapperRef = useRef<HTMLDivElement | null>(null);

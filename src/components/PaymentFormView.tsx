@@ -275,11 +275,13 @@ export const PaymentFormView: React.FC = () => {
       });
     }
 
-    // Reset form for next entry
+    // Reset form for next entry (do not advance sequence count when editing an existing voucher)
     setCreditAmount('');
     setRemarks('');
     setRefPurchaseInvoice('');
-    setInvoiceNumber(generateInvoiceNumber('PAY', supplierPayments.length + 1));
+    setInvoiceNumber(
+      generateInvoiceNumber('PAY', editingPaymentId ? supplierPayments.length : supplierPayments.length + 1)
+    );
 
     // Focus supplier input for the next fast payment entry
     setTimeout(() => {
@@ -301,25 +303,34 @@ export const PaymentFormView: React.FC = () => {
   };
 
   // Keyboard shortcut support (Ctrl+S, Print)
+  const shortcutHandlerRef = useRef<(action: ViewShortcutEventDetail['action']) => void>(() => {});
+  shortcutHandlerRef.current = (action) => {
+    if (action === 'SAVE_ACTIVE_VIEW') {
+      handleSaveVoucher({ openPreview: false });
+    } else if (action === 'PRINT_ACTIVE_VIEW') {
+      handleSaveVoucher({ openPreview: true });
+    } else if (action === 'RESET_FORM') {
+      handleClearForm();
+    }
+  };
+
   useEffect(() => {
     const handleShortcut = (e: Event) => {
       const customEvent = e as CustomEvent<ViewShortcutEventDetail>;
       const action = customEvent.detail?.action;
-      if (action === 'SAVE_ACTIVE_VIEW') {
+      if (
+        action === 'SAVE_ACTIVE_VIEW' ||
+        action === 'PRINT_ACTIVE_VIEW' ||
+        action === 'RESET_FORM'
+      ) {
         customEvent.detail.handled = true;
-        handleSaveVoucher({ openPreview: false });
-      } else if (action === 'PRINT_ACTIVE_VIEW') {
-        customEvent.detail.handled = true;
-        handleSaveVoucher({ openPreview: true });
-      } else if (action === 'RESET_FORM') {
-        customEvent.detail.handled = true;
-        handleClearForm();
+        shortcutHandlerRef.current(action);
       }
     };
 
     window.addEventListener(ZSB_VIEW_SHORTCUT_EVENT, handleShortcut);
     return () => window.removeEventListener(ZSB_VIEW_SHORTCUT_EVENT, handleShortcut);
-  });
+  }, []);
 
   // Latest 8 supplier payments for quick audit table
   const recentSupplierPayments = useMemo(() => {

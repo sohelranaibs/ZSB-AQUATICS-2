@@ -156,26 +156,49 @@ button.zsb-help-icon-btn svg {
   flex-shrink: 0;
 }
 
-/* Packing List Ledger — Live BDT Conversion: Remove all cell color and make all text Black */
-.packing-ledger-plain-table,
+/* Packing List Ledger — Live BDT Conversion: 1st row (header) uses #273e56 with white text; body & footer stay plain white/black */
+.packing-ledger-plain-table {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
 .packing-ledger-plain-table thead,
+.packing-ledger-plain-table thead tr,
+.packing-ledger-plain-table thead th {
+  background-color: #273e56 !important;
+  background-image: none !important;
+  color: #ffffff !important;
+  border-color: #1f3349 !important;
+}
+
+.packing-ledger-plain-table thead th:hover {
+  background-color: #1f3349 !important;
+}
+
+.packing-ledger-plain-table thead *,
+.packing-ledger-plain-table thead svg {
+  color: #ffffff !important;
+}
+
 .packing-ledger-plain-table tbody,
 .packing-ledger-plain-table tfoot,
-.packing-ledger-plain-table tr,
-.packing-ledger-plain-table th,
+.packing-ledger-plain-table tbody tr,
+.packing-ledger-plain-table tfoot tr,
 .packing-ledger-plain-table td {
   background-color: #ffffff !important;
   background-image: none !important;
   color: #000000 !important;
 }
 
-.packing-ledger-plain-table *:not(thead):not(tbody):not(tfoot):not(tr):not(th):not(td):not(svg):not(path):not(button[data-zsb-clicked="true"]):not(button:active) {
+.packing-ledger-plain-table tbody *:not(tr):not(td):not(svg):not(path):not(button[data-zsb-clicked="true"]):not(button:active),
+.packing-ledger-plain-table tfoot *:not(tr):not(td):not(svg):not(path):not(button[data-zsb-clicked="true"]):not(button:active) {
   background-color: transparent !important;
   background-image: none !important;
   color: #000000 !important;
 }
 
-.packing-ledger-plain-table svg {
+.packing-ledger-plain-table tbody svg,
+.packing-ledger-plain-table tfoot svg {
   color: #000000 !important;
 }
 

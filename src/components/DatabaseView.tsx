@@ -2907,9 +2907,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 data-testid="packing-ledger-live-bdt-table"
                 className="w-full text-left text-[11px] bg-white text-black packing-ledger-plain-table"
               >
-                <thead className="sticky top-0 z-10 bg-white text-black font-bold uppercase text-[10px] tracking-tight border-b border-slate-300">
-                  <tr className="bg-white text-black">
-                    <th className="px-1 py-2 w-6 text-center bg-white text-black">
+                <thead className="sticky top-0 z-10 bg-[#273E56] text-white font-bold uppercase text-[10px] tracking-tight border-b border-[#1F3349]">
+                  <tr className="bg-[#273E56] text-white">
+                    <th className="px-1 py-2 w-6 text-center bg-[#273E56] text-white">
                       <input
                         ref={packingHeaderCheckboxRef}
                         type="checkbox"
@@ -2919,24 +2919,24 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         onChange={() =>
                           handleSelectAll(sortedPackings.map((p) => p.id))
                         }
-                        className="cursor-pointer accent-black"
+                        className="cursor-pointer accent-[#0D9488]"
                       />
                     </th>
-                    <th className="px-1 py-2 w-10 text-center whitespace-nowrap bg-white text-black">SL #</th>
-                    {renderSortableHeader('invoiceNumber', 'PACKING NO', 'left', 'whitespace-nowrap bg-white text-black')}
-                    {renderSortableHeader('date', 'DATE', 'left', 'whitespace-nowrap bg-white text-black')}
-                    {renderSortableHeader('shippingMark', 'SHIPPING MARK', 'left', 'bg-white text-black')}
-                    {renderSortableHeader('flight', 'FLIGHT', 'left', 'whitespace-nowrap bg-white text-black')}
-                    {renderSortableHeader('destination', 'DESTINATION', 'left', 'bg-white text-black')}
-                    {renderSortableHeader('shipper', 'SHIPPER', 'left', 'bg-white text-black')}
-                    {renderSortableHeader('items', 'ITEMS', 'left', 'bg-white text-black')}
-                    {renderSortableHeader('totalBox', 'TOTAL BOX', 'right', 'bg-white text-black')}
-                    {renderSortableHeader('totalWeight', 'TOTAL WEIGHT', 'right', 'bg-white text-black')}
-                    {renderSortableHeader('totalAmount', 'TOTAL VALUE', 'right', 'bg-white text-black')}
-                    {renderSortableHeader('rmbRate', 'RMB RATE', 'right', 'bg-white text-black')}
-                    {renderSortableHeader('amountBDT', 'TOTAL AMOUNT (BDT)', 'right', 'bg-white text-black')}
-                    {renderSortableHeader('status', 'STATUS', 'center', 'whitespace-nowrap bg-white text-black')}
-                    <th className="px-1 py-2 text-center whitespace-nowrap bg-white text-black">ACTIONS</th>
+                    <th className="px-1 py-2 w-10 text-center whitespace-nowrap bg-[#273E56] text-white">SL #</th>
+                    {renderSortableHeader('invoiceNumber', 'PACKING NO', 'left', 'whitespace-nowrap bg-[#273E56] text-white')}
+                    {renderSortableHeader('date', 'DATE', 'left', 'whitespace-nowrap bg-[#273E56] text-white')}
+                    {renderSortableHeader('shippingMark', 'SHIPPING MARK', 'left', 'bg-[#273E56] text-white')}
+                    {renderSortableHeader('flight', 'FLIGHT', 'left', 'whitespace-nowrap bg-[#273E56] text-white')}
+                    {renderSortableHeader('destination', 'DESTINATION', 'left', 'bg-[#273E56] text-white')}
+                    {renderSortableHeader('shipper', 'SHIPPER', 'left', 'bg-[#273E56] text-white')}
+                    {renderSortableHeader('items', 'ITEMS', 'left', 'bg-[#273E56] text-white')}
+                    {renderSortableHeader('totalBox', 'TOTAL BOX', 'right', 'bg-[#273E56] text-white')}
+                    {renderSortableHeader('totalWeight', 'TOTAL WEIGHT', 'right', 'bg-[#273E56] text-white')}
+                    {renderSortableHeader('totalAmount', 'TOTAL VALUE', 'right', 'bg-[#273E56] text-white')}
+                    {renderSortableHeader('rmbRate', 'RMB RATE', 'right', 'bg-[#273E56] text-white')}
+                    {renderSortableHeader('amountBDT', 'TOTAL AMOUNT (BDT)', 'right', 'bg-[#273E56] text-white')}
+                    {renderSortableHeader('status', 'STATUS', 'center', 'whitespace-nowrap bg-[#273E56] text-white')}
+                    <th className="px-1 py-2 text-center whitespace-nowrap bg-[#273E56] text-white">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 font-medium bg-white text-black">

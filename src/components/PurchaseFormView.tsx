@@ -13,6 +13,7 @@ import { PurchaseItemRow } from '../types/index.ts';
 import { validatePurchaseForm } from '../utils/validation.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
 import { exportElementToPng } from '../utils/pdfGenerator.ts';
+import { yieldForDomFrame } from '../utils/pdfExportStyles.ts';
 import {
   ZSB_VIEW_SHORTCUT_EVENT,
   ViewShortcutEventDetail,
@@ -231,12 +232,15 @@ export const PurchaseFormView: React.FC = () => {
   };
 
   // Sync when editingPurchaseId is selected externally (e.g. from DatabaseView)
+  const lastLoadedEditingPurchaseIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (editingPurchaseId) {
-      const found = purchases.find((p) => p.id === editingPurchaseId);
-      if (found && found.invoiceNumber !== invoiceNumber) {
-        handleLoadForEdit(editingPurchaseId);
-      }
+    if (!editingPurchaseId) {
+      lastLoadedEditingPurchaseIdRef.current = null;
+      return;
+    }
+    if (lastLoadedEditingPurchaseIdRef.current !== editingPurchaseId) {
+      lastLoadedEditingPurchaseIdRef.current = editingPurchaseId;
+      handleLoadForEdit(editingPurchaseId);
     }
   }, [editingPurchaseId]);
 
@@ -433,6 +437,7 @@ export const PurchaseFormView: React.FC = () => {
     setIsExportingPng(true);
     const filename = formatPurchaseExportFilename(invoiceNumber, description, date, 'png');
     try {
+      await yieldForDomFrame();
       const success = await exportElementToPng('purchase-voucher-export-canvas', filename, 760);
       if (success) {
         showToast(`PNG image downloaded: ${filename}`);
@@ -1610,7 +1615,8 @@ export const PurchaseFormView: React.FC = () => {
         </div>
       </div>
 
-      {/* Offscreen Printable / Exportable Purchase Challan Canvas for Direct PDF & .PNG Export (Identical to PrintPreviewModal) */}
+      {/* Offscreen Printable / Exportable Purchase Challan Canvas for Direct PDF & .PNG Export (Mounted Only On Demand) */}
+      {(isExportingPng || isShareModalOpen) && (
       <div className="fixed -left-[9999px] top-0 pointer-events-none" aria-hidden="true">
         <div
           id="purchase-voucher-export-canvas"
@@ -1860,6 +1866,7 @@ export const PurchaseFormView: React.FC = () => {
           </div>
         </div>
       </div>
+      )}
 
       {/* Interactive PNG WeChat Share Modal */}
       {isShareModalOpen && (

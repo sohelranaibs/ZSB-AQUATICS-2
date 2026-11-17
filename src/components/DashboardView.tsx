@@ -53,9 +53,16 @@ import {
   Wallet,
 } from 'lucide-react';
 import { buildMonthlyMortalityReport } from '../utils/mortalityReport.ts';
+import { downloadCsvFile } from '../utils/csvExporter.ts';
+import {
+  buildDashboardSummaryCsvFilename,
+  generateDashboardSummaryCSV,
+} from '../utils/dashboardSummaryCsv.ts';
 import { MonthlySummaryCard } from './MonthlySummaryCard.tsx';
+import { ProfitLossTrendChart } from './ProfitLossTrendChart.tsx';
 import { MonthlyPerformanceSummaryWidget } from './MonthlyPerformanceSummaryWidget.tsx';
 import { TopSuppliersChart } from './TopSuppliersChart.tsx';
+import { DashboardAllSuppliersReport } from './DashboardAllSuppliersReport.tsx';
 import { MonthlyReportsExportView } from './MonthlyReportsExportView.tsx';
 import { DailyFinancialSummaryWidget } from './DailyFinancialSummaryWidget.tsx';
 import { QuickFinancialPulseSidebar } from './QuickFinancialPulseSidebar.tsx';
@@ -232,6 +239,37 @@ export const DashboardView: React.FC = () => {
   const latestPurchaseDate = purchases[0]?.date ? formatDate(purchases[0].date) : 'No records';
   const latestPaymentDate = payments[0]?.date ? formatDate(payments[0].date) : 'No records';
   const latestPackingDate = packings[0]?.packingDate ? formatDate(packings[0].packingDate) : 'No records';
+
+  const handleDownloadSummaryCsv = () => {
+    const csvContent = generateDashboardSummaryCSV({
+      companyName: companyProfile.companyName || 'ZSB AQUATICS',
+      currency: companyProfile.currency || 'TK',
+      rmbExchangeRate: companyProfile.rmbExchangeRate || 16.5,
+      totalExportValueBDT: totalExportValue,
+      totalPurchaseValue,
+      totalPurchaseCount,
+      totalPurchaseQtyKg: totalPurchaseQty,
+      totalPackingCount,
+      totalExportWeightKg: totalWeight,
+      totalExportBoxes: totalBoxes,
+      totalRmbSettled,
+      totalPaymentCount,
+      supplierPaymentCount,
+      exporterPaymentCount,
+      totalPaymentsMade,
+      activePartiesCount,
+      executiveMarginPercent,
+      availableStockKg: lowStockSummary.totalAvailableStockKg,
+      stockStatus: lowStockSummary.totalStockStatus,
+      totalBalance: totalBalanceSummary.totalBalance,
+      latestPurchaseDate,
+      latestPackingDate,
+      latestPaymentDate,
+    });
+    const filename = buildDashboardSummaryCsvFilename();
+    downloadCsvFile(csvContent, filename);
+    showToast(`Dashboard summary CSV downloaded: ${filename}`);
+  };
 
   // Recent activity list with filter support
   const allActivities = useMemo(() => {
@@ -571,6 +609,16 @@ export const DashboardView: React.FC = () => {
               className="px-2.5 py-1.5 rounded-lg bg-[#1D6CE0] hover:bg-[#1558BD] text-white text-[11px] font-semibold transition cursor-pointer whitespace-nowrap shrink-0"
             >
               + Packing
+            </button>
+            <button
+              type="button"
+              data-testid="dashboard-download-summary-csv-btn"
+              onClick={handleDownloadSummaryCsv}
+              className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-[#0D9488] hover:bg-[#0F766E] text-white border border-white/15 rounded-lg text-[11px] font-bold shadow-xs transition cursor-pointer whitespace-nowrap shrink-0"
+              title="Export high-level dashboard card metrics as a formatted CSV file"
+            >
+              <Download className="w-3.5 h-3.5 stroke-[2.25] shrink-0" />
+              <span>Download Summary CSV</span>
             </button>
             <button
               type="button"
@@ -1620,11 +1668,17 @@ export const DashboardView: React.FC = () => {
       {/* Current Month Financial Summary (Total Purchases, Total Export Value, Net Profit) */}
       <MonthlySummaryCard onOpenMonthlyReports={() => setDashboardSubView('monthly_reports')} />
 
+      {/* 6-Month Profit & Loss Area Chart (Monthly Revenue vs. Monthly Costs) */}
+      <ProfitLossTrendChart />
+
       {/* Monthly Performance Summary Widget (Side-by-Side Comparison of Total Monthly Purchases vs. Total Monthly Payments Bar Chart) */}
       <MonthlyPerformanceSummaryWidget />
 
       {/* Top 5 Suppliers by Total Purchase Volume (Recharts BarChart & Leaderboard) */}
       <TopSuppliersChart />
+
+      {/* All Supplier List · Total Purchase & Total Due Report History */}
+      <DashboardAllSuppliersReport />
 
       {/* Main Two-Column Split: Workbook Data Entry Modules (7 Cols) & Ledger Database Status (5 Cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">

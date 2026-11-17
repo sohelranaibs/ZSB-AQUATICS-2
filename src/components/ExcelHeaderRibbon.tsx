@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useApp } from '../context/AppContext.tsx';
+import { useSyncTelemetrySnapshot } from '../context/VolatileFeedbackStore.ts';
 import {
   buildExporterPaymentSlipRows,
   calculateExporterSlipTotals,
@@ -60,7 +61,261 @@ interface ExcelHeaderRibbonProps {
   onOpenMobileDrawer?: () => void;
 }
 
-export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
+interface HeaderSyncControlsProps {
+  totalRecordsCount: number;
+  isLiveSyncEnabled: boolean;
+  toggleLiveSync: (enabled?: boolean) => void;
+  forceSyncNow: (entityLabel?: string) => Promise<boolean>;
+}
+
+const HeaderSyncControls: React.FC<HeaderSyncControlsProps> = React.memo(
+  ({ totalRecordsCount, isLiveSyncEnabled, toggleLiveSync, forceSyncNow }) => {
+    const {
+      syncStatus,
+      lastSyncedAt,
+      lastBackupAt,
+      lastSyncedEntity,
+      syncStartedAtMs,
+      isSlowConnection,
+      isForcingSync,
+      hasUnsyncedChanges,
+    } = useSyncTelemetrySnapshot();
+
+    const [nowMs, setNowMs] = React.useState<number>(() => Date.now());
+
+    React.useEffect(() => {
+      setNowMs(Date.now());
+      const tickMs = syncStatus === 'saving' || isForcingSync ? 1000 : 10000;
+      const interval = window.setInterval(() => {
+        setNowMs(Date.now());
+      }, tickMs);
+      return () => window.clearInterval(interval);
+    }, [lastSyncedAt, lastBackupAt, syncStatus, isForcingSync, hasUnsyncedChanges]);
+
+    const syncDisplay = useMemo(
+      () =>
+        getSyncStatusDisplay(
+          {
+            status: syncStatus,
+            lastSyncedAt,
+            lastBackupAt,
+            lastSyncedEntity,
+            totalRecordsCount,
+            isLiveSyncEnabled,
+            hasUnsyncedChanges,
+            syncStartedAtMs,
+            isSlowConnection,
+            isForcingSync,
+          },
+          nowMs
+        ),
+      [
+        syncStatus,
+        lastSyncedAt,
+        lastBackupAt,
+        lastSyncedEntity,
+        totalRecordsCount,
+        isLiveSyncEnabled,
+        hasUnsyncedChanges,
+        syncStartedAtMs,
+        isSlowConnection,
+        isForcingSync,
+        nowMs,
+      ]
+    );
+
+    return (
+      <div
+        data-testid="header-sync-group"
+        className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border bg-[#1F3349] shrink-0 transition-colors ${
+          syncDisplay.isSlowSync || syncDisplay.indicatorColor === 'rose'
+            ? 'border-amber-400/70'
+            : 'border-white/15'
+        }`}
+      >
+        {/* Live Sync Background Auto-save Toggle */}
+        <div
+          className="flex items-center space-x-1 text-[11px] whitespace-nowrap shrink-0 pr-1.5 border-r border-white/15"
+          title={
+            isLiveSyncEnabled
+              ? 'Live Sync is ON: Background database auto-save is active. Click to pause for high-frequency data entry.'
+              : 'Live Sync is PAUSED: Background auto-save disabled. Click to resume or click "Force Sync" (Ctrl+S) to back up immediately.'
+          }
+        >
+          <Zap
+            className={`w-3 h-3 transition-colors ${
+              isLiveSyncEnabled ? 'text-[#00B14F]' : 'text-slate-400'
+            }`}
+          />
+          <button
+            type="button"
+            role="switch"
+            aria-checked={isLiveSyncEnabled}
+            data-testid="ribbon-live-sync-toggle"
+            onClick={() => toggleLiveSync()}
+            aria-label={`Live Sync background auto-save toggle. Currently ${
+              isLiveSyncEnabled ? 'Enabled' : 'Paused'
+            }. Click to toggle.`}
+            className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-1 focus:ring-[#1D6CE0] ${
+              isLiveSyncEnabled ? 'bg-[#00B14F]' : 'bg-slate-500'
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                isLiveSyncEnabled ? 'translate-x-3' : 'translate-x-0'
+              }`}
+            />
+          </button>
+
+          <span
+            className={`text-[10px] font-mono font-bold ${
+              isLiveSyncEnabled ? 'text-emerald-300' : 'text-amber-300'
+            }`}
+          >
+            {isLiveSyncEnabled ? 'ON' : 'OFF'}
+          </span>
+        </div>
+
+        {/* Background Sync Status & Last Successful Backup Timestamp */}
+        <div
+          role="status"
+          aria-live="polite"
+          data-testid="ribbon-sync-status"
+          data-sync-freshness={syncDisplay.freshnessTier}
+          data-sync-color={syncDisplay.indicatorColor}
+          data-sync-slow={syncDisplay.isSlowSync ? 'true' : 'false'}
+          aria-label={`${syncDisplay.ariaLabel}. Last backup at ${syncDisplay.formattedBackupDateTime}.`}
+          title={`Background Sync: ${syncDisplay.statusBannerLabel} (${syncDisplay.freshnessLabel})\nLast Successful Backup: ${syncDisplay.formattedBackupDateTime} (${syncDisplay.backupElapsedText})\nRecords Protected: ${totalRecordsCount} ledger entries`}
+          className="flex items-center space-x-1.5 text-[11px] whitespace-nowrap shrink-0"
+        >
+          {syncStatus === 'saving' || isForcingSync ? (
+            <RefreshCw className="w-3 h-3 text-amber-300 animate-spin shrink-0" />
+          ) : syncDisplay.indicatorColor === 'rose' ? (
+            <AlertCircle className="w-3 h-3 text-rose-300 shrink-0" />
+          ) : syncStatus === 'paused' ? (
+            <Pause className="w-3 h-3 text-amber-300 shrink-0" />
+          ) : syncDisplay.isSlowSync ? (
+            <AlertCircle className="w-3 h-3 text-amber-300 shrink-0" />
+          ) : (
+            <span
+              data-testid="header-sync-status-dot"
+              className="relative flex h-2 w-2 shrink-0"
+            >
+              <span
+                className={`relative inline-flex rounded-full h-2 w-2 ${
+                  syncDisplay.indicatorColor === 'emerald'
+                    ? 'bg-[#00B14F]'
+                    : syncDisplay.indicatorColor === 'sky'
+                    ? 'bg-[#1D6CE0]'
+                    : 'bg-amber-400'
+                }`}
+              />
+            </span>
+          )}
+
+          <span
+            data-testid="header-sync-freshness-label"
+            className={`text-[11px] font-bold ${
+              syncDisplay.isSlowSync || syncStatus === 'saving'
+                ? 'text-amber-300'
+                : syncDisplay.indicatorColor === 'rose'
+                ? 'text-rose-300'
+                : syncStatus === 'paused'
+                ? 'text-amber-300'
+                : 'text-emerald-300'
+            }`}
+          >
+            {syncDisplay.statusBannerLabel}
+          </span>
+
+          <span
+            data-testid="header-last-backup-timestamp"
+            className="text-[10px] font-mono font-semibold text-sky-200 border-l border-white/20 pl-1.5"
+          >
+            Last Backup: {syncDisplay.formattedBackupTime}
+            <span
+              data-testid="header-sync-elapsed-badge"
+              className="hidden 2xl:inline text-slate-300"
+            >
+              {' '}
+              · {syncDisplay.backupElapsedText}
+            </span>
+          </span>
+        </div>
+
+        {/* Manual Force Sync Button (especially helpful if connection is slow or sync is paused) */}
+        <button
+          type="button"
+          data-testid="ribbon-force-sync-btn"
+          disabled={isForcingSync}
+          onClick={() => {
+            void forceSyncNow('All Ledgers (Manual Force Sync)');
+            setNowMs(Date.now());
+          }}
+          aria-label="Force immediate background synchronization and backup"
+          title={
+            syncDisplay.isSlowSync
+              ? 'Slow connection detected: Click Force Sync to immediately flush all ledgers to backup storage (Ctrl+S)'
+              : 'Force Sync: Immediately flush all ledgers & update backup timestamp (Ctrl+S)'
+          }
+          className={`flex items-center space-x-1 px-2 py-0.5 text-[10px] font-bold rounded border transition whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-60 disabled:cursor-wait ${
+            syncDisplay.shouldHighlightForceSync
+              ? 'border-amber-400 bg-amber-500/20 text-amber-200 hover:bg-amber-500/30'
+              : 'border-white/25 bg-white/10 hover:bg-white/20 text-white'
+          }`}
+        >
+          <RefreshCw
+            className={`w-3 h-3 shrink-0 ${
+              isForcingSync ? 'animate-spin text-amber-300' : 'text-sky-200'
+            }`}
+          />
+          <span>{isForcingSync ? 'Syncing...' : 'Force Sync'}</span>
+        </button>
+      </div>
+    );
+  }
+);
+
+const HeaderBottomSyncStatus: React.FC<{ totalRecordsCount: number; rmbExchangeRate: number }> =
+  React.memo(({ totalRecordsCount, rmbExchangeRate }) => {
+    const { syncStatus, lastSyncedEntity, hasUnsyncedChanges } = useSyncTelemetrySnapshot();
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        className="text-[11px] font-mono text-slate-200 hidden 2xl:flex items-center space-x-2.5 shrink-0"
+      >
+        <span
+          className={`flex items-center space-x-1 ${
+            syncStatus === 'saving'
+              ? 'text-amber-300 font-semibold'
+              : syncStatus === 'error'
+              ? 'text-rose-300 font-semibold'
+              : syncStatus === 'paused'
+              ? 'text-amber-300 font-semibold'
+              : 'text-emerald-300 font-semibold'
+          }`}
+        >
+          <Database className="w-3 h-3 shrink-0" />
+          <span>
+            {syncStatus === 'saving'
+              ? `Auto-saving (${lastSyncedEntity})...`
+              : syncStatus === 'error'
+              ? 'Sync Error'
+              : syncStatus === 'paused'
+              ? hasUnsyncedChanges
+                ? 'Live Sync Paused (Unsaved Edits)'
+                : 'Live Sync Paused (Idle)'
+              : `Synced (${totalRecordsCount} records)`}
+          </span>
+        </span>
+        <span className="text-white/25">|</span>
+        <span className="text-sky-200">1 RMB = {rmbExchangeRate} TK</span>
+      </div>
+    );
+  });
+
+export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
   onOpenShortcutsModal,
   displayMode = 'smart_mobile',
   onChangeDisplayMode,
@@ -82,38 +337,19 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
     companyProfile,
     exportDatabaseJSON,
     importDatabaseJSON,
-    openPrintModal,
-    openDataCenterModal,
     openSnapshotModal,
     snapshots,
     purchases,
     packings,
     payments,
     otherCosts,
-    syncStatus,
-    lastSyncedAt,
-    lastSyncedEntity,
-    triggerManualSync,
+    forceSyncNow,
     isLiveSyncEnabled,
     toggleLiveSync,
-    hasUnsyncedChanges,
-    exportCurrentViewToPdf,
-    isExportingGlobalPdf,
-    lastExportedPdfFilename,
     currentUser,
     logout,
     auditLogs,
   } = useApp();
-
-  const [nowMs, setNowMs] = React.useState<number>(() => Date.now());
-
-  React.useEffect(() => {
-    setNowMs(Date.now());
-    const interval = window.setInterval(() => {
-      setNowMs(Date.now());
-    }, 10000);
-    return () => window.clearInterval(interval);
-  }, [lastSyncedAt, syncStatus, hasUnsyncedChanges]);
 
   const totalRecordsCount = computeTotalPersistedRecords({
     purchases: purchases.length,
@@ -121,18 +357,6 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
     payments: payments.length,
     otherCosts: otherCosts.length,
   });
-
-  const syncDisplay = getSyncStatusDisplay(
-    {
-      status: syncStatus,
-      lastSyncedAt,
-      lastSyncedEntity,
-      totalRecordsCount,
-      isLiveSyncEnabled,
-      hasUnsyncedChanges,
-    },
-    nowMs
-  );
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -152,25 +376,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
 
 
 
-  const getDatasetForActiveTab = () => {
-    if (
-      activeTab === 'packing_form' ||
-      activeTab === 'air_way_bill' ||
-      activeTab === 'packing_db' ||
-      activeTab === 'exporter_payment_slip'
-    ) {
-      return 'packing' as const;
-    }
-    if (activeTab === 'payment_form' || activeTab === 'exporter_payment_form' || activeTab === 'payment_db') {
-      return 'payment' as const;
-    }
-    if (activeTab === 'profit_loss' || activeTab === 'total_balance') {
-      return 'other_cost' as const;
-    }
-    return 'purchase' as const;
-  };
-
-  const getFormulaForTab = () => {
+  const formulaText = useMemo(() => {
     switch (activeTab) {
       case 'dashboard':
         return '=SUM(PURCHASE_DB!E:E) + SUM(PACKING_DB!G:G) [REAL-TIME SYSTEM ROLLUP]';
@@ -201,14 +407,18 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
       default:
         return '=VLOOKUP(Invoice_Number, MASTER_DATABASE, 2, FALSE)';
     }
-  };
+  }, [activeTab, auditLogs.length]);
 
-  const workbookSheets = buildWorkbookSheets({
-    purchasesCount: purchases.length,
-    packingsCount: packings.length,
-    paymentsCount: payments.length,
-    auditLogsCount: auditLogs.length,
-  });
+  const workbookSheets = useMemo(
+    () =>
+      buildWorkbookSheets({
+        purchasesCount: purchases.length,
+        packingsCount: packings.length,
+        paymentsCount: payments.length,
+        auditLogsCount: auditLogs.length,
+      }),
+    [purchases.length, packings.length, payments.length, auditLogs.length]
+  );
 
   const activeSheetMeta = workbookSheets.find((s) => s.id === activeTab) || workbookSheets[0];
 
@@ -334,108 +544,15 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
           <GlobalSearchBar />
         </div>
 
-        {/* Right: Quick Macro Actions & Sync Status */}
+        {/* Right: Quick Macro Actions & Background Sync Status */}
         <div className="flex items-center gap-1.5 order-2 xl:order-3 flex-wrap justify-end">
-          {/* Live Sync Background Auto-save Toggle */}
-          <div
-            className="flex items-center space-x-1 px-2 py-1 text-[11px] rounded-lg border border-white/15 bg-[#1F3349] whitespace-nowrap shrink-0"
-            title={
-              isLiveSyncEnabled
-                ? 'Live Sync is ON: Background database auto-save is active. Click to pause for high-frequency data entry.'
-                : 'Live Sync is PAUSED: Background auto-save disabled for faster data entry. Click to resume or use "Sync Now" (Ctrl+S) to save.'
-            }
-          >
-            <div className="flex items-center space-x-1 text-slate-200">
-              <Zap
-                className={`w-3 h-3 transition-colors ${
-                  isLiveSyncEnabled ? 'text-[#00B14F]' : 'text-slate-400'
-                }`}
-              />
-              <span className="text-[10px] font-bold hidden 2xl:inline">Live Sync</span>
-            </div>
-
-            <button
-              type="button"
-              role="switch"
-              aria-checked={isLiveSyncEnabled}
-              data-testid="ribbon-live-sync-toggle"
-              onClick={() => toggleLiveSync()}
-              aria-label={`Live Sync background auto-save toggle. Currently ${
-                isLiveSyncEnabled ? 'Enabled' : 'Paused'
-              }. Click to toggle.`}
-              className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-1 focus:ring-[#1D6CE0] ${
-                isLiveSyncEnabled ? 'bg-[#00B14F]' : 'bg-slate-500'
-              }`}
-            >
-              <span
-                className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
-                  isLiveSyncEnabled ? 'translate-x-3' : 'translate-x-0'
-                }`}
-              />
-            </button>
-
-            <span
-              className={`text-[10px] font-mono font-bold ${
-                isLiveSyncEnabled ? 'text-emerald-300' : 'text-amber-300'
-              }`}
-            >
-              {isLiveSyncEnabled ? 'ON' : 'OFF'}
-            </span>
-          </div>
-
-          <button
-            type="button"
-            data-testid="ribbon-sync-status"
-            data-sync-freshness={syncDisplay.freshnessTier}
-            data-sync-color={syncDisplay.indicatorColor}
-            onClick={() => {
-              triggerManualSync('All Ledgers');
-              setNowMs(Date.now());
-            }}
-            aria-label={`${syncDisplay.ariaLabel} (${syncDisplay.freshnessLabel} · ${syncDisplay.elapsedText})`}
-            title={`Ledger Database Status: ${syncDisplay.freshnessLabel} (${syncDisplay.elapsedText} at ${syncDisplay.formattedTime}). Click to synchronize all ledger data now.`}
-            className="flex items-center space-x-1 px-2 py-1 text-[11px] font-bold rounded-lg border border-white/15 bg-white/10 hover:bg-white/20 text-white transition-all whitespace-nowrap shrink-0 cursor-pointer"
-          >
-            {syncStatus === 'saving' ? (
-              <RefreshCw className="w-3 h-3 text-amber-300 animate-spin shrink-0" />
-            ) : syncDisplay.indicatorColor === 'rose' ? (
-              <AlertCircle className="w-3 h-3 text-rose-300 shrink-0" />
-            ) : syncStatus === 'paused' ? (
-              <Pause className="w-3 h-3 text-amber-300 shrink-0" />
-            ) : (
-              <span
-                data-testid="header-sync-status-dot"
-                className="relative flex h-2 w-2 shrink-0"
-              >
-                <span
-                  className={`relative inline-flex rounded-full h-2 w-2 ${
-                    syncDisplay.indicatorColor === 'emerald'
-                      ? 'bg-[#00B14F]'
-                      : syncDisplay.indicatorColor === 'sky'
-                      ? 'bg-[#1D6CE0]'
-                      : 'bg-amber-400'
-                  }`}
-                />
-              </span>
-            )}
-            <span data-testid="header-sync-freshness-label">
-              {syncStatus === 'saving'
-                ? 'Saving...'
-                : syncStatus === 'paused'
-                ? hasUnsyncedChanges
-                  ? 'Unsaved'
-                  : 'Paused'
-                : syncDisplay.freshnessLabel}
-            </span>
-            <span
-              data-testid="header-sync-elapsed-badge"
-              className="text-[10px] font-mono font-semibold text-sky-200 border-l border-white/20 pl-1 hidden 2xl:inline"
-            >
-              {syncStatus === 'saving'
-                ? lastSyncedEntity
-                : `${syncDisplay.elapsedText} · ${syncDisplay.formattedTime}`}
-            </span>
-          </button>
+          {/* Background Synchronization Indicator: Live Auto-Save Toggle + Last Backup Timestamp + Force Sync */}
+          <HeaderSyncControls
+            totalRecordsCount={totalRecordsCount}
+            isLiveSyncEnabled={isLiveSyncEnabled}
+            toggleLiveSync={toggleLiveSync}
+            forceSyncNow={forceSyncNow}
+          />
 
           <button
             type="button"
@@ -568,7 +685,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
           </div>
           <div className="h-4 w-px bg-white/15 hidden xl:block" />
           <div className="flex-1 overflow-x-auto whitespace-nowrap text-slate-200 hidden xl:block">
-            <span className="text-slate-200 font-medium">{getFormulaForTab()}</span>
+            <span className="text-slate-200 font-medium">{formulaText}</span>
           </div>
         </div>
 
@@ -712,39 +829,11 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = ({
           </button>
         </div>
 
-        <div
-          role="status"
-          aria-live="polite"
-          className="text-[11px] font-mono text-slate-200 hidden 2xl:flex items-center space-x-2.5 shrink-0"
-        >
-          <span
-            className={`flex items-center space-x-1 ${
-              syncStatus === 'saving'
-                ? 'text-amber-300 font-semibold'
-                : syncStatus === 'error'
-                ? 'text-rose-300 font-semibold'
-                : syncStatus === 'paused'
-                ? 'text-amber-300 font-semibold'
-                : 'text-emerald-300 font-semibold'
-            }`}
-          >
-            <Database className="w-3 h-3 shrink-0" />
-            <span>
-              {syncStatus === 'saving'
-                ? `Auto-saving (${lastSyncedEntity})...`
-                : syncStatus === 'error'
-                ? 'Sync Error'
-                : syncStatus === 'paused'
-                ? hasUnsyncedChanges
-                  ? 'Live Sync Paused (Unsaved Edits)'
-                  : 'Live Sync Paused (Idle)'
-                : `Synced (${totalRecordsCount} records)`}
-            </span>
-          </span>
-          <span className="text-white/25">|</span>
-          <span className="text-sky-200">1 RMB = {companyProfile.rmbExchangeRate} TK</span>
-        </div>
+        <HeaderBottomSyncStatus
+          totalRecordsCount={totalRecordsCount}
+          rmbExchangeRate={companyProfile.rmbExchangeRate}
+        />
       </div>
     </header>
   );
-};
+});

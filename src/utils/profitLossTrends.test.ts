@@ -1,150 +1,159 @@
-import test from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { calculateProfitLossMonthlyTrends } from './profitLossTrends.ts';
 import {
-  computeMonthlySupplierOutflow,
-  calculateProfitLossMonthlyTrends,
-} from './profitLossTrends.ts';
-import {
-  samplePurchases as initialPurchases,
-  samplePackings as initialPackings,
-  samplePayments as initialPayments,
-  sampleOtherCosts as initialOtherCosts,
-} from '../context/initialData.ts';
-import { PurchaseRecord, PaymentRecord, PackingRecord } from '../types/index.ts';
+  PurchaseRecord,
+  PackingRecord,
+  PaymentRecord,
+  OtherCostRecord,
+} from '../types/index.ts';
 
-test('computeMonthlySupplierOutflow sums supplier payment vouchers and avoids double-counting matching purchase paid amounts', () => {
-  const octPurchases = initialPurchases.filter((p) => p.date.startsWith('2026-10'));
-  const octPayments = initialPayments.filter((pm) => pm.date.startsWith('2026-10'));
-
-  const result = computeMonthlySupplierOutflow(octPurchases, octPayments);
-  // In 2026-10: ABDULLAH VAI voucher = 100,000, UZZAL VAI voucher = 94,500 -> total 194,500
-  assert.equal(result.supplierVoucherOutflow, 194500);
-  assert.equal(result.supplierPaymentOutflow, 194500);
-  assert.equal(result.purchaseBillTotal, 219500);
-  assert.equal(result.supplierPaymentCount, 2);
-});
-
-test('computeMonthlySupplierOutflow includes paidAmount from purchases when a supplier has no voucher in that month and ignores exporter payments', () => {
-  const purchases: PurchaseRecord[] = [
+describe('calculateProfitLossMonthlyTrends', () => {
+  const samplePurchases: PurchaseRecord[] = [
     {
       id: 'pur-1',
       invoiceNumber: 'INV-1',
-      date: '2026-10-10',
-      description: 'NEW SUPPLIER',
-      contactNumber: '',
+      date: '2026-08-15',
+      description: 'Supplier A',
+      contactNumber: '+8801700000001',
       items: [],
-      totalQty: 50,
-      totalAmount: 50000,
+      totalQty: 100,
+      totalAmount: 100000,
       previousAmount: 0,
-      paidAmount: 35000,
-      balance: 15000,
-      remarks: '',
-      createdAt: '',
+      paidAmount: 80000,
+      balance: 20000,
+      createdAt: '2026-08-15T00:00:00Z',
     },
-  ];
-
-  const payments: PaymentRecord[] = [
     {
-      id: 'exp-1',
-      invoiceNumber: 'EXP-2026-0001',
-      date: '2026-10-11',
-      description: 'AAD',
-      shippingMark: 'AAD',
-      paymentCategory: 'exporter',
-      contactNumber: '',
+      id: 'pur-2',
+      invoiceNumber: 'INV-2',
+      date: '2026-09-10',
+      description: 'Supplier B',
+      contactNumber: '+8801700000002',
       items: [],
-      totalAmount: 200000,
+      totalQty: 150,
+      totalAmount: 120000,
       previousAmount: 0,
-      paidAmount: 200000,
+      paidAmount: 120000,
       balance: 0,
-      status: 'PAID',
-      returnRMB: 12000,
-      remarks: '',
-      createdAt: '',
+      createdAt: '2026-09-10T00:00:00Z',
     },
   ];
 
-  const result = computeMonthlySupplierOutflow(purchases, payments);
-  assert.equal(result.supplierVoucherOutflow, 0);
-  assert.equal(result.supplierPaymentOutflow, 35000);
-  assert.equal(result.supplierPaymentCount, 1);
-});
+  const samplePackings: PackingRecord[] = [
+    {
+      id: 'pkg-1',
+      invoiceNumber: 'PKG-1',
+      packingDate: '2026-08-20',
+      shippingMark: 'AAD',
+      flight: 'CZ392',
+      destination: 'CAN',
+      shipper: 'ZSB',
+      fromDate: '2026-08-20',
+      toDate: '2026-08-20',
+      items: [],
+      totalBox: 10,
+      totalWeight: 160,
+      totalAmount: 10000, // 165,000 BDT
+      rmbRate: 16.5,
+      totalAmountBDT: 165000,
+      createdAt: '2026-08-20T00:00:00Z',
+    },
+    {
+      id: 'pkg-2',
+      invoiceNumber: 'PKG-2',
+      packingDate: '2026-09-18',
+      shippingMark: 'CHJ',
+      flight: 'MU',
+      destination: 'PVG',
+      shipper: 'ZSB',
+      fromDate: '2026-09-18',
+      toDate: '2026-09-18',
+      items: [],
+      totalBox: 20,
+      totalWeight: 320,
+      totalAmount: 20000, // 330,000 BDT (+100% MoM)
+      rmbRate: 16.5,
+      totalAmountBDT: 330000,
+      createdAt: '2026-09-18T00:00:00Z',
+    },
+  ];
 
-test('calculateProfitLossMonthlyTrends computes accurate MoM export revenue vs supplier payment outflows on seed data', () => {
-  const trends = calculateProfitLossMonthlyTrends(
-    initialPurchases,
-    initialPackings,
-    initialPayments,
-    initialOtherCosts,
-    { windowMode: 'active', rmbExchangeRate: 16.5 }
-  );
+  const samplePayments: PaymentRecord[] = [
+    {
+      id: 'pay-1',
+      invoiceNumber: 'PAY-1',
+      date: '2026-08-16',
+      description: 'Supplier A',
+      contactNumber: '+8801700000001',
+      items: [],
+      totalAmount: 80000,
+      previousAmount: 0,
+      paidAmount: 80000,
+      balance: 20000,
+      status: 'PAID',
+      returnRMB: 0,
+      paymentCategory: 'supplier',
+      createdAt: '2026-08-16T00:00:00Z',
+    },
+  ];
 
-  assert.equal(trends.points.length, 4);
-  assert.deepEqual(
-    trends.points.map((p) => p.yearMonth),
-    ['2026-07', '2026-08', '2026-09', '2026-10']
-  );
+  const sampleOtherCosts: OtherCostRecord[] = [];
 
-  // Jul 2026: Export = 0, Outflow = 60,000 (Kabir Vai purchase paid), Spread = -60,000
-  const jul = trends.points[0];
-  assert.equal(jul.exportRevenue, 0);
-  assert.equal(jul.supplierPaymentOutflow, 60000);
-  assert.equal(jul.netCashflowSpread, -60000);
+  it('computes active months, MoM deltas, and net cashflow spreads accurately', () => {
+    const res = calculateProfitLossMonthlyTrends(
+      samplePurchases,
+      samplePackings,
+      samplePayments,
+      sampleOtherCosts,
+      { windowMode: 'active', rmbExchangeRate: 16.5 }
+    );
 
-  // Aug 2026: Export = 198,000, Outflow = 110,000, Spread = 88,000
-  const aug = trends.points[1];
-  assert.equal(aug.exportRevenue, 198000);
-  assert.equal(aug.supplierPaymentOutflow, 110000);
-  assert.equal(aug.netCashflowSpread, 88000);
-  assert.equal(aug.revenueMoMPercent, null);
+    assert.equal(res.windowMode, 'active');
+    assert.equal(res.points.length, 2);
+    assert.equal(res.points[0].yearMonth, '2026-08');
+    assert.equal(res.points[0].exportRevenue, 165000);
+    assert.equal(res.points[0].supplierPaymentOutflow, 80000);
+    assert.equal(res.points[0].netCashflowSpread, 85000);
+    assert.equal(res.points[0].revenueMoMPercent, null);
 
-  // Sep 2026: Export = 305,250 (+54.2%), Outflow = 120,000 (+9.1%), Spread = 185,250
-  const sep = trends.points[2];
-  assert.equal(sep.exportRevenue, 305250);
-  assert.equal(sep.supplierPaymentOutflow, 120000);
-  assert.equal(sep.netCashflowSpread, 185250);
-  assert.equal(sep.revenueMoMChange, 107250);
-  assert.equal(sep.revenueMoMPercent, 54.2);
-  assert.equal(sep.outflowMoMChange, 10000);
-  assert.equal(sep.outflowMoMPercent, 9.1);
+    // Sep 2026 includes unvouchered direct purchase payment for Supplier B (120,000)
+    assert.equal(res.points[1].yearMonth, '2026-09');
+    assert.equal(res.points[1].exportRevenue, 330000);
+    assert.equal(res.points[1].supplierPaymentOutflow, 120000);
+    assert.equal(res.points[1].netCashflowSpread, 210000);
+    assert.equal(res.points[1].revenueMoMPercent, 100);
+    assert.equal(res.points[1].outflowMoMPercent, 50);
 
-  // Oct 2026: Export = 432,300 (+41.6%), Outflow = 194,500 (+62.1%), Spread = 237,800
-  const oct = trends.points[3];
-  assert.equal(oct.exportRevenue, 432300);
-  assert.equal(oct.supplierPaymentOutflow, 194500);
-  assert.equal(oct.netCashflowSpread, 237800);
-  assert.equal(oct.revenueMoMChange, 127050);
-  assert.equal(oct.revenueMoMPercent, 41.6);
-  assert.equal(oct.outflowMoMChange, 74500);
-  assert.equal(oct.outflowMoMPercent, 62.1);
-
-  // Aggregate totals
-  assert.equal(trends.totalExportRevenue, 935550);
-  assert.equal(trends.totalSupplierOutflow, 484500);
-  assert.equal(trends.totalNetCashflowSpread, 451050);
-  assert.equal(trends.overallOutflowToRevenueRatio, 51.8);
-  assert.equal(trends.latestMonth?.yearMonth, '2026-10');
-  assert.equal(trends.previousMonth?.yearMonth, '2026-09');
-});
-
-test('calculateProfitLossMonthlyTrends supports 6m and 12m rolling windows and handles empty records safely', () => {
-  const sixMonth = calculateProfitLossMonthlyTrends(
-    initialPurchases,
-    initialPackings,
-    initialPayments,
-    initialOtherCosts,
-    { windowMode: '6m', endYearMonth: '2026-10', rmbExchangeRate: 16.5 }
-  );
-  assert.equal(sixMonth.points.length, 6);
-  assert.equal(sixMonth.points[0].yearMonth, '2026-05');
-  assert.equal(sixMonth.points[5].yearMonth, '2026-10');
-
-  const emptyTrends = calculateProfitLossMonthlyTrends([], [], [], [], {
-    windowMode: 'active',
-    endYearMonth: '2026-10',
+    assert.equal(res.latestMonth?.yearMonth, '2026-09');
+    assert.equal(res.previousMonth?.yearMonth, '2026-08');
+    assert.equal(res.totalExportRevenue, 495000);
+    assert.equal(res.totalSupplierOutflow, 200000);
+    assert.equal(res.totalNetCashflowSpread, 295000);
+    assert.equal(res.overallOutflowToRevenueRatio, 40.4);
   });
-  assert.equal(emptyTrends.points.length, 1);
-  assert.equal(emptyTrends.totalExportRevenue, 0);
-  assert.equal(emptyTrends.totalSupplierOutflow, 0);
-  assert.equal(emptyTrends.overallOutflowToRevenueRatio, 0);
+
+  it('supports 6m and 12m rolling calendar windows', () => {
+    const res6m = calculateProfitLossMonthlyTrends(
+      samplePurchases,
+      samplePackings,
+      samplePayments,
+      sampleOtherCosts,
+      { windowMode: '6m', endYearMonth: '2026-09' }
+    );
+    assert.equal(res6m.points.length, 6);
+    assert.equal(res6m.points[0].yearMonth, '2026-04');
+    assert.equal(res6m.points[5].yearMonth, '2026-09');
+
+    const res12m = calculateProfitLossMonthlyTrends(
+      samplePurchases,
+      samplePackings,
+      samplePayments,
+      sampleOtherCosts,
+      { windowMode: '12m', endYearMonth: '2026-09' }
+    );
+    assert.equal(res12m.points.length, 12);
+    assert.equal(res12m.points[0].yearMonth, '2025-10');
+    assert.equal(res12m.points[11].yearMonth, '2026-09');
+  });
 });

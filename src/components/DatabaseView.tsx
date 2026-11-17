@@ -421,6 +421,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
           ? `${syncLedgerFromDate || 'START'}_to_${syncLedgerToDate || 'END'}`
           : new Date().toISOString().slice(0, 10);
       const fallbackFilename = `ZSB_AQUATICS_SUPPLIER_RECONCILIATION_LEDGER_${safeSupplier}_${dateTag}.pdf`;
+      await yieldForDomFrame();
       const ok = await exportElementToPdf('supplier-reconciliation-ledger-pdf-canvas', fallbackFilename);
       if (ok) {
         showToast(`Exported PDF: ${fallbackFilename}`);
@@ -3774,7 +3775,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
       </div>
 
       {/* Offscreen Host for Direct Batch Payment Slips Combined PDF Export */}
-      {activeDbType === 'payment' && selectedPaymentsForBatch.length > 0 && (
+      {activeDbType === 'payment' && isExportingBatchSlips && selectedPaymentsForBatch.length > 0 && (
         <div
           id="batch-payment-slips-offscreen-host"
           data-testid="batch-payment-slips-offscreen-host"
@@ -3802,7 +3803,8 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
         </div>
       )}
 
-      {/* Offscreen Host for Official Supplier Reconciliation Ledger PDF Export */}
+      {/* Offscreen Host for Official Supplier Reconciliation Ledger PDF Export (Mounted Only During Fallback Export) */}
+      {isExportingSyncLedgerPdf && (
       <div
         style={{
           position: 'fixed',
@@ -4006,6 +4008,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
           </div>
         </div>
       </div>
+      )}
       {/* Edit Payment Voucher Modal for Fast Maintenance & Corrections */}
       {editingPaymentRecord && (
         <div

@@ -1,7 +1,8 @@
-import { useLayoutEffect, useState, type RefObject } from 'react';
+import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import {
   MAX_VISIBLE_TABLE_ROWS,
   calculateScrollViewportMaxHeight,
+  computeTableScrollSignature,
 } from '../utils/tableScroll.ts';
 
 export interface UseRowScrollViewportOptions {
@@ -33,10 +34,12 @@ export function useRowScrollViewport(
   } = options;
 
   const [maxHeight, setMaxHeight] = useState<number | undefined>(undefined);
+  const lastSigRef = useRef<string>('');
 
   useLayoutEffect(() => {
     const container = scrollContainerRef.current;
     if (!enabled || !container || rowCount <= maxVisibleRows) {
+      lastSigRef.current = '';
       setMaxHeight(undefined);
       return;
     }
@@ -44,6 +47,7 @@ export function useRowScrollViewport(
     const measure = () => {
       const table = container.querySelector('table');
       if (!table) {
+        lastSigRef.current = '';
         setMaxHeight(undefined);
         return;
       }
@@ -53,30 +57,63 @@ export function useRowScrollViewport(
       const tbodyRows = Array.from(table.querySelectorAll('tbody > tr')) as HTMLElement[];
 
       if (tbodyRows.length <= maxVisibleRows) {
+        lastSigRef.current = '';
         setMaxHeight(undefined);
         return;
       }
 
-      const rowHeights = tbodyRows.map((tr) => measureElementHeight(tr));
+      const theadHeight = measureElementHeight(thead);
+      const tfootHeight = measureElementHeight(tfoot);
+      const sig = computeTableScrollSignature({
+        rowCount: tbodyRows.length,
+        containerWidth: container.clientWidth,
+        theadHeight,
+        tfootHeight,
+      });
+
+      if (lastSigRef.current === sig) {
+        return;
+      }
+
+      const rowHeights = tbodyRows
+        .slice(0, maxVisibleRows)
+        .map((tr) => measureElementHeight(tr));
+      while (rowHeights.length < tbodyRows.length) {
+        rowHeights.push(0);
+      }
+
       const nextHeight = calculateScrollViewportMaxHeight({
-        theadHeight: measureElementHeight(thead),
-        tfootHeight: measureElementHeight(tfoot),
+        theadHeight,
+        tfootHeight,
         rowHeights,
         maxVisibleRows,
       });
 
+      lastSigRef.current = sig;
       setMaxHeight((prev) => (prev === nextHeight ? prev : nextHeight));
     };
 
     measure();
 
+    let rafId = 0;
     const table = container.querySelector('table');
     if (typeof ResizeObserver !== 'undefined' && table) {
       const observer = new ResizeObserver(() => {
-        measure();
+        if (rafId) {
+          cancelAnimationFrame(rafId);
+        }
+        rafId = requestAnimationFrame(() => {
+          rafId = 0;
+          measure();
+        });
       });
       observer.observe(table);
-      return () => observer.disconnect();
+      return () => {
+        if (rafId) {
+          cancelAnimationFrame(rafId);
+        }
+        observer.disconnect();
+      };
     }
     return undefined;
   }, [scrollContainerRef, rowCount, maxVisibleRows, enabled, includeFooter, depsKey]);

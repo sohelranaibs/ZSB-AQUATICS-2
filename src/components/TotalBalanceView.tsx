@@ -1936,25 +1936,27 @@ export const TotalBalanceView: React.FC = () => {
       </section>
 
       {/* Offscreen Corporate A4 Financial Statement Container for Structured PDF Export */}
-      <div
-        id="partner-financial-statement-host"
-        aria-hidden="true"
-        className="print:hidden"
-        style={{
-          position: 'fixed',
-          left: '-10000px',
-          top: 0,
-          width: '760px',
-          pointerEvents: 'none',
-          zIndex: -1,
-        }}
-      >
-        <PartnerFinancialStatementPrintDocument
-          statement={financialStatementData}
-          companyProfile={companyProfile}
-          elementId="partner-financial-statement-printable"
-        />
-      </div>
+      {isExportingFinancialStatement && (
+        <div
+          id="partner-financial-statement-host"
+          aria-hidden="true"
+          className="print:hidden"
+          style={{
+            position: 'fixed',
+            left: '-10000px',
+            top: 0,
+            width: '760px',
+            pointerEvents: 'none',
+            zIndex: -1,
+          }}
+        >
+          <PartnerFinancialStatementPrintDocument
+            statement={financialStatementData}
+            companyProfile={companyProfile}
+            elementId="partner-financial-statement-printable"
+          />
+        </div>
+      )}
     </div>
   );
 };

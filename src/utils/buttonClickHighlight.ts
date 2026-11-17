@@ -30,6 +30,8 @@ export function isEligibleClickedButton(el: Element | null): el is HTMLElement {
   return true;
 }
 
+const lastClickedByRoot = new WeakMap<object, HTMLElement>();
+
 export function markButtonAsClicked(
   targetButton: HTMLElement | null,
   rootDoc: Document | HTMLElement = document
@@ -38,14 +40,29 @@ export function markButtonAsClicked(
     return null;
   }
 
-  const previousClicked = rootDoc.querySelectorAll(`[${CLICKED_BUTTON_ATTR}="true"]`);
-  previousClicked.forEach((el) => {
-    if (el !== targetButton) {
-      el.removeAttribute(CLICKED_BUTTON_ATTR);
+  const cachedPrev = lastClickedByRoot.get(rootDoc);
+  if (
+    cachedPrev === targetButton &&
+    targetButton.getAttribute(CLICKED_BUTTON_ATTR) === 'true'
+  ) {
+    return targetButton;
+  }
+
+  if (cachedPrev) {
+    if (cachedPrev !== targetButton) {
+      cachedPrev.removeAttribute(CLICKED_BUTTON_ATTR);
     }
-  });
+  } else if (typeof rootDoc.querySelectorAll === 'function') {
+    const previousClicked = rootDoc.querySelectorAll(`[${CLICKED_BUTTON_ATTR}="true"]`);
+    previousClicked.forEach((el) => {
+      if (el !== targetButton) {
+        el.removeAttribute(CLICKED_BUTTON_ATTR);
+      }
+    });
+  }
 
   targetButton.setAttribute(CLICKED_BUTTON_ATTR, 'true');
+  lastClickedByRoot.set(rootDoc, targetButton);
   return targetButton;
 }
 
@@ -65,7 +82,12 @@ export function bindGlobalButtonGoldenClickHandler(rootDoc: Document = document)
     if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
       window.requestAnimationFrame(() => {
         if (btn.isConnected) {
-          markButtonAsClicked(btn, rootDoc);
+          if (
+            btn.getAttribute(CLICKED_BUTTON_ATTR) !== 'true' ||
+            lastClickedByRoot.get(rootDoc) !== btn
+          ) {
+            markButtonAsClicked(btn, rootDoc);
+          }
           return;
         }
         if (testId) {

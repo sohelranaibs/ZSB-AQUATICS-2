@@ -196,7 +196,7 @@ interface ThemeSidebarNavProps {
   onCloseMobileDrawer?: () => void;
 }
 
-export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = ({
+export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
   sheets,
   isCollapsed,
   onToggleCollapse,
@@ -497,4 +497,4 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = ({
       )}
     </>
   );
-};
+});

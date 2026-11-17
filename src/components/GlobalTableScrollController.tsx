@@ -25,18 +25,11 @@ function ensureStickySectionOpacity(
     return;
   }
 
+  // Batch style reads before writes
   const computedSection = window.getComputedStyle(section);
-  if (computedSection.position !== 'sticky') {
-    section.style.position = 'sticky';
-  }
-  if (edge === 'top') {
-    section.style.top = '0px';
-  } else {
-    section.style.bottom = '0px';
-  }
-  if (!computedSection.zIndex || computedSection.zIndex === 'auto') {
-    section.style.zIndex = '10';
-  }
+  const needsPositionSticky = computedSection.position !== 'sticky';
+  const needsZIndex = !computedSection.zIndex || computedSection.zIndex === 'auto';
+  const cellsToPaint: Array<{ cell: HTMLElement; color: string }> = [];
 
   for (const row of rows) {
     const rowBg = window.getComputedStyle(row).backgroundColor;
@@ -48,9 +41,25 @@ function ensureStickySectionOpacity(
     for (const cell of cells) {
       const cellBg = window.getComputedStyle(cell).backgroundColor;
       if (!isOpaqueCssColor(cellBg)) {
-        cell.style.backgroundColor = resolvedSectionBg;
+        cellsToPaint.push({ cell, color: resolvedSectionBg });
       }
     }
+  }
+
+  // Apply writes together
+  if (needsPositionSticky) {
+    section.style.position = 'sticky';
+  }
+  if (edge === 'top') {
+    section.style.top = '0px';
+  } else {
+    section.style.bottom = '0px';
+  }
+  if (needsZIndex) {
+    section.style.zIndex = '10';
+  }
+  for (const entry of cellsToPaint) {
+    entry.cell.style.backgroundColor = entry.color;
   }
   section.setAttribute('data-sticky-sig', stickySig);
 }
@@ -65,6 +74,14 @@ function clearScrollCap(container: HTMLElement): void {
   container.removeAttribute('data-ten-row-sig');
 }
 
+function isNonTableChromeMutationTarget(node: Node | null): boolean {
+  const el = node instanceof HTMLElement ? node : node?.parentElement;
+  if (!el) return false;
+  return Boolean(
+    el.closest('header, nav, [data-testid="global-toast-banner"], #global-pdf-export-host')
+  );
+}
+
 export const GlobalTableScrollController: React.FC = () => {
   useEffect(() => {
     if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -75,14 +92,22 @@ export const GlobalTableScrollController: React.FC = () => {
 
     const applyTenRowCapToAllTables = () => {
       const tables = Array.from(document.querySelectorAll('table'));
+      if (tables.length === 0) return;
+
+      // Phase 1: Batch all layout reads first to avoid read/write thrashing
+      const clearOps: HTMLElement[] = [];
+      const updateOps: Array<{
+        container: HTMLElement;
+        thead: HTMLElement | null;
+        tfoot: HTMLElement | null;
+        nextSig: string;
+        nextMaxHeight: number;
+      }> = [];
 
       for (const table of tables) {
-        // Never touch nested tables
         if (table.parentElement?.closest('table')) {
           continue;
         }
-
-        // Never touch print/PDF/hidden/manually managed tables
         if (table.closest(EXCLUDED_TABLE_CONTAINER_SELECTOR)) {
           continue;
         }
@@ -97,7 +122,12 @@ export const GlobalTableScrollController: React.FC = () => {
         ) as HTMLElement[];
 
         if (tbodyRows.length <= MAX_VISIBLE_TABLE_ROWS) {
-          clearScrollCap(container);
+          if (
+            container.getAttribute('data-ten-row-scroll') === 'active' ||
+            container.hasAttribute('data-ten-row-sig')
+          ) {
+            clearOps.push(container);
+          }
           continue;
         }
 
@@ -119,8 +149,9 @@ export const GlobalTableScrollController: React.FC = () => {
           continue;
         }
 
-        const rowHeights = tbodyRows.slice(0, MAX_VISIBLE_TABLE_ROWS).map((tr) => measureLocalHeight(tr));
-        // Push sentinel items to preserve row count > maxVisibleRows check
+        const rowHeights = tbodyRows
+          .slice(0, MAX_VISIBLE_TABLE_ROWS)
+          .map((tr) => measureLocalHeight(tr));
         while (rowHeights.length < tbodyRows.length) {
           rowHeights.push(0);
         }
@@ -136,6 +167,16 @@ export const GlobalTableScrollController: React.FC = () => {
           continue;
         }
 
+        updateOps.push({ container, thead, tfoot, nextSig, nextMaxHeight });
+      }
+
+      // Phase 2: Perform DOM style and attribute writes
+      for (const container of clearOps) {
+        clearScrollCap(container);
+      }
+
+      for (const op of updateOps) {
+        const { container, thead, tfoot, nextSig, nextMaxHeight } = op;
         const targetMaxHeightCss = `${nextMaxHeight}px`;
         if (container.style.maxHeight !== targetMaxHeightCss) {
           container.style.maxHeight = targetMaxHeightCss;
@@ -175,9 +216,18 @@ export const GlobalTableScrollController: React.FC = () => {
     // Initial pass
     applyTenRowCapToAllTables();
 
-    // Re-evaluate only on structural DOM additions/removals (never attributes)
-    const mutationObserver = new MutationObserver(() => {
-      scheduleScan();
+    // Re-evaluate only on structural DOM additions/removals outside header/nav/toast/offscreen chrome
+    const mutationObserver = new MutationObserver((mutations) => {
+      let hasRelevantMutation = false;
+      for (const m of mutations) {
+        if (!isNonTableChromeMutationTarget(m.target)) {
+          hasRelevantMutation = true;
+          break;
+        }
+      }
+      if (hasRelevantMutation) {
+        scheduleScan();
+      }
     });
     const rootNode = document.getElementById('root') || document.body;
     mutationObserver.observe(rootNode, {

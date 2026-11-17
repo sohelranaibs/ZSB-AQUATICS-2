@@ -9,14 +9,21 @@ export type SyncFreshnessTier = 'up_to_date' | 'recent' | 'stale' | 'out_of_sync
 
 export type SyncIndicatorColor = 'emerald' | 'sky' | 'amber' | 'rose';
 
+export const SLOW_SYNC_THRESHOLD_MS = 2500;
+
 export interface SyncMetadata {
   status: SyncStatusState;
   lastSyncedAt: string; // ISO timestamp
+  lastBackupAt?: string; // ISO timestamp of last confirmed backup write
   lastSyncedEntity?: string;
   totalRecordsCount: number;
   errorMessage?: string;
   isLiveSyncEnabled?: boolean;
   hasUnsyncedChanges?: boolean;
+  syncStartedAtMs?: number | null;
+  slowSyncThresholdMs?: number;
+  isSlowConnection?: boolean;
+  isForcingSync?: boolean;
 }
 
 export interface SyncFreshnessInfo {
@@ -28,11 +35,36 @@ export interface SyncFreshnessInfo {
   isUpToDateWithDb: boolean;
 }
 
+export interface BackupTimestampInfo {
+  isoString: string;
+  formattedTime: string;
+  formattedDateTime: string;
+  elapsedText: string;
+  elapsedSeconds: number | null;
+  backupSummaryText: string;
+  hasBackup: boolean;
+}
+
 export interface SyncDisplayInfo {
   status: SyncStatusState;
   badgeText: 'Auto-saving...' | 'Synced' | 'Sync Error' | 'Live Sync Paused';
+  statusBannerLabel:
+    | 'Slow Connection'
+    | 'Forcing Sync...'
+    | 'Syncing...'
+    | 'Synced'
+    | 'Sync Error'
+    | 'Unsaved Changes'
+    | 'Sync Paused';
   detailText: string;
   formattedTime: string;
+  lastBackupAt: string;
+  formattedBackupTime: string;
+  formattedBackupDateTime: string;
+  backupElapsedText: string;
+  backupSummaryText: string;
+  isSlowSync: boolean;
+  shouldHighlightForceSync: boolean;
   ariaLabel: string;
   isLiveSyncActive: boolean;
   freshnessTier: SyncFreshnessTier;
@@ -54,6 +86,20 @@ export function formatSyncTimestamp(isoString: string | null | undefined): strin
   const minutes = String(date.getMinutes()).padStart(2, '0');
   const seconds = String(date.getSeconds()).padStart(2, '0');
   return `${hours}:${minutes}:${seconds}`;
+}
+
+/**
+ * Formats an ISO timestamp into YYYY-MM-DD HH:MM:SS (local time) for backup inspection & tooltips.
+ */
+export function formatSyncDateTime(isoString: string | null | undefined): string {
+  if (!isoString) return 'No backup recorded yet';
+  const date = new Date(isoString);
+  if (isNaN(date.getTime())) return 'No backup recorded yet';
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day} ${formatSyncTimestamp(isoString)}`;
 }
 
 /**
@@ -84,6 +130,73 @@ export function formatSyncElapsedAge(
   }
   const diffHours = Math.floor(diffMinutes / 60);
   return { elapsedSeconds: diffSeconds, elapsedText: `${diffHours}h ago` };
+}
+
+/**
+ * Formats the last confirmed backup timestamp and age for header display.
+ */
+export function formatBackupTimestampLabel(
+  lastBackupAt: string | null | undefined,
+  nowMs: number = Date.now()
+): BackupTimestampInfo {
+  if (!lastBackupAt) {
+    return {
+      isoString: '',
+      formattedTime: '--:--:--',
+      formattedDateTime: 'No backup recorded yet',
+      elapsedText: 'Never backed up',
+      elapsedSeconds: null,
+      backupSummaryText: 'Backup: Pending',
+      hasBackup: false,
+    };
+  }
+
+  const parsedMs = new Date(lastBackupAt).getTime();
+  if (isNaN(parsedMs)) {
+    return {
+      isoString: '',
+      formattedTime: '--:--:--',
+      formattedDateTime: 'No backup recorded yet',
+      elapsedText: 'Unknown',
+      elapsedSeconds: null,
+      backupSummaryText: 'Backup: Pending',
+      hasBackup: false,
+    };
+  }
+
+  const formattedTime = formatSyncTimestamp(lastBackupAt);
+  const formattedDateTime = formatSyncDateTime(lastBackupAt);
+  const { elapsedSeconds, elapsedText } = formatSyncElapsedAge(lastBackupAt, nowMs);
+
+  return {
+    isoString: lastBackupAt,
+    formattedTime,
+    formattedDateTime,
+    elapsedText,
+    elapsedSeconds,
+    backupSummaryText: `Backup ${formattedTime} · ${elapsedText}`,
+    hasBackup: true,
+  };
+}
+
+/**
+ * Determines whether the background sync operation is experiencing slow connection / latency.
+ */
+export function detectSlowSync(params: {
+  status: SyncStatusState;
+  syncStartedAtMs?: number | null;
+  isSlowConnection?: boolean;
+  nowMs?: number;
+  thresholdMs?: number;
+}): boolean {
+  if (params.isSlowConnection) return true;
+  if (params.status !== 'saving') return false;
+  if (typeof params.syncStartedAtMs !== 'number' || !Number.isFinite(params.syncStartedAtMs)) {
+    return false;
+  }
+  const nowMs = params.nowMs ?? Date.now();
+  const thresholdMs = Math.max(250, params.thresholdMs ?? SLOW_SYNC_THRESHOLD_MS);
+  return nowMs - params.syncStartedAtMs >= thresholdMs;
 }
 
 /**
@@ -206,9 +319,25 @@ export function getSyncStatusDisplay(
   nowMs: number = Date.now()
 ): SyncDisplayInfo {
   const formattedTime = formatSyncTimestamp(meta.lastSyncedAt);
+  const resolvedBackupIso = meta.lastBackupAt ?? meta.lastSyncedAt;
+  const backupInfo = formatBackupTimestampLabel(resolvedBackupIso, nowMs);
   const entityLabel = meta.lastSyncedEntity ? `${meta.lastSyncedEntity}` : 'Local DB';
   const isLiveSyncActive = meta.isLiveSyncEnabled !== false && meta.status !== 'paused';
   const freshness = evaluateSyncFreshness(meta, nowMs);
+  const isSlowSync = detectSlowSync({
+    status: meta.status,
+    syncStartedAtMs: meta.syncStartedAtMs,
+    isSlowConnection: meta.isSlowConnection,
+    nowMs,
+    thresholdMs: meta.slowSyncThresholdMs,
+  });
+
+  const shouldHighlightForceSync =
+    isSlowSync ||
+    meta.status === 'error' ||
+    Boolean(meta.hasUnsyncedChanges) ||
+    freshness.freshnessTier === 'stale' ||
+    freshness.freshnessTier === 'out_of_sync';
 
   if (!isLiveSyncActive || meta.status === 'paused') {
     const detail = meta.hasUnsyncedChanges
@@ -217,8 +346,16 @@ export function getSyncStatusDisplay(
     return {
       status: 'paused',
       badgeText: 'Live Sync Paused',
+      statusBannerLabel: meta.hasUnsyncedChanges ? 'Unsaved Changes' : 'Sync Paused',
       detailText: detail,
       formattedTime,
+      lastBackupAt: backupInfo.isoString,
+      formattedBackupTime: backupInfo.formattedTime,
+      formattedBackupDateTime: backupInfo.formattedDateTime,
+      backupElapsedText: backupInfo.elapsedText,
+      backupSummaryText: backupInfo.backupSummaryText,
+      isSlowSync,
+      shouldHighlightForceSync: Boolean(meta.hasUnsyncedChanges) || isSlowSync,
       ariaLabel: `Database persistence status: Live Sync paused. ${
         meta.hasUnsyncedChanges
           ? 'Unsaved changes pending in memory. Click to sync now.'
@@ -234,17 +371,34 @@ export function getSyncStatusDisplay(
   }
 
   if (meta.status === 'saving') {
+    const statusBannerLabel = meta.isForcingSync
+      ? 'Forcing Sync...'
+      : isSlowSync
+      ? 'Slow Connection'
+      : 'Syncing...';
     return {
       status: 'saving',
       badgeText: 'Auto-saving...',
-      detailText: `Updating ${entityLabel}`,
+      statusBannerLabel,
+      detailText: isSlowSync
+        ? `Slow connection while updating ${entityLabel} — Force Sync available`
+        : `Updating ${entityLabel}`,
       formattedTime,
-      ariaLabel: `Database persistence status: Auto-saving ${entityLabel} to local storage`,
+      lastBackupAt: backupInfo.isoString,
+      formattedBackupTime: backupInfo.formattedTime,
+      formattedBackupDateTime: backupInfo.formattedDateTime,
+      backupElapsedText: backupInfo.elapsedText,
+      backupSummaryText: backupInfo.backupSummaryText,
+      isSlowSync,
+      shouldHighlightForceSync: true,
+      ariaLabel: isSlowSync
+        ? `Database persistence status: Slow connection detected while saving ${entityLabel}. Use Force Sync to flush immediately.`
+        : `Database persistence status: Auto-saving ${entityLabel} to local storage`,
       isLiveSyncActive: true,
       freshnessTier: freshness.freshnessTier,
       indicatorColor: freshness.indicatorColor,
       freshnessLabel: freshness.freshnessLabel,
-      elapsedText: freshness.elapsedText,
+      elapsedText: isSlowSync ? 'Slow connection' : freshness.elapsedText,
       isUpToDateWithDb: freshness.isUpToDateWithDb,
     };
   }
@@ -253,8 +407,16 @@ export function getSyncStatusDisplay(
     return {
       status: 'error',
       badgeText: 'Sync Error',
+      statusBannerLabel: 'Sync Error',
       detailText: meta.errorMessage || 'Local storage write failed',
       formattedTime,
+      lastBackupAt: backupInfo.isoString,
+      formattedBackupTime: backupInfo.formattedTime,
+      formattedBackupDateTime: backupInfo.formattedDateTime,
+      backupElapsedText: backupInfo.elapsedText,
+      backupSummaryText: backupInfo.backupSummaryText,
+      isSlowSync,
+      shouldHighlightForceSync: true,
       ariaLabel: `Database persistence status: Sync Error - ${meta.errorMessage || 'Local storage write failed'}`,
       isLiveSyncActive: true,
       freshnessTier: freshness.freshnessTier,
@@ -268,8 +430,16 @@ export function getSyncStatusDisplay(
   return {
     status: 'synced',
     badgeText: 'Synced',
+    statusBannerLabel: isSlowSync ? 'Slow Connection' : 'Synced',
     detailText: `${meta.totalRecordsCount} records · ${formattedTime}`,
     formattedTime,
+    lastBackupAt: backupInfo.isoString,
+    formattedBackupTime: backupInfo.formattedTime,
+    formattedBackupDateTime: backupInfo.formattedDateTime,
+    backupElapsedText: backupInfo.elapsedText,
+    backupSummaryText: backupInfo.backupSummaryText,
+    isSlowSync,
+    shouldHighlightForceSync,
     ariaLabel: `Database persistence status: Synced (${meta.totalRecordsCount} records saved at ${formattedTime})`,
     isLiveSyncActive: true,
     freshnessTier: freshness.freshnessTier,

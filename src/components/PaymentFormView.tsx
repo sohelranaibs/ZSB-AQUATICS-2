@@ -86,11 +86,17 @@ export const PaymentFormView: React.FC = () => {
 
   const creditInputRef = useRef<HTMLInputElement>(null);
 
-  // Synchronize when editingPaymentId is provided from database
+  // Synchronize when editingPaymentId is provided from database (load once per ID selection)
+  const lastLoadedEditingPaymentIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (editingPaymentId) {
+    if (!editingPaymentId) {
+      lastLoadedEditingPaymentIdRef.current = null;
+      return;
+    }
+    if (lastLoadedEditingPaymentIdRef.current !== editingPaymentId) {
       const pm = payments.find((p) => p.id === editingPaymentId);
       if (pm) {
+        lastLoadedEditingPaymentIdRef.current = editingPaymentId;
         setInvoiceNumber(pm.invoiceNumber || nextInvoiceNo);
         setDate(pm.date || new Date().toISOString().slice(0, 10));
         setSupplierName(pm.description || '');

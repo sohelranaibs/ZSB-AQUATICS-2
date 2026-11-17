@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import {
   calculatePackingRow,
@@ -12,6 +12,13 @@ import {
 import { PackingItemRow } from '../types/index.ts';
 import { validatePackingForm } from '../utils/validation.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
+import {
+  REPORT_WEIGHT_DEBOUNCE_MS,
+  parseReportWeightInput,
+  formatReportWeightDraft,
+  applyReportWeightToRow,
+  reconcilePackingRowsWithReportDrafts,
+} from '../utils/packingReportWeight.ts';
 import {
   ZSB_VIEW_SHORTCUT_EVENT,
   ViewShortcutEventDetail,
@@ -41,6 +48,88 @@ import {
   PngShareModal,
   WeChatIcon,
 } from './PngShareModal.tsx';
+
+interface ReportWeightCellInputProps {
+  rowId: string;
+  rowIndex: number;
+  committedValue: number;
+  hasError: boolean;
+  resetToken: number;
+  onScheduleDraft: (rowId: string, rawValue: string) => void;
+  onCommitImmediate: (rowId: string, rawValue: string) => void;
+}
+
+const ReportWeightCellInput: React.FC<ReportWeightCellInputProps> = memo(
+  ({
+    rowId,
+    rowIndex,
+    committedValue,
+    hasError,
+    resetToken,
+    onScheduleDraft,
+    onCommitImmediate,
+  }) => {
+    const inputRef = useRef<HTMLInputElement>(null);
+    const prevResetTokenRef = useRef<number>(resetToken);
+    const [localDraft, setLocalDraft] = useState<string>(() =>
+      formatReportWeightDraft(committedValue)
+    );
+
+    useEffect(() => {
+      const resetChanged = prevResetTokenRef.current !== resetToken;
+      prevResetTokenRef.current = resetToken;
+      const isFocused =
+        typeof document !== 'undefined' && document.activeElement === inputRef.current;
+      if (resetChanged || !isFocused) {
+        setLocalDraft(formatReportWeightDraft(committedValue));
+      }
+    }, [committedValue, resetToken]);
+
+    const isDraftActive = parseReportWeightInput(localDraft) > 0;
+
+    return (
+      <>
+        <input
+          ref={inputRef}
+          type="number"
+          min="0"
+          step="0.01"
+          aria-label={`Row ${rowIndex + 1} Report Weight (KG)`}
+          data-testid={`packing-row-${rowIndex + 1}-report-weight`}
+          aria-invalid={hasError}
+          value={localDraft}
+          onChange={(e) => {
+            const raw = e.target.value;
+            setLocalDraft(raw);
+            onScheduleDraft(rowId, raw);
+          }}
+          onBlur={() => {
+            onCommitImmediate(rowId, localDraft);
+            setLocalDraft(formatReportWeightDraft(parseReportWeightInput(localDraft)));
+          }}
+          placeholder="0.00"
+          title={
+            isDraftActive
+              ? 'Active: Calculation uses Report Weight (KG)'
+              : 'Enter Report Weight (KG) to override Weight (KG)'
+          }
+          className={`w-full border rounded-md px-2 py-1.5 text-right font-mono tabular-nums focus:outline-none focus:ring-2 transition ${
+            isDraftActive
+              ? 'bg-white border-emerald-500 ring-1 ring-emerald-300 text-emerald-950 font-black focus:ring-emerald-600'
+              : hasError
+              ? 'bg-white border-rose-400 text-slate-800 focus:ring-rose-500'
+              : 'bg-white border-slate-200 text-slate-700 font-semibold focus:ring-amber-500'
+          }`}
+        />
+        {isDraftActive && (
+          <div className="text-[9px] font-extrabold text-emerald-700 text-center uppercase mt-0.5 tracking-tight">
+            Active
+          </div>
+        )}
+      </>
+    );
+  }
+);
 
 export const PackingListView: React.FC = () => {
   const {
@@ -106,6 +195,76 @@ export const PackingListView: React.FC = () => {
   const [addingCategory, setAddingCategory] = useState<string | null>(null);
   const [newOptionValue, setNewOptionValue] = useState<string>('');
   const [validationAttempted, setValidationAttempted] = useState<boolean>(false);
+  const [reportWeightResetToken, setReportWeightResetToken] = useState<number>(0);
+
+  // Per-row debounce timers and pending drafts for (REPORT WEIGHT (KG))
+  const reportWeightTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const pendingReportWeightDraftsRef = useRef<Record<string, string>>({});
+
+  const clearPendingReportWeights = useCallback((targetRowId?: string) => {
+    if (targetRowId) {
+      const existingTimer = reportWeightTimersRef.current[targetRowId];
+      if (existingTimer !== undefined) {
+        clearTimeout(existingTimer);
+        delete reportWeightTimersRef.current[targetRowId];
+      }
+      delete pendingReportWeightDraftsRef.current[targetRowId];
+      return;
+    }
+    Object.values(reportWeightTimersRef.current).forEach((timerId) => {
+      clearTimeout(timerId);
+    });
+    reportWeightTimersRef.current = {};
+    pendingReportWeightDraftsRef.current = {};
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearPendingReportWeights();
+    };
+  }, [clearPendingReportWeights]);
+
+  const commitReportWeightForRow = useCallback(
+    (id: string, rawValue: string) => {
+      clearPendingReportWeights(id);
+      const numericWeight = parseReportWeightInput(rawValue);
+      setRows((prev) => {
+        let changed = false;
+        const next = prev.map((row) => {
+          if (row.id !== id) return row;
+          const updated = applyReportWeightToRow(row, numericWeight);
+          if (updated !== row) changed = true;
+          return updated;
+        });
+        return changed ? next : prev;
+      });
+    },
+    [clearPendingReportWeights]
+  );
+
+  const scheduleReportWeightCommit = useCallback(
+    (id: string, rawValue: string) => {
+      pendingReportWeightDraftsRef.current[id] = rawValue;
+      const existingTimer = reportWeightTimersRef.current[id];
+      if (existingTimer !== undefined) {
+        clearTimeout(existingTimer);
+      }
+      reportWeightTimersRef.current[id] = setTimeout(() => {
+        commitReportWeightForRow(id, pendingReportWeightDraftsRef.current[id] ?? rawValue);
+      }, REPORT_WEIGHT_DEBOUNCE_MS);
+    },
+    [commitReportWeightForRow]
+  );
+
+  const flushPendingReportWeights = useCallback((): PackingItemRow[] => {
+    const draftsSnapshot = { ...pendingReportWeightDraftsRef.current };
+    clearPendingReportWeights();
+    const reconciled = reconcilePackingRowsWithReportDrafts(rows, draftsSnapshot);
+    if (reconciled !== rows) {
+      setRows(reconciled);
+    }
+    return reconciled;
+  }, [clearPendingReportWeights, rows]);
 
   const validation = validatePackingForm({
     invoiceNumber,
@@ -122,6 +281,8 @@ export const PackingListView: React.FC = () => {
   const handleLoadForEdit = (idToEdit: string) => {
     const found = packings.find((p) => p.id === idToEdit);
     if (!found) return;
+    clearPendingReportWeights();
+    setReportWeightResetToken((t) => t + 1);
     setEditingPackingId(found.id);
     setInvoiceNumber(found.invoiceNumber);
     setPackingDate(found.packingDate);
@@ -158,12 +319,15 @@ export const PackingListView: React.FC = () => {
   };
 
   // Sync when editingPackingId is selected externally (e.g. from DatabaseView)
+  const lastLoadedEditingPackingIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (editingPackingId) {
-      const found = packings.find((p) => p.id === editingPackingId);
-      if (found && found.invoiceNumber !== invoiceNumber) {
-        handleLoadForEdit(editingPackingId);
-      }
+    if (!editingPackingId) {
+      lastLoadedEditingPackingIdRef.current = null;
+      return;
+    }
+    if (lastLoadedEditingPackingIdRef.current !== editingPackingId) {
+      lastLoadedEditingPackingIdRef.current = editingPackingId;
+      handleLoadForEdit(editingPackingId);
     }
   }, [editingPackingId]);
 
@@ -210,6 +374,8 @@ export const PackingListView: React.FC = () => {
           : undefined,
       },
       () => {
+        clearPendingReportWeights(id);
+        setReportWeightResetToken((t) => t + 1);
         setRows((prev) =>
           prev.map((row) => (row.id === id ? createEmptyRow(row.id) : row))
         );
@@ -227,6 +393,8 @@ export const PackingListView: React.FC = () => {
   };
 
   const resetFormFields = () => {
+    clearPendingReportWeights();
+    setReportWeightResetToken((t) => t + 1);
     setShippingMark('');
     setFlight('');
     setDestination('');
@@ -280,6 +448,8 @@ export const PackingListView: React.FC = () => {
   });
 
   const handleSavePDF = () => {
+    const resolvedRows = flushPendingReportWeights();
+    const resolvedTotals = calculatePackingTotals(resolvedRows);
     const check = validatePackingForm({
       invoiceNumber,
       packingDate,
@@ -288,7 +458,7 @@ export const PackingListView: React.FC = () => {
       destination,
       shipper,
       paymentStatus,
-      rows,
+      rows: resolvedRows,
     });
 
     if (!check.isValid) {
@@ -315,13 +485,16 @@ export const PackingListView: React.FC = () => {
         fromDate: packingDate,
         toDate: packingDate,
         items: validItems,
-        totalBox,
-        totalWeight,
-        totalAmount,
+        totalBox: resolvedTotals.totalBox,
+        totalWeight: resolvedTotals.totalWeight,
+        totalAmount: resolvedTotals.totalAmount,
         rmbRate: preservedRmbRate,
-        totalAmountBDT: calculatePackingTotalAmountBDT(totalAmount, preservedRmbRate),
-        rmbAmount: totalWeight > 0 ? Math.round((totalAmount / totalWeight) * 100) / 100 : 0,
-        settledAmount: totalAmount,
+        totalAmountBDT: calculatePackingTotalAmountBDT(resolvedTotals.totalAmount, preservedRmbRate),
+        rmbAmount:
+          resolvedTotals.totalWeight > 0
+            ? Math.round((resolvedTotals.totalAmount / resolvedTotals.totalWeight) * 100) / 100
+            : 0,
+        settledAmount: resolvedTotals.totalAmount,
         exporterStatus: paymentStatus,
         remarks,
         paymentDate: paymentStatus === 'PAID' ? packingDate : '',
@@ -367,11 +540,14 @@ export const PackingListView: React.FC = () => {
       fromDate: packingDate,
       toDate: packingDate,
       items: validItems,
-      totalBox,
-      totalWeight,
-      totalAmount,
-      rmbAmount: totalWeight > 0 ? Math.round((totalAmount / totalWeight) * 100) / 100 : 0,
-      settledAmount: totalAmount,
+      totalBox: resolvedTotals.totalBox,
+      totalWeight: resolvedTotals.totalWeight,
+      totalAmount: resolvedTotals.totalAmount,
+      rmbAmount:
+        resolvedTotals.totalWeight > 0
+          ? Math.round((resolvedTotals.totalAmount / resolvedTotals.totalWeight) * 100) / 100
+          : 0,
+      settledAmount: resolvedTotals.totalAmount,
       exporterStatus: paymentStatus,
       remarks,
       paymentDate: paymentStatus === 'PAID' ? packingDate : '',
@@ -409,6 +585,17 @@ export const PackingListView: React.FC = () => {
   })();
 
   const handlePrintSelected = () => {
+    const resolvedRows = flushPendingReportWeights();
+    const resolvedTotals = calculatePackingTotals(resolvedRows);
+    const activeItems = resolvedRows.filter(
+      (r) =>
+        r.item.trim() !== '' ||
+        r.box > 0 ||
+        r.weight > 0 ||
+        (Number(r.reportWeight) || 0) > 0 ||
+        r.rate > 0
+    );
+    const itemsToExport = activeItems.length > 0 ? activeItems : resolvedRows.slice(0, 5);
     openPrintModal({
       type: 'packing',
       title: `Export Packing List - ${invoiceNumber}`,
@@ -421,13 +608,13 @@ export const PackingListView: React.FC = () => {
         packingDate,
         fromDate: packingDate,
         toDate: packingDate,
-        items: exportableRows,
-        totalBox,
-        totalWeight,
-        totalAmount,
+        items: itemsToExport,
+        totalBox: resolvedTotals.totalBox,
+        totalWeight: resolvedTotals.totalWeight,
+        totalAmount: resolvedTotals.totalAmount,
         remarks,
       },
-      items: exportableRows,
+      items: itemsToExport,
     });
   };
 
@@ -1188,46 +1375,21 @@ export const PackingListView: React.FC = () => {
                           )}
                         </td>
 
-                        {/* Editable Report Weight (KG) Input (Active override over Weight (KG)) */}
+                        {/* Editable Report Weight (KG) Input (Debounced onChange + active override over Weight (KG)) */}
                         <td
                           className={`p-1.5 border-r border-slate-200 transition-colors ${
                             isReportWeightActive ? 'bg-emerald-50/60' : 'bg-slate-50/30'
                           }`}
                         >
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            aria-label={`Row ${idx + 1} Report Weight (KG)`}
-                            data-testid={`packing-row-${idx + 1}-report-weight`}
-                            aria-invalid={Boolean(rowErr?.weight || highlightFirstEmptyRow)}
-                            value={reportWeightVal > 0 ? reportWeightVal : ''}
-                            onChange={(e) =>
-                              handleRowChange(
-                                row.id,
-                                'reportWeight',
-                                parseFloat(e.target.value) || 0
-                              )
-                            }
-                            placeholder="0.00"
-                            title={
-                              isReportWeightActive
-                                ? 'Active: Calculation uses Report Weight (KG)'
-                                : 'Enter Report Weight (KG) to override Weight (KG)'
-                            }
-                            className={`w-full border rounded-md px-2 py-1.5 text-right font-mono tabular-nums focus:outline-none focus:ring-2 transition ${
-                              isReportWeightActive
-                                ? 'bg-white border-emerald-500 ring-1 ring-emerald-300 text-emerald-950 font-black focus:ring-emerald-600'
-                                : rowErr?.weight || highlightFirstEmptyRow
-                                ? 'bg-white border-rose-400 text-slate-800 focus:ring-rose-500'
-                                : 'bg-white border-slate-200 text-slate-700 font-semibold focus:ring-amber-500'
-                            }`}
+                          <ReportWeightCellInput
+                            rowId={row.id}
+                            rowIndex={idx}
+                            committedValue={reportWeightVal}
+                            hasError={Boolean(rowErr?.weight || highlightFirstEmptyRow)}
+                            resetToken={reportWeightResetToken}
+                            onScheduleDraft={scheduleReportWeightCommit}
+                            onCommitImmediate={commitReportWeightForRow}
                           />
-                          {isReportWeightActive && (
-                            <div className="text-[9px] font-extrabold text-emerald-700 text-center uppercase mt-0.5 tracking-tight">
-                              Active
-                            </div>
-                          )}
                         </td>
 
                         {/* Total Weight (Box * Active Weight) */}
@@ -1807,7 +1969,8 @@ export const PackingListView: React.FC = () => {
         </div>
       </div>
 
-      {/* Offscreen Printable / Exportable Packing Manifest Canvas for Direct .PNG and PDF Export (Identical to PrintPreviewModal) */}
+      {/* Offscreen Printable / Exportable Packing Manifest Canvas for Share Export (Mounted Only On Demand) */}
+      {isShareModalOpen && (
       <div className="fixed -left-[9999px] top-0 pointer-events-none" aria-hidden="true">
         <div
           id="packing-manifest-export-canvas"
@@ -2077,6 +2240,7 @@ export const PackingListView: React.FC = () => {
           </div>
         </div>
       </div>
+      )}
 
       {/* Interactive PNG WeChat Share Modal */}
       {isShareModalOpen && (

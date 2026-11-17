@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   CompanyProfile,
   DropdownOptions,
@@ -107,7 +107,11 @@ import {
   appendSnapshotWithRetention,
 } from '../utils/snapshotManager.ts';
 import { emitPaymentSyncTrigger } from '../utils/paymentSync.ts';
-import { SyncStatusState } from '../utils/syncStatus.ts';
+import {
+  SyncStatusState,
+  SLOW_SYNC_THRESHOLD_MS,
+  formatSyncTimestamp,
+} from '../utils/syncStatus.ts';
 import {
   parseShipmentDeepLink,
   buildShipmentDetailUrl,
@@ -135,6 +139,11 @@ import {
   TEAM_MEMBERS_STORAGE_KEY,
 } from '../utils/administration.ts';
 import { indexedStorageDriver, DB_STORE_NAMES } from '../utils/indexedStorage.ts';
+import {
+  publishToastMessage,
+  getToastSnapshot,
+  updateSyncTelemetry,
+} from './VolatileFeedbackStore.ts';
 
 const createEmptyPackingDraftRows = (): PackingItemRow[] =>
   ['1', '2', '3', '4', '5'].map((id) => ({
@@ -357,7 +366,7 @@ interface AppContextType {
   printModalData: PrintModalData;
   openPrintModal: (modal: Omit<PrintModalData, 'isOpen'>) => void;
   closePrintModal: () => void;
-  globalViewReport: GlobalViewTableReport;
+  globalViewReport: GlobalViewTableReport | null;
   isExportingGlobalPdf: boolean;
   lastExportedPdfFilename: string | null;
   exportCurrentViewToPdf: (options?: { openPreviewOnly?: boolean }) => Promise<boolean>;
@@ -430,16 +439,12 @@ interface AppContextType {
   ) => SnapshotValidationResult;
 
   // Local Database Persistence Sync Status & Live Sync
-  syncStatus: SyncStatusState;
-  lastSyncedAt: string;
-  lastSyncedEntity: string;
   triggerManualSync: (entityLabel?: string) => void;
+  forceSyncNow: (entityLabel?: string) => Promise<boolean>;
   isLiveSyncEnabled: boolean;
   toggleLiveSync: (enabled?: boolean) => void;
-  hasUnsyncedChanges: boolean;
 
   // Notification toast
-  toastMessage: string | null;
   showToast: (msg: string) => void;
 
   // Shipment QR Code Deep-Link Focus
@@ -473,6 +478,7 @@ const STORAGE_KEYS = {
   AUTH_USER: 'zsb_auth_user_v2',
   AUDIT_LOGS: 'zsb_audit_logs_v2',
   LIVE_SYNC: 'zsb_live_sync_enabled_v1',
+  LAST_BACKUP_AT: 'zsb_last_backup_at_v1',
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -935,8 +941,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   );
 
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
   const [printModalData, setPrintModalData] = useState<PrintModalData>({
     isOpen: false,
     type: 'purchase',
@@ -1069,68 +1073,228 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
-  const [hasUnsyncedChanges, setHasUnsyncedChanges] = useState<boolean>(false);
   const isLiveSyncEnabledRef = useRef<boolean>(isLiveSyncEnabled);
   isLiveSyncEnabledRef.current = isLiveSyncEnabled;
 
-  const [syncStatus, setSyncStatus] = useState<SyncStatusState>(() => {
+  const initialBackupIsoRef = useRef<string | null>(null);
+  if (initialBackupIsoRef.current === null) {
+    let resolvedBackupIso = '';
     try {
       if (typeof window !== 'undefined') {
-        const saved = localStorage.getItem(STORAGE_KEYS.LIVE_SYNC);
-        if (saved === 'false') return 'paused';
+        const stored = localStorage.getItem(STORAGE_KEYS.LAST_BACKUP_AT);
+        if (stored && !isNaN(new Date(stored).getTime())) {
+          resolvedBackupIso = stored;
+        }
       }
-      return 'synced';
     } catch {
-      return 'synced';
+      // ignore storage read error
     }
-  });
-  const [lastSyncedAt, setLastSyncedAt] = useState<string>(() => new Date().toISOString());
-  const [lastSyncedEntity, setLastSyncedEntity] = useState<string>('All Ledgers');
+    initialBackupIsoRef.current = resolvedBackupIso || new Date().toISOString();
+  }
+
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const slowSyncWatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialMountRef = useRef<boolean>(true);
+  const debouncedSaveTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const lastWrittenRefMap = useRef<Map<string, unknown>>(new Map());
+
+  const writeJsonIfChanged = (key: string, value: unknown) => {
+    if (lastWrittenRefMap.current.get(key) === value) {
+      return;
+    }
+    localStorage.setItem(key, JSON.stringify(value));
+    lastWrittenRefMap.current.set(key, value);
+  };
+
+  const evaluateNavigatorSlowConnection = () => {
+    try {
+      if (typeof navigator === 'undefined') return false;
+      if (navigator.onLine === false) return true;
+      const conn = (navigator as Navigator & {
+        connection?: { effectiveType?: string; downlink?: number };
+      }).connection;
+      if (!conn) return false;
+      return (
+        conn.effectiveType === 'slow-2g' ||
+        conn.effectiveType === '2g' ||
+        (typeof conn.downlink === 'number' && conn.downlink > 0 && conn.downlink < 0.7)
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    updateSyncTelemetry({
+      syncStatus: isLiveSyncEnabledRef.current ? 'synced' : 'paused',
+      lastSyncedAt: initialBackupIsoRef.current!,
+      lastBackupAt: initialBackupIsoRef.current!,
+      lastSyncedEntity: 'All Ledgers',
+      syncStartedAtMs: null,
+      isSlowConnection: evaluateNavigatorSlowConnection(),
+      isForcingSync: false,
+      hasUnsyncedChanges: false,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleNetworkChange = () => {
+      updateSyncTelemetry({ isSlowConnection: evaluateNavigatorSlowConnection() });
+    };
+    window.addEventListener('online', handleNetworkChange);
+    window.addEventListener('offline', handleNetworkChange);
+    const conn = (navigator as Navigator & {
+      connection?: { addEventListener?: (t: string, cb: () => void) => void; removeEventListener?: (t: string, cb: () => void) => void };
+    }).connection;
+    conn?.addEventListener?.('change', handleNetworkChange);
+    return () => {
+      window.removeEventListener('online', handleNetworkChange);
+      window.removeEventListener('offline', handleNetworkChange);
+      conn?.removeEventListener?.('change', handleNetworkChange);
+    };
+  }, []);
+
+  const recordCompletedBackupTimestamp = (isoTimestamp: string) => {
+    updateSyncTelemetry({
+      lastSyncedAt: isoTimestamp,
+      lastBackupAt: isoTimestamp,
+    });
+    try {
+      localStorage.setItem(STORAGE_KEYS.LAST_BACKUP_AT, isoTimestamp);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const flushAllStoresNow = async (
+    entityLabel: string = 'All Ledgers (Force Sync)',
+    options?: { targetStatus?: SyncStatusState; silent?: boolean }
+  ): Promise<boolean> => {
+    // Cancel any queued debounced timers immediately so a forced sync supersedes slow queues
+    debouncedSaveTimersRef.current.forEach((timer) => clearTimeout(timer));
+    debouncedSaveTimersRef.current.clear();
+    if (syncTimerRef.current) {
+      clearTimeout(syncTimerRef.current);
+      syncTimerRef.current = null;
+    }
+    if (slowSyncWatchTimerRef.current) {
+      clearTimeout(slowSyncWatchTimerRef.current);
+      slowSyncWatchTimerRef.current = null;
+    }
+
+    const startMs = Date.now();
+    updateSyncTelemetry({
+      isForcingSync: true,
+      syncStatus: 'saving',
+      syncStartedAtMs: startMs,
+      lastSyncedEntity: entityLabel,
+    });
+
+    // Yield one animation frame so header spinners/labels paint immediately before synchronous serialization
+    await yieldForDomFrame();
+
+    try {
+      const idbPromises: Promise<unknown>[] = [];
+      if (lastWrittenRefMap.current.get(STORAGE_KEYS.PURCHASES) !== purchases) {
+        idbPromises.push(indexedStorageDriver.saveCollection(DB_STORE_NAMES.PURCHASES, purchases));
+      }
+      if (lastWrittenRefMap.current.get(STORAGE_KEYS.PACKINGS) !== packings) {
+        idbPromises.push(indexedStorageDriver.saveCollection(DB_STORE_NAMES.PACKINGS, packings));
+      }
+      if (lastWrittenRefMap.current.get(STORAGE_KEYS.PAYMENTS) !== payments) {
+        idbPromises.push(indexedStorageDriver.saveCollection(DB_STORE_NAMES.PAYMENTS, payments));
+      }
+      if (lastWrittenRefMap.current.get(STORAGE_KEYS.OTHER_COSTS) !== otherCosts) {
+        idbPromises.push(indexedStorageDriver.saveCollection(DB_STORE_NAMES.OTHER_COSTS, otherCosts));
+      }
+
+      writeJsonIfChanged(STORAGE_KEYS.PROFILE, companyProfile);
+      writeJsonIfChanged(STORAGE_KEYS.DROPDOWNS, dropdownOptions);
+      writeJsonIfChanged(STORAGE_KEYS.PURCHASES, purchases);
+      writeJsonIfChanged(STORAGE_KEYS.PACKINGS, packings);
+      writeJsonIfChanged(STORAGE_KEYS.PACKING_DRAFT, packingDraft);
+      writeJsonIfChanged(STORAGE_KEYS.PAYMENTS, payments);
+      writeJsonIfChanged(STORAGE_KEYS.OTHER_COSTS, otherCosts);
+      writeJsonIfChanged(STORAGE_KEYS.PARTNER_DEPOSITS, partnerDeposits);
+      writeJsonIfChanged(STORAGE_KEYS.PARTNER_WITHDRAWALS, partnerWithdrawals);
+      writeJsonIfChanged(STORAGE_KEYS.PROFIT_DISTRIBUTIONS, profitDistributions);
+      writeJsonIfChanged(STORAGE_KEYS.BALANCE_INCOMES, balanceIncomes);
+      writeJsonIfChanged(STORAGE_KEYS.RECURRING_EXPENSES, recurringExpenses);
+      writeJsonIfChanged(STORAGE_KEYS.EXTERNAL_DEBTS, externalDebts);
+      writeJsonIfChanged(STORAGE_KEYS.SUPPLIER_CREDITS, supplierCredits);
+      writeJsonIfChanged(STORAGE_KEYS.MORTALITIES, mortalities);
+      writeJsonIfChanged(STORAGE_KEYS.BUSINESS_DOCUMENTS, businessDocuments);
+      writeJsonIfChanged(STORAGE_KEYS.SNAPSHOTS, snapshots);
+
+      if (idbPromises.length > 0) {
+        await Promise.race([
+          Promise.all(idbPromises),
+          new Promise<void>((resolve) => {
+            setTimeout(resolve, 3500);
+          }),
+        ]);
+      }
+
+      const completedAt = new Date().toISOString();
+      const finalStatus =
+        options?.targetStatus !== undefined
+          ? options.targetStatus
+          : isLiveSyncEnabledRef.current
+          ? 'synced'
+          : 'paused';
+
+      updateSyncTelemetry({
+        hasUnsyncedChanges: false,
+        syncStartedAtMs: null,
+        isSlowConnection: evaluateNavigatorSlowConnection(),
+        lastSyncedAt: completedAt,
+        lastBackupAt: completedAt,
+        syncStatus: finalStatus,
+        isForcingSync: false,
+      });
+      try {
+        localStorage.setItem(STORAGE_KEYS.LAST_BACKUP_AT, completedAt);
+      } catch (e) {
+        console.error(e);
+      }
+
+      if (!options?.silent) {
+        const recordTotal =
+          purchases.length + packings.length + payments.length + otherCosts.length;
+        showToast(
+          `Force Sync complete: ${recordTotal} ledger records backed up at ${formatSyncTimestamp(
+            completedAt
+          )}.`
+        );
+      }
+      return true;
+    } catch (e) {
+      console.error(e);
+      updateSyncTelemetry({
+        syncStatus: 'error',
+        syncStartedAtMs: null,
+        isForcingSync: false,
+      });
+      if (!options?.silent) {
+        showToast('Force Sync encountered a local storage write error.');
+      }
+      return false;
+    }
+  };
 
   const triggerManualSync = (
     entityLabel: string = 'All Ledgers',
     targetStatus?: SyncStatusState
   ) => {
-    try {
-      setSyncStatus('saving');
-      setLastSyncedEntity(entityLabel);
-      localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(companyProfile));
-      localStorage.setItem(STORAGE_KEYS.DROPDOWNS, JSON.stringify(dropdownOptions));
-      localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify(purchases));
-      localStorage.setItem(STORAGE_KEYS.PACKINGS, JSON.stringify(packings));
-      localStorage.setItem(STORAGE_KEYS.PACKING_DRAFT, JSON.stringify(packingDraft));
-      localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
-      localStorage.setItem(STORAGE_KEYS.OTHER_COSTS, JSON.stringify(otherCosts));
-      localStorage.setItem(STORAGE_KEYS.PARTNER_DEPOSITS, JSON.stringify(partnerDeposits));
-      localStorage.setItem(STORAGE_KEYS.PARTNER_WITHDRAWALS, JSON.stringify(partnerWithdrawals));
-      localStorage.setItem(STORAGE_KEYS.PROFIT_DISTRIBUTIONS, JSON.stringify(profitDistributions));
-      localStorage.setItem(STORAGE_KEYS.BALANCE_INCOMES, JSON.stringify(balanceIncomes));
-      localStorage.setItem(STORAGE_KEYS.RECURRING_EXPENSES, JSON.stringify(recurringExpenses));
-      localStorage.setItem(STORAGE_KEYS.EXTERNAL_DEBTS, JSON.stringify(externalDebts));
-      localStorage.setItem(STORAGE_KEYS.SUPPLIER_CREDITS, JSON.stringify(supplierCredits));
-      localStorage.setItem(STORAGE_KEYS.MORTALITIES, JSON.stringify(mortalities));
-      localStorage.setItem(STORAGE_KEYS.BUSINESS_DOCUMENTS, JSON.stringify(businessDocuments));
-      localStorage.setItem(STORAGE_KEYS.SNAPSHOTS, JSON.stringify(snapshots));
-      setHasUnsyncedChanges(false);
-      if (syncTimerRef.current) {
-        clearTimeout(syncTimerRef.current);
-      }
-      const finalStatus =
-        targetStatus !== undefined
-          ? targetStatus
-          : isLiveSyncEnabledRef.current
-          ? 'synced'
-          : 'paused';
-      syncTimerRef.current = setTimeout(() => {
-        setSyncStatus(finalStatus);
-        setLastSyncedAt(new Date().toISOString());
-      }, 80);
-    } catch (e) {
-      console.error(e);
-      setSyncStatus('error');
-    }
+    void flushAllStoresNow(entityLabel, {
+      targetStatus,
+      silent: entityLabel.includes('Live Sync Restored'),
+    });
+  };
+
+  const forceSyncNow = (entityLabel: string = 'All Ledgers (Force Sync)') => {
+    return flushAllStoresNow(entityLabel, { silent: false });
   };
 
   const toggleLiveSync = (forcedValue?: boolean) => {
@@ -1145,29 +1309,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     if (nextValue) {
       // When turning Live Sync on, immediately flush all state to storage and show Synced
-      triggerManualSync('All Ledgers (Live Sync Restored)', 'synced');
-      setHasUnsyncedChanges(false);
+      void flushAllStoresNow('All Ledgers (Live Sync Restored)', {
+        targetStatus: 'synced',
+        silent: true,
+      });
+      updateSyncTelemetry({ hasUnsyncedChanges: false });
       showToast('Live Sync enabled: Auto-saving database changes in the background.');
     } else {
       if (syncTimerRef.current) {
         clearTimeout(syncTimerRef.current);
       }
-      setSyncStatus('paused');
+      if (slowSyncWatchTimerRef.current) {
+        clearTimeout(slowSyncWatchTimerRef.current);
+      }
+      updateSyncTelemetry({
+        syncStartedAtMs: null,
+        syncStatus: 'paused',
+      });
       showToast(
-        'Live Sync paused: Background auto-saving disabled. Use "Sync Now" (Ctrl+S) to save.'
+        'Live Sync paused: Background auto-saving disabled. Use "Force Sync" (Ctrl+S) to back up now.'
       );
     }
   };
 
-  const debouncedSaveTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-
-  const persistWithSyncIndicator = (entityLabel: string, writeFn: () => void) => {
+  const persistWithSyncIndicator = (
+    entityLabel: string,
+    writeFn: () => void | Promise<unknown>
+  ) => {
     try {
       if (!isLiveSyncEnabledRef.current) {
         if (!isInitialMountRef.current) {
-          setHasUnsyncedChanges(true);
-          setSyncStatus('paused');
-          setLastSyncedEntity(entityLabel);
+          updateSyncTelemetry({
+            hasUnsyncedChanges: true,
+            syncStatus: 'paused',
+            lastSyncedEntity: entityLabel,
+          });
         }
         return;
       }
@@ -1176,35 +1352,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
-      setHasUnsyncedChanges(false);
-      setSyncStatus('saving');
-      setLastSyncedEntity(entityLabel);
+      updateSyncTelemetry((prev) => ({
+        hasUnsyncedChanges: false,
+        syncStatus: 'saving',
+        syncStartedAtMs: prev.syncStartedAtMs ?? Date.now(),
+        lastSyncedEntity: entityLabel,
+      }));
+
+      if (!slowSyncWatchTimerRef.current) {
+        slowSyncWatchTimerRef.current = setTimeout(() => {
+          slowSyncWatchTimerRef.current = null;
+          updateSyncTelemetry({ isSlowConnection: true });
+        }, SLOW_SYNC_THRESHOLD_MS);
+      }
 
       const existingTimer = debouncedSaveTimersRef.current.get(entityLabel);
       if (existingTimer) {
         clearTimeout(existingTimer);
       }
 
-      const timer = setTimeout(() => {
+      const timer = setTimeout(async () => {
+        debouncedSaveTimersRef.current.delete(entityLabel);
         try {
-          writeFn();
+          await writeFn();
           if (syncTimerRef.current) {
             clearTimeout(syncTimerRef.current);
           }
           syncTimerRef.current = setTimeout(() => {
-            setSyncStatus('synced');
-            setLastSyncedAt(new Date().toISOString());
+            if (debouncedSaveTimersRef.current.size > 0) return;
+            if (slowSyncWatchTimerRef.current) {
+              clearTimeout(slowSyncWatchTimerRef.current);
+              slowSyncWatchTimerRef.current = null;
+            }
+            const completedAt = new Date().toISOString();
+            updateSyncTelemetry({
+              syncStartedAtMs: null,
+              isSlowConnection: evaluateNavigatorSlowConnection(),
+              syncStatus: 'synced',
+            });
+            recordCompletedBackupTimestamp(completedAt);
           }, 50);
         } catch (e) {
           console.error(e);
-          setSyncStatus('error');
+          if (slowSyncWatchTimerRef.current) {
+            clearTimeout(slowSyncWatchTimerRef.current);
+            slowSyncWatchTimerRef.current = null;
+          }
+          updateSyncTelemetry({
+            syncStartedAtMs: null,
+            syncStatus: 'error',
+          });
         }
       }, 80);
 
       debouncedSaveTimersRef.current.set(entityLabel, timer);
     } catch (e) {
       console.error(e);
-      setSyncStatus('error');
+      updateSyncTelemetry({
+        syncStartedAtMs: null,
+        syncStatus: 'error',
+      });
     }
   };
 
@@ -1222,16 +1429,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [dropdownOptions]);
 
   useEffect(() => {
-    persistWithSyncIndicator('Purchase DB', () => {
+    persistWithSyncIndicator('Purchase DB', async () => {
       localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify(purchases));
-      indexedStorageDriver.saveCollection(DB_STORE_NAMES.PURCHASES, purchases);
+      await indexedStorageDriver.saveCollection(DB_STORE_NAMES.PURCHASES, purchases);
     });
   }, [purchases]);
 
   useEffect(() => {
-    persistWithSyncIndicator('Packing DB', () => {
+    persistWithSyncIndicator('Packing DB', async () => {
       localStorage.setItem(STORAGE_KEYS.PACKINGS, JSON.stringify(packings));
-      indexedStorageDriver.saveCollection(DB_STORE_NAMES.PACKINGS, packings);
+      await indexedStorageDriver.saveCollection(DB_STORE_NAMES.PACKINGS, packings);
     });
   }, [packings]);
 
@@ -1242,16 +1449,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [packingDraft]);
 
   useEffect(() => {
-    persistWithSyncIndicator('Payment DB', () => {
+    persistWithSyncIndicator('Payment DB', async () => {
       localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
-      indexedStorageDriver.saveCollection(DB_STORE_NAMES.PAYMENTS, payments);
+      await indexedStorageDriver.saveCollection(DB_STORE_NAMES.PAYMENTS, payments);
     });
   }, [payments]);
 
   useEffect(() => {
-    persistWithSyncIndicator('Costing DB', () => {
+    persistWithSyncIndicator('Costing DB', async () => {
       localStorage.setItem(STORAGE_KEYS.OTHER_COSTS, JSON.stringify(otherCosts));
-      indexedStorageDriver.saveCollection(DB_STORE_NAMES.OTHER_COSTS, otherCosts);
+      await indexedStorageDriver.saveCollection(DB_STORE_NAMES.OTHER_COSTS, otherCosts);
     });
   }, [otherCosts]);
 
@@ -1398,9 +1605,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     isInitialMountRef.current = false;
+    try {
+      const existingBackup = localStorage.getItem(STORAGE_KEYS.LAST_BACKUP_AT);
+      if (!existingBackup || isNaN(new Date(existingBackup).getTime())) {
+        localStorage.setItem(STORAGE_KEYS.LAST_BACKUP_AT, initialBackupIsoRef.current!);
+      }
+    } catch {
+      // ignore storage error
+    }
     return () => {
       if (syncTimerRef.current) {
         clearTimeout(syncTimerRef.current);
+      }
+      if (slowSyncWatchTimerRef.current) {
+        clearTimeout(slowSyncWatchTimerRef.current);
       }
       debouncedSaveTimersRef.current.forEach((t) => clearTimeout(t));
     };
@@ -1468,12 +1686,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showToast = useCallback((msg: string) => {
-    setToastMessage(msg);
+    publishToastMessage(msg);
     if (toastTimerRef.current) {
       clearTimeout(toastTimerRef.current);
     }
     toastTimerRef.current = setTimeout(() => {
-      setToastMessage((curr) => (curr === msg ? null : curr));
+      if (getToastSnapshot() === msg) {
+        publishToastMessage(null);
+      }
     }, 3200);
   }, []);
 
@@ -3407,53 +3627,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast(`Removed "${target?.title || 'Document'}" from document expiry tracker.`);
   };
 
-  // Print modal & Global View Table PDF Export
+  // Print modal & Global View Table PDF Export (lazy on-demand report generation)
   const [isExportingGlobalPdf, setIsExportingGlobalPdf] = useState<boolean>(false);
   const [lastExportedPdfFilename, setLastExportedPdfFilename] = useState<string | null>(null);
-  const [liveDomTablesSnapshot, setLiveDomTablesSnapshot] = useState<
-    ReturnType<typeof extractLiveDomTablesFromContainer>
-  >([]);
-
-  const globalViewReport = React.useMemo(
-    () =>
-      buildGlobalViewTableReport({
-        activeTab,
-        companyProfile,
-        purchases,
-        packings,
-        payments,
-        otherCosts,
-        partnerDeposits,
-        partnerWithdrawals,
-        profitDistributions,
-        balanceIncomes,
-        supplierCredits,
-        packingDraft,
-        dropdownOptions,
-        domTables: liveDomTablesSnapshot,
-      }),
-    [
-      activeTab,
-      companyProfile,
-      purchases,
-      packings,
-      payments,
-      otherCosts,
-      partnerDeposits,
-      partnerWithdrawals,
-      profitDistributions,
-      balanceIncomes,
-      supplierCredits,
-      packingDraft,
-      dropdownOptions,
-      liveDomTablesSnapshot,
-    ]
-  );
-
-  // Clear stale DOM table snapshot whenever the user switches activeTab
-  useEffect(() => {
-    setLiveDomTablesSnapshot([]);
-  }, [activeTab]);
+  const [globalExportReportSnapshot, setGlobalExportReportSnapshot] =
+    useState<GlobalViewTableReport | null>(null);
 
   const openPrintModal = useCallback((modal: Omit<PrintModalData, 'isOpen'>) => {
     setPrintModalData({
@@ -3474,7 +3652,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ? (document.querySelector('main') as HTMLElement | null)
         : null;
     const extractedDomTables = extractLiveDomTablesFromContainer(mainEl);
-    setLiveDomTablesSnapshot(extractedDomTables);
 
     const freshReport = buildGlobalViewTableReport({
       activeTab,
@@ -3511,6 +3688,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return true;
     }
 
+    setGlobalExportReportSnapshot(freshReport);
     setIsExportingGlobalPdf(true);
     try {
       // Yield a single animation frame so #global-printable-document paints cleanly without fixed delay
@@ -3533,6 +3711,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return false;
     } finally {
       setIsExportingGlobalPdf(false);
+      setGlobalExportReportSnapshot(null);
     }
   };
 
@@ -4090,161 +4269,198 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const contextValue = useMemo<AppContextType>(
+    () => ({
+      isAuthenticated,
+      currentUser,
+      login,
+      logout,
+      auditLogs,
+      addAuditLog,
+      clearAuditLogs,
+      activeTab,
+      setActiveTab,
+      companyProfile,
+      updateCompanyProfile,
+      addCompanyPartner,
+      removeCompanyPartner,
+      setPartnerEmail,
+      setPartnerAlertsEnabled,
+      dropdownOptions,
+      addDropdownItem,
+      editDropdownItem,
+      deleteDropdownItem,
+      resetDropdowns,
+      purchases,
+      addPurchase,
+      updatePurchase,
+      deletePurchase,
+      batchDeletePurchases,
+      batchUpdatePurchasesStatus,
+      bulkImportPurchases,
+      editingPurchaseId,
+      setEditingPurchaseId,
+      packings,
+      addPacking,
+      updatePacking,
+      deletePacking,
+      batchDeletePackings,
+      batchUpdatePackingsStatus,
+      bulkImportPackings,
+      editingPackingId,
+      setEditingPackingId,
+      packingDraft,
+      setPackingDraft,
+      resetPackingDraft,
+      payments,
+      addPayment,
+      updatePayment,
+      deletePayment,
+      batchDeletePayments,
+      batchUpdatePaymentsStatus,
+      bulkImportPayments,
+      editingPaymentId,
+      setEditingPaymentId,
+      otherCosts,
+      addOtherCost,
+      deleteOtherCost,
+      bulkImportOtherCosts,
+      partnerDeposits,
+      addPartnerDeposit,
+      updatePartnerDeposit,
+      deletePartnerDeposit,
+      partnerWithdrawals,
+      addPartnerWithdrawal,
+      deletePartnerWithdrawal,
+      profitDistributions,
+      issueProfitDistribution,
+      deleteProfitDistribution,
+      partnerNotifications,
+      clearPartnerNotifications,
+      balanceIncomes,
+      addBalanceIncome,
+      deleteBalanceIncome,
+      recurringExpenses,
+      addRecurringExpense,
+      toggleRecurringExpenseAutoDeduct,
+      deleteRecurringExpense,
+      runDueRecurringExpensesNow,
+      deductRecurringExpenseNow,
+      externalDebts,
+      addExternalDebt,
+      recordExternalDebtRepayment,
+      deleteExternalDebtRepayment,
+      deleteExternalDebt,
+      supplierCredits,
+      addSupplierCredit,
+      applySupplierCredit,
+      applySupplierCreditsForPayment,
+      deleteSupplierCredit,
+      mortalities,
+      addMortality,
+      updateMortality,
+      deleteMortality,
+      businessDocuments,
+      addBusinessDocument,
+      updateBusinessDocument,
+      deleteBusinessDocument,
+      printModalData,
+      openPrintModal,
+      closePrintModal,
+      globalViewReport: globalExportReportSnapshot,
+      isExportingGlobalPdf,
+      lastExportedPdfFilename,
+      exportCurrentViewToPdf,
+      dataCenterModal,
+      openDataCenterModal,
+      closeDataCenterModal,
+      privateImportDraft,
+      savePrivateImportDraft,
+      clearPrivateImportDraft,
+      superAdminPassword,
+      updateSuperAdminPassword,
+      resetAccountPasswordViaEmail,
+      resetSuperAdminPasswordToDefault,
+      superAdminClearModal,
+      openSuperAdminClearModal,
+      closeSuperAdminClearModal,
+      clearRecordsWithSuperAdmin,
+      pendingSingleDelete: pendingSingleDeleteState
+        ? {
+            recordType: pendingSingleDeleteState.recordType,
+            recordId: pendingSingleDeleteState.recordId,
+            recordTitle: pendingSingleDeleteState.recordTitle,
+            recordSubtitle: pendingSingleDeleteState.recordSubtitle,
+          }
+        : null,
+      requestSuperAdminSingleDelete,
+      confirmSingleDeleteWithSuperAdmin,
+      cancelSingleDelete,
+      clearAllDatabaseRecords,
+      resetAllData,
+      exportDatabaseJSON,
+      importDatabaseJSON,
+      snapshots,
+      snapshotModalOpen,
+      openSnapshotModal,
+      closeSnapshotModal,
+      createSnapshot,
+      restoreSnapshot,
+      deleteSnapshot,
+      downloadSnapshotJSON,
+      importSnapshotFromJSON,
+      triggerManualSync,
+      forceSyncNow,
+      isLiveSyncEnabled,
+      toggleLiveSync,
+      showToast,
+      focusedShipmentInvoice,
+      openShipmentDetails,
+      clearFocusedShipment,
+    }),
+    [
+      isAuthenticated,
+      currentUser,
+      auditLogs,
+      activeTab,
+      companyProfile,
+      dropdownOptions,
+      purchases,
+      editingPurchaseId,
+      packings,
+      editingPackingId,
+      packingDraft,
+      payments,
+      editingPaymentId,
+      otherCosts,
+      partnerDeposits,
+      partnerWithdrawals,
+      profitDistributions,
+      partnerNotifications,
+      balanceIncomes,
+      recurringExpenses,
+      externalDebts,
+      supplierCredits,
+      mortalities,
+      businessDocuments,
+      printModalData,
+      globalExportReportSnapshot,
+      isExportingGlobalPdf,
+      lastExportedPdfFilename,
+      dataCenterModal,
+      privateImportDraft,
+      superAdminPassword,
+      superAdminClearModal,
+      pendingSingleDeleteState,
+      snapshots,
+      snapshotModalOpen,
+      isLiveSyncEnabled,
+      focusedShipmentInvoice,
+    ]
+  );
+
   return (
-    <AppContext.Provider
-      value={{
-        isAuthenticated,
-        currentUser,
-        login,
-        logout,
-        auditLogs,
-        addAuditLog,
-        clearAuditLogs,
-        activeTab,
-        setActiveTab,
-        companyProfile,
-        updateCompanyProfile,
-        addCompanyPartner,
-        removeCompanyPartner,
-        setPartnerEmail,
-        setPartnerAlertsEnabled,
-        dropdownOptions,
-        addDropdownItem,
-        editDropdownItem,
-        deleteDropdownItem,
-        resetDropdowns,
-        purchases,
-        addPurchase,
-        updatePurchase,
-        deletePurchase,
-        batchDeletePurchases,
-        batchUpdatePurchasesStatus,
-        bulkImportPurchases,
-        editingPurchaseId,
-        setEditingPurchaseId,
-        packings,
-        addPacking,
-        updatePacking,
-        deletePacking,
-        batchDeletePackings,
-        batchUpdatePackingsStatus,
-        bulkImportPackings,
-        editingPackingId,
-        setEditingPackingId,
-        packingDraft,
-        setPackingDraft,
-        resetPackingDraft,
-        payments,
-        addPayment,
-        updatePayment,
-        deletePayment,
-        batchDeletePayments,
-        batchUpdatePaymentsStatus,
-        bulkImportPayments,
-        editingPaymentId,
-        setEditingPaymentId,
-        otherCosts,
-        addOtherCost,
-        deleteOtherCost,
-        bulkImportOtherCosts,
-        partnerDeposits,
-        addPartnerDeposit,
-        updatePartnerDeposit,
-        deletePartnerDeposit,
-        partnerWithdrawals,
-        addPartnerWithdrawal,
-        deletePartnerWithdrawal,
-        profitDistributions,
-        issueProfitDistribution,
-        deleteProfitDistribution,
-        partnerNotifications,
-        clearPartnerNotifications,
-        balanceIncomes,
-        addBalanceIncome,
-        deleteBalanceIncome,
-        recurringExpenses,
-        addRecurringExpense,
-        toggleRecurringExpenseAutoDeduct,
-        deleteRecurringExpense,
-        runDueRecurringExpensesNow,
-        deductRecurringExpenseNow,
-        externalDebts,
-        addExternalDebt,
-        recordExternalDebtRepayment,
-        deleteExternalDebtRepayment,
-        deleteExternalDebt,
-        supplierCredits,
-        addSupplierCredit,
-        applySupplierCredit,
-        applySupplierCreditsForPayment,
-        deleteSupplierCredit,
-        mortalities,
-        addMortality,
-        updateMortality,
-        deleteMortality,
-        businessDocuments,
-        addBusinessDocument,
-        updateBusinessDocument,
-        deleteBusinessDocument,
-        printModalData,
-        openPrintModal,
-        closePrintModal,
-        globalViewReport,
-        isExportingGlobalPdf,
-        lastExportedPdfFilename,
-        exportCurrentViewToPdf,
-        dataCenterModal,
-        openDataCenterModal,
-        closeDataCenterModal,
-        privateImportDraft,
-        savePrivateImportDraft,
-        clearPrivateImportDraft,
-        superAdminPassword,
-        updateSuperAdminPassword,
-        resetAccountPasswordViaEmail,
-        resetSuperAdminPasswordToDefault,
-        superAdminClearModal,
-        openSuperAdminClearModal,
-        closeSuperAdminClearModal,
-        clearRecordsWithSuperAdmin,
-        pendingSingleDelete: pendingSingleDeleteState
-          ? {
-              recordType: pendingSingleDeleteState.recordType,
-              recordId: pendingSingleDeleteState.recordId,
-              recordTitle: pendingSingleDeleteState.recordTitle,
-              recordSubtitle: pendingSingleDeleteState.recordSubtitle,
-            }
-          : null,
-        requestSuperAdminSingleDelete,
-        confirmSingleDeleteWithSuperAdmin,
-        cancelSingleDelete,
-        clearAllDatabaseRecords,
-        resetAllData,
-        exportDatabaseJSON,
-        importDatabaseJSON,
-        snapshots,
-        snapshotModalOpen,
-        openSnapshotModal,
-        closeSnapshotModal,
-        createSnapshot,
-        restoreSnapshot,
-        deleteSnapshot,
-        downloadSnapshotJSON,
-        importSnapshotFromJSON,
-        syncStatus,
-        lastSyncedAt,
-        lastSyncedEntity,
-        triggerManualSync,
-        isLiveSyncEnabled,
-        toggleLiveSync,
-        hasUnsyncedChanges,
-        toastMessage,
-        showToast,
-        focusedShipmentInvoice,
-        openShipmentDetails,
-        clearFocusedShipment,
-      }}
-    >
+    <AppContext.Provider value={contextValue}>
       {children}
     </AppContext.Provider>
   );

@@ -3,9 +3,12 @@ import assert from 'node:assert/strict';
 import {
   formatSyncTimestamp,
   formatSyncElapsedAge,
+  formatBackupTimestampLabel,
+  detectSlowSync,
   evaluateSyncFreshness,
   computeTotalPersistedRecords,
   getSyncStatusDisplay,
+  SLOW_SYNC_THRESHOLD_MS,
 } from './syncStatus.ts';
 
 test('formatSyncTimestamp formats valid ISO strings into HH:MM:SS and handles invalid inputs', () => {
@@ -211,4 +214,106 @@ test('getSyncStatusDisplay returns accurate labels and freshness colors for savi
   assert.equal(pausedPendingInfo.detailText, 'Unsaved changes pending (Click to sync)');
   assert.equal(pausedPendingInfo.indicatorColor, 'rose');
   assert.ok(pausedPendingInfo.ariaLabel.includes('Unsaved changes pending in memory'));
+});
+
+test('formatBackupTimestampLabel handles valid, empty, and malformed timestamps accurately', () => {
+  const backupDate = new Date(2026, 9, 28, 16, 42, 18); // 16:42:18 local time
+  const iso = backupDate.toISOString();
+  const nowMs = backupDate.getTime() + 45000; // 45s later
+
+  const valid = formatBackupTimestampLabel(iso, nowMs);
+  assert.equal(valid.hasBackup, true);
+  assert.equal(valid.formattedTime, '16:42:18');
+  assert.equal(valid.formattedDateTime, '2026-10-28 16:42:18');
+  assert.equal(valid.elapsedText, '45s ago');
+  assert.equal(valid.backupSummaryText, 'Backup 16:42:18 · 45s ago');
+
+  const empty = formatBackupTimestampLabel('', nowMs);
+  assert.equal(empty.hasBackup, false);
+  assert.equal(empty.formattedTime, '--:--:--');
+  assert.equal(empty.backupSummaryText, 'Backup: Pending');
+
+  const invalid = formatBackupTimestampLabel('not-a-timestamp', nowMs);
+  assert.equal(invalid.hasBackup, false);
+  assert.equal(invalid.formattedTime, '--:--:--');
+});
+
+test('detectSlowSync flags saving operations exceeding threshold or explicit slow connections', () => {
+  const startMs = 1_700_000_000_000;
+
+  assert.equal(
+    detectSlowSync({
+      status: 'saving',
+      syncStartedAtMs: startMs,
+      nowMs: startMs + 1000,
+    }),
+    false
+  );
+
+  assert.equal(
+    detectSlowSync({
+      status: 'saving',
+      syncStartedAtMs: startMs,
+      nowMs: startMs + SLOW_SYNC_THRESHOLD_MS,
+    }),
+    true
+  );
+
+  assert.equal(
+    detectSlowSync({
+      status: 'synced',
+      syncStartedAtMs: startMs,
+      nowMs: startMs + 10_000,
+    }),
+    false
+  );
+
+  assert.equal(
+    detectSlowSync({
+      status: 'synced',
+      isSlowConnection: true,
+    }),
+    true
+  );
+});
+
+test('getSyncStatusDisplay exposes last backup timestamp separately and highlights Force Sync when slow', () => {
+  const backupDate = new Date(2026, 9, 28, 10, 15, 30);
+  const backupIso = backupDate.toISOString();
+  const startedAtMs = backupDate.getTime() + 60_000;
+  const nowMs = startedAtMs + 4000; // saving stuck for 4 seconds (> threshold)
+
+  const slowSaving = getSyncStatusDisplay(
+    {
+      status: 'saving',
+      lastSyncedAt: backupIso,
+      lastBackupAt: backupIso,
+      lastSyncedEntity: 'Packing DB',
+      totalRecordsCount: 22,
+      syncStartedAtMs: startedAtMs,
+    },
+    nowMs
+  );
+
+  assert.equal(slowSaving.isSlowSync, true);
+  assert.equal(slowSaving.statusBannerLabel, 'Slow Connection');
+  assert.equal(slowSaving.shouldHighlightForceSync, true);
+  assert.equal(slowSaving.formattedBackupTime, '10:15:30');
+  assert.equal(slowSaving.backupElapsedText, '1m ago');
+  assert.ok(slowSaving.ariaLabel.includes('Slow connection detected'));
+
+  const forcingSync = getSyncStatusDisplay(
+    {
+      status: 'saving',
+      lastSyncedAt: backupIso,
+      lastBackupAt: backupIso,
+      lastSyncedEntity: 'All Ledgers (Force Sync)',
+      totalRecordsCount: 22,
+      syncStartedAtMs: nowMs,
+      isForcingSync: true,
+    },
+    nowMs
+  );
+  assert.equal(forcingSync.statusBannerLabel, 'Forcing Sync...');
+  assert.equal(forcingSync.formattedBackupTime, '10:15:30');
 });

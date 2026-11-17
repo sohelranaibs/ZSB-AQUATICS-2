@@ -2087,6 +2087,7 @@ export const ProfitLossView: React.FC = () => {
       </div>
 
       {/* Offscreen Corporate A4 Fiscal Summary Document for One-Click PDF Generation */}
+      {isDownloadingPdf && (
       <div
         id="profit-loss-fiscal-summary-host"
         aria-hidden="true"
@@ -2250,6 +2251,7 @@ export const ProfitLossView: React.FC = () => {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 };

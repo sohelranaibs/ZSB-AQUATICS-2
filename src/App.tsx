@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { AppProvider, useApp } from './context/AppContext.tsx';
+import { useToastMessage } from './context/VolatileFeedbackStore.ts';
 import { ExcelHeaderRibbon } from './components/ExcelHeaderRibbon.tsx';
 import { ThemeSidebarNav, buildWorkbookSheets } from './components/ThemeSidebarNav.tsx';
 import { DashboardView } from './components/DashboardView.tsx';
@@ -72,11 +73,26 @@ import {
 } from './utils/clientRuntimeGuard.ts';
 import { GlobalTableScrollController } from './components/GlobalTableScrollController.tsx';
 
+const GlobalToastBanner: React.FC = React.memo(() => {
+  const toastMessage = useToastMessage();
+  if (!toastMessage) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      data-testid="global-toast-banner"
+      className="fixed bottom-14 right-3 sm:bottom-4 sm:right-4 z-[70] bg-[#273E56] text-white px-4 py-3 rounded-xl shadow-lg border border-[#1D6CE0] flex items-center space-x-2.5 text-xs font-semibold transition-all duration-150 print:hidden max-w-md"
+    >
+      <CheckCircle2 className="w-4 h-4 text-[#00B14F] shrink-0" />
+      <span className="leading-snug">{toastMessage}</span>
+    </div>
+  );
+});
+
 const MainContent: React.FC = () => {
   const {
     activeTab,
     setActiveTab,
-    toastMessage,
     showToast,
     printModalData,
     closePrintModal,
@@ -807,17 +823,7 @@ const MainContent: React.FC = () => {
         />
 
         {/* Toast Notification Banner */}
-        {toastMessage && (
-          <div
-            role="status"
-            aria-live="polite"
-            data-testid="global-toast-banner"
-            className="fixed bottom-14 right-3 sm:bottom-4 sm:right-4 z-[70] bg-[#273E56] text-white px-4 py-3 rounded-xl shadow-lg border border-[#1D6CE0] flex items-center space-x-2.5 text-xs font-semibold transition-all duration-150 print:hidden max-w-md"
-          >
-            <CheckCircle2 className="w-4 h-4 text-[#00B14F] shrink-0" />
-            <span className="leading-snug">{toastMessage}</span>
-          </div>
-        )}
+        <GlobalToastBanner />
 
         {/* Smart Mobile Horizontal Swipe-to-Scroll Navigation Strip (Visible when horizontal overflow exists in Smart Mobile mode) */}
         {layoutMetrics.displayMode === 'smart_mobile' && scrollState.maxScrollLeft > 0 && (

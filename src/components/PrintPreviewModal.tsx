@@ -48,6 +48,7 @@ export const PrintPreviewModal: React.FC = () => {
     companyProfile,
     showToast,
     globalViewReport,
+    isExportingGlobalPdf,
   } = useApp();
   const [isSavingPdf, setIsSavingPdf] = useState(false);
   const [isSavingPng, setIsSavingPng] = useState(false);
@@ -57,12 +58,15 @@ export const PrintPreviewModal: React.FC = () => {
   const ITEMS_PER_PAGE = 10;
 
   if (!printModalData.isOpen) {
-    return (
-      <GlobalOffscreenPrintHost
-        report={globalViewReport}
-        companyProfile={companyProfile}
-      />
-    );
+    if (isExportingGlobalPdf && globalViewReport) {
+      return (
+        <GlobalOffscreenPrintHost
+          report={globalViewReport}
+          companyProfile={companyProfile}
+        />
+      );
+    }
+    return null;
   }
 
   const { type, title, data, items, selectedIds } = printModalData;
@@ -2161,10 +2165,12 @@ export const PrintPreviewModal: React.FC = () => {
         </div>
       </div>
     </div>
-    <GlobalOffscreenPrintHost
-      report={globalViewReport}
-      companyProfile={companyProfile}
-    />
+    {isExportingGlobalPdf && globalViewReport && (
+      <GlobalOffscreenPrintHost
+        report={globalViewReport}
+        companyProfile={companyProfile}
+      />
+    )}
 
     {/* Interactive PNG WeChat Share Modal */}
     {isShareModalOpen && (

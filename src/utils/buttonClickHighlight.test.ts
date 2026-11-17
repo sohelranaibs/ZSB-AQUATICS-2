@@ -65,4 +65,32 @@ describe('buttonClickHighlight utility', () => {
     assert.equal(btnA.getAttribute(CLICKED_BUTTON_ATTR), null);
     assert.equal(btnB.getAttribute(CLICKED_BUTTON_ATTR), 'true');
   });
+
+  it('handles repeated clicks on the same button and switches cleanly back and forth', () => {
+    const btnA = new MockElement({ 'data-testid': 'btn-repeat-a' });
+    const btnB = new MockElement({ 'data-testid': 'btn-repeat-b' });
+    let scanCount = 0;
+    const mockRoot = {
+      querySelectorAll: () => {
+        scanCount += 1;
+        return [];
+      },
+    } as unknown as HTMLElement;
+
+    // Initial priming click scans once if no cached button exists for this root
+    markButtonAsClicked(btnA as unknown as HTMLElement, mockRoot);
+    assert.equal(btnA.getAttribute(CLICKED_BUTTON_ATTR), 'true');
+    assert.equal(scanCount, 1);
+
+    // Second click on same button hits O(1) fast path without touching DOM queries
+    markButtonAsClicked(btnA as unknown as HTMLElement, mockRoot);
+    assert.equal(btnA.getAttribute(CLICKED_BUTTON_ATTR), 'true');
+    assert.equal(scanCount, 1);
+
+    // Switch to btnB uses WeakMap previous reference without querySelectorAll
+    markButtonAsClicked(btnB as unknown as HTMLElement, mockRoot);
+    assert.equal(btnA.getAttribute(CLICKED_BUTTON_ATTR), null);
+    assert.equal(btnB.getAttribute(CLICKED_BUTTON_ATTR), 'true');
+    assert.equal(scanCount, 1);
+  });
 });

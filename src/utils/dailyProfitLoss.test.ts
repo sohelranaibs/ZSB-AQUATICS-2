@@ -7,6 +7,8 @@ import {
   getVisibleDailyProfitLossWindow,
   shouldLoadMoreOnScroll,
   getNextDailyProfitLossRowLimit,
+  formatProfitLossFiscalSummaryFilename,
+  buildProfitLossFiscalSummaryReportPayload,
 } from './dailyProfitLoss.ts';
 import {
   PurchaseRecord,
@@ -331,3 +333,38 @@ test('getNextDailyProfitLossRowLimit increments in batches of 10 and caps at tot
   assert.equal(getNextDailyProfitLossRowLimit(25, 25), 25);
   assert.equal(getNextDailyProfitLossRowLimit(10, 0), 10);
 });
+
+test('formatProfitLossFiscalSummaryFilename produces standardized PDF/PNG filenames', () => {
+  assert.equal(
+    formatProfitLossFiscalSummaryFilename('2026-10-30', 'pdf'),
+    'ZSB_AQUATICS_FISCAL_SUMMARY_REPORT_2026-10-30.pdf'
+  );
+  assert.equal(
+    formatProfitLossFiscalSummaryFilename('2026-10-30T15:00:00Z', 'png'),
+    'ZSB_AQUATICS_FISCAL_SUMMARY_REPORT_2026-10-30.png'
+  );
+});
+
+test('buildProfitLossFiscalSummaryReportPayload constructs complete fiscal summary payload', () => {
+  const payload = buildProfitLossFiscalSummaryReportPayload(
+    samplePurchases,
+    samplePackings,
+    samplePayments,
+    sampleOtherCosts,
+    {
+      rmbExchangeRate: 16.5,
+      referenceDate: '2026-10-30',
+    }
+  );
+
+  assert.equal(payload.statementRef, 'PL-FS-20261030');
+  assert.equal(payload.filename, 'ZSB_AQUATICS_FISCAL_SUMMARY_REPORT_2026-10-30.pdf');
+  assert.equal(payload.generatedAt, '2026-10-30');
+  assert.equal(payload.summary.totalPurchasing, 98000);
+  assert.equal(payload.summary.totalExportValue, 115500);
+  assert.equal(payload.summary.totalOtherCosting, 12500);
+  assert.equal(payload.summary.grossProfit, 17500);
+  assert.equal(payload.summary.netProfit, 5000);
+  assert.equal(payload.dailyEntries.length, 3);
+});
+

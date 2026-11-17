@@ -70,7 +70,8 @@ export interface PackingItemRow {
   item: string;
   box: number;
   weight: number;
-  totalWeight: number; // box * weight
+  reportWeight?: number; // Editable override weight/box (KG); when > 0, active over weight
+  totalWeight: number; // box * (reportWeight > 0 ? reportWeight : weight)
   unit: string;
   rate: number;
   amount: number; // totalWeight * rate

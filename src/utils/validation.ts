@@ -220,6 +220,7 @@ export function validatePackingForm(
         row.item.trim() !== '' ||
         row.box !== 0 ||
         row.weight !== 0 ||
+        (Number(row.reportWeight) || 0) !== 0 ||
         row.rate !== 0
     );
 
@@ -247,9 +248,11 @@ export function validatePackingForm(
         rowIssues.push('select Box count (> 0)');
       }
 
-      if (!isValidNumber(row.weight) || row.weight <= 0) {
+      const hasReportWeight = isValidNumber(row.reportWeight) && row.reportWeight > 0;
+      const hasStandardWeight = isValidNumber(row.weight) && row.weight > 0;
+      if (!hasReportWeight && !hasStandardWeight) {
         rErr.weight = true;
-        rowIssues.push('select Weight/Box (> 0)');
+        rowIssues.push('select Weight/Box or enter Report Weight (> 0)');
       }
 
       if (isNoReport) {

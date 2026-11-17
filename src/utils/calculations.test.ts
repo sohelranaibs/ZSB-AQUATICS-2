@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   calculatePurchaseRowTotal,
   calculatePurchaseTotals,
+  resolvePackingEffectiveWeight,
   calculatePackingRow,
   calculatePackingTotals,
   calculatePackingTotalAmountBDT,
@@ -69,6 +70,24 @@ test('calculatePackingRow calculates total weight = box * weight and amount = to
   const result = calculatePackingRow(5, 14, 250);
   assert.equal(result.totalWeight, 70); // 5 * 14
   assert.equal(result.amount, 17500); // 70 * 250
+});
+
+test('resolvePackingEffectiveWeight and calculatePackingRow activate reportWeight and deactivate weight when reportWeight > 0', () => {
+  const inactiveReport = resolvePackingEffectiveWeight(16, 0);
+  assert.equal(inactiveReport.isReportWeightActive, false);
+  assert.equal(inactiveReport.effectiveWeight, 16);
+
+  const activeReport = resolvePackingEffectiveWeight(16, 14.5);
+  assert.equal(activeReport.isReportWeightActive, true);
+  assert.equal(activeReport.effectiveWeight, 14.5);
+
+  const rowWithReport = calculatePackingRow(10, 16, 40, 14.5);
+  assert.equal(rowWithReport.totalWeight, 145); // 10 * 14.5 (16 ignored)
+  assert.equal(rowWithReport.amount, 5800); // 145 * 40
+
+  const rowClearedReport = calculatePackingRow(10, 16, 40, 0);
+  assert.equal(rowClearedReport.totalWeight, 160); // reverts to 10 * 16
+  assert.equal(rowClearedReport.amount, 6400); // 160 * 40
 });
 
 test('calculatePackingTotals sums boxes, weights and amounts', () => {

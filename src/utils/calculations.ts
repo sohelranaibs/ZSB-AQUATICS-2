@@ -46,16 +46,42 @@ export function calculatePurchaseTotals(
 }
 
 /**
+ * Resolves the active per-box weight (KG) for a Packing List row.
+ * When a positive Report Weight (KG) is provided, it becomes active and overrides Weight (KG).
+ */
+export function resolvePackingEffectiveWeight(
+  weight: number,
+  reportWeight?: number
+): { effectiveWeight: number; isReportWeightActive: boolean } {
+  const rw = Number(reportWeight) || 0;
+  if (rw > 0) {
+    return {
+      effectiveWeight: rw,
+      isReportWeightActive: true,
+    };
+  }
+  return {
+    effectiveWeight: Number(weight) || 0,
+    isReportWeightActive: false,
+  };
+}
+
+/**
  * Calculates Packing List Row:
- * Total Weight = Box * Weight
+ * Total Weight = Box * (Report Weight if > 0, else Weight)
  * Amount = Total Weight * Rate
  */
-export function calculatePackingRow(box: number, weight: number, rate: number) {
+export function calculatePackingRow(
+  box: number,
+  weight: number,
+  rate: number,
+  reportWeight?: number
+) {
   const b = Number(box) || 0;
-  const w = Number(weight) || 0;
+  const { effectiveWeight } = resolvePackingEffectiveWeight(weight, reportWeight);
   const r = Number(rate) || 0;
 
-  const totalWeight = Math.round(b * w * 100) / 100;
+  const totalWeight = Math.round(b * effectiveWeight * 100) / 100;
   const amount = Math.round(totalWeight * r * 100) / 100;
 
   return {
@@ -600,6 +626,7 @@ export function isPackingFormDraftPopulated(
           (r.item || '').trim() !== '' ||
           (Number(r.box) || 0) > 0 ||
           (Number(r.weight) || 0) > 0 ||
+          (Number(r.reportWeight) || 0) > 0 ||
           (Number(r.rate) || 0) > 0
       )
     : false;
@@ -643,6 +670,7 @@ export function buildPackingRecordFromDraft(
         (r.item || '').trim() !== '' ||
         (Number(r.box) || 0) > 0 ||
         (Number(r.weight) || 0) > 0 ||
+        (Number(r.reportWeight) || 0) > 0 ||
         (Number(r.rate) || 0) > 0
     ),
     totalBox,

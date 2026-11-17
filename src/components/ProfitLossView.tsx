@@ -15,7 +15,11 @@ import {
   SUPPLIER_CREDIT_REASONS,
   calculateSupplierCreditSummary,
 } from '../utils/supplierCredits.ts';
-import { calculateDailyProfitLossReport } from '../utils/dailyProfitLoss.ts';
+import {
+  calculateDailyProfitLossReport,
+  buildProfitLossFiscalSummaryReportPayload,
+} from '../utils/dailyProfitLoss.ts';
+import { exportElementToPdf, resolveCompanyLogoSrc } from '../utils/pdfGenerator.ts';
 import { DailyProfitLossSection } from './DailyProfitLossSection.tsx';
 import { SupplierCreditRecord } from '../types/index.ts';
 import {
@@ -37,6 +41,8 @@ import {
   Plus,
   Trash2,
   Printer,
+  FileDown,
+  Loader2,
   Package,
   ShoppingCart,
   Receipt,
@@ -66,7 +72,10 @@ export const ProfitLossView: React.FC = () => {
     openPrintModal,
     setActiveTab,
     showToast,
+    addAuditLog,
   } = useApp();
+
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState<boolean>(false);
 
   const [newCategory, setNewCategory] = useState<string>(dropdownOptions.costingCategories[0] || 'Air Freight & Cargo');
   const [newCostDate, setNewCostDate] = useState<string>(() =>
@@ -194,27 +203,60 @@ export const ProfitLossView: React.FC = () => {
     setNewRef('');
   };
 
+  const fiscalSummaryPayload = useMemo(
+    () =>
+      buildProfitLossFiscalSummaryReportPayload(purchases, packings, payments, otherCosts, {
+        rmbExchangeRate: companyProfile.rmbExchangeRate,
+      }),
+    [purchases, packings, payments, otherCosts, companyProfile.rmbExchangeRate]
+  );
+
   const handlePrintProfitLoss = () => {
-    const fullDailyReport = calculateDailyProfitLossReport(
-      purchases,
-      packings,
-      payments,
-      otherCosts,
-      { rmbExchangeRate: companyProfile.rmbExchangeRate }
-    );
     openPrintModal({
       type: 'profit_loss',
-      title: 'Loss & Profit Financial Statement & Daily Report',
+      title: fiscalSummaryPayload.title,
       data: {
-        summary,
-        dailyEntries: fullDailyReport.entries,
-        periodLabel: 'All Active Trading Days',
+        summary: fiscalSummaryPayload.summary,
+        dailyEntries: fiscalSummaryPayload.dailyEntries,
+        periodLabel: fiscalSummaryPayload.periodLabel,
+        filename: fiscalSummaryPayload.filename,
         purchases,
         packings,
         payments,
         otherCosts,
       },
     });
+  };
+
+  const handleDownloadPdfReport = async () => {
+    if (isDownloadingPdf) return;
+    setIsDownloadingPdf(true);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      const success = await exportElementToPdf(
+        'profit-loss-fiscal-summary-printable',
+        fiscalSummaryPayload.filename
+      );
+      if (success) {
+        addAuditLog({
+          action: 'EXPORT',
+          module: 'OtherCost',
+          entityId: fiscalSummaryPayload.statementRef,
+          summary: `Downloaded P&L Fiscal Summary PDF (${fiscalSummaryPayload.filename})`,
+          details: `Net Profit: ${formatCurrency(summary.netProfit, companyProfile.currency)} (${summary.marginPercent}% margin) · ${fiscalSummaryPayload.dailyEntries.length} trading days`,
+        });
+        showToast(`Fiscal Summary PDF Report downloaded: ${fiscalSummaryPayload.filename}`);
+      } else {
+        handlePrintProfitLoss();
+        showToast('Opened Fiscal Summary Report preview for PDF save.');
+      }
+    } catch (err) {
+      console.error('Download P&L PDF Report failed:', err);
+      handlePrintProfitLoss();
+      showToast('Opened Fiscal Summary Report preview.');
+    } finally {
+      setIsDownloadingPdf(false);
+    }
   };
 
   const isProfitable = summary.netProfit >= 0;
@@ -266,6 +308,22 @@ export const ProfitLossView: React.FC = () => {
             <span>TOTAL BALANCE</span>
           </button>
           <button
+            type="button"
+            data-testid="pl-download-pdf-report-btn"
+            onClick={handleDownloadPdfReport}
+            disabled={isDownloadingPdf}
+            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold bg-[#1D6CE0] hover:bg-[#1558BC] disabled:opacity-60 text-white rounded-lg shadow transition cursor-pointer whitespace-nowrap"
+          >
+            {isDownloadingPdf ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <FileDown className="w-3.5 h-3.5" />
+            )}
+            <span>{isDownloadingPdf ? 'Generating PDF...' : 'Download PDF Report'}</span>
+          </button>
+          <button
+            type="button"
+            data-testid="pl-print-statement-btn"
             onClick={handlePrintProfitLoss}
             className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold bg-[#00897b] hover:bg-[#00796b] text-white rounded-lg shadow transition cursor-pointer whitespace-nowrap"
           >
@@ -2024,6 +2082,171 @@ export const ProfitLossView: React.FC = () => {
               )}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Offscreen Corporate A4 Fiscal Summary Document for One-Click PDF Generation */}
+      <div
+        id="profit-loss-fiscal-summary-host"
+        aria-hidden="true"
+        className="print:hidden"
+        style={{
+          position: 'fixed',
+          left: '-10000px',
+          top: 0,
+          width: '780px',
+          pointerEvents: 'none',
+          zIndex: -1,
+        }}
+      >
+        <div
+          id="profit-loss-fiscal-summary-printable"
+          className="bg-white text-slate-900 p-6 space-y-4 text-xs"
+          style={{ width: '780px', backgroundColor: '#ffffff', color: '#0f172a' }}
+        >
+          {/* Corporate Letterhead */}
+          <div className="flex items-center justify-between border-b-2 border-slate-800 pb-3">
+            <div className="flex items-center gap-3">
+              <img
+                src={resolveCompanyLogoSrc(companyProfile.logoUrl)}
+                alt={companyProfile.companyName}
+                className="w-12 h-12 rounded-full object-contain border border-slate-300 p-0.5 bg-white"
+              />
+              <div>
+                <div className="text-lg font-black tracking-wide text-slate-900 uppercase">
+                  {companyProfile.companyName}
+                </div>
+                <div className="text-[11px] font-semibold text-teal-800 uppercase">
+                  {companyProfile.address}
+                </div>
+                <div className="text-[10px] text-slate-600 font-mono">
+                  Tel: {(companyProfile.mobiles || []).join(' / ')}
+                  {companyProfile.email ? ` | Email: ${companyProfile.email}` : ''}
+                </div>
+              </div>
+            </div>
+            <div className="text-right font-mono text-[11px]">
+              <div className="font-black text-slate-900 uppercase text-xs">
+                FISCAL SUMMARY REPORT
+              </div>
+              <div className="text-slate-600">Ref: {fiscalSummaryPayload.statementRef}</div>
+              <div className="text-slate-600">
+                Date: {formatDate(fiscalSummaryPayload.generatedAt)}
+              </div>
+            </div>
+          </div>
+
+          {/* Executive Fiscal Summary Breakdown */}
+          <div className="p-4 bg-slate-50 rounded border border-slate-300 space-y-2">
+            <div className="font-black text-slate-900 uppercase tracking-wider border-b border-slate-300 pb-1.5 flex items-center justify-between">
+              <span>Executive Fiscal Profit &amp; Loss Summary</span>
+              <span className="font-mono text-[11px] text-slate-600">
+                Scope: {fiscalSummaryPayload.periodLabel}
+              </span>
+            </div>
+            <div className="flex justify-between border-b border-slate-200 pb-1.5 font-bold">
+              <span>
+                Gross Export Revenue (A) — {packings.length} Shipments ({summary.totalWeightExported} KG)
+              </span>
+              <span className="font-mono text-teal-800">
+                {formatCurrency(summary.totalExportValue, companyProfile.currency)}
+              </span>
+            </div>
+            <div className="flex justify-between border-b border-slate-200 pb-1.5 font-bold">
+              <span>
+                Less: Total Purchase Cost (B) — {purchases.length} Purchase Challans
+              </span>
+              <span className="font-mono text-rose-700">
+                - {formatCurrency(summary.totalPurchasing, companyProfile.currency)}
+              </span>
+            </div>
+            <div className="flex justify-between border-b border-slate-200 pb-1.5 font-bold bg-amber-50 px-2 py-1 rounded">
+              <span>Gross Margin (A - B)</span>
+              <span className="font-mono text-slate-900">
+                {formatCurrency(summary.grossProfit, companyProfile.currency)}
+              </span>
+            </div>
+            <div className="flex justify-between border-b border-slate-200 pb-1.5 font-bold">
+              <span>
+                Less: Total Other Operating Costs (C) — {otherCosts.length} Expense Vouchers
+              </span>
+              <span className="font-mono text-rose-700">
+                - {formatCurrency(summary.totalOtherCosting, companyProfile.currency)}
+              </span>
+            </div>
+            <div className="flex justify-between border-b border-slate-200 pb-1.5 text-[11px] font-semibold text-teal-900">
+              <span>Supplier Credit Notes &amp; Rebates (Issued / Applied)</span>
+              <span className="font-mono">
+                {formatCurrency(creditSummary.totalIssuedAmount, companyProfile.currency)} (Applied:{' '}
+                {formatCurrency(creditSummary.totalAppliedAmount, companyProfile.currency)})
+              </span>
+            </div>
+            <div className="flex justify-between pt-1 font-black text-sm">
+              <span>NET {isProfitable ? 'PROFIT' : 'LOSS'} (A - B - C)</span>
+              <span className={`font-mono ${isProfitable ? 'text-emerald-800' : 'text-rose-700'}`}>
+                {isProfitable ? '+' : ''}
+                {formatCurrency(summary.netProfit, companyProfile.currency)} (
+                {summary.marginPercent}% Margin)
+              </span>
+            </div>
+          </div>
+
+          {/* Daily Fiscal Summary Table (Top 15 Trading Days) */}
+          {fiscalSummaryPayload.dailyEntries.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="font-black text-xs uppercase tracking-wider text-slate-900 flex items-center justify-between">
+                <span>Daily Trading Profit &amp; Loss Breakdown</span>
+                <span className="font-mono text-[11px] text-slate-600">
+                  {fiscalSummaryPayload.dailyEntries.length} Trading Days
+                </span>
+              </div>
+              <table className="w-full text-[11px] border border-slate-300 border-collapse font-mono">
+                <thead>
+                  <tr className="bg-slate-800 text-white uppercase font-bold text-[10px]">
+                    <th className="p-1.5 border-r border-slate-600 text-left font-sans">Date</th>
+                    <th className="p-1.5 border-r border-slate-600 text-right">Export (RMB)</th>
+                    <th className="p-1.5 border-r border-slate-600 text-right">Purchase</th>
+                    <th className="p-1.5 border-r border-slate-600 text-right">Gross Margin</th>
+                    <th className="p-1.5 border-r border-slate-600 text-right">Other Cost</th>
+                    <th className="p-1.5 border-r border-slate-600 text-right">Net P&amp;L</th>
+                    <th className="p-1.5 text-center font-sans">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {fiscalSummaryPayload.dailyEntries.slice(0, 15).map((d) => (
+                    <tr key={d.date}>
+                      <td className="p-1.5 border-r border-slate-200 font-sans font-bold text-slate-900">
+                        {d.formattedDate} ({d.weekdayLabel})
+                      </td>
+                      <td className="p-1.5 border-r border-slate-200 text-right font-bold text-teal-800">
+                        {formatCurrency(d.exportAmountRMB ?? 0, 'RMB')}
+                      </td>
+                      <td className="p-1.5 border-r border-slate-200 text-right text-blue-800">
+                        {formatCurrency(d.purchaseAmount, companyProfile.currency)}
+                      </td>
+                      <td className="p-1.5 border-r border-slate-200 text-right text-slate-800">
+                        {formatCurrency(d.grossProfit, companyProfile.currency)}
+                      </td>
+                      <td className="p-1.5 border-r border-slate-200 text-right text-amber-800">
+                        {formatCurrency(d.otherCostAmount, companyProfile.currency)}
+                      </td>
+                      <td
+                        className={`p-1.5 border-r border-slate-200 text-right font-black ${
+                          d.netProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                        }`}
+                      >
+                        {d.netProfit >= 0 ? '+' : ''}
+                        {formatCurrency(d.netProfit, companyProfile.currency)}
+                      </td>
+                      <td className="p-1.5 text-center font-sans font-bold text-[10px]">
+                        {d.status} ({d.marginPercent}%)
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>

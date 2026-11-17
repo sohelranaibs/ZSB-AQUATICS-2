@@ -537,3 +537,83 @@ export function calculateDailyProfitLossReport(
     },
   };
 }
+
+export interface ProfitLossFiscalSummaryReportPayload {
+  statementRef: string;
+  filename: string;
+  title: string;
+  periodLabel: string;
+  generatedAt: string;
+  summary: ReturnType<typeof calculateProfitLoss>;
+  dailyEntries: DailyProfitLossEntry[];
+  totals: DailyProfitLossSummaryTotals;
+  purchases: PurchaseRecord[];
+  packings: PackingRecord[];
+  payments: PaymentRecord[];
+  otherCosts: OtherCostRecord[];
+}
+
+/**
+ * Formats a clean, standardized PDF/PNG filename for the Profit & Loss Fiscal Summary report.
+ */
+export function formatProfitLossFiscalSummaryFilename(
+  referenceDate?: string,
+  ext: 'pdf' | 'png' = 'pdf'
+): string {
+  const cleanDate =
+    referenceDate && /^\d{4}-\d{2}-\d{2}/.test(referenceDate.trim())
+      ? referenceDate.trim().slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
+  const safeExt = ext === 'png' ? 'png' : 'pdf';
+  return `ZSB_AQUATICS_FISCAL_SUMMARY_REPORT_${cleanDate}.${safeExt}`;
+}
+
+/**
+ * Builds the consolidated Profit & Loss Fiscal Summary report payload for one-click PDF generation and print preview.
+ */
+export function buildProfitLossFiscalSummaryReportPayload(
+  purchases: PurchaseRecord[],
+  packings: PackingRecord[],
+  payments: PaymentRecord[],
+  otherCosts: OtherCostRecord[],
+  options: {
+    rmbExchangeRate?: number;
+    referenceDate?: string;
+    periodLabel?: string;
+  } = {}
+): ProfitLossFiscalSummaryReportPayload {
+  const rate =
+    Number(options.rmbExchangeRate) > 0 ? Number(options.rmbExchangeRate) : 16.5;
+  const cleanDate =
+    options.referenceDate && /^\d{4}-\d{2}-\d{2}/.test(options.referenceDate.trim())
+      ? options.referenceDate.trim().slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
+
+  const summary = calculateProfitLoss(purchases, packings, payments, otherCosts, rate);
+  const dailyReport = calculateDailyProfitLossReport(
+    purchases,
+    packings,
+    payments,
+    otherCosts,
+    {
+      rmbExchangeRate: rate,
+      referenceTodayDate: cleanDate,
+    }
+  );
+
+  return {
+    statementRef: `PL-FS-${cleanDate.replace(/-/g, '')}`,
+    filename: formatProfitLossFiscalSummaryFilename(cleanDate, 'pdf'),
+    title: 'Loss & Profit Financial Statement & Daily Report',
+    periodLabel: options.periodLabel || 'All Active Trading Days',
+    generatedAt: cleanDate,
+    summary,
+    dailyEntries: dailyReport.entries,
+    totals: dailyReport.totals,
+    purchases: Array.isArray(purchases) ? purchases : [],
+    packings: Array.isArray(packings) ? packings : [],
+    payments: Array.isArray(payments) ? payments : [],
+    otherCosts: Array.isArray(otherCosts) ? otherCosts : [],
+  };
+}
+

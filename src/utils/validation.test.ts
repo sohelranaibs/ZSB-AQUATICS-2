@@ -290,6 +290,33 @@ describe('validatePackingForm', () => {
     });
     assert.equal(paidPositiveRate.isValid, true);
   });
+
+  it('passes when reportWeight > 0 is entered even if weight is 0', () => {
+    const result = validatePackingForm({
+      invoiceNumber: 'PKG-2026-0008',
+      packingDate: '2026-03-15',
+      shippingMark: 'AAD',
+      flight: 'CAN',
+      destination: 'GUANGZHOU',
+      shipper: 'ZSB AQUATICS',
+      paymentStatus: 'PAID',
+      rows: [
+        {
+          id: '1',
+          item: '2F',
+          box: 5,
+          weight: 0,
+          reportWeight: 14.5,
+          totalWeight: 72.5,
+          unit: 'KG',
+          rate: 40,
+          amount: 2900,
+        },
+      ],
+    });
+    assert.equal(result.isValid, true);
+    assert.equal(result.validItems.length, 1);
+  });
 });
 
 describe('validateSupplierPaymentForm', () => {

@@ -141,6 +141,7 @@ const createEmptyPackingDraftRows = (): PackingItemRow[] =>
     item: '',
     box: 0,
     weight: 0,
+    reportWeight: 0,
     totalWeight: 0,
     unit: 'KG',
     rate: 0,

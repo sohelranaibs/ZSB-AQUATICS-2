@@ -645,6 +645,7 @@ export const PrintPreviewModal: React.FC = () => {
                     <th className="p-2 border-r border-slate-300 text-left">ITEM / SIZE</th>
                     <th className="p-2 border-r border-slate-300 text-center w-20">BOX</th>
                     <th className="p-2 border-r border-slate-300 text-center w-20">WEIGHT (KG)</th>
+                    <th className="p-2 border-r border-slate-300 text-center w-24">REPORT WEIGHT (KG)</th>
                     <th className="p-2 border-r border-slate-300 text-right w-28">TOTAL WEIGHT</th>
                     <th className="p-2 border-r border-slate-300 text-center w-16">UNIT</th>
                     <th className="p-2 border-r border-slate-300 text-right w-24">RATE (RMB)</th>
@@ -655,6 +656,7 @@ export const PrintPreviewModal: React.FC = () => {
                   {displayPackingItems && displayPackingItems.length > 0 ? (
                     displayPackingItems.map((row: any, i: number) => {
                       const absoluteIndex = printCurrentPageOnly ? (currentPage - 1) * ITEMS_PER_PAGE + i : i;
+                      const hasReportWt = (Number(row.reportWeight) || 0) > 0;
                       return (
                         <tr key={i} className="font-medium">
                           <td className="p-2 border-r border-slate-200 text-center whitespace-nowrap">
@@ -662,7 +664,20 @@ export const PrintPreviewModal: React.FC = () => {
                           </td>
                           <td className="p-2 border-r border-slate-200 font-bold">{row.item}</td>
                           <td className="p-2 border-r border-slate-200 text-center font-mono">{row.box}</td>
-                          <td className="p-2 border-r border-slate-200 text-center font-mono">{row.weight}</td>
+                          <td
+                            className={`p-2 border-r border-slate-200 text-center font-mono ${
+                              hasReportWt ? 'text-slate-400 line-through' : ''
+                            }`}
+                          >
+                            {row.weight}
+                          </td>
+                          <td
+                            className={`p-2 border-r border-slate-200 text-center font-mono ${
+                              hasReportWt ? 'font-bold text-emerald-800' : 'text-slate-400'
+                            }`}
+                          >
+                            {hasReportWt ? row.reportWeight : '-'}
+                          </td>
                           <td className="p-2 border-r border-slate-200 text-right font-mono font-bold text-teal-800">
                             {row.totalWeight} KG
                           </td>
@@ -689,12 +704,18 @@ export const PrintPreviewModal: React.FC = () => {
                       <td className="p-2 text-center font-mono">
                         {displayPackingItems.reduce((s: number, r: any) => s + (Number(r.box) || 0), 0)} Boxes
                       </td>
-                      <td></td>
+                      <td colSpan={2}></td>
                       <td className="p-2 text-right font-mono text-teal-800 font-bold">
                         {displayPackingItems
                           .reduce(
                             (s: number, r: any) =>
-                              s + (Number(r.totalWeight) || Number(r.weight) * Number(r.box) || 0),
+                              s +
+                              (Number(r.totalWeight) ||
+                                ((Number(r.reportWeight) || 0) > 0
+                                  ? Number(r.reportWeight)
+                                  : Number(r.weight)) *
+                                  Number(r.box) ||
+                                0),
                             0
                           )
                           .toFixed(2)}{' '}
@@ -716,7 +737,7 @@ export const PrintPreviewModal: React.FC = () => {
                       {printCurrentPageOnly ? 'GRAND TOTAL:' : 'TOTALS:'}
                     </td>
                     <td className="p-2 text-center font-mono text-slate-900">{data.totalBox} Boxes</td>
-                    <td></td>
+                    <td colSpan={2}></td>
                     <td className="p-2 text-right font-mono text-teal-800 font-black">{data.totalWeight} KG</td>
                     <td colSpan={2} className="p-2 text-right uppercase">TOTAL INVOICE VALUE:</td>
                     <td className="p-2 text-right font-mono font-black text-slate-900">

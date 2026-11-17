@@ -81,6 +81,7 @@ export const PackingListView: React.FC = () => {
     item: '',
     box: 0,
     weight: 0,
+    reportWeight: 0,
     totalWeight: 0,
     unit: 'KG',
     rate: 0,
@@ -129,10 +130,12 @@ export const PackingListView: React.FC = () => {
     setPaymentStatus(found.paymentStatus === 'PAID' ? 'PAID' : 'UNPAID');
     setRemarks(found.remarks || '');
 
-    const loadedRows = found.items.map((it) => {
-      const calcs = calculatePackingRow(it.box, it.weight, it.rate);
+    const loadedRows: PackingItemRow[] = found.items.map((it) => {
+      const reportWeightVal = Number(it.reportWeight) || 0;
+      const calcs = calculatePackingRow(it.box, it.weight, it.rate, reportWeightVal);
       return {
         ...it,
+        reportWeight: reportWeightVal,
         totalWeight: calcs.totalWeight,
         amount: calcs.amount,
       };
@@ -162,7 +165,7 @@ export const PackingListView: React.FC = () => {
     }
   }, [editingPackingId]);
 
-  // Row update logic (Box, Weight, Rate)
+  // Row update logic (Box, Weight, Report Weight, Rate)
   const handleRowChange = (
     id: string,
     field: keyof PackingItemRow,
@@ -173,11 +176,15 @@ export const PackingListView: React.FC = () => {
         if (row.id !== id) return row;
         const updated = { ...row, [field]: value };
 
-        const b = field === 'box' ? Number(value) : row.box;
-        const w = field === 'weight' ? Number(value) : row.weight;
-        const r = field === 'rate' ? Number(value) : row.rate;
+        const b = field === 'box' ? Number(value) || 0 : row.box;
+        const w = field === 'weight' ? Number(value) || 0 : row.weight;
+        const rw =
+          field === 'reportWeight'
+            ? Number(value) || 0
+            : Number(row.reportWeight) || 0;
+        const r = field === 'rate' ? Number(value) || 0 : row.rate;
 
-        const calcs = calculatePackingRow(b, w, r);
+        const calcs = calculatePackingRow(b, w, r, rw);
         updated.totalWeight = calcs.totalWeight;
         updated.amount = calcs.amount;
 
@@ -244,7 +251,12 @@ export const PackingListView: React.FC = () => {
 
   const { totalBox, totalWeight, totalAmount } = calculatePackingTotals(rows);
   const populatedRowCount = rows.filter(
-    (r) => r.item.trim() !== '' || r.box !== 0 || r.weight !== 0 || r.rate !== 0
+    (r) =>
+      r.item.trim() !== '' ||
+      r.box !== 0 ||
+      r.weight !== 0 ||
+      (Number(r.reportWeight) || 0) !== 0 ||
+      r.rate !== 0
   ).length;
   const avgRatePerKg =
     totalWeight > 0 ? Math.round((totalAmount / totalWeight) * 100) / 100 : 0;
@@ -384,7 +396,12 @@ export const PackingListView: React.FC = () => {
 
   const exportableRows = (() => {
     const validItems = rows.filter(
-      (r) => r.item.trim() !== '' || r.box > 0 || r.weight > 0 || r.rate > 0
+      (r) =>
+        r.item.trim() !== '' ||
+        r.box > 0 ||
+        r.weight > 0 ||
+        (Number(r.reportWeight) || 0) > 0 ||
+        r.rate > 0
     );
     return validItems.length > 0 ? validItems : rows.slice(0, 5);
   })();
@@ -919,73 +936,85 @@ export const PackingListView: React.FC = () => {
                 data-testid="packing-entry-table"
               >
                 <thead>
-                  <tr className="bg-[#273E56] text-white uppercase text-[11px] font-bold tracking-wider border-b border-[#1d2c35]">
-                    <th className="px-2 py-2.5 border-r border-[#334b59] w-10 text-center">
+                  <tr className="bg-[#273E56] text-white uppercase text-[10.5px] font-bold tracking-wide border-b border-[#1d2c35]">
+                    <th className="px-1.5 py-2.5 border-r border-[#334b59] w-10 min-w-[40px] text-center">
                       SL #
                     </th>
-                    <th className="px-2.5 py-2.5 border-r border-[#334b59] text-left min-w-[150px]">
-                      <div className="flex items-center justify-between">
+                    <th className="px-2 py-2.5 border-r border-[#334b59] text-left min-w-[126px]">
+                      <div className="flex items-center justify-between gap-1">
                         <span>ITEM / SIZE</span>
                         <button
                           type="button"
                           onClick={() => setAddingCategory('exportItems')}
-                          className="text-[9px] bg-[#00897b] hover:bg-[#00796b] px-1.5 py-0.5 rounded text-white font-bold cursor-pointer"
+                          className="text-[9px] bg-[#00897b] hover:bg-[#00796b] px-1.5 py-0.5 rounded text-white font-bold cursor-pointer shrink-0"
                           title="Add new export item"
                         >
                           +New
                         </button>
                       </div>
                     </th>
-                    <th className="px-2 py-2.5 border-r border-[#334b59] w-24 text-center">
-                      <div className="flex items-center justify-between px-1">
+                    <th className="px-1 py-2.5 border-r border-[#334b59] min-w-[58px] text-center">
+                      <div className="flex items-center justify-between px-0.5 gap-1">
                         <span>BOX</span>
                         <button
                           type="button"
                           onClick={() => setAddingCategory('boxes')}
-                          className="text-[9px] bg-[#00897b] hover:bg-[#00796b] px-1 py-0.5 rounded text-white cursor-pointer"
+                          className="text-[9px] bg-[#00897b] hover:bg-[#00796b] px-1 py-0.5 rounded text-white cursor-pointer shrink-0"
                           title="Add box preset"
                         >
                           +
                         </button>
                       </div>
                     </th>
-                    <th className="px-2 py-2.5 border-r border-[#334b59] w-24 text-center">
-                      <div className="flex items-center justify-between px-1">
+                    <th className="px-1 py-2.5 border-r border-[#334b59] min-w-[80px] text-center">
+                      <div className="flex items-center justify-between px-0.5 gap-1">
                         <span>WEIGHT (KG)</span>
                         <button
                           type="button"
                           onClick={() => setAddingCategory('weights')}
-                          className="text-[9px] bg-[#00897b] hover:bg-[#00796b] px-1 py-0.5 rounded text-white cursor-pointer"
+                          className="text-[9px] bg-[#00897b] hover:bg-[#00796b] px-1 py-0.5 rounded text-white cursor-pointer shrink-0"
                           title="Add weight preset"
                         >
                           +
                         </button>
                       </div>
                     </th>
-                    <th className="px-2.5 py-2.5 border-r border-[#334b59] w-28 text-right">
+                    <th
+                      data-testid="packing-col-report-weight"
+                      className="px-1.5 py-2.5 border-r border-[#334b59] min-w-[96px] text-center"
+                    >
+                      <div>REPORT WEIGHT (KG)</div>
+                      <div className="text-[9px] font-normal lowercase tracking-normal text-[#80cbc4]">
+                        editable override
+                      </div>
+                    </th>
+                    <th className="px-1.5 py-2.5 border-r border-[#334b59] min-w-[74px] text-right">
                       TOTAL WEIGHT
                     </th>
-                    <th className="px-2 py-2.5 border-r border-[#334b59] w-20 text-center">
+                    <th className="px-1 py-2.5 border-r border-[#334b59] min-w-[66px] text-center">
                       UNIT
                     </th>
-                    <th className="px-2.5 py-2.5 border-r border-[#334b59] w-28 text-right">
+                    <th className="px-1.5 py-2.5 border-r border-[#334b59] min-w-[76px] text-right">
                       <div>RATE (RMB)</div>
                       <div className="text-[9px] font-normal lowercase tracking-normal text-[#80cbc4]">
                         {paymentStatus === 'UNPAID' ? '≥ 0 (Unpaid)' : '> 0 (Required)'}
                       </div>
                     </th>
-                    <th className="px-2.5 py-2.5 border-r border-[#334b59] w-32 text-right">
+                    <th className="px-1.5 py-2.5 border-r border-[#334b59] min-w-[88px] text-right">
                       TOTAL AMOUNT (RMB)
                     </th>
-                    <th className="px-2 py-2.5 w-12 text-center">CLR</th>
+                    <th className="px-1 py-2.5 w-10 min-w-[40px] text-center">CLR</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {rows.map((row, idx) => {
+                    const reportWeightVal = Number(row.reportWeight) || 0;
+                    const isReportWeightActive = reportWeightVal > 0;
                     const isFilled =
                       row.item.trim() !== '' ||
                       row.box !== 0 ||
                       row.weight !== 0 ||
+                      isReportWeightActive ||
                       row.rate !== 0;
                     const rowErr = validationAttempted
                       ? validation.rowErrors[row.id]
@@ -1071,11 +1100,22 @@ export const PackingListView: React.FC = () => {
                           </select>
                         </td>
 
-                        {/* Weight Dropdown */}
-                        <td className="p-1.5 border-r border-slate-200">
+                        {/* Weight Dropdown (Inactive when Report Weight (KG) is active) */}
+                        <td
+                          className={`p-1.5 border-r border-slate-200 transition-colors ${
+                            isReportWeightActive ? 'bg-slate-100/80' : ''
+                          }`}
+                        >
                           <select
                             aria-label={`Row ${idx + 1} Weight`}
+                            data-testid={`packing-row-${idx + 1}-weight-select`}
                             aria-invalid={Boolean(rowErr?.weight || highlightFirstEmptyRow)}
+                            disabled={isReportWeightActive}
+                            title={
+                              isReportWeightActive
+                                ? 'Inactive: Report Weight (KG) is active for calculation'
+                                : 'Active Weight (KG) per box'
+                            }
                             value={row.weight || ''}
                             onChange={(e) =>
                               handleRowChange(
@@ -1084,10 +1124,12 @@ export const PackingListView: React.FC = () => {
                                 parseFloat(e.target.value) || 0
                               )
                             }
-                            className={`w-full bg-white border rounded-md px-2 py-1.5 text-center font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 ${
-                              rowErr?.weight || highlightFirstEmptyRow
-                                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
-                                : 'border-slate-200 focus:ring-amber-500'
+                            className={`w-full border rounded-md px-2 py-1.5 text-center font-mono font-bold focus:outline-none focus:ring-2 transition ${
+                              isReportWeightActive
+                                ? 'bg-slate-100 border-slate-200 text-slate-400 opacity-60 cursor-not-allowed line-through'
+                                : rowErr?.weight || highlightFirstEmptyRow
+                                ? 'bg-rose-50/40 border-rose-500 ring-1 ring-rose-300 text-slate-800 focus:ring-rose-500'
+                                : 'bg-white border-slate-200 text-slate-800 focus:ring-amber-500'
                             }`}
                           >
                             <option value="0">-</option>
@@ -1100,9 +1142,56 @@ export const PackingListView: React.FC = () => {
                               </option>
                             ))}
                           </select>
+                          {isReportWeightActive && (
+                            <div className="text-[9px] font-bold text-slate-400 text-center uppercase mt-0.5 tracking-tight">
+                              Inactive
+                            </div>
+                          )}
                         </td>
 
-                        {/* Total Weight (Box * Weight) */}
+                        {/* Editable Report Weight (KG) Input (Active override over Weight (KG)) */}
+                        <td
+                          className={`p-1.5 border-r border-slate-200 transition-colors ${
+                            isReportWeightActive ? 'bg-emerald-50/60' : 'bg-slate-50/30'
+                          }`}
+                        >
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            aria-label={`Row ${idx + 1} Report Weight (KG)`}
+                            data-testid={`packing-row-${idx + 1}-report-weight`}
+                            aria-invalid={Boolean(rowErr?.weight || highlightFirstEmptyRow)}
+                            value={reportWeightVal > 0 ? reportWeightVal : ''}
+                            onChange={(e) =>
+                              handleRowChange(
+                                row.id,
+                                'reportWeight',
+                                parseFloat(e.target.value) || 0
+                              )
+                            }
+                            placeholder="0.00"
+                            title={
+                              isReportWeightActive
+                                ? 'Active: Calculation uses Report Weight (KG)'
+                                : 'Enter Report Weight (KG) to override Weight (KG)'
+                            }
+                            className={`w-full border rounded-md px-2 py-1.5 text-right font-mono tabular-nums focus:outline-none focus:ring-2 transition ${
+                              isReportWeightActive
+                                ? 'bg-white border-emerald-500 ring-1 ring-emerald-300 text-emerald-950 font-black focus:ring-emerald-600'
+                                : rowErr?.weight || highlightFirstEmptyRow
+                                ? 'bg-white border-rose-400 text-slate-800 focus:ring-rose-500'
+                                : 'bg-white border-slate-200 text-slate-700 font-semibold focus:ring-amber-500'
+                            }`}
+                          />
+                          {isReportWeightActive && (
+                            <div className="text-[9px] font-extrabold text-emerald-700 text-center uppercase mt-0.5 tracking-tight">
+                              Active
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Total Weight (Box * Active Weight) */}
                         <td
                           data-testid={`packing-row-${idx + 1}-weight`}
                           className="p-1.5 border-r border-slate-200 bg-amber-50/40 text-right font-mono font-bold tabular-nums text-teal-800 pr-2.5"
@@ -1118,7 +1207,7 @@ export const PackingListView: React.FC = () => {
                             onChange={(e) =>
                               handleRowChange(row.id, 'unit', e.target.value)
                             }
-                            className="w-full bg-slate-50 border border-slate-200 rounded-md px-1.5 py-1.5 text-center text-[11px] font-bold text-slate-700"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-md px-1 py-1.5 text-center text-[11px] font-bold text-slate-700"
                           >
                             {dropdownOptions.units.map((u) => (
                               <option key={u} value={u}>
@@ -1203,7 +1292,10 @@ export const PackingListView: React.FC = () => {
                     >
                       {totalBox} Boxes
                     </td>
-                    <td className="px-2 py-2.5 text-right uppercase text-[11px] font-bold border-r border-[#334b59] whitespace-nowrap">
+                    <td
+                      colSpan={2}
+                      className="px-2 py-2.5 text-right uppercase text-[11px] font-bold border-r border-[#334b59] whitespace-nowrap"
+                    >
                       TOTAL WT:
                     </td>
                     <td
@@ -1233,7 +1325,7 @@ export const PackingListView: React.FC = () => {
 
                   {/* Row 2: Prominent Shipment Totals Live Summation Banner */}
                   <tr className="bg-[#273E56] text-white border-t border-[#334b59]">
-                    <td colSpan={9} className="p-3">
+                    <td colSpan={10} className="p-3">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="flex items-center gap-2">
                           <span className="px-2.5 py-1 rounded bg-[#00897b] text-white font-black text-xs uppercase tracking-wider shadow-xs">
@@ -1321,7 +1413,7 @@ export const PackingListView: React.FC = () => {
                 </span>
               </div>
               <div className="text-[11px] text-slate-600 font-mono">
-                Formula: <strong>Total Weight = Box × Weight</strong> ·{' '}
+                Formula: <strong>Total Weight = Box × (Report Weight if entered, else Weight)</strong> ·{' '}
                 <strong>Total Amount = Total Weight × Rate</strong>
               </div>
             </div>
@@ -1827,6 +1919,7 @@ export const PackingListView: React.FC = () => {
                   <th className="p-2 border-r border-slate-300 text-left">ITEM / SIZE</th>
                   <th className="p-2 border-r border-slate-300 text-center w-20">BOX</th>
                   <th className="p-2 border-r border-slate-300 text-center w-20">WEIGHT (KG)</th>
+                  <th className="p-2 border-r border-slate-300 text-center w-24">REPORT WEIGHT (KG)</th>
                   <th className="p-2 border-r border-slate-300 text-right w-28">TOTAL WEIGHT</th>
                   <th className="p-2 border-r border-slate-300 text-center w-16">UNIT</th>
                   <th className="p-2 border-r border-slate-300 text-right w-24">RATE (RMB)</th>
@@ -1834,34 +1927,50 @@ export const PackingListView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {exportableRows.map((row, idx) => (
-                  <tr key={row.id || idx} className="font-medium">
-                    <td className="p-2 border-r border-slate-200 text-center whitespace-nowrap">
-                      <span className="zsb-sl-badge">{String(idx + 1).padStart(2, '0')}</span>
-                    </td>
-                    <td className="p-2 border-r border-slate-200 font-bold">{row.item || '-'}</td>
-                    <td className="p-2 border-r border-slate-200 text-center font-mono">{row.box || 0}</td>
-                    <td className="p-2 border-r border-slate-200 text-center font-mono">{row.weight || 0}</td>
-                    <td className="p-2 border-r border-slate-200 text-right font-mono font-bold text-teal-800">
-                      {row.totalWeight || 0} KG
-                    </td>
-                    <td className="p-2 border-r border-slate-200 text-center font-bold text-[10px]">
-                      {row.unit || 'KG'}
-                    </td>
-                    <td className="p-2 border-r border-slate-200 text-right font-mono">
-                      {formatCurrency(row.rate || 0, '')}
-                    </td>
-                    <td className="p-2 text-right font-mono font-bold text-slate-900">
-                      {formatCurrency(row.amount || 0, '')}
-                    </td>
-                  </tr>
-                ))}
+                {exportableRows.map((row, idx) => {
+                  const hasReportWt = (Number(row.reportWeight) || 0) > 0;
+                  return (
+                    <tr key={row.id || idx} className="font-medium">
+                      <td className="p-2 border-r border-slate-200 text-center whitespace-nowrap">
+                        <span className="zsb-sl-badge">{String(idx + 1).padStart(2, '0')}</span>
+                      </td>
+                      <td className="p-2 border-r border-slate-200 font-bold">{row.item || '-'}</td>
+                      <td className="p-2 border-r border-slate-200 text-center font-mono">{row.box || 0}</td>
+                      <td
+                        className={`p-2 border-r border-slate-200 text-center font-mono ${
+                          hasReportWt ? 'text-slate-400 line-through' : ''
+                        }`}
+                      >
+                        {row.weight || 0}
+                      </td>
+                      <td
+                        className={`p-2 border-r border-slate-200 text-center font-mono ${
+                          hasReportWt ? 'font-bold text-emerald-800' : 'text-slate-400'
+                        }`}
+                      >
+                        {hasReportWt ? row.reportWeight : '-'}
+                      </td>
+                      <td className="p-2 border-r border-slate-200 text-right font-mono font-bold text-teal-800">
+                        {row.totalWeight || 0} KG
+                      </td>
+                      <td className="p-2 border-r border-slate-200 text-center font-bold text-[10px]">
+                        {row.unit || 'KG'}
+                      </td>
+                      <td className="p-2 border-r border-slate-200 text-right font-mono">
+                        {formatCurrency(row.rate || 0, '')}
+                      </td>
+                      <td className="p-2 text-right font-mono font-bold text-slate-900">
+                        {formatCurrency(row.amount || 0, '')}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr className="bg-slate-100 font-bold border-t-2 border-slate-400">
                   <td colSpan={2} className="p-2 text-right uppercase">TOTALS:</td>
                   <td className="p-2 text-center font-mono text-slate-900">{totalBox} Boxes</td>
-                  <td></td>
+                  <td colSpan={2}></td>
                   <td className="p-2 text-right font-mono text-teal-800 font-black">{totalWeight} KG</td>
                   <td colSpan={2} className="p-2 text-right uppercase">TOTAL INVOICE VALUE:</td>
                   <td className="p-2 text-right font-mono font-black text-slate-900">

@@ -63,7 +63,7 @@ test('resolveGlobalKeyboardShortcut resolves Ctrl+E to OPEN_EXCEL_MODAL', () => 
   assert.equal(ctrlE.preventDefault, true);
 });
 
-test('resolveGlobalKeyboardShortcut resolves Ctrl+/, Ctrl+K, and non-editable ? to OPEN_SHORTCUTS_MODAL', () => {
+test('resolveGlobalKeyboardShortcut resolves Ctrl+/, ?, Ctrl+K, and / accurately', () => {
   const ctrlSlash = resolveGlobalKeyboardShortcut({
     key: '/',
     ctrlKey: true,
@@ -77,7 +77,14 @@ test('resolveGlobalKeyboardShortcut resolves Ctrl+/, Ctrl+K, and non-editable ? 
     ctrlKey: true,
   });
   assert.ok(ctrlK);
-  assert.equal(ctrlK.action, 'OPEN_SHORTCUTS_MODAL');
+  assert.equal(ctrlK.action, 'FOCUS_GLOBAL_SEARCH');
+
+  const plainSlashOutsideInput = resolveGlobalKeyboardShortcut({
+    key: '/',
+    isEditableTarget: false,
+  });
+  assert.ok(plainSlashOutsideInput);
+  assert.equal(plainSlashOutsideInput.action, 'FOCUS_GLOBAL_SEARCH');
 
   const plainQuestionOutsideInput = resolveGlobalKeyboardShortcut({
     key: '?',
@@ -125,11 +132,15 @@ test('resolveGlobalKeyboardShortcut resolves Alt+1..9 and Alt+0 to JUMP_TO_TAB',
 
   const tab6 = resolveGlobalKeyboardShortcut({ code: 'Digit6', key: '6', altKey: true });
   assert.ok(tab6);
-  assert.equal(tab6.targetTab, 'exporter_payment_slip');
+  assert.equal(tab6.targetTab, 'air_way_bill');
+
+  const tab7 = resolveGlobalKeyboardShortcut({ code: 'Digit7', key: '7', altKey: true });
+  assert.ok(tab7);
+  assert.equal(tab7.targetTab, 'exporter_payment_slip');
 
   const tab10 = resolveGlobalKeyboardShortcut({ key: '0', altKey: true });
   assert.ok(tab10);
-  assert.equal(tab10.targetTab, 'payment_db');
+  assert.equal(tab10.targetTab, 'packing_db');
 });
 
 test('resolveGlobalKeyboardShortcut resolves Alt+ArrowRight, Alt+ArrowLeft, and Escape', () => {
@@ -146,16 +157,16 @@ test('resolveGlobalKeyboardShortcut resolves Alt+ArrowRight, Alt+ArrowLeft, and 
   assert.equal(esc.action, 'CLOSE_ACTIVE_MODAL');
 });
 
-test('getAdjacentWorkbookTab cycles forward and backward across all 13 sheets', () => {
+test('getAdjacentWorkbookTab cycles forward and backward across all 17 sheets', () => {
   assert.equal(getAdjacentWorkbookTab('dashboard', 'next'), 'purchase_form');
-  assert.equal(getAdjacentWorkbookTab('dashboard', 'prev'), 'audit_logs');
-  assert.equal(getAdjacentWorkbookTab('audit_logs', 'next'), 'dashboard');
+  assert.equal(getAdjacentWorkbookTab('dashboard', 'prev'), 'total_balance');
+  assert.equal(getAdjacentWorkbookTab('total_balance', 'next'), 'dashboard');
 });
 
 test('getWorkbookTabByNumber maps 1..9 and 0 (10) accurately', () => {
   assert.equal(getWorkbookTabByNumber(1), 'dashboard');
   assert.equal(getWorkbookTabByNumber(3), 'packing_form');
-  assert.equal(getWorkbookTabByNumber(0), 'payment_db');
+  assert.equal(getWorkbookTabByNumber(0), 'packing_db');
   assert.equal(getWorkbookTabByNumber(99), null);
 });
 

@@ -69,6 +69,7 @@ import {
 import { buildSupplierRecordHistory } from '../utils/supplierHistory.ts';
 import { formatDateImageStyle } from '../utils/calculations.ts';
 import { exportElementToPdf, exportElementsToCombinedPdf, resolveCompanyLogoSrc } from '../utils/pdfGenerator.ts';
+import { exportSupplierReconciliationLedgerPdf } from '../utils/supplierReconciliationPdf.ts';
 import { COMPANY_LOGO_URL } from '../context/initialData.ts';
 import {
   formatBatchPaymentSlipsPdfFilename,
@@ -394,6 +395,22 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     if (isExportingSyncLedgerPdf) return;
     setIsExportingSyncLedgerPdf(true);
     try {
+      const result = exportSupplierReconciliationLedgerPdf({
+        companyProfile,
+        supplierFilter: syncLedgerSupplier,
+        fromDate: syncLedgerFromDate,
+        toDate: syncLedgerToDate,
+        sortDirection: syncLedgerSortDirection,
+        rows: syncSupplierLedgerRows,
+        totals: syncSupplierLedgerTotals,
+      });
+      if (result.ok) {
+        showToast(`Exported PDF: ${result.filename}`);
+      } else {
+        showToast('Failed to export Supplier Reconciliation Ledger PDF. Please try again.');
+      }
+    } catch (err) {
+      console.error('Supplier Reconciliation Ledger PDF export failed:', err);
       const safeSupplier =
         syncLedgerSupplier === 'ALL'
           ? 'ALL_SUPPLIERS'
@@ -402,10 +419,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
         syncLedgerFromDate || syncLedgerToDate
           ? `${syncLedgerFromDate || 'START'}_to_${syncLedgerToDate || 'END'}`
           : new Date().toISOString().slice(0, 10);
-      const filename = `ZSB_AQUATICS_SUPPLIER_RECONCILIATION_LEDGER_${safeSupplier}_${dateTag}.pdf`;
-      const ok = await exportElementToPdf('supplier-reconciliation-ledger-pdf-canvas', filename);
+      const fallbackFilename = `ZSB_AQUATICS_SUPPLIER_RECONCILIATION_LEDGER_${safeSupplier}_${dateTag}.pdf`;
+      const ok = await exportElementToPdf('supplier-reconciliation-ledger-pdf-canvas', fallbackFilename);
       if (ok) {
-        showToast(`Exported PDF: ${filename}`);
+        showToast(`Exported PDF: ${fallbackFilename}`);
       } else {
         showToast('Failed to export Supplier Reconciliation Ledger PDF. Please try again.');
       }

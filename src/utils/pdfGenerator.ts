@@ -6,6 +6,10 @@ import { COMPANY_LOGO_URL } from '../context/initialData.ts';
 let cachedCompanyLogoDataUrl: string | null = null;
 let cachedSignatureDataUrl: string | null = null;
 
+export function getCachedCompanyLogoDataUrl(): string | null {
+  return cachedCompanyLogoDataUrl;
+}
+
 function preloadAssetAsDataUrl(assetPath: string, onLoaded: (dataUrl: string) => void): void {
   if (typeof window === 'undefined' || typeof fetch === 'undefined') return;
   try {
@@ -214,6 +218,7 @@ async function renderElementViaSvgForeignObject(
     let cssText = '';
     for (let i = 0; i < cs.length; i++) {
       const prop = cs[i];
+      if (!prop || prop.startsWith('--')) continue;
       // Skip external url() background images to avoid tainting foreignObject canvas
       let val = cs.getPropertyValue(prop);
       if (!val) continue;
@@ -410,10 +415,18 @@ export async function renderElementToHighResCanvas(
           'stroke',
         ] as const;
 
+        const clonedTargetScope =
+          (elementId ? clonedDoc.getElementById(elementId) : null) ||
+          (clonedDoc.querySelector(`[${tempExportAttr}="true"]`) as HTMLElement | null);
+
+        const scopedChildren = clonedTargetScope
+          ? [clonedTargetScope, ...Array.from(clonedTargetScope.querySelectorAll('*'))]
+          : Array.from(clonedDoc.querySelectorAll('*'));
+
         const allElements = [
           clonedDoc.documentElement,
           clonedDoc.body,
-          ...Array.from(clonedDoc.querySelectorAll('*')),
+          ...scopedChildren,
         ];
 
         allElements.forEach((node) => {

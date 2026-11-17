@@ -121,6 +121,24 @@ button[data-testid^="db-cell-trigger-"] {
   padding: 0.125rem !important;
 }
 
+/* Compact circular help icon trigger (overrides global base button padding) */
+button.zsb-help-icon-btn {
+  padding: 0 !important;
+  border-radius: 9999px !important;
+  width: 1.125rem !important;
+  height: 1.125rem !important;
+  min-width: 1.125rem !important;
+  min-height: 1.125rem !important;
+  background-color: rgba(0, 137, 123, 0.35) !important;
+  border-color: rgba(128, 203, 196, 0.65) !important;
+}
+
+button.zsb-help-icon-btn svg {
+  width: 0.75rem !important;
+  height: 0.75rem !important;
+  flex-shrink: 0;
+}
+
 /* Packing List Ledger — Live BDT Conversion: Remove all cell color and make all text Black */
 .packing-ledger-plain-table,
 .packing-ledger-plain-table thead,

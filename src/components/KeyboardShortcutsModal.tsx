@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  ORDERED_WORKBOOK_TABS,
   ShortcutActionId,
   ShortcutCategory,
   ShortcutDefinition,
@@ -84,7 +85,7 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
                 </span>
               </h2>
               <p className="text-xs text-slate-300 mt-0.5">
-                Fast data entry, voucher saving, PDF printing, and instant sheet switching across all 13 ledgers.
+                Fast data entry, voucher saving, PDF printing, and instant sheet switching across all {ORDERED_WORKBOOK_TABS.length} ledgers.
               </p>
             </div>
           </div>

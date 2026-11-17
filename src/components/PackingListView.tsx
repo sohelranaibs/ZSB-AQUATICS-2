@@ -35,6 +35,7 @@ import {
   Edit3,
   CheckCircle2,
   UploadCloud,
+  HelpCircle,
 } from 'lucide-react';
 import {
   PngShareModal,
@@ -74,6 +75,7 @@ export const PackingListView: React.FC = () => {
   const [remarks, setRemarks] = useState<string>('');
   const [lastSavedRecord, setLastSavedRecord] = useState<{ id: string; invoiceNumber: string } | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
+  const [showReportWeightHelp, setShowReportWeightHelp] = useState<boolean>(false);
 
   // 5 standard empty rows ready for data entry
   const createEmptyRow = (id: string): PackingItemRow => ({
@@ -981,9 +983,45 @@ export const PackingListView: React.FC = () => {
                     </th>
                     <th
                       data-testid="packing-col-report-weight"
-                      className="px-1.5 py-2.5 border-r border-[#334b59] min-w-[96px] text-center"
+                      className="relative px-1.5 py-2.5 border-r border-[#334b59] min-w-[96px] text-center"
                     >
-                      <div>REPORT WEIGHT (KG)</div>
+                      <div className="inline-flex items-center justify-center gap-1">
+                        <span>REPORT WEIGHT (KG)</span>
+                        <span className="relative inline-flex items-center group">
+                          <button
+                            type="button"
+                            data-testid="report-weight-help-btn"
+                            aria-label="Report Weight (KG) Help"
+                            aria-describedby="report-weight-tooltip"
+                            aria-expanded={showReportWeightHelp}
+                            title="When this field is populated, it overrides the standard weight for final report calculations."
+                            onClick={() => setShowReportWeightHelp((prev) => !prev)}
+                            onBlur={() => setShowReportWeightHelp(false)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') setShowReportWeightHelp(false);
+                            }}
+                            className="zsb-help-icon-btn inline-flex items-center justify-center rounded-full text-[#80cbc4] hover:text-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-colors cursor-help shrink-0"
+                          >
+                            <HelpCircle className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                          <div
+                            id="report-weight-tooltip"
+                            role="tooltip"
+                            data-testid="report-weight-tooltip"
+                            className={`pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-2 w-60 rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-[11px] font-medium normal-case tracking-normal text-left leading-relaxed text-slate-100 shadow-xl z-30 transition-all duration-150 ${
+                              showReportWeightHelp
+                                ? 'opacity-100 visible translate-y-0'
+                                : 'opacity-0 invisible -translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:visible group-focus-within:translate-y-0'
+                            }`}
+                          >
+                            <span
+                              aria-hidden="true"
+                              className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-2.5 h-2.5 rotate-45 bg-slate-900 border-l border-t border-slate-700"
+                            />
+                            When this field is populated, it overrides the standard weight for final report calculations.
+                          </div>
+                        </span>
+                      </div>
                       <div className="text-[9px] font-normal lowercase tracking-normal text-[#80cbc4]">
                         editable override
                       </div>

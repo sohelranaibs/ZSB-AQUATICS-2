@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import {
   DEFAULT_EXPORTER_SLIP_ROWS,
@@ -20,6 +20,10 @@ import {
 import { useRowScrollViewport } from '../hooks/useRowScrollViewport.ts';
 import { MAX_VISIBLE_TABLE_ROWS } from '../utils/tableScroll.ts';
 import { ExporterPaymentSlipRow, ExporterStatus } from '../types/index.ts';
+import {
+  isExporterSlipRowDataEqual,
+  updateCustomExporterSlipRowById,
+} from '../utils/tableRowOptimization.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
 import { exportElementToPng } from '../utils/pdfGenerator.ts';
 import {
@@ -54,6 +58,241 @@ import {
 } from '../utils/exporterWeChatShare.ts';
 
 const CUSTOM_SLIP_ROWS_STORAGE_KEY = 'zsb_exporter_slip_custom_rows_v4';
+
+interface ExporterPaymentSlipTableRowProps {
+  row: ExporterPaymentSlipRow;
+  rowIndex: number;
+  statusOptionElements: React.ReactNode;
+  onUpdateRow: (
+    row: ExporterPaymentSlipRow,
+    field: keyof ExporterPaymentSlipRow,
+    value: string | number
+  ) => void;
+  onSaveCustomRowToDb: (row: ExporterPaymentSlipRow) => void;
+  onRemoveCustomRow: (rowId: string) => void;
+}
+
+const areExporterSlipTableRowPropsEqual = (
+  prev: ExporterPaymentSlipTableRowProps,
+  next: ExporterPaymentSlipTableRowProps
+): boolean =>
+  prev.rowIndex === next.rowIndex &&
+  prev.statusOptionElements === next.statusOptionElements &&
+  prev.onUpdateRow === next.onUpdateRow &&
+  prev.onSaveCustomRowToDb === next.onSaveCustomRowToDb &&
+  prev.onRemoveCustomRow === next.onRemoveCustomRow &&
+  isExporterSlipRowDataEqual(prev.row, next.row);
+
+const ExporterPaymentSlipTableRow: React.FC<ExporterPaymentSlipTableRowProps> =
+  memo(
+    ({
+      row,
+      rowIndex,
+      statusOptionElements,
+      onUpdateRow,
+      onSaveCustomRowToDb,
+      onRemoveCustomRow,
+    }) => {
+      const isPopulated = isExporterSlipRowPopulated(row);
+
+      const handleDateChange = useCallback(
+        (e: React.ChangeEvent<HTMLInputElement>) => {
+          onUpdateRow(row, 'date', e.target.value);
+        },
+        [onUpdateRow, row]
+      );
+
+      const handleFlightChange = useCallback(
+        (e: React.ChangeEvent<HTMLInputElement>) => {
+          onUpdateRow(row, 'flight', e.target.value);
+        },
+        [onUpdateRow, row]
+      );
+
+      const handleMarkChange = useCallback(
+        (e: React.ChangeEvent<HTMLInputElement>) => {
+          onUpdateRow(row, 'mark', e.target.value);
+        },
+        [onUpdateRow, row]
+      );
+
+      const handleBoxChange = useCallback(
+        (e: React.ChangeEvent<HTMLInputElement>) => {
+          onUpdateRow(row, 'box', e.target.value);
+        },
+        [onUpdateRow, row]
+      );
+
+      const handleWeightKgChange = useCallback(
+        (e: React.ChangeEvent<HTMLInputElement>) => {
+          onUpdateRow(row, 'weightKg', e.target.value);
+        },
+        [onUpdateRow, row]
+      );
+
+      const handleAmountChange = useCallback(
+        (e: React.ChangeEvent<HTMLInputElement>) => {
+          onUpdateRow(row, 'amount', e.target.value);
+        },
+        [onUpdateRow, row]
+      );
+
+      const handleStatusChange = useCallback(
+        (e: React.ChangeEvent<HTMLSelectElement>) => {
+          onUpdateRow(row, 'status', e.target.value);
+        },
+        [onUpdateRow, row]
+      );
+
+      const handleSaveCustomClick = useCallback(() => {
+        onSaveCustomRowToDb(row);
+      }, [onSaveCustomRowToDb, row]);
+
+      const handleRemoveCustomClick = useCallback(() => {
+        onRemoveCustomRow(row.id);
+      }, [onRemoveCustomRow, row.id]);
+
+      return (
+        <tr className="border-b border-black h-12 text-xs sm:text-sm font-bold hover:bg-[#f5e4b3] transition-colors">
+          {/* 0. SL # 序号 */}
+          <td className="py-1 px-1.5 border-r-2 border-black text-center">
+            <span className="zsb-sl-badge">
+              {String(rowIndex + 1).padStart(2, '0')}
+            </span>
+          </td>
+
+          {/* 1. DATE 发货日期 */}
+          <td className="py-1 px-1.5 border-r-2 border-black font-mono">
+            <input
+              type="date"
+              aria-label={`Row ${rowIndex + 1} Date`}
+              value={row.date || ''}
+              onChange={handleDateChange}
+              className="w-full text-center font-mono text-xs sm:text-sm font-bold bg-transparent border-b border-transparent hover:border-black/40 focus:border-black focus:bg-white/80 focus:outline-none rounded-xs px-1 py-0.5 text-black"
+            />
+          </td>
+
+          {/* 2. FLIGHT 航班名称 */}
+          <td className="py-1 px-1.5 border-r-2 border-black uppercase">
+            <input
+              type="text"
+              list="exporter-slip-flights-datalist"
+              aria-label={`Row ${rowIndex + 1} Flight`}
+              placeholder="Flight..."
+              value={row.flight || ''}
+              onChange={handleFlightChange}
+              className="w-full text-center uppercase font-bold bg-transparent border-b border-transparent hover:border-black/40 focus:border-black focus:bg-white/80 focus:outline-none rounded-xs px-1 py-0.5 text-black placeholder:text-black/35 placeholder:font-normal"
+            />
+          </td>
+
+          {/* 3. MARK 标记 (20px Font Size) */}
+          <td className="py-1 px-1.5 border-r-2 border-black uppercase font-black text-[20px]">
+            <input
+              type="text"
+              list="exporter-slip-marks-datalist"
+              aria-label={`Row ${rowIndex + 1} Mark`}
+              placeholder="Mark..."
+              value={row.mark || ''}
+              onChange={handleMarkChange}
+              className="w-full text-center uppercase text-[20px] leading-tight font-black tracking-wider bg-transparent border-b border-transparent hover:border-black/40 focus:border-black focus:bg-white/80 focus:outline-none rounded-xs px-1 py-0.5 text-black placeholder:text-xs sm:placeholder:text-sm placeholder:text-black/35 placeholder:font-normal placeholder:tracking-normal"
+            />
+          </td>
+
+          {/* 4. BOX 箱数 */}
+          <td className="py-1 px-1.5 border-r-2 border-black font-mono">
+            <input
+              type="number"
+              min="0"
+              step="1"
+              aria-label={`Row ${rowIndex + 1} Box`}
+              placeholder="0"
+              value={row.box || ''}
+              onChange={handleBoxChange}
+              className="w-full text-center font-mono font-bold bg-transparent border-b border-transparent hover:border-black/40 focus:border-black focus:bg-white/80 focus:outline-none rounded-xs px-1 py-0.5 text-black placeholder:text-black/35"
+            />
+          </td>
+
+          {/* 5. WEIGHT /KG 重量 */}
+          <td className="py-1 px-1.5 border-r-2 border-black font-mono">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              aria-label={`Row ${rowIndex + 1} Weight KG`}
+              placeholder="0.00"
+              value={row.weightKg || ''}
+              onChange={handleWeightKgChange}
+              className="w-full text-center font-mono font-bold bg-transparent border-b border-transparent hover:border-black/40 focus:border-black focus:bg-white/80 focus:outline-none rounded-xs px-1 py-0.5 text-black placeholder:text-black/35"
+            />
+          </td>
+
+          {/* 6. AMOUNT 待结金额 */}
+          <td className="py-1 px-2 border-r-2 border-black font-mono">
+            <div className="flex items-center justify-center space-x-0.5">
+              <span className="text-black font-bold">¥</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                aria-label={`Settlement Amount Row ${rowIndex + 1}`}
+                placeholder="0.00"
+                value={row.amount || ''}
+                onChange={handleAmountChange}
+                className="w-28 text-center font-mono font-black bg-transparent border-b border-transparent hover:border-black/40 focus:border-black focus:bg-white/80 focus:outline-none rounded-xs px-1 py-0.5 text-black placeholder:text-black/35"
+              />
+            </div>
+          </td>
+
+          {/* 8. STATUS 地位 + Row Actions */}
+          <td className="py-1 px-2">
+            <div className="flex items-center justify-between gap-1">
+              <select
+                aria-label={`Exporter Status Row ${rowIndex + 1}`}
+                value={row.status === 'PAID' ? 'PAID' : 'UNPAID'}
+                onChange={handleStatusChange}
+                className={`flex-1 text-center text-xs font-black uppercase rounded px-1.5 py-1 border border-transparent hover:border-black/30 focus:outline-none cursor-pointer ${
+                  row.status === 'PAID'
+                    ? 'text-emerald-900 bg-emerald-500/15'
+                    : 'text-rose-900 bg-rose-500/15'
+                }`}
+              >
+                {statusOptionElements}
+              </select>
+
+              {!row.packingId && !row.paymentId && (
+                <div
+                  data-export-ignore="true"
+                  className="flex items-center gap-0.5"
+                >
+                  {isPopulated && (
+                    <button
+                      type="button"
+                      onClick={handleSaveCustomClick}
+                      aria-label={`Save Row ${rowIndex + 1} to Exporter DB`}
+                      title="Save this row to Exporter / Packing Database"
+                      className="p-1 rounded text-teal-800 hover:text-white hover:bg-teal-700 transition cursor-pointer"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleRemoveCustomClick}
+                    aria-label={`Delete Row ${rowIndex + 1}`}
+                    title="Remove row from Payment Slip"
+                    className="p-1 rounded text-rose-800/70 hover:text-white hover:bg-rose-600 transition cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </td>
+        </tr>
+      );
+    },
+    areExporterSlipTableRowPropsEqual
+  );
 
 export const ExporterPaymentSlipView: React.FC = () => {
   const {
@@ -133,6 +372,8 @@ export const ExporterPaymentSlipView: React.FC = () => {
       return createInitialExporterSlipRows(DEFAULT_EXPORTER_SLIP_ROWS);
     }
   });
+  const customRowsRef = useRef<ExporterPaymentSlipRow[]>(customRows);
+  customRowsRef.current = customRows;
 
   useEffect(() => {
     try {
@@ -326,8 +567,18 @@ export const ExporterPaymentSlipView: React.FC = () => {
       : ['PAID', 'UNPAID'];
   }, [dropdownOptions.paymentStatuses]);
 
+  const statusOptionElements = useMemo(
+    () =>
+      statusOptions.map((st) => (
+        <option key={st} value={st} className="bg-white text-black">
+          {st}
+        </option>
+      )),
+    [statusOptions]
+  );
+
   // Add a new row to the Payment Slip form
-  const handleAddRow = () => {
+  const handleAddRow = useCallback(() => {
     const defaultDate =
       dateFilterMode === 'range'
         ? toDate || fromDate || new Date().toISOString().slice(0, 10)
@@ -342,37 +593,49 @@ export const ExporterPaymentSlipView: React.FC = () => {
     });
     setCustomRows((prev) => [...prev, newRow]);
     showToast('Added new row to Exporter Payment Slip (付款单).');
-  };
+  }, [
+    dateFilterMode,
+    fromDate,
+    selectedDate,
+    selectedFlight,
+    selectedMark,
+    selectedStatus,
+    showToast,
+    toDate,
+  ]);
 
   // Delete or clear a custom row in the Payment Slip form (Requires Super Admin Permission)
-  const handleRemoveCustomRow = (rowId: string) => {
-    const targetRow = customRows.find((r) => r.id === rowId);
-    requestSuperAdminSingleDelete(
-      {
-        recordType: 'custom_row',
-        recordId: rowId,
-        recordTitle: targetRow?.mark
-          ? `Payment Slip Row (${targetRow.mark})`
-          : `Payment Slip Row`,
-        recordSubtitle: targetRow
-          ? `Date: ${targetRow.date || '-'} · Flight: ${targetRow.flight || '-'}`
-          : undefined,
-      },
-      () => {
-        setCustomRows((prev) => {
-          if (prev.length <= 1) {
-            return [
-              createEmptyExporterSlipRow(generateRecordId('sliprow'), {
-                date: new Date().toISOString().slice(0, 10),
-              }),
-            ];
-          }
-          return prev.filter((r) => r.id !== rowId);
-        });
-        showToast('Super Admin verified: Removed row from Payment Slip.');
-      }
-    );
-  };
+  const handleRemoveCustomRow = useCallback(
+    (rowId: string) => {
+      const targetRow = customRowsRef.current.find((r) => r.id === rowId);
+      requestSuperAdminSingleDelete(
+        {
+          recordType: 'custom_row',
+          recordId: rowId,
+          recordTitle: targetRow?.mark
+            ? `Payment Slip Row (${targetRow.mark})`
+            : `Payment Slip Row`,
+          recordSubtitle: targetRow
+            ? `Date: ${targetRow.date || '-'} · Flight: ${targetRow.flight || '-'}`
+            : undefined,
+        },
+        () => {
+          setCustomRows((prev) => {
+            if (prev.length <= 1) {
+              return [
+                createEmptyExporterSlipRow(generateRecordId('sliprow'), {
+                  date: new Date().toISOString().slice(0, 10),
+                }),
+              ];
+            }
+            return prev.filter((r) => r.id !== rowId);
+          });
+          showToast('Super Admin verified: Removed row from Payment Slip.');
+        }
+      );
+    },
+    [requestSuperAdminSingleDelete, showToast]
+  );
 
   // Reset all custom rows in the Payment Slip form
   const handleResetCustomRows = () => {
@@ -381,204 +644,190 @@ export const ExporterPaymentSlipView: React.FC = () => {
   };
 
   // Update any field on a row (persists to PackingRecord if DB-linked, or updates customRows)
-  const handleUpdateRow = (
-    row: ExporterPaymentSlipRow,
-    field: keyof ExporterPaymentSlipRow,
-    value: string | number
-  ) => {
-    if (row.packingId) {
-      if (row.packingId === 'draft-packing-manifest') {
-        setPackingDraft((prev) => {
-          const next = { ...prev };
-          if (field === 'date') next.packingDate = String(value);
-          else if (field === 'flight') next.flight = String(value).toUpperCase();
-          else if (field === 'mark') next.shippingMark = String(value).toUpperCase();
-          else if (field === 'status') next.paymentStatus = String(value) as ExporterStatus;
-          return next;
-        });
-        return;
-      }
+  const handleUpdateRow = useCallback(
+    (
+      row: ExporterPaymentSlipRow,
+      field: keyof ExporterPaymentSlipRow,
+      value: string | number
+    ) => {
+      if (row[field] === value) return;
 
-      if (field === 'date') {
-        updatePacking(row.packingId, { packingDate: String(value) }, true);
-      } else if (field === 'flight') {
-        updatePacking(row.packingId, { flight: String(value).toUpperCase() }, true);
-      } else if (field === 'mark') {
-        updatePacking(row.packingId, { shippingMark: String(value).toUpperCase() }, true);
-      } else if (field === 'box') {
-        updatePacking(row.packingId, { totalBox: Number(value) || 0 }, true);
-      } else if (field === 'weightKg') {
-        const newWeight = Number(value) || 0;
-        if (Number(row.rmb) > 0) {
-          const newAmount = calculateExporterSlipRowAmount(newWeight, row.rmb);
-          updatePacking(
-            row.packingId,
-            { totalWeight: newWeight, settledAmount: newAmount, debitAmount: newAmount },
-            true
-          );
-        } else {
-          updatePacking(row.packingId, { totalWeight: newWeight }, true);
+      if (row.packingId) {
+        if (row.packingId === 'draft-packing-manifest') {
+          setPackingDraft((prev) => {
+            const next = { ...prev };
+            if (field === 'date') next.packingDate = String(value);
+            else if (field === 'flight') next.flight = String(value).toUpperCase();
+            else if (field === 'mark') next.shippingMark = String(value).toUpperCase();
+            else if (field === 'status') next.paymentStatus = String(value) as ExporterStatus;
+            return next;
+          });
+          return;
         }
-      } else if (field === 'rmb') {
-        const newRmb = Number(value) || 0;
-        const newAmount = calculateExporterSlipRowAmount(row.weightKg, newRmb);
-        updatePacking(
-          row.packingId,
-          { rmbAmount: newRmb, settledAmount: newAmount, debitAmount: newAmount },
-          true
-        );
-      } else if (field === 'amount') {
-        const newAmount = Number(value) || 0;
-        const targetPkg = packings.find((pk) => pk.id === row.packingId);
-        const credit = Number(targetPkg?.creditAmount) || 0;
-        updatePacking(
-          row.packingId,
-          {
-            reportAmount: newAmount,
-            balanceAmount: calculatePaymentRow(newAmount, credit),
-            settledAmount: newAmount,
-            debitAmount: newAmount,
-            totalAmount: newAmount,
-            rmbAmount: 0,
-          },
-          true
-        );
-      } else if (field === 'status') {
-        updatePacking(
-          row.packingId,
-          {
-            exporterStatus: String(value),
-            paymentStatus: String(value) as ExporterStatus,
-          },
-          true
-        );
-      }
-      return;
-    }
-
-    if (row.paymentId) {
-      const targetPm = payments.find((pm) => pm.id === row.paymentId);
-      if (field === 'date') {
-        updatePayment(row.paymentId, { date: String(value) });
-      } else if (field === 'mark') {
-        updatePayment(row.paymentId, { shippingMark: String(value).toUpperCase() });
-      } else if (field === 'amount') {
-        const newAmount = Number(value) || 0;
-        const paid = Number(targetPm?.paidAmount) || 0;
-        updatePayment(row.paymentId, {
-          reportAmount: newAmount,
-          balance: calculatePaymentRow(newAmount, paid),
-        });
-      } else if (field === 'status') {
-        updatePayment(row.paymentId, { status: String(value) as ExporterStatus });
-      }
-      return;
-    }
-
-    setCustomRows((prev) =>
-      prev.map((item) => {
-        if (item.id !== row.id) return item;
-        const updated: ExporterPaymentSlipRow = { ...item };
 
         if (field === 'date') {
-          updated.date = String(value);
+          updatePacking(row.packingId, { packingDate: String(value) }, true);
         } else if (field === 'flight') {
-          updated.flight = String(value).toUpperCase();
+          updatePacking(row.packingId, { flight: String(value).toUpperCase() }, true);
         } else if (field === 'mark') {
-          updated.mark = String(value).toUpperCase();
+          updatePacking(row.packingId, { shippingMark: String(value).toUpperCase() }, true);
         } else if (field === 'box') {
-          updated.box = Number(value) || 0;
+          updatePacking(row.packingId, { totalBox: Number(value) || 0 }, true);
         } else if (field === 'weightKg') {
           const newWeight = Number(value) || 0;
-          updated.weightKg = newWeight;
-          if (Number(updated.rmb) > 0) {
-            updated.amount = calculateExporterSlipRowAmount(newWeight, updated.rmb);
+          if (Number(row.rmb) > 0) {
+            const newAmount = calculateExporterSlipRowAmount(newWeight, row.rmb);
+            updatePacking(
+              row.packingId,
+              { totalWeight: newWeight, settledAmount: newAmount, debitAmount: newAmount },
+              true
+            );
+          } else {
+            updatePacking(row.packingId, { totalWeight: newWeight }, true);
           }
         } else if (field === 'rmb') {
           const newRmb = Number(value) || 0;
-          updated.rmb = newRmb;
-          updated.amount = calculateExporterSlipRowAmount(updated.weightKg, newRmb);
+          const newAmount = calculateExporterSlipRowAmount(row.weightKg, newRmb);
+          updatePacking(
+            row.packingId,
+            { rmbAmount: newRmb, settledAmount: newAmount, debitAmount: newAmount },
+            true
+          );
         } else if (field === 'amount') {
-          updated.amount = Number(value) || 0;
-          updated.rmb = 0;
+          const newAmount = Number(value) || 0;
+          const targetPkg = packings.find((pk) => pk.id === row.packingId);
+          const credit = Number(targetPkg?.creditAmount) || 0;
+          updatePacking(
+            row.packingId,
+            {
+              reportAmount: newAmount,
+              balanceAmount: calculatePaymentRow(newAmount, credit),
+              settledAmount: newAmount,
+              debitAmount: newAmount,
+              totalAmount: newAmount,
+              rmbAmount: 0,
+            },
+            true
+          );
         } else if (field === 'status') {
-          updated.status = String(value);
+          updatePacking(
+            row.packingId,
+            {
+              exporterStatus: String(value),
+              paymentStatus: String(value) as ExporterStatus,
+            },
+            true
+          );
         }
+        return;
+      }
 
-        return updated;
-      })
-    );
-  };
+      if (row.paymentId) {
+        const targetPm = payments.find((pm) => pm.id === row.paymentId);
+        if (field === 'date') {
+          updatePayment(row.paymentId, { date: String(value) });
+        } else if (field === 'mark') {
+          updatePayment(row.paymentId, { shippingMark: String(value).toUpperCase() });
+        } else if (field === 'amount') {
+          const newAmount = Number(value) || 0;
+          const paid = Number(targetPm?.paidAmount) || 0;
+          updatePayment(row.paymentId, {
+            reportAmount: newAmount,
+            balance: calculatePaymentRow(newAmount, paid),
+          });
+        } else if (field === 'status') {
+          updatePayment(row.paymentId, { status: String(value) as ExporterStatus });
+        }
+        return;
+      }
+
+      setCustomRows((prev) =>
+        updateCustomExporterSlipRowById(prev, row.id, field, value)
+      );
+    },
+    [packings, payments, setPackingDraft, updatePacking, updatePayment]
+  );
 
   // Save a populated custom row into the master Exporter / Packing Database
-  const handleSaveCustomRowToDb = (row: ExporterPaymentSlipRow) => {
-    if (!isExporterSlipRowPopulated(row)) {
-      showToast('Enter Mark, Flight, Box, Weight, or Amount before saving to Exporter DB.');
-      return;
-    }
-    const rate = companyProfile.rmbExchangeRate || 16.5;
-    const weightVal = Number(row.weightKg) || 0;
-    const rmbRateVal = Number(row.rmb) || 0;
-    const computedSlipAmount =
-      weightVal > 0 && rmbRateVal > 0
-        ? calculateExporterSlipRowAmount(weightVal, rmbRateVal)
-        : 0;
-    const effectiveRmbTotal =
-      computedSlipAmount > 0 ? computedSlipAmount : Number(row.amount) || rmbRateVal || 0;
-    const totalAmountBdt = Math.round(effectiveRmbTotal * rate * 100) / 100;
-    const perKgRateRmb =
-      weightVal > 0 && effectiveRmbTotal > 0
-        ? Math.round((effectiveRmbTotal / weightVal) * 100) / 100
-        : rmbRateVal;
-    const normalizedStatus: ExporterStatus =
-      (row.status || '').toUpperCase() === 'PAID' ? 'PAID' : 'UNPAID';
-    const invoiceNo = generateInvoiceNumber('PKG', packings.length);
+  const handleSaveCustomRowToDb = useCallback(
+    (row: ExporterPaymentSlipRow) => {
+      if (!isExporterSlipRowPopulated(row)) {
+        showToast('Enter Mark, Flight, Box, Weight, or Amount before saving to Exporter DB.');
+        return;
+      }
+      const rate = companyProfile.rmbExchangeRate || 16.5;
+      const weightVal = Number(row.weightKg) || 0;
+      const rmbRateVal = Number(row.rmb) || 0;
+      const computedSlipAmount =
+        weightVal > 0 && rmbRateVal > 0
+          ? calculateExporterSlipRowAmount(weightVal, rmbRateVal)
+          : 0;
+      const effectiveRmbTotal =
+        computedSlipAmount > 0 ? computedSlipAmount : Number(row.amount) || rmbRateVal || 0;
+      const totalAmountBdt = Math.round(effectiveRmbTotal * rate * 100) / 100;
+      const perKgRateRmb =
+        weightVal > 0 && effectiveRmbTotal > 0
+          ? Math.round((effectiveRmbTotal / weightVal) * 100) / 100
+          : rmbRateVal;
+      const normalizedStatus: ExporterStatus =
+        (row.status || '').toUpperCase() === 'PAID' ? 'PAID' : 'UNPAID';
+      const invoiceNo = generateInvoiceNumber('PKG', packings.length);
 
-    addPacking({
-      invoiceNumber: invoiceNo,
-      shippingMark: (row.mark || (selectedMark !== 'ALL' ? selectedMark : 'GENERAL')).trim().toUpperCase(),
-      flight: (row.flight || (selectedFlight !== 'ALL' ? selectedFlight : 'CAN')).trim().toUpperCase(),
-      destination: 'GUANGZHOU',
-      shipper: companyProfile.companyName,
-      packingDate: row.date || new Date().toISOString().slice(0, 10),
-      fromDate: row.date || new Date().toISOString().slice(0, 10),
-      toDate: row.date || new Date().toISOString().slice(0, 10),
-      items: [
-        {
-          id: generateRecordId('pkgitem'),
-          item: 'EXPORT SHIPMENT',
-          box: Number(row.box) || 0,
-          weight:
-            Number(row.box) > 0
-              ? Math.round((weightVal / Number(row.box)) * 100) / 100
-              : weightVal,
-          totalWeight: weightVal,
-          unit: 'KG',
-          rate: perKgRateRmb,
-          amount: effectiveRmbTotal,
-        },
-      ],
-      totalBox: Number(row.box) || 0,
-      totalWeight: weightVal,
-      totalAmount: effectiveRmbTotal,
-      totalAmountBDT: totalAmountBdt,
-      rmbAmount: rmbRateVal > 0 ? rmbRateVal : 0,
-      settledAmount: effectiveRmbTotal,
-      debitAmount: effectiveRmbTotal,
-      reportAmount: effectiveRmbTotal,
-      creditAmount: normalizedStatus === 'PAID' ? effectiveRmbTotal : 0,
-      balanceAmount: normalizedStatus === 'PAID' ? 0 : effectiveRmbTotal,
-      exporterStatus: normalizedStatus,
-      paymentStatus: normalizedStatus,
-    });
+      addPacking({
+        invoiceNumber: invoiceNo,
+        shippingMark: (row.mark || (selectedMark !== 'ALL' ? selectedMark : 'GENERAL')).trim().toUpperCase(),
+        flight: (row.flight || (selectedFlight !== 'ALL' ? selectedFlight : 'CAN')).trim().toUpperCase(),
+        destination: 'GUANGZHOU',
+        shipper: companyProfile.companyName,
+        packingDate: row.date || new Date().toISOString().slice(0, 10),
+        fromDate: row.date || new Date().toISOString().slice(0, 10),
+        toDate: row.date || new Date().toISOString().slice(0, 10),
+        items: [
+          {
+            id: generateRecordId('pkgitem'),
+            item: 'EXPORT SHIPMENT',
+            box: Number(row.box) || 0,
+            weight:
+              Number(row.box) > 0
+                ? Math.round((weightVal / Number(row.box)) * 100) / 100
+                : weightVal,
+            totalWeight: weightVal,
+            unit: 'KG',
+            rate: perKgRateRmb,
+            amount: effectiveRmbTotal,
+          },
+        ],
+        totalBox: Number(row.box) || 0,
+        totalWeight: weightVal,
+        totalAmount: effectiveRmbTotal,
+        totalAmountBDT: totalAmountBdt,
+        rmbAmount: rmbRateVal > 0 ? rmbRateVal : 0,
+        settledAmount: effectiveRmbTotal,
+        debitAmount: effectiveRmbTotal,
+        reportAmount: effectiveRmbTotal,
+        creditAmount: normalizedStatus === 'PAID' ? effectiveRmbTotal : 0,
+        balanceAmount: normalizedStatus === 'PAID' ? 0 : effectiveRmbTotal,
+        exporterStatus: normalizedStatus,
+        paymentStatus: normalizedStatus,
+      });
 
-    setCustomRows((prev) => {
-      const remaining = prev.filter((r) => r.id !== row.id);
-      return remaining.length > 0
-        ? remaining
-        : createInitialExporterSlipRows(DEFAULT_EXPORTER_SLIP_ROWS);
-    });
-  };
+      setCustomRows((prev) => {
+        const remaining = prev.filter((r) => r.id !== row.id);
+        return remaining.length > 0
+          ? remaining
+          : createInitialExporterSlipRows(DEFAULT_EXPORTER_SLIP_ROWS);
+      });
+    },
+    [
+      addPacking,
+      companyProfile.companyName,
+      companyProfile.rmbExchangeRate,
+      packings.length,
+      selectedFlight,
+      selectedMark,
+      showToast,
+    ]
+  );
 
   const handlePrintSlip = () => {
     let dateRangeLabel = '';
@@ -806,7 +1055,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
                 className="inline-flex items-center gap-1.5 bg-[#faefd0] border-2 border-[#98486f] px-3 py-0.5 rounded-lg shadow-xs"
               >
                 <span className="text-[11px] font-bold uppercase text-slate-700">MARK:</span>
-                <span className="text-2xl sm:text-[28px] leading-tight font-black tracking-wider text-[#98486f] uppercase">
+                <span className="text-[17px] leading-tight font-black tracking-wider text-[#98486f] uppercase">
                   {selectedMark}
                 </span>
               </span>
@@ -839,7 +1088,7 @@ export const ExporterPaymentSlipView: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-          {/* 1. Shipping Mark Dropdown Box (Double Font Size for MARK e.g. HM-105) */}
+          {/* 1. Shipping Mark Dropdown Box (17px Font Size for MARK e.g. HM-105) */}
           <div>
             <label
               htmlFor="exporter-slip-mark-select"
@@ -849,32 +1098,32 @@ export const ExporterPaymentSlipView: React.FC = () => {
                 <Tag className="w-3.5 h-3.5 text-[#98486f]" />
                 <span>Shipping Mark (MARK 标记)</span>
               </span>
-              <span className="text-[10px] font-semibold text-emerald-700">Auto-Sync · 2× Font</span>
+              <span className="text-[10px] font-semibold text-emerald-700">Auto-Sync</span>
             </label>
             <select
               id="exporter-slip-mark-select"
               aria-label="Shipping Mark"
               value={selectedMark}
               onChange={(e) => handleMarkChange(e.target.value)}
-              className="w-full px-3 py-1.5 text-2xl sm:text-[28px] leading-tight font-black tracking-wider uppercase border-2 border-[#98486f]/60 rounded-lg bg-[#faefd0]/60 text-slate-950 focus:bg-white focus:border-[#98486f] focus:outline-none transition"
+              className="w-full px-3 py-2 text-[17px] leading-tight font-black tracking-wider uppercase border-2 border-[#98486f]/60 rounded-lg bg-[#faefd0]/60 text-slate-950 focus:bg-white focus:border-[#98486f] focus:outline-none transition"
             >
-              <option value="ALL" className="text-sm font-bold">
+              <option value="ALL" className="text-[17px] font-bold">
                 ALL MARKS ({packings.length})
               </option>
-              <optgroup label="Marks with Saved Exporter Records" className="text-base font-black">
+              <optgroup label="Marks with Saved Exporter Records" className="text-[17px] font-black">
                 {availableMarks.dbMarks.map((mark) => {
                   const count = packings.filter((p) => p.shippingMark === mark).length;
                   return (
-                    <option key={mark} value={mark} className="text-xl font-black">
+                    <option key={mark} value={mark} className="text-[17px] font-black">
                       {mark} ({count})
                     </option>
                   );
                 })}
               </optgroup>
               {availableMarks.otherMarks.length > 0 && (
-                <optgroup label="Other Registered Marks" className="text-base font-black">
+                <optgroup label="Other Registered Marks" className="text-[17px] font-black">
                   {availableMarks.otherMarks.map((mark) => (
-                    <option key={mark} value={mark} className="text-xl font-black">
+                    <option key={mark} value={mark} className="text-[17px] font-black">
                       {mark}
                     </option>
                   ))}
@@ -1199,154 +1448,17 @@ export const ExporterPaymentSlipView: React.FC = () => {
               </thead>
 
               <tbody className="bg-[#faefd0] text-black">
-                {slipRows.map((row, idx) => {
-                  const isPopulated = isExporterSlipRowPopulated(row);
-                  return (
-                    <tr
-                      key={row.id}
-                      className="border-b border-black h-12 text-xs sm:text-sm font-bold hover:bg-[#f5e4b3] transition-colors"
-                    >
-                      {/* 0. SL # 序号 */}
-                      <td className="py-1 px-1.5 border-r-2 border-black text-center">
-                        <span className="zsb-sl-badge">
-                          {String(idx + 1).padStart(2, '0')}
-                        </span>
-                      </td>
-
-                      {/* 1. DATE 发货日期 */}
-                      <td className="py-1 px-1.5 border-r-2 border-black font-mono">
-                        <input
-                          type="date"
-                          aria-label={`Row ${idx + 1} Date`}
-                          value={row.date || ''}
-                          onChange={(e) => handleUpdateRow(row, 'date', e.target.value)}
-                          className="w-full text-center font-mono text-xs sm:text-sm font-bold bg-transparent border-b border-transparent hover:border-black/40 focus:border-black focus:bg-white/80 focus:outline-none rounded-xs px-1 py-0.5 text-black"
-                        />
-                      </td>
-
-                      {/* 2. FLIGHT 航班名称 */}
-                      <td className="py-1 px-1.5 border-r-2 border-black uppercase">
-                        <input
-                          type="text"
-                          list="exporter-slip-flights-datalist"
-                          aria-label={`Row ${idx + 1} Flight`}
-                          placeholder="Flight..."
-                          value={row.flight || ''}
-                          onChange={(e) => handleUpdateRow(row, 'flight', e.target.value)}
-                          className="w-full text-center uppercase font-bold bg-transparent border-b border-transparent hover:border-black/40 focus:border-black focus:bg-white/80 focus:outline-none rounded-xs px-1 py-0.5 text-black placeholder:text-black/35 placeholder:font-normal"
-                        />
-                      </td>
-
-                      {/* 3. MARK 标记 (Double Font Size: 24px / 28px vs 12px / 14px base) */}
-                      <td className="py-1 px-1.5 border-r-2 border-black uppercase font-black">
-                        <input
-                          type="text"
-                          list="exporter-slip-marks-datalist"
-                          aria-label={`Row ${idx + 1} Mark`}
-                          placeholder="Mark..."
-                          value={row.mark || ''}
-                          onChange={(e) => handleUpdateRow(row, 'mark', e.target.value)}
-                          className="w-full text-center uppercase text-2xl sm:text-[28px] leading-tight font-black tracking-wider bg-transparent border-b border-transparent hover:border-black/40 focus:border-black focus:bg-white/80 focus:outline-none rounded-xs px-1 py-0.5 text-black placeholder:text-xs sm:placeholder:text-sm placeholder:text-black/35 placeholder:font-normal placeholder:tracking-normal"
-                        />
-                      </td>
-
-                      {/* 4. BOX 箱数 */}
-                      <td className="py-1 px-1.5 border-r-2 border-black font-mono">
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          aria-label={`Row ${idx + 1} Box`}
-                          placeholder="0"
-                          value={row.box || ''}
-                          onChange={(e) => handleUpdateRow(row, 'box', e.target.value)}
-                          className="w-full text-center font-mono font-bold bg-transparent border-b border-transparent hover:border-black/40 focus:border-black focus:bg-white/80 focus:outline-none rounded-xs px-1 py-0.5 text-black placeholder:text-black/35"
-                        />
-                      </td>
-
-                      {/* 5. WEIGHT /KG 重量 */}
-                      <td className="py-1 px-1.5 border-r-2 border-black font-mono">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          aria-label={`Row ${idx + 1} Weight KG`}
-                          placeholder="0.00"
-                          value={row.weightKg || ''}
-                          onChange={(e) => handleUpdateRow(row, 'weightKg', e.target.value)}
-                          className="w-full text-center font-mono font-bold bg-transparent border-b border-transparent hover:border-black/40 focus:border-black focus:bg-white/80 focus:outline-none rounded-xs px-1 py-0.5 text-black placeholder:text-black/35"
-                        />
-                      </td>
-
-                      {/* 6. AMOUNT 待结金额 */}
-                      <td className="py-1 px-2 border-r-2 border-black font-mono">
-                        <div className="flex items-center justify-center space-x-0.5">
-                          <span className="text-black font-bold">¥</span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            aria-label={`Settlement Amount Row ${idx + 1}`}
-                            placeholder="0.00"
-                            value={row.amount || ''}
-                            onChange={(e) => handleUpdateRow(row, 'amount', e.target.value)}
-                            className="w-28 text-center font-mono font-black bg-transparent border-b border-transparent hover:border-black/40 focus:border-black focus:bg-white/80 focus:outline-none rounded-xs px-1 py-0.5 text-black placeholder:text-black/35"
-                          />
-                        </div>
-                      </td>
-
-                      {/* 8. STATUS 地位 + Row Actions */}
-                      <td className="py-1 px-2">
-                        <div className="flex items-center justify-between gap-1">
-                          <select
-                            aria-label={`Exporter Status Row ${idx + 1}`}
-                            value={row.status === 'PAID' ? 'PAID' : 'UNPAID'}
-                            onChange={(e) => handleUpdateRow(row, 'status', e.target.value)}
-                            className={`flex-1 text-center text-xs font-black uppercase rounded px-1.5 py-1 border border-transparent hover:border-black/30 focus:outline-none cursor-pointer ${
-                              row.status === 'PAID'
-                                ? 'text-emerald-900 bg-emerald-500/15'
-                                : 'text-rose-900 bg-rose-500/15'
-                            }`}
-                          >
-                            {statusOptions.map((st) => (
-                              <option key={st} value={st} className="bg-white text-black">
-                                {st}
-                              </option>
-                            ))}
-                          </select>
-
-                          {!row.packingId && !row.paymentId && (
-                            <div
-                              data-export-ignore="true"
-                              className="flex items-center gap-0.5"
-                            >
-                              {isPopulated && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleSaveCustomRowToDb(row)}
-                                  aria-label={`Save Row ${idx + 1} to Exporter DB`}
-                                  title="Save this row to Exporter / Packing Database"
-                                  className="p-1 rounded text-teal-800 hover:text-white hover:bg-teal-700 transition cursor-pointer"
-                                >
-                                  <Save className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveCustomRow(row.id)}
-                                aria-label={`Delete Row ${idx + 1}`}
-                                title="Remove row from Payment Slip"
-                                className="p-1 rounded text-rose-800/70 hover:text-white hover:bg-rose-600 transition cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {slipRows.map((row, idx) => (
+                  <ExporterPaymentSlipTableRow
+                    key={row.id}
+                    row={row}
+                    rowIndex={idx}
+                    statusOptionElements={statusOptionElements}
+                    onUpdateRow={handleUpdateRow}
+                    onSaveCustomRowToDb={handleSaveCustomRowToDb}
+                    onRemoveCustomRow={handleRemoveCustomRow}
+                  />
+                ))}
               </tbody>
 
               {/* 5. GRAND TOTAL 累计 Plum Footer Row */}

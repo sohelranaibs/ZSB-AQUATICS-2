@@ -380,7 +380,7 @@ export const PrintPreviewModal: React.FC = () => {
           {/* Printable Voucher Paper Content (A4 Portrait Printable Width: 760px / 190mm) */}
           <div
             id="printable-document"
-            className="zsb-print-paper relative w-full max-w-[760px] bg-white shadow-2xl rounded-sm border border-slate-300 p-5 sm:p-7 space-y-5 text-slate-900 print:shadow-none print:border-none print:p-0 print:max-w-none overflow-hidden"
+            className="zsb-print-paper relative w-full max-w-[760px] bg-white shadow-2xl rounded-sm border border-slate-300 p-5 sm:p-7 space-y-5 text-slate-900 print:shadow-none overflow-hidden"
             style={{ backgroundColor: '#ffffff', color: '#000000', position: 'relative' }}
           >
             {/* Centered Watermark Logo */}
@@ -656,18 +656,29 @@ export const PrintPreviewModal: React.FC = () => {
                 </div>
               </div>
 
-              <table className="w-full text-xs border border-slate-300 border-collapse">
+              <table className="w-full text-xs border border-slate-300 border-collapse" style={{ tableLayout: 'fixed', width: '100%' }}>
+                <colgroup>
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: '20%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '13%' }} />
+                  <col style={{ width: '7%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '13%' }} />
+                </colgroup>
                 <thead>
-                  <tr className="bg-slate-100 text-slate-800 uppercase font-bold text-[11px] border-b border-slate-300">
-                    <th className="p-2 border-r border-slate-300 text-center w-12">SL</th>
+                  <tr className="bg-slate-100 text-slate-800 uppercase font-bold text-[10px] border-b border-slate-300">
+                    <th className="p-2 border-r border-slate-300 text-center">SL</th>
                     <th className="p-2 border-r border-slate-300 text-left">ITEM / SIZE</th>
-                    <th className="p-2 border-r border-slate-300 text-center w-20">BOX</th>
-                    <th className="p-2 border-r border-slate-300 text-center w-20">WEIGHT (KG)</th>
-                    <th className="p-2 border-r border-slate-300 text-center w-24">REPORT WEIGHT (KG)</th>
-                    <th className="p-2 border-r border-slate-300 text-right w-28">TOTAL WEIGHT</th>
-                    <th className="p-2 border-r border-slate-300 text-center w-16">UNIT</th>
-                    <th className="p-2 border-r border-slate-300 text-right w-24">RATE (RMB)</th>
-                    <th className="p-2 text-right w-32">AMOUNT (RMB)</th>
+                    <th className="p-2 border-r border-slate-300 text-center">BOX</th>
+                    <th className="p-2 border-r border-slate-300 text-center">WEIGHT (KG)</th>
+                    <th className="p-2 border-r border-slate-300 text-center">REPORT WT (KG)</th>
+                    <th className="p-2 border-r border-slate-300 text-right">TOTAL WEIGHT</th>
+                    <th className="p-2 border-r border-slate-300 text-center">UNIT</th>
+                    <th className="p-2 border-r border-slate-300 text-right">RATE (RMB)</th>
+                    <th className="p-2 text-right">AMOUNT (RMB)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -1619,66 +1630,143 @@ export const PrintPreviewModal: React.FC = () => {
                       {data.dailyEntries.length === 1 ? 'Day' : 'Days'}
                     </span>
                   </div>
-                  <table className="w-full text-[11px] border border-slate-300 border-collapse font-mono">
+                  <table
+                    className="w-full text-[10.5px] border border-slate-300 border-collapse font-mono tabular-nums"
+                    style={{ tableLayout: 'fixed', width: '100%' }}
+                  >
+                    <colgroup>
+                      <col style={{ width: '20%' }} />
+                      <col style={{ width: '14%' }} />
+                      <col style={{ width: '13%' }} />
+                      <col style={{ width: '13%' }} />
+                      <col style={{ width: '12%' }} />
+                      <col style={{ width: '16%' }} />
+                      <col style={{ width: '12%' }} />
+                    </colgroup>
                     <thead>
-                      <tr className="bg-slate-800 text-white uppercase font-bold text-[10px]">
-                        <th className="p-2 border-r border-slate-600 text-left font-sans">
+                      <tr className="bg-slate-800 text-white uppercase font-bold text-[9.5px] tracking-tight">
+                        <th className="py-2 px-1.5 border-r border-slate-600 text-left font-sans whitespace-nowrap">
                           Date &amp; Day
                         </th>
-                        <th className="p-2 border-r border-slate-600 text-right">
-                          Export Rev (A · RMB)
+                        <th className="py-2 px-1.5 border-r border-slate-600 text-right whitespace-nowrap">
+                          Export Rev (RMB)
                         </th>
-                        <th className="p-2 border-r border-slate-600 text-right">
-                          Purchase Cost (B)
+                        <th className="py-2 px-1.5 border-r border-slate-600 text-right whitespace-nowrap">
+                          Purchase (B)
                         </th>
-                        <th className="p-2 border-r border-slate-600 text-right">
+                        <th className="py-2 px-1.5 border-r border-slate-600 text-right whitespace-nowrap">
                           Gross Profit
                         </th>
-                        <th className="p-2 border-r border-slate-600 text-right">
+                        <th className="py-2 px-1.5 border-r border-slate-600 text-right whitespace-nowrap">
                           Other Cost (C)
                         </th>
-                        <th className="p-2 border-r border-slate-600 text-right">
+                        <th className="py-2 px-1.5 border-r border-slate-600 text-right whitespace-nowrap">
                           Net Profit / Loss
                         </th>
-                        <th className="p-2 text-center font-sans">Status</th>
+                        <th className="py-2 px-1 text-center font-sans whitespace-nowrap">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
                       {data.dailyEntries.map((d: any) => (
                         <tr key={d.date} className="hover:bg-slate-50">
-                          <td className="p-2 border-r border-slate-200 font-sans">
-                            <div className="font-mono font-bold text-slate-900">
+                          <td className="py-1.5 px-1.5 border-r border-slate-200 font-sans">
+                            <div className="font-mono font-bold text-slate-900 whitespace-nowrap">
                               {d.formattedDate} ({d.weekdayLabel})
                             </div>
-                            <div className="text-[10px] text-slate-500">{d.topSummaryText}</div>
+                            <div className="text-[9.5px] text-slate-500 truncate">{d.topSummaryText}</div>
                           </td>
-                          <td className="p-2 border-r border-slate-200 text-right font-bold text-teal-800">
+                          <td className="py-1.5 px-1.5 border-r border-slate-200 text-right font-bold text-teal-800 whitespace-nowrap">
                             {formatCurrency(d.exportAmountRMB ?? 0, 'RMB')}
                           </td>
-                          <td className="p-2 border-r border-slate-200 text-right font-bold text-blue-800">
+                          <td className="py-1.5 px-1.5 border-r border-slate-200 text-right font-bold text-blue-800 whitespace-nowrap">
                             {formatCurrency(d.purchaseAmount, companyProfile.currency)}
                           </td>
-                          <td className="p-2 border-r border-slate-200 text-right font-bold text-slate-800">
+                          <td className="py-1.5 px-1.5 border-r border-slate-200 text-right font-bold text-slate-800 whitespace-nowrap">
                             {d.grossProfit >= 0 ? '+' : ''}
                             {formatCurrency(d.grossProfit, companyProfile.currency)}
                           </td>
-                          <td className="p-2 border-r border-slate-200 text-right font-bold text-amber-800">
+                          <td className="py-1.5 px-1.5 border-r border-slate-200 text-right font-bold text-amber-800 whitespace-nowrap">
                             {formatCurrency(d.otherCostAmount, companyProfile.currency)}
                           </td>
                           <td
-                            className={`p-2 border-r border-slate-200 text-right font-black ${
+                            className={`py-1.5 px-1.5 border-r border-slate-200 text-right font-black whitespace-nowrap ${
                               d.netProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'
                             }`}
                           >
                             {d.netProfit >= 0 ? '+' : ''}
                             {formatCurrency(d.netProfit, companyProfile.currency)}
                           </td>
-                          <td className="p-2 text-center font-sans font-bold text-[10px]">
+                          <td className="py-1.5 px-1 text-center font-sans font-bold text-[9.5px] whitespace-nowrap">
                             {d.status} ({d.marginPercent}%)
                           </td>
                         </tr>
                       ))}
                     </tbody>
+                    <tfoot>
+                      {(() => {
+                        const sumExportRMB = data.dailyEntries.reduce(
+                          (s: number, r: any) => s + (Number(r.exportAmountRMB) || 0),
+                          0
+                        );
+                        const sumPurchase =
+                          data.summary?.totalPurchasing ??
+                          data.dailyEntries.reduce(
+                            (s: number, r: any) => s + (Number(r.purchaseAmount) || 0),
+                            0
+                          );
+                        const sumGross =
+                          data.summary?.grossProfit ??
+                          data.dailyEntries.reduce(
+                            (s: number, r: any) => s + (Number(r.grossProfit) || 0),
+                            0
+                          );
+                        const sumOther =
+                          data.summary?.totalOtherCosting ??
+                          data.dailyEntries.reduce(
+                            (s: number, r: any) => s + (Number(r.otherCostAmount) || 0),
+                            0
+                          );
+                        const sumNet =
+                          data.summary?.netProfit ??
+                          data.dailyEntries.reduce(
+                            (s: number, r: any) => s + (Number(r.netProfit) || 0),
+                            0
+                          );
+                        const marginPct = data.summary?.marginPercent ?? 0;
+                        return (
+                          <tr className="bg-slate-900 text-white font-black text-[10px] border-t-2 border-amber-500">
+                            <td className="py-2 px-1.5 border-r border-slate-700 font-sans uppercase whitespace-nowrap">
+                              Σ TOTAL ({data.dailyEntries.length}{' '}
+                              {data.dailyEntries.length === 1 ? 'DAY' : 'DAYS'}):
+                            </td>
+                            <td className="py-2 px-1.5 border-r border-slate-700 text-right text-teal-300 whitespace-nowrap">
+                              {formatCurrency(sumExportRMB, 'RMB')}
+                            </td>
+                            <td className="py-2 px-1.5 border-r border-slate-700 text-right text-blue-300 whitespace-nowrap">
+                              {formatCurrency(sumPurchase, companyProfile.currency)}
+                            </td>
+                            <td className="py-2 px-1.5 border-r border-slate-700 text-right text-amber-300 whitespace-nowrap">
+                              {sumGross >= 0 ? '+' : ''}
+                              {formatCurrency(sumGross, companyProfile.currency)}
+                            </td>
+                            <td className="py-2 px-1.5 border-r border-slate-700 text-right text-orange-300 whitespace-nowrap">
+                              {formatCurrency(sumOther, companyProfile.currency)}
+                            </td>
+                            <td
+                              className={`py-2 px-1.5 border-r border-slate-700 text-right whitespace-nowrap ${
+                                sumNet >= 0 ? 'text-emerald-300' : 'text-rose-300'
+                              }`}
+                            >
+                              {sumNet >= 0 ? '+' : ''}
+                              {formatCurrency(sumNet, companyProfile.currency)}
+                            </td>
+                            <td className="py-2 px-1 text-center font-sans text-slate-200 whitespace-nowrap">
+                              Margin: {marginPct}%
+                            </td>
+                          </tr>
+                        );
+                      })()}
+                    </tfoot>
                   </table>
                 </div>
               )}
@@ -2026,7 +2114,7 @@ export const PrintPreviewModal: React.FC = () => {
                         <td className="py-1.5 px-1.5 border-r-2 border-black align-middle">
                           {row ? row.flight : ''}
                         </td>
-                        <td className="py-1 px-2 border-r-2 border-black font-black text-2xl leading-none tracking-wider uppercase align-middle">
+                        <td className="py-1 px-2 border-r-2 border-black font-black text-[20px] leading-none tracking-wider uppercase align-middle">
                           {row ? row.mark : ''}
                         </td>
                         <td className="py-1.5 px-1.5 border-r-2 border-black font-mono align-middle">

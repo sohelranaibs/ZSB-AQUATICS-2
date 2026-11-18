@@ -245,7 +245,7 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
             </span>
           </div>
 
-          <div className="flex-1 w-full space-y-1 overflow-y-auto">
+          <div className="flex-1 w-full space-y-1.5 py-1 overflow-y-auto">
             {sheets.map((s) => {
               const isActive = activeTab === s.id;
               return (
@@ -253,9 +253,10 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
                   key={s.id}
                   type="button"
                   data-testid={`sidebar-mini-${s.id}`}
+                  aria-current={isActive ? 'page' : undefined}
                   onClick={() => handleSelectSheet(s.id)}
                   title={`#${s.num} · ${s.label}`}
-                  className={`w-full py-2 rounded-lg text-[11px] font-mono font-bold transition flex items-center justify-center cursor-pointer border ${
+                  className={`w-full py-1.5 rounded-lg text-[11px] font-mono font-bold transition flex items-center justify-center cursor-pointer border ${
                     isActive
                       ? 'bg-[#273E56] text-white border-amber-400 shadow-xs'
                       : 'bg-[#273E56] text-slate-200 border-white/15 hover:text-white'
@@ -271,7 +272,7 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
             type="button"
             onClick={logout}
             title="Logout"
-            className="mt-2 w-9 h-9 rounded-lg bg-white/10 hover:bg-[#1D6CE0] text-white flex items-center justify-center transition cursor-pointer shrink-0"
+            className="mt-2 w-8 h-8 rounded-lg bg-white/10 hover:bg-[#1D6CE0] text-white flex items-center justify-center transition cursor-pointer shrink-0"
           >
             <LogOut className="w-4 h-4" />
           </button>
@@ -286,7 +287,7 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
         className="hidden md:flex flex-col w-56 lg:w-60 xl:w-64 shrink-0 md:sticky md:top-0 md:h-screen self-start bg-[#273E56] text-slate-100 print:hidden select-none z-30"
       >
         {/* Top Brand Lockup (Matching Reference Full-Height Deep Navy Sidebar) */}
-        <div className="px-4 py-4 flex items-center justify-between gap-2.5 border-b border-white/10 shrink-0">
+        <div className="px-4 py-3 flex items-center justify-between gap-2.5 border-b border-white/10 shrink-0">
         <button
           type="button"
           onClick={() => setActiveTab('dashboard')}
@@ -320,10 +321,10 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
         </button>
       </div>
 
-      {/* Sheet Navigation List — Light #EDF2F7 Pill Tab Active Style Matching Screenshot */}
+      {/* Sheet Navigation List — Sleek Reduced-Height Pill Tabs */}
       <nav
         aria-label="Workbook Sheets Menu"
-        className="flex-1 overflow-y-auto py-2.5 pl-2.5 pr-2 space-y-0.5"
+        className="flex-1 overflow-y-auto py-2.5 px-3 space-y-2"
       >
         {sheets.map((s) => {
           const isActive = activeTab === s.id;
@@ -332,17 +333,18 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
               key={s.id}
               type="button"
               data-testid={`sidebar-nav-${s.id}`}
+              aria-current={isActive ? 'page' : undefined}
               onClick={() => setActiveTab(s.id)}
-              className={`w-full py-2.5 px-3.5 rounded-xl flex items-center justify-between gap-2 text-left transition-all cursor-pointer group border ${
+              className={`w-full py-1.5 px-3 rounded-xl flex items-center justify-between gap-2 text-left transition-all cursor-pointer group border ${
                 isActive
                   ? 'bg-[#273E56] text-white border-amber-400 font-bold shadow-xs'
                   : 'bg-[#273E56] text-slate-100 border-white/15 hover:text-white font-medium'
               }`}
               title={`Sheet #${s.num} · ${s.label}`}
             >
-              <div className="flex items-center gap-3 min-w-0">
+              <div className="flex items-center gap-2.5 min-w-0">
                 {renderSheetIcon(s.id, isActive)}
-                <span className="text-[13px] leading-snug truncate">
+                <span className="text-[13px] leading-tight truncate">
                   {s.shortLabel || s.label}
                 </span>
               </div>
@@ -350,7 +352,7 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
               <div className="flex items-center gap-1.5 shrink-0">
                 {s.badge !== undefined && (
                   <span
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold tabular-nums ${
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold tabular-nums leading-none ${
                       isActive
                         ? 'bg-[#1D6CE0]/15 text-[#1D6CE0]'
                         : 'bg-white/10 text-slate-200'
@@ -365,24 +367,26 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
         })}
       </nav>
 
-      {/* Bottom Flush Logout Row */}
+      {/* Bottom Logout Row */}
       <div className="border-t border-white/10 shrink-0">
-        <div className="px-4 py-2 flex items-center justify-between text-[11px] font-mono text-slate-300 border-b border-white/10">
+        <div className="px-4 py-1.5 flex items-center justify-between text-[11px] font-mono text-slate-300 border-b border-white/10">
           <span>Exchange Rate</span>
           <span className="text-sky-200 font-bold tabular-nums">
             1 RMB = {companyProfile.rmbExchangeRate} {companyProfile.currency}
           </span>
         </div>
 
-        <button
-          type="button"
-          data-testid="sidebar-logout-btn"
-          onClick={logout}
-          className="w-full py-3 px-4 flex items-center gap-3 text-slate-100 hover:text-white hover:bg-white/10 text-[13px] font-semibold transition cursor-pointer"
-        >
-          <LogOut className="w-4 h-4 shrink-0" />
-          <span>Logout</span>
-        </button>
+        <div className="px-3 py-2">
+          <button
+            type="button"
+            data-testid="sidebar-logout-btn"
+            onClick={logout}
+            className="w-full py-1.5 px-3 rounded-xl flex items-center gap-2.5 text-slate-100 hover:text-white hover:bg-white/10 text-[13px] leading-tight font-semibold transition cursor-pointer"
+          >
+            <LogOut className="w-4 h-4 shrink-0" />
+            <span>Logout</span>
+          </button>
+        </div>
       </div>
     </aside>
     );
@@ -408,7 +412,7 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
             data-testid="theme-sidebar-mobile-drawer"
             className="relative z-10 flex flex-col w-64 max-w-[82vw] h-full bg-[#273E56] text-slate-100 border-r border-[#385775] shadow-2xl select-none"
           >
-            <div className="px-4 py-4 flex items-center justify-between gap-2.5 border-b border-white/10 shrink-0">
+            <div className="px-4 py-3 flex items-center justify-between gap-2.5 border-b border-white/10 shrink-0">
               <button
                 type="button"
                 onClick={() => handleSelectSheet('dashboard')}
@@ -441,7 +445,7 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
               </button>
             </div>
 
-            <nav aria-label="Mobile Workbook Sheets Menu" className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
+            <nav aria-label="Mobile Workbook Sheets Menu" className="flex-1 overflow-y-auto py-2.5 px-3 space-y-2">
               {sheets.map((s) => {
                 const isActive = activeTab === s.id;
                 return (
@@ -449,22 +453,23 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
                     key={s.id}
                     type="button"
                     data-testid={`mobile-sidebar-nav-${s.id}`}
+                    aria-current={isActive ? 'page' : undefined}
                     onClick={() => handleSelectSheet(s.id)}
-                    className={`w-full py-2.5 px-3.5 rounded-xl flex items-center justify-between gap-2 text-left transition-colors cursor-pointer border ${
+                    className={`w-full py-1.5 px-3 rounded-xl flex items-center justify-between gap-2 text-left transition-colors cursor-pointer border ${
                       isActive
                         ? 'bg-[#273E56] text-white border-amber-400 font-bold shadow-xs'
                         : 'bg-[#273E56] text-slate-100 border-white/15 hover:text-white font-medium'
                     }`}
                   >
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-center gap-2.5 min-w-0">
                       {renderSheetIcon(s.id, isActive)}
-                      <span className="text-[13px] leading-snug truncate">
+                      <span className="text-[13px] leading-tight truncate">
                         {s.shortLabel || s.label}
                       </span>
                     </div>
                     {s.badge !== undefined && (
                       <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold tabular-nums shrink-0 ${
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold tabular-nums leading-none shrink-0 ${
                           isActive ? 'bg-[#1D6CE0]/15 text-[#1D6CE0]' : 'bg-white/10 text-slate-200'
                         }`}
                       >
@@ -477,20 +482,22 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
             </nav>
 
             <div className="border-t border-white/10 shrink-0">
-              <div className="px-4 py-2 flex items-center justify-between text-[11px] font-mono text-slate-300 border-b border-white/10">
+              <div className="px-4 py-1.5 flex items-center justify-between text-[11px] font-mono text-slate-300 border-b border-white/10">
                 <span>Exchange Rate</span>
                 <span className="text-sky-200 font-bold tabular-nums">
                   1 RMB = {companyProfile.rmbExchangeRate} {companyProfile.currency}
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={logout}
-                className="w-full py-3 px-4 flex items-center gap-3 text-slate-100 hover:text-white hover:bg-white/10 text-[13px] font-semibold transition cursor-pointer"
-              >
-                <LogOut className="w-4 h-4 shrink-0" />
-                <span>Logout</span>
-              </button>
+              <div className="px-3 py-2">
+                <button
+                  type="button"
+                  onClick={logout}
+                  className="w-full py-1.5 px-3 rounded-xl flex items-center gap-2.5 text-slate-100 hover:text-white hover:bg-white/10 text-[13px] leading-tight font-semibold transition cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4 shrink-0" />
+                  <span>Logout</span>
+                </button>
+              </div>
             </div>
           </aside>
         </div>

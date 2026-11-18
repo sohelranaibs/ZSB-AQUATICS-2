@@ -119,6 +119,26 @@ const MainContent: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
 
+  const handleToggleSidebar = useCallback(() => {
+    setIsSidebarCollapsed((prev) => !prev);
+  }, []);
+
+  const handleCloseMobileDrawer = useCallback(() => {
+    setIsMobileDrawerOpen(false);
+  }, []);
+
+  const handleOpenMobileDrawer = useCallback(() => {
+    setIsMobileDrawerOpen(true);
+  }, []);
+
+  const handleOpenShortcutsModal = useCallback(() => {
+    setShortcutsModalOpen(true);
+  }, []);
+
+  const handleCloseShortcutsModal = useCallback(() => {
+    setShortcutsModalOpen(false);
+  }, []);
+
   const workbookSheets = useMemo(
     () =>
       buildWorkbookSheets({
@@ -554,6 +574,9 @@ const MainContent: React.FC = () => {
   );
 
   useEffect(() => {
+    if (layoutMetrics.displayMode !== 'smart_mobile') {
+      return undefined;
+    }
     const rafId = requestAnimationFrame(() => {
       syncScrollMetricsFromTarget(null);
     });
@@ -755,12 +778,21 @@ const MainContent: React.FC = () => {
     endSwipeGesture();
   }, [endSwipeGesture]);
 
+  const scrollRafRef = useRef<number>(0);
+
   const handleWrapperScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
+      if (layoutMetrics.displayMode !== 'smart_mobile') return;
       const scrolledEl = e.target instanceof HTMLElement ? e.target : sheetScrollWrapperRef.current;
-      syncScrollMetricsFromTarget(scrolledEl);
+      if (scrollRafRef.current) {
+        cancelAnimationFrame(scrollRafRef.current);
+      }
+      scrollRafRef.current = requestAnimationFrame(() => {
+        scrollRafRef.current = 0;
+        syncScrollMetricsFromTarget(scrolledEl);
+      });
     },
-    [syncScrollMetricsFromTarget]
+    [layoutMetrics.displayMode, syncScrollMetricsFromTarget]
   );
 
   const handleQuickHorizontalPan = useCallback(
@@ -797,16 +829,17 @@ const MainContent: React.FC = () => {
       <ThemeSidebarNav
         sheets={workbookSheets}
         isCollapsed={isSidebarCollapsed}
-        onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+        onToggleCollapse={handleToggleSidebar}
         isMobileDrawerOpen={isMobileDrawerOpen}
-        onCloseMobileDrawer={() => setIsMobileDrawerOpen(false)}
+        onCloseMobileDrawer={handleCloseMobileDrawer}
       />
 
       {/* Right Column: Seamless #273E56 Top Header + Rounded Cool Ice-Slate (#EDF2F7) Main Workspace */}
       <div className="flex-1 min-w-0 flex flex-col bg-[#273E56]">
         {/* Top Navy Control Header & Sheet Formula Strip */}
         <ExcelHeaderRibbon
-          onOpenShortcutsModal={() => setShortcutsModalOpen(true)}
+          sheets={workbookSheets}
+          onOpenShortcutsModal={handleOpenShortcutsModal}
           displayMode={layoutMetrics.displayMode}
           onChangeDisplayMode={handleChangeDisplayMode}
           zoomPercent={layoutMetrics.userZoomPercent}
@@ -818,8 +851,8 @@ const MainContent: React.FC = () => {
           isFullScreen={isFullScreen}
           onToggleFullScreen={handleToggleFullScreen}
           isSidebarCollapsed={isSidebarCollapsed}
-          onToggleSidebar={() => setIsSidebarCollapsed((prev) => !prev)}
-          onOpenMobileDrawer={() => setIsMobileDrawerOpen(true)}
+          onToggleSidebar={handleToggleSidebar}
+          onOpenMobileDrawer={handleOpenMobileDrawer}
         />
 
         {/* Toast Notification Banner */}
@@ -909,9 +942,19 @@ const MainContent: React.FC = () => {
             {activeTab === 'exporter_payment_slip' && <ExporterPaymentSlipView />}
             {activeTab === 'profit_loss' && <ProfitLossView />}
             {activeTab === 'total_balance' && <TotalBalanceView />}
-            {activeTab === 'purchase_db' && <DatabaseView initialType="purchase" />}
-            {activeTab === 'packing_db' && <DatabaseView initialType="packing" />}
-            {activeTab === 'payment_db' && <DatabaseView initialType="payment" />}
+            {(activeTab === 'purchase_db' ||
+              activeTab === 'packing_db' ||
+              activeTab === 'payment_db') && (
+              <DatabaseView
+                initialType={
+                  activeTab === 'packing_db'
+                    ? 'packing'
+                    : activeTab === 'payment_db'
+                    ? 'payment'
+                    : 'purchase'
+                }
+              />
+            )}
             {activeTab === 'search_reports' && <SearchReportsView />}
             {activeTab === 'audit_logs' && <AuditLogsView />}
             {activeTab === 'settings' && <SettingsView />}
@@ -1049,7 +1092,7 @@ const MainContent: React.FC = () => {
       {/* Global Keyboard Shortcuts Reference & Command Modal */}
       <KeyboardShortcutsModal
         isOpen={shortcutsModalOpen}
-        onClose={() => setShortcutsModalOpen(false)}
+        onClose={handleCloseShortcutsModal}
         onExecuteShortcut={executeShortcutAction}
       />
     </div>

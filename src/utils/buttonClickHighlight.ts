@@ -67,6 +67,8 @@ export function markButtonAsClicked(
 }
 
 export function bindGlobalButtonGoldenClickHandler(rootDoc: Document = document): () => void {
+  let pendingRafId = 0;
+
   const handleActivate = (event: Event) => {
     const target = event.target as Element | null;
     if (!target || typeof target.closest !== 'function') return;
@@ -74,13 +76,29 @@ export function bindGlobalButtonGoldenClickHandler(rootDoc: Document = document)
     const btn = target.closest(INTERACTIVE_BUTTON_SELECTOR) as HTMLElement | null;
     if (!isEligibleClickedButton(btn)) return;
 
-    const testId = btn.getAttribute('data-testid');
-    const ariaLabel = btn.getAttribute('aria-label');
+    const alreadyMarked =
+      lastClickedByRoot.get(rootDoc) === btn &&
+      btn.getAttribute(CLICKED_BUTTON_ATTR) === 'true';
 
-    markButtonAsClicked(btn, rootDoc);
+    if (!alreadyMarked) {
+      markButtonAsClicked(btn, rootDoc);
+    }
 
-    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
-      window.requestAnimationFrame(() => {
+    // Only schedule post-click connection check on 'click' (when React handlers may replace the button)
+    if (
+      event.type === 'click' &&
+      typeof window !== 'undefined' &&
+      typeof window.requestAnimationFrame === 'function'
+    ) {
+      const testId = btn.getAttribute('data-testid');
+      const ariaLabel = btn.getAttribute('aria-label');
+
+      if (pendingRafId && typeof window.cancelAnimationFrame === 'function') {
+        window.cancelAnimationFrame(pendingRafId);
+      }
+
+      pendingRafId = window.requestAnimationFrame(() => {
+        pendingRafId = 0;
         if (btn.isConnected) {
           if (
             btn.getAttribute(CLICKED_BUTTON_ATTR) !== 'true' ||
@@ -115,6 +133,9 @@ export function bindGlobalButtonGoldenClickHandler(rootDoc: Document = document)
   rootDoc.addEventListener('click', handleActivate, true);
 
   return () => {
+    if (pendingRafId && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+      window.cancelAnimationFrame(pendingRafId);
+    }
     rootDoc.removeEventListener('pointerdown', handleActivate, true);
     rootDoc.removeEventListener('click', handleActivate, true);
   };

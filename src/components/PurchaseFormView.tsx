@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import {
   calculatePurchaseRowTotal,
@@ -10,6 +10,10 @@ import {
   getSupplierLedgerStats,
 } from '../utils/calculations.ts';
 import { PurchaseItemRow } from '../types/index.ts';
+import {
+  isPurchaseRowDataEqual,
+  updatePurchaseRowById,
+} from '../utils/tableRowOptimization.ts';
 import { validatePurchaseForm } from '../utils/validation.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
 import { exportElementToPng } from '../utils/pdfGenerator.ts';
@@ -40,6 +44,200 @@ import {
   WeChatIcon,
 } from './PngShareModal.tsx';
 
+const createEmptyPurchaseRow = (id: string): PurchaseItemRow => ({
+  id,
+  item: '',
+  quantity: 0,
+  rate: 0,
+  totalAmount: 0,
+  previousAmount: 0,
+  paidAmount: 0,
+  balance: 0,
+});
+
+interface PurchaseItemTableRowProps {
+  row: PurchaseItemRow;
+  rowIndex: number;
+  purchaseItemOptions: React.ReactNode;
+  hasItemError: boolean;
+  hasQuantityError: boolean;
+  hasRateError: boolean;
+  hasAnyRowError: boolean;
+  onRowChange: (
+    id: string,
+    field: 'item' | 'quantity' | 'rate',
+    value: string | number
+  ) => void;
+  onClearRow: (id: string) => void;
+}
+
+const arePurchaseItemTableRowPropsEqual = (
+  prev: PurchaseItemTableRowProps,
+  next: PurchaseItemTableRowProps
+): boolean =>
+  prev.rowIndex === next.rowIndex &&
+  prev.purchaseItemOptions === next.purchaseItemOptions &&
+  prev.hasItemError === next.hasItemError &&
+  prev.hasQuantityError === next.hasQuantityError &&
+  prev.hasRateError === next.hasRateError &&
+  prev.hasAnyRowError === next.hasAnyRowError &&
+  prev.onRowChange === next.onRowChange &&
+  prev.onClearRow === next.onClearRow &&
+  isPurchaseRowDataEqual(prev.row, next.row);
+
+const PurchaseItemTableRow: React.FC<PurchaseItemTableRowProps> = memo(
+  ({
+    row,
+    rowIndex,
+    purchaseItemOptions,
+    hasItemError,
+    hasQuantityError,
+    hasRateError,
+    hasAnyRowError,
+    onRowChange,
+    onClearRow,
+  }) => {
+    const isFilled =
+      row.item.trim() !== '' || row.quantity !== 0 || row.rate !== 0;
+
+    const handleItemChange = useCallback(
+      (e: React.ChangeEvent<HTMLSelectElement>) => {
+        onRowChange(row.id, 'item', e.target.value);
+      },
+      [onRowChange, row.id]
+    );
+
+    const handleQuantityChange = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        onRowChange(row.id, 'quantity', parseFloat(e.target.value) || 0);
+      },
+      [onRowChange, row.id]
+    );
+
+    const handleRateChange = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        onRowChange(row.id, 'rate', parseFloat(e.target.value) || 0);
+      },
+      [onRowChange, row.id]
+    );
+
+    const handleClearClick = useCallback(() => {
+      onClearRow(row.id);
+    }, [onClearRow, row.id]);
+
+    return (
+      <tr
+        className={`transition-colors ${
+          hasAnyRowError
+            ? 'bg-rose-50/60 hover:bg-rose-50'
+            : isFilled
+            ? 'bg-amber-50/20 hover:bg-amber-50/50'
+            : rowIndex % 2 === 0
+            ? 'bg-white hover:bg-slate-50'
+            : 'bg-slate-50/50 hover:bg-slate-100/60'
+        }`}
+      >
+        {/* Row SL Number */}
+        <td className="px-2 py-1.5 border-r border-slate-200 text-center">
+          <span className="zsb-sl-badge">
+            {String(rowIndex + 1).padStart(2, '0')}
+          </span>
+        </td>
+
+        {/* Item / Grade Dropdown */}
+        <td className="p-1.5 border-r border-slate-200">
+          <select
+            aria-label={`Row ${rowIndex + 1} Item`}
+            aria-invalid={hasItemError}
+            value={row.item}
+            onChange={handleItemChange}
+            className={`w-full border rounded-md px-2 py-1.5 font-semibold focus:bg-white focus:outline-none focus:ring-2 ${
+              hasItemError
+                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 text-rose-900 focus:ring-rose-500'
+                : row.item
+                ? 'bg-white border-slate-300 text-slate-900 focus:ring-blue-500'
+                : 'bg-slate-50 border-slate-200 text-slate-500 focus:ring-blue-500'
+            }`}
+          >
+            <option value="">-- Select Grade / Size --</option>
+            {purchaseItemOptions}
+          </select>
+        </td>
+
+        {/* Quantity Input */}
+        <td className="p-1.5 border-r border-slate-200">
+          <input
+            aria-label={`Row ${rowIndex + 1} Quantity`}
+            aria-invalid={hasQuantityError}
+            type="number"
+            min="0"
+            step="any"
+            value={row.quantity || ''}
+            onChange={handleQuantityChange}
+            className={`w-full bg-white border rounded-md px-2.5 py-1.5 text-right font-mono tabular-nums font-semibold text-slate-900 focus:outline-none focus:ring-2 ${
+              hasQuantityError
+                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
+                : 'border-slate-200 focus:ring-blue-500'
+            }`}
+            placeholder="0"
+          />
+        </td>
+
+        {/* Unit Rate Input */}
+        <td className="p-1.5 border-r border-slate-200">
+          <input
+            aria-label={`Row ${rowIndex + 1} Rate`}
+            aria-invalid={hasRateError}
+            type="number"
+            min="0"
+            step="0.01"
+            value={row.rate || ''}
+            onChange={handleRateChange}
+            className={`w-full bg-white border rounded-md px-2.5 py-1.5 text-right font-mono tabular-nums font-semibold text-slate-900 focus:outline-none focus:ring-2 ${
+              hasRateError
+                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
+                : 'border-slate-200 focus:ring-blue-500'
+            }`}
+            placeholder="0.00"
+          />
+        </td>
+
+        {/* Row Total Amount (Quantity * Rate) */}
+        <td
+          data-testid={`purchase-row-${rowIndex + 1}-total`}
+          className="px-3 py-1.5 border-r border-slate-200 bg-amber-50/40 text-right font-mono tabular-nums font-bold text-slate-900 text-xs"
+        >
+          {row.totalAmount > 0
+            ? row.totalAmount.toLocaleString('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })
+            : '0.00'}
+        </td>
+
+        {/* Row Clear Action */}
+        <td className="p-1.5 text-center">
+          <button
+            type="button"
+            onClick={handleClearClick}
+            disabled={!isFilled}
+            aria-label={`Clear row ${rowIndex + 1}`}
+            title="Reset this row"
+            className={`p-1 rounded transition ${
+              isFilled
+                ? 'text-slate-500 hover:text-rose-600 hover:bg-rose-50 cursor-pointer'
+                : 'text-slate-300 cursor-not-allowed'
+            }`}
+          >
+            <RotateCcw className="w-3.5 h-3.5 mx-auto" />
+          </button>
+        </td>
+      </tr>
+    );
+  },
+  arePurchaseItemTableRowPropsEqual
+);
+
 export const PurchaseFormView: React.FC = () => {
   const {
     companyProfile,
@@ -66,24 +264,15 @@ export const PurchaseFormView: React.FC = () => {
   const [lastSavedRecord, setLastSavedRecord] = useState<{ id: string; invoiceNumber: string } | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
 
-  const createEmptyRow = (id: string): PurchaseItemRow => ({
-    id,
-    item: '',
-    quantity: 0,
-    rate: 0,
-    totalAmount: 0,
-    previousAmount: 0,
-    paidAmount: 0,
-    balance: 0,
-  });
-
-  const [rows, setRows] = useState<PurchaseItemRow[]>([
-    createEmptyRow('1'),
-    createEmptyRow('2'),
-    createEmptyRow('3'),
-    createEmptyRow('4'),
-    createEmptyRow('5'),
+  const [rows, setRows] = useState<PurchaseItemRow[]>(() => [
+    createEmptyPurchaseRow('1'),
+    createEmptyPurchaseRow('2'),
+    createEmptyPurchaseRow('3'),
+    createEmptyPurchaseRow('4'),
+    createEmptyPurchaseRow('5'),
   ]);
+  const rowsRef = useRef<PurchaseItemRow[]>(rows);
+  rowsRef.current = rows;
 
   // Overall invoice-level settlement summary inputs (empty / 0 by default)
   const [overallPreviousAmount, setOverallPreviousAmount] = useState<number>(0);
@@ -100,104 +289,138 @@ export const PurchaseFormView: React.FC = () => {
   const [validationAttempted, setValidationAttempted] = useState<boolean>(false);
   const [isExportingPng, setIsExportingPng] = useState<boolean>(false);
 
-  const validation = validatePurchaseForm({
-    invoiceNumber,
-    date,
-    supplierName: description,
-    overallPreviousAmount,
-    overallPaidAmount,
-    rows,
-  });
+  const validation = useMemo(
+    () =>
+      validatePurchaseForm({
+        invoiceNumber,
+        date,
+        supplierName: description,
+        overallPreviousAmount,
+        overallPaidAmount,
+        rows,
+      }),
+    [invoiceNumber, date, description, overallPreviousAmount, overallPaidAmount, rows]
+  );
 
   // Supplier historical ledger stats (exclude active bill when editing)
-  const supplierStats = getSupplierLedgerStats(
-    purchases,
-    description,
-    editingPurchaseId || undefined
+  const supplierStats = useMemo(
+    () =>
+      getSupplierLedgerStats(
+        purchases,
+        description,
+        editingPurchaseId || undefined
+      ),
+    [purchases, description, editingPurchaseId]
+  );
+
+  const supplierOptionElements = useMemo(
+    () =>
+      dropdownOptions.suppliers.map((s) => (
+        <option key={s} value={s}>
+          {s}
+        </option>
+      )),
+    [dropdownOptions.suppliers]
+  );
+
+  const purchaseItemOptionElements = useMemo(
+    () =>
+      dropdownOptions.purchaseItems.map((it) => (
+        <option key={it} value={it}>
+          {it}
+        </option>
+      )),
+    [dropdownOptions.purchaseItems]
+  );
+
+  const savedInvoiceOptionElements = useMemo(
+    () =>
+      purchases.map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.invoiceNumber} — {p.description} ({formatDate(p.date)})
+        </option>
+      )),
+    [purchases]
   );
 
   // Handle supplier selection and automatically populate contact number & previous invoice balance
-  const handleSupplierChange = (newSupplier: string) => {
-    setDescription(newSupplier);
-    const trimmed = newSupplier.trim();
-    if (!trimmed) {
-      if (!editingPurchaseId) {
-        setOverallPreviousAmount(0);
+  const handleSupplierChange = useCallback(
+    (newSupplier: string) => {
+      setDescription(newSupplier);
+      const trimmed = newSupplier.trim();
+      if (!trimmed) {
+        if (!editingPurchaseId) {
+          setOverallPreviousAmount(0);
+        }
+        return;
       }
-      return;
-    }
 
-    const stats = getSupplierLedgerStats(
-      purchases,
-      trimmed,
-      editingPurchaseId || undefined
-    );
-    if (stats.latestContactNumber) {
-      setContactNumber(stats.latestContactNumber);
-    }
-    if (!editingPurchaseId) {
-      const autoPrev = stats.invoiceCount > 0 ? stats.latestClosingBalance : 0;
-      setOverallPreviousAmount(autoPrev);
-      if (stats.invoiceCount > 0 && autoPrev !== 0) {
-        showToast(
-          `Previous balance ${formatCurrency(autoPrev, companyProfile.currency)} auto-filled for ${trimmed}.`
-        );
+      const stats = getSupplierLedgerStats(
+        purchases,
+        trimmed,
+        editingPurchaseId || undefined
+      );
+      if (stats.latestContactNumber) {
+        setContactNumber(stats.latestContactNumber);
       }
-    }
-  };
+      if (!editingPurchaseId) {
+        const autoPrev = stats.invoiceCount > 0 ? stats.latestClosingBalance : 0;
+        setOverallPreviousAmount(autoPrev);
+        if (stats.invoiceCount > 0 && autoPrev !== 0) {
+          showToast(
+            `Previous balance ${formatCurrency(autoPrev, companyProfile.currency)} auto-filled for ${trimmed}.`
+          );
+        }
+      }
+    },
+    [editingPurchaseId, purchases, showToast, companyProfile.currency]
+  );
 
   // Handle line-item row changes (Item, Quantity, Rate)
-  const handleRowChange = (
-    id: string,
-    field: 'item' | 'quantity' | 'rate',
-    value: string | number
-  ) => {
-    setRows((prev) =>
-      prev.map((row) => {
-        if (row.id !== id) return row;
-        const updated = { ...row, [field]: value };
-
-        if (field === 'quantity' || field === 'rate') {
-          const qty = field === 'quantity' ? Number(value) : row.quantity;
-          const rt = field === 'rate' ? Number(value) : row.rate;
-          updated.totalAmount = calculatePurchaseRowTotal(qty, rt);
-          updated.balance = updated.totalAmount;
-        }
-        return updated;
-      })
-    );
-  };
+  const handleRowChange = useCallback(
+    (
+      id: string,
+      field: 'item' | 'quantity' | 'rate',
+      value: string | number
+    ) => {
+      setRows((prev) => updatePurchaseRowById(prev, id, field, value));
+    },
+    []
+  );
 
   // Clear or remove a single row (Requires Super Admin Permission)
-  const handleClearRow = (id: string) => {
-    const targetRow = rows.find((r) => r.id === id);
-    requestSuperAdminSingleDelete(
-      {
-        recordType: 'custom_row',
-        recordId: id,
-        recordTitle: targetRow?.item
-          ? `Purchase Item Row — ${targetRow.item}`
-          : `Purchase Line Item Row`,
-        recordSubtitle: targetRow
-          ? `Qty: ${targetRow.quantity} · Rate: ${targetRow.rate} · Total: ${targetRow.totalAmount}`
-          : undefined,
-      },
-      () => {
-        setRows((prev) =>
-          prev.map((row) => (row.id === id ? createEmptyRow(row.id) : row))
-        );
-        showToast('Super Admin verified: Purchase line item row deleted.');
-      }
-    );
-  };
+  const handleClearRow = useCallback(
+    (id: string) => {
+      const targetRow = rowsRef.current.find((r) => r.id === id);
+      requestSuperAdminSingleDelete(
+        {
+          recordType: 'custom_row',
+          recordId: id,
+          recordTitle: targetRow?.item
+            ? `Purchase Item Row — ${targetRow.item}`
+            : `Purchase Line Item Row`,
+          recordSubtitle: targetRow
+            ? `Qty: ${targetRow.quantity} · Rate: ${targetRow.rate} · Total: ${targetRow.totalAmount}`
+            : undefined,
+        },
+        () => {
+          setRows((prev) =>
+            prev.map((row) => (row.id === id ? createEmptyPurchaseRow(row.id) : row))
+          );
+          showToast('Super Admin verified: Purchase line item row deleted.');
+        }
+      );
+    },
+    [requestSuperAdminSingleDelete, showToast]
+  );
 
   // Append a new blank row to the table
-  const handleAddRow = () => {
+  const handleAddRow = useCallback(() => {
     setRows((prev) => [
       ...prev,
-      createEmptyRow(generateRecordId('prow')),
+      createEmptyPurchaseRow(generateRecordId('prow')),
     ]);
-  };
+  }, []);
 
   // Load a previously saved purchase bill into form for editing
   const handleLoadForEdit = (idToEdit: string) => {
@@ -217,7 +440,7 @@ export const PurchaseFormView: React.FC = () => {
       totalAmount: calculatePurchaseRowTotal(it.quantity, it.rate),
     }));
     while (loadedRows.length < 5) {
-      loadedRows.push(createEmptyRow(generateRecordId('prow')));
+      loadedRows.push(createEmptyPurchaseRow(generateRecordId('prow')));
     }
     setRows(loadedRows);
     setValidationAttempted(false);
@@ -253,11 +476,11 @@ export const PurchaseFormView: React.FC = () => {
     setSearchDescription('');
     setDate(new Date().toISOString().slice(0, 10));
     setRows([
-      createEmptyRow('1'),
-      createEmptyRow('2'),
-      createEmptyRow('3'),
-      createEmptyRow('4'),
-      createEmptyRow('5'),
+      createEmptyPurchaseRow('1'),
+      createEmptyPurchaseRow('2'),
+      createEmptyPurchaseRow('3'),
+      createEmptyPurchaseRow('4'),
+      createEmptyPurchaseRow('5'),
     ]);
     setValidationAttempted(false);
   };
@@ -269,15 +492,23 @@ export const PurchaseFormView: React.FC = () => {
     showToast('Form cleared and all fillable cells reset.');
   };
 
-  const { totalQty, totalAmount, balance } = calculatePurchaseTotals(
-    rows,
-    overallPreviousAmount,
-    overallPaidAmount
+  const { totalQty, totalAmount, balance } = useMemo(
+    () =>
+      calculatePurchaseTotals(
+        rows,
+        overallPreviousAmount,
+        overallPaidAmount
+      ),
+    [rows, overallPreviousAmount, overallPaidAmount]
   );
 
-  const populatedRowCount = rows.filter(
-    (r) => r.item.trim() !== '' || r.quantity !== 0 || r.rate !== 0
-  ).length;
+  const populatedRowCount = useMemo(
+    () =>
+      rows.filter(
+        (r) => r.item.trim() !== '' || r.quantity !== 0 || r.rate !== 0
+      ).length,
+    [rows]
+  );
 
   const handleSavePDF = () => {
     const check = validatePurchaseForm({
@@ -370,12 +601,12 @@ export const PurchaseFormView: React.FC = () => {
     }
   };
 
-  const exportableRows = (() => {
+  const exportableRows = useMemo(() => {
     const validItems = rows.filter(
       (r) => r.item.trim() !== '' || r.quantity > 0 || r.rate > 0
     );
     return validItems.length > 0 ? validItems : rows.slice(0, 5);
-  })();
+  }, [rows]);
 
   const handlePrintSelected = () => {
     openPrintModal({
@@ -476,9 +707,12 @@ export const PurchaseFormView: React.FC = () => {
     }
   };
 
-  const recentSupplierBills = purchases
-    .filter((p) => p.description.toLowerCase() === description.toLowerCase())
-    .slice(0, 3);
+  const recentSupplierBills = useMemo(() => {
+    const normalizedDescription = description.toLowerCase();
+    return purchases
+      .filter((p) => p.description.toLowerCase() === normalizedDescription)
+      .slice(0, 3);
+  }, [purchases, description]);
 
   return (
     <div className="p-3 sm:p-5 max-w-[1440px] mx-auto space-y-5">
@@ -744,11 +978,7 @@ export const PurchaseFormView: React.FC = () => {
                     }`}
                   >
                     <option value="">-- Select Supplier Name --</option>
-                    {dropdownOptions.suppliers.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
+                    {supplierOptionElements}
                   </select>
                 </div>
 
@@ -889,8 +1119,6 @@ export const PurchaseFormView: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {rows.map((row, idx) => {
-                    const isFilled =
-                      row.item.trim() !== '' || row.quantity !== 0 || row.rate !== 0;
                     const rowErr = validationAttempted
                       ? validation.rowErrors[row.id]
                       : undefined;
@@ -899,132 +1127,18 @@ export const PurchaseFormView: React.FC = () => {
                       Boolean(validation.fieldErrors.rows) &&
                       idx === 0;
                     return (
-                      <tr
+                      <PurchaseItemTableRow
                         key={row.id}
-                        className={`transition-colors ${
-                          rowErr || highlightFirstEmptyRow
-                            ? 'bg-rose-50/60 hover:bg-rose-50'
-                            : isFilled
-                            ? 'bg-amber-50/20 hover:bg-amber-50/50'
-                            : idx % 2 === 0
-                            ? 'bg-white hover:bg-slate-50'
-                            : 'bg-slate-50/50 hover:bg-slate-100/60'
-                        }`}
-                      >
-                        {/* Row SL Number */}
-                        <td className="px-2 py-1.5 border-r border-slate-200 text-center">
-                          <span className="zsb-sl-badge">
-                            {String(idx + 1).padStart(2, '0')}
-                          </span>
-                        </td>
-
-                        {/* Item / Grade Dropdown */}
-                        <td className="p-1.5 border-r border-slate-200">
-                          <select
-                            aria-label={`Row ${idx + 1} Item`}
-                            aria-invalid={Boolean(rowErr?.item || highlightFirstEmptyRow)}
-                            value={row.item}
-                            onChange={(e) =>
-                              handleRowChange(row.id, 'item', e.target.value)
-                            }
-                            className={`w-full border rounded-md px-2 py-1.5 font-semibold focus:bg-white focus:outline-none focus:ring-2 ${
-                              rowErr?.item || highlightFirstEmptyRow
-                                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 text-rose-900 focus:ring-rose-500'
-                                : row.item
-                                ? 'bg-white border-slate-300 text-slate-900 focus:ring-blue-500'
-                                : 'bg-slate-50 border-slate-200 text-slate-500 focus:ring-blue-500'
-                            }`}
-                          >
-                            <option value="">-- Select Grade / Size --</option>
-                            {dropdownOptions.purchaseItems.map((it) => (
-                              <option key={it} value={it}>
-                                {it}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-
-                        {/* Quantity Input */}
-                        <td className="p-1.5 border-r border-slate-200">
-                          <input
-                            aria-label={`Row ${idx + 1} Quantity`}
-                            aria-invalid={Boolean(rowErr?.quantity || highlightFirstEmptyRow)}
-                            type="number"
-                            min="0"
-                            step="any"
-                            value={row.quantity || ''}
-                            onChange={(e) =>
-                              handleRowChange(
-                                row.id,
-                                'quantity',
-                                parseFloat(e.target.value) || 0
-                              )
-                            }
-                            className={`w-full bg-white border rounded-md px-2.5 py-1.5 text-right font-mono tabular-nums font-semibold text-slate-900 focus:outline-none focus:ring-2 ${
-                              rowErr?.quantity || highlightFirstEmptyRow
-                                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
-                                : 'border-slate-200 focus:ring-blue-500'
-                            }`}
-                            placeholder="0"
-                          />
-                        </td>
-
-                        {/* Unit Rate Input */}
-                        <td className="p-1.5 border-r border-slate-200">
-                          <input
-                            aria-label={`Row ${idx + 1} Rate`}
-                            aria-invalid={Boolean(rowErr?.rate || highlightFirstEmptyRow)}
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={row.rate || ''}
-                            onChange={(e) =>
-                              handleRowChange(
-                                row.id,
-                                'rate',
-                                parseFloat(e.target.value) || 0
-                              )
-                            }
-                            className={`w-full bg-white border rounded-md px-2.5 py-1.5 text-right font-mono tabular-nums font-semibold text-slate-900 focus:outline-none focus:ring-2 ${
-                              rowErr?.rate || highlightFirstEmptyRow
-                                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
-                                : 'border-slate-200 focus:ring-blue-500'
-                            }`}
-                            placeholder="0.00"
-                          />
-                        </td>
-
-                        {/* Row Total Amount (Quantity * Rate) */}
-                        <td
-                          data-testid={`purchase-row-${idx + 1}-total`}
-                          className="px-3 py-1.5 border-r border-slate-200 bg-amber-50/40 text-right font-mono tabular-nums font-bold text-slate-900 text-xs"
-                        >
-                          {row.totalAmount > 0
-                            ? row.totalAmount.toLocaleString('en-US', {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })
-                            : '0.00'}
-                        </td>
-
-                        {/* Row Clear Action */}
-                        <td className="p-1.5 text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleClearRow(row.id)}
-                            disabled={!isFilled}
-                            aria-label={`Clear row ${idx + 1}`}
-                            title="Reset this row"
-                            className={`p-1 rounded transition ${
-                              isFilled
-                                ? 'text-slate-500 hover:text-rose-600 hover:bg-rose-50 cursor-pointer'
-                                : 'text-slate-300 cursor-not-allowed'
-                            }`}
-                          >
-                            <RotateCcw className="w-3.5 h-3.5 mx-auto" />
-                          </button>
-                        </td>
-                      </tr>
+                        row={row}
+                        rowIndex={idx}
+                        purchaseItemOptions={purchaseItemOptionElements}
+                        hasItemError={Boolean(rowErr?.item || highlightFirstEmptyRow)}
+                        hasQuantityError={Boolean(rowErr?.quantity || highlightFirstEmptyRow)}
+                        hasRateError={Boolean(rowErr?.rate || highlightFirstEmptyRow)}
+                        hasAnyRowError={Boolean(rowErr || highlightFirstEmptyRow)}
+                        onRowChange={handleRowChange}
+                        onClearRow={handleClearRow}
+                      />
                     );
                   })}
                 </tbody>
@@ -1410,11 +1524,7 @@ export const PurchaseFormView: React.FC = () => {
                     ? '-- No saved invoices --'
                     : '-- Select Invoice to Edit --'}
                 </option>
-                {purchases.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.invoiceNumber} — {p.description} ({formatDate(p.date)})
-                  </option>
-                ))}
+                {savedInvoiceOptionElements}
               </select>
             </div>
           </div>

@@ -1008,8 +1008,8 @@ export function openPrintableDocumentWindow(
       font-size: 13px;
     }
     .btn-close:hover { background: #475569; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { vertical-align: middle !important; }
+    table { width: 100% !important; border-collapse: collapse !important; table-layout: fixed !important; font-variant-numeric: tabular-nums !important; }
+    th, td { vertical-align: middle !important; box-sizing: border-box !important; }
     @media print {
       .print-bar { display: none !important; }
       body { padding: 0 !important; margin: 0 !important; }
@@ -1054,7 +1054,7 @@ export function openPrintableDocumentWindow(
   </div>
 
   <div id="print-root">
-    ${clonedElement.innerHTML}
+    ${clonedElement.outerHTML}
   </div>
 
   <script>

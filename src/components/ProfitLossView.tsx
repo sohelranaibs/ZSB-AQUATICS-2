@@ -2086,169 +2086,422 @@ export const ProfitLossView: React.FC = () => {
         </div>
       </div>
 
-      {/* Offscreen Corporate A4 Fiscal Summary Document for One-Click PDF Generation */}
+      {/* Offscreen Official Print-Preview-Identical Document for One-Click PDF Generation */}
       {isDownloadingPdf && (
       <div
         id="profit-loss-fiscal-summary-host"
         aria-hidden="true"
-        className="print:hidden"
-        style={{
-          position: 'fixed',
-          left: '-10000px',
-          top: 0,
-          width: '780px',
-          pointerEvents: 'none',
-          zIndex: -1,
-        }}
+        className="fixed -left-[9999px] top-0 pointer-events-none print:hidden"
       >
         <div
           id="profit-loss-fiscal-summary-printable"
-          className="bg-white text-slate-900 p-6 space-y-4 text-xs"
-          style={{ width: '780px', backgroundColor: '#ffffff', color: '#0f172a' }}
+          className="zsb-print-paper relative w-[760px] max-w-[760px] bg-white rounded-sm border border-slate-300 p-7 space-y-5 text-slate-900 overflow-hidden"
+          style={{ width: '760px', backgroundColor: '#ffffff', color: '#000000', position: 'relative' }}
         >
-          {/* Corporate Letterhead */}
-          <div className="flex items-center justify-between border-b-2 border-slate-800 pb-3">
-            <div className="flex items-center gap-3">
-              <img
-                src={resolveCompanyLogoSrc(companyProfile.logoUrl)}
-                alt={companyProfile.companyName}
-                className="w-12 h-12 rounded-full object-contain border border-slate-300 p-0.5 bg-white"
-              />
-              <div>
-                <div className="text-lg font-black tracking-wide text-slate-900 uppercase">
-                  {companyProfile.companyName}
-                </div>
-                <div className="text-[11px] font-semibold text-teal-800 uppercase">
-                  {companyProfile.address}
-                </div>
-                <div className="text-[10px] text-slate-600 font-mono">
-                  Tel: {(companyProfile.mobiles || []).join(' / ')}
-                  {companyProfile.email ? ` | Email: ${companyProfile.email}` : ''}
-                </div>
+          {/* Centered Watermark Logo */}
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 flex items-center justify-center pointer-events-none select-none z-0 overflow-hidden"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+              userSelect: 'none',
+              zIndex: 0,
+              opacity: 0.07,
+            }}
+          >
+            <img
+              src={resolveCompanyLogoSrc(companyProfile.logoUrl)}
+              alt=""
+              style={{
+                width: '340px',
+                height: '340px',
+                objectFit: 'contain',
+                borderRadius: '9999px',
+              }}
+            />
+          </div>
+
+          {/* Official Document Header (Identical to PrintPreviewModal) */}
+          <div
+            style={{ borderBottom: '2px solid #0f172a', position: 'relative', zIndex: 10 }}
+            className="pb-3.5 text-center space-y-1 relative z-10"
+          >
+            <div className="flex items-center justify-center gap-3.5 mb-1">
+              <div
+                style={{
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '9999px',
+                  overflow: 'hidden',
+                  border: '2px solid #fbbf24',
+                  backgroundColor: '#ffffff',
+                  padding: '2px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+                className="w-16 h-16 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shadow-xs flex items-center justify-center shrink-0"
+              >
+                <img
+                  src={resolveCompanyLogoSrc(companyProfile.logoUrl)}
+                  alt={companyProfile.companyName}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    borderRadius: '9999px',
+                    display: 'block',
+                  }}
+                  className="w-full h-full object-contain rounded-full"
+                />
+              </div>
+
+              <div
+                className="zsb-3d-text-print text-3xl sm:text-4xl font-black tracking-widest uppercase"
+                style={{
+                  color: '#f59e0b',
+                  fontFamily: "'Cinzel', Georgia, Cambria, 'Times New Roman', Times, serif",
+                  fontWeight: 900,
+                  letterSpacing: '0.09em',
+                  textShadow:
+                    '1px 1px 0px #b45309, 2px 2px 0px #92400e, 3px 3px 0px #78350f, 4px 4px 0px #451a03, 5px 5px 7px rgba(15, 23, 42, 0.35)',
+                }}
+              >
+                {companyProfile.companyName}
               </div>
             </div>
-            <div className="text-right font-mono text-[11px]">
-              <div className="font-black text-slate-900 uppercase text-xs">
-                FISCAL SUMMARY REPORT
-              </div>
-              <div className="text-slate-600">Ref: {fiscalSummaryPayload.statementRef}</div>
-              <div className="text-slate-600">
-                Date: {formatDate(fiscalSummaryPayload.generatedAt)}
-              </div>
+
+            <div
+              style={{ color: '#000000' }}
+              className="text-xs sm:text-sm font-bold tracking-wide"
+            >
+              Address: {companyProfile.address}
+            </div>
+
+            <div
+              style={{ color: '#000000' }}
+              className="text-xs sm:text-sm font-bold font-mono"
+            >
+              Mobile: {companyProfile.mobiles.join(' , ')} | EMAIL:{' '}
+              {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com'
+                ? companyProfile.email
+                : 'zsbaquatics@gmail.com'}
+              , Website : {companyProfile.website || 'www.zsbaquatics.com'}
+            </div>
+
+            <div
+              style={{ backgroundColor: '#0f172a', color: '#ffffff' }}
+              className="inline-block mt-2 px-5 py-1.5 rounded text-xs font-bold tracking-widest uppercase shadow-sm"
+            >
+              LOSS &amp; PROFIT STATEMENT
             </div>
           </div>
 
-          {/* Executive Fiscal Summary Breakdown */}
-          <div className="p-4 bg-slate-50 rounded border border-slate-300 space-y-2">
-            <div className="font-black text-slate-900 uppercase tracking-wider border-b border-slate-300 pb-1.5 flex items-center justify-between">
-              <span>Executive Fiscal Profit &amp; Loss Summary</span>
-              <span className="font-mono text-[11px] text-slate-600">
-                Scope: {fiscalSummaryPayload.periodLabel}
-              </span>
-            </div>
-            <div className="flex justify-between border-b border-slate-200 pb-1.5 font-bold">
-              <span>
-                Gross Export Revenue (A) — {packings.length} Shipments ({summary.totalWeightExported} KG)
-              </span>
-              <span className="font-mono text-teal-800">
-                {formatCurrency(summary.totalExportValue, companyProfile.currency)}
-              </span>
-            </div>
-            <div className="flex justify-between border-b border-slate-200 pb-1.5 font-bold">
-              <span>
-                Less: Total Purchase Cost (B) — {purchases.length} Purchase Challans
-              </span>
-              <span className="font-mono text-rose-700">
-                - {formatCurrency(summary.totalPurchasing, companyProfile.currency)}
-              </span>
-            </div>
-            <div className="flex justify-between border-b border-slate-200 pb-1.5 font-bold bg-amber-50 px-2 py-1 rounded">
-              <span>Gross Margin (A - B)</span>
-              <span className="font-mono text-slate-900">
-                {formatCurrency(summary.grossProfit, companyProfile.currency)}
-              </span>
-            </div>
-            <div className="flex justify-between border-b border-slate-200 pb-1.5 font-bold">
-              <span>
-                Less: Total Other Operating Costs (C) — {otherCosts.length} Expense Vouchers
-              </span>
-              <span className="font-mono text-rose-700">
-                - {formatCurrency(summary.totalOtherCosting, companyProfile.currency)}
-              </span>
-            </div>
-            <div className="flex justify-between border-b border-slate-200 pb-1.5 text-[11px] font-semibold text-teal-900">
-              <span>Supplier Credit Notes &amp; Rebates (Issued / Applied)</span>
-              <span className="font-mono">
-                {formatCurrency(creditSummary.totalIssuedAmount, companyProfile.currency)} (Applied:{' '}
-                {formatCurrency(creditSummary.totalAppliedAmount, companyProfile.currency)})
-              </span>
-            </div>
-            <div className="flex justify-between pt-1 font-black text-sm">
-              <span>NET {isProfitable ? 'PROFIT' : 'LOSS'} (A - B - C)</span>
-              <span className={`font-mono ${isProfitable ? 'text-emerald-800' : 'text-rose-700'}`}>
-                {isProfitable ? '+' : ''}
-                {formatCurrency(summary.netProfit, companyProfile.currency)} (
-                {summary.marginPercent}% Margin)
-              </span>
-            </div>
-          </div>
-
-          {/* Daily Fiscal Summary Table (Top 15 Trading Days) */}
-          {fiscalSummaryPayload.dailyEntries.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="font-black text-xs uppercase tracking-wider text-slate-900 flex items-center justify-between">
-                <span>Daily Trading Profit &amp; Loss Breakdown</span>
-                <span className="font-mono text-[11px] text-slate-600">
-                  {fiscalSummaryPayload.dailyEntries.length} Trading Days
+          {/* Profit & Loss Statement & Daily Report Details (Identical to PrintPreviewModal) */}
+          <div className="space-y-4 text-xs relative z-10">
+            {fiscalSummaryPayload.periodLabel && (
+              <div className="flex items-center justify-between bg-slate-100 px-3 py-2 rounded border border-slate-300 font-mono text-[11px]">
+                <span>
+                  <strong>REPORT SCOPE:</strong> {fiscalSummaryPayload.periodLabel}
+                </span>
+                <span>
+                  <strong>GENERATED:</strong> {formatDate(new Date().toISOString())}
                 </span>
               </div>
-              <table className="w-full text-[11px] border border-slate-300 border-collapse font-mono">
-                <thead>
-                  <tr className="bg-slate-800 text-white uppercase font-bold text-[10px]">
-                    <th className="p-1.5 border-r border-slate-600 text-left font-sans">Date</th>
-                    <th className="p-1.5 border-r border-slate-600 text-right">Export (RMB)</th>
-                    <th className="p-1.5 border-r border-slate-600 text-right">Purchase</th>
-                    <th className="p-1.5 border-r border-slate-600 text-right">Gross Margin</th>
-                    <th className="p-1.5 border-r border-slate-600 text-right">Other Cost</th>
-                    <th className="p-1.5 border-r border-slate-600 text-right">Net P&amp;L</th>
-                    <th className="p-1.5 text-center font-sans">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {fiscalSummaryPayload.dailyEntries.slice(0, 15).map((d) => (
-                    <tr key={d.date}>
-                      <td className="p-1.5 border-r border-slate-200 font-sans font-bold text-slate-900">
-                        {d.formattedDate} ({d.weekdayLabel})
-                      </td>
-                      <td className="p-1.5 border-r border-slate-200 text-right font-bold text-teal-800">
-                        {formatCurrency(d.exportAmountRMB ?? 0, 'RMB')}
-                      </td>
-                      <td className="p-1.5 border-r border-slate-200 text-right text-blue-800">
-                        {formatCurrency(d.purchaseAmount, companyProfile.currency)}
-                      </td>
-                      <td className="p-1.5 border-r border-slate-200 text-right text-slate-800">
-                        {formatCurrency(d.grossProfit, companyProfile.currency)}
-                      </td>
-                      <td className="p-1.5 border-r border-slate-200 text-right text-amber-800">
-                        {formatCurrency(d.otherCostAmount, companyProfile.currency)}
-                      </td>
-                      <td
-                        className={`p-1.5 border-r border-slate-200 text-right font-black ${
-                          d.netProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'
-                        }`}
-                      >
-                        {d.netProfit >= 0 ? '+' : ''}
-                        {formatCurrency(d.netProfit, companyProfile.currency)}
-                      </td>
-                      <td className="p-1.5 text-center font-sans font-bold text-[10px]">
-                        {d.status} ({d.marginPercent}%)
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            )}
+
+            {/* Executive Summary Block */}
+            <div className="p-4 bg-slate-50 rounded border border-slate-300 text-xs space-y-2">
+              <div className="font-black text-slate-900 uppercase tracking-wider border-b border-slate-300 pb-1.5">
+                Executive Profit &amp; Loss Summary
+              </div>
+              <div className="flex justify-between border-b pb-1.5 font-bold">
+                <span>Gross Export Sales / Invoiced Value (A)</span>
+                <span className="font-mono text-teal-800">
+                  {formatCurrency(
+                    fiscalSummaryPayload.summary?.totalExportValue || 0,
+                    companyProfile.currency
+                  )}
+                </span>
+              </div>
+              <div className="flex justify-between border-b pb-1.5 font-bold">
+                <span>Less: Total Purchase Cost — Live Fish (B)</span>
+                <span className="font-mono text-rose-700">
+                  -{' '}
+                  {formatCurrency(
+                    fiscalSummaryPayload.summary?.totalPurchasing || 0,
+                    companyProfile.currency
+                  )}
+                </span>
+              </div>
+              <div className="flex justify-between border-b pb-1.5 font-bold bg-amber-50/70 px-2 py-1 rounded">
+                <span>Gross Profit / Margin (A - B)</span>
+                <span className="font-mono text-slate-900">
+                  {formatCurrency(
+                    fiscalSummaryPayload.summary?.grossProfit || 0,
+                    companyProfile.currency
+                  )}
+                </span>
+              </div>
+              <div className="flex justify-between border-b pb-1.5 font-bold">
+                <span>Less: Total Other Operating Costs — Freight / Cargo / Customs (C)</span>
+                <span className="font-mono text-rose-700">
+                  -{' '}
+                  {formatCurrency(
+                    fiscalSummaryPayload.summary?.totalOtherCosting || 0,
+                    companyProfile.currency
+                  )}
+                </span>
+              </div>
+              <div className="flex justify-between pt-1 font-black text-sm">
+                <span>NET BUSINESS PROFIT / (LOSS) (A - B - C)</span>
+                <span
+                  className={`font-mono ${
+                    (fiscalSummaryPayload.summary?.netProfit || 0) >= 0
+                      ? 'text-emerald-800'
+                      : 'text-rose-700'
+                  }`}
+                >
+                  {(fiscalSummaryPayload.summary?.netProfit || 0) >= 0 ? '+' : ''}
+                  {formatCurrency(
+                    fiscalSummaryPayload.summary?.netProfit || 0,
+                    companyProfile.currency
+                  )}{' '}
+                  ({fiscalSummaryPayload.summary?.marginPercent || 0}%)
+                </span>
+              </div>
             </div>
-          )}
+
+            {/* Daily Report Details of Profit & Loss Table */}
+            {Array.isArray(fiscalSummaryPayload.dailyEntries) &&
+              fiscalSummaryPayload.dailyEntries.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="font-black text-xs uppercase tracking-wider text-slate-900 flex items-center justify-between">
+                    <span>Daily Report Details of Profit &amp; Loss</span>
+                    <span className="font-mono text-[11px] text-slate-600">
+                      {fiscalSummaryPayload.dailyEntries.length} Trading{' '}
+                      {fiscalSummaryPayload.dailyEntries.length === 1 ? 'Day' : 'Days'}
+                    </span>
+                  </div>
+                  <table
+                    className="w-full text-[10.5px] border border-slate-300 border-collapse font-mono tabular-nums"
+                    style={{ tableLayout: 'fixed', width: '100%' }}
+                  >
+                    <colgroup>
+                      <col style={{ width: '20%' }} />
+                      <col style={{ width: '14%' }} />
+                      <col style={{ width: '13%' }} />
+                      <col style={{ width: '13%' }} />
+                      <col style={{ width: '12%' }} />
+                      <col style={{ width: '16%' }} />
+                      <col style={{ width: '12%' }} />
+                    </colgroup>
+                    <thead>
+                      <tr className="bg-slate-800 text-white uppercase font-bold text-[9.5px] tracking-tight">
+                        <th className="py-2 px-1.5 border-r border-slate-600 text-left font-sans whitespace-nowrap">
+                          Date &amp; Day
+                        </th>
+                        <th className="py-2 px-1.5 border-r border-slate-600 text-right whitespace-nowrap">
+                          Export Rev (RMB)
+                        </th>
+                        <th className="py-2 px-1.5 border-r border-slate-600 text-right whitespace-nowrap">
+                          Purchase (B)
+                        </th>
+                        <th className="py-2 px-1.5 border-r border-slate-600 text-right whitespace-nowrap">
+                          Gross Profit
+                        </th>
+                        <th className="py-2 px-1.5 border-r border-slate-600 text-right whitespace-nowrap">
+                          Other Cost (C)
+                        </th>
+                        <th className="py-2 px-1.5 border-r border-slate-600 text-right whitespace-nowrap">
+                          Net Profit / Loss
+                        </th>
+                        <th className="py-2 px-1 text-center font-sans whitespace-nowrap">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {fiscalSummaryPayload.dailyEntries.map((d) => (
+                        <tr key={d.date} className="hover:bg-slate-50">
+                          <td className="py-1.5 px-1.5 border-r border-slate-200 font-sans">
+                            <div className="font-mono font-bold text-slate-900 whitespace-nowrap">
+                              {d.formattedDate} ({d.weekdayLabel})
+                            </div>
+                            <div className="text-[9.5px] text-slate-500 truncate">{d.topSummaryText}</div>
+                          </td>
+                          <td className="py-1.5 px-1.5 border-r border-slate-200 text-right font-bold text-teal-800 whitespace-nowrap">
+                            {formatCurrency(d.exportAmountRMB ?? 0, 'RMB')}
+                          </td>
+                          <td className="py-1.5 px-1.5 border-r border-slate-200 text-right font-bold text-blue-800 whitespace-nowrap">
+                            {formatCurrency(d.purchaseAmount, companyProfile.currency)}
+                          </td>
+                          <td className="py-1.5 px-1.5 border-r border-slate-200 text-right font-bold text-slate-800 whitespace-nowrap">
+                            {d.grossProfit >= 0 ? '+' : ''}
+                            {formatCurrency(d.grossProfit, companyProfile.currency)}
+                          </td>
+                          <td className="py-1.5 px-1.5 border-r border-slate-200 text-right font-bold text-amber-800 whitespace-nowrap">
+                            {formatCurrency(d.otherCostAmount, companyProfile.currency)}
+                          </td>
+                          <td
+                            className={`py-1.5 px-1.5 border-r border-slate-200 text-right font-black whitespace-nowrap ${
+                              d.netProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                            }`}
+                          >
+                            {d.netProfit >= 0 ? '+' : ''}
+                            {formatCurrency(d.netProfit, companyProfile.currency)}
+                          </td>
+                          <td className="py-1.5 px-1 text-center font-sans font-bold text-[9.5px] whitespace-nowrap">
+                            {d.status} ({d.marginPercent}%)
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      {(() => {
+                        const sumExportRMB = fiscalSummaryPayload.dailyEntries.reduce(
+                          (s, r) => s + (Number(r.exportAmountRMB) || 0),
+                          0
+                        );
+                        const sumPurchase =
+                          fiscalSummaryPayload.summary?.totalPurchasing ??
+                          fiscalSummaryPayload.dailyEntries.reduce(
+                            (s, r) => s + (Number(r.purchaseAmount) || 0),
+                            0
+                          );
+                        const sumGross =
+                          fiscalSummaryPayload.summary?.grossProfit ??
+                          fiscalSummaryPayload.dailyEntries.reduce(
+                            (s, r) => s + (Number(r.grossProfit) || 0),
+                            0
+                          );
+                        const sumOther =
+                          fiscalSummaryPayload.summary?.totalOtherCosting ??
+                          fiscalSummaryPayload.dailyEntries.reduce(
+                            (s, r) => s + (Number(r.otherCostAmount) || 0),
+                            0
+                          );
+                        const sumNet =
+                          fiscalSummaryPayload.summary?.netProfit ??
+                          fiscalSummaryPayload.dailyEntries.reduce(
+                            (s, r) => s + (Number(r.netProfit) || 0),
+                            0
+                          );
+                        const marginPct = fiscalSummaryPayload.summary?.marginPercent ?? 0;
+                        return (
+                          <tr className="bg-slate-900 text-white font-black text-[10px] border-t-2 border-amber-500">
+                            <td className="py-2 px-1.5 border-r border-slate-700 font-sans uppercase whitespace-nowrap">
+                              Σ TOTAL ({fiscalSummaryPayload.dailyEntries.length}{' '}
+                              {fiscalSummaryPayload.dailyEntries.length === 1 ? 'DAY' : 'DAYS'}):
+                            </td>
+                            <td className="py-2 px-1.5 border-r border-slate-700 text-right text-teal-300 whitespace-nowrap">
+                              {formatCurrency(sumExportRMB, 'RMB')}
+                            </td>
+                            <td className="py-2 px-1.5 border-r border-slate-700 text-right text-blue-300 whitespace-nowrap">
+                              {formatCurrency(sumPurchase, companyProfile.currency)}
+                            </td>
+                            <td className="py-2 px-1.5 border-r border-slate-700 text-right text-amber-300 whitespace-nowrap">
+                              {sumGross >= 0 ? '+' : ''}
+                              {formatCurrency(sumGross, companyProfile.currency)}
+                            </td>
+                            <td className="py-2 px-1.5 border-r border-slate-700 text-right text-orange-300 whitespace-nowrap">
+                              {formatCurrency(sumOther, companyProfile.currency)}
+                            </td>
+                            <td
+                              className={`py-2 px-1.5 border-r border-slate-700 text-right whitespace-nowrap ${
+                                sumNet >= 0 ? 'text-emerald-300' : 'text-rose-300'
+                              }`}
+                            >
+                              {sumNet >= 0 ? '+' : ''}
+                              {formatCurrency(sumNet, companyProfile.currency)}
+                            </td>
+                            <td className="py-2 px-1 text-center font-sans text-slate-200 whitespace-nowrap">
+                              Margin: {marginPct}%
+                            </td>
+                          </tr>
+                        );
+                      })()}
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+          </div>
+
+          {/* Dual Official Signatures (Identical to PrintPreviewModal) */}
+          <div className="pt-12 grid grid-cols-2 gap-8 text-center text-xs relative z-10">
+            <div className="flex flex-col items-center">
+              <div style={{ borderBottom: '2px solid #0f172a' }} className="w-52 pb-1.5">
+                <div
+                  style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', color: '#0f172a' }}
+                  className="text-base font-bold tracking-wider"
+                >
+                  {companyProfile.managingPartner}
+                </div>
+              </div>
+              <div
+                style={{ color: '#0f172a' }}
+                className="mt-1.5 font-bold uppercase tracking-wider text-xs"
+              >
+                Managing Partner
+              </div>
+              <div
+                style={{ color: '#d97706', fontWeight: 800 }}
+                className="text-[10px] uppercase font-extrabold text-amber-500 zsb-golden-brand-light"
+              >
+                {companyProfile.companyName}
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center">
+              <div style={{ borderBottom: '2px solid #0f172a' }} className="w-52 pb-1.5">
+                <div
+                  style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', color: '#0f172a' }}
+                  className="text-base font-bold tracking-wider"
+                >
+                  {companyProfile.partner}
+                </div>
+              </div>
+              <div
+                style={{ color: '#0f172a' }}
+                className="mt-1.5 font-bold uppercase tracking-wider text-xs"
+              >
+                Partner
+              </div>
+              <div
+                style={{ color: '#d97706', fontWeight: 800 }}
+                className="text-[10px] uppercase font-extrabold text-amber-500 zsb-golden-brand-light"
+              >
+                {companyProfile.companyName}
+              </div>
+            </div>
+          </div>
+
+          {/* Footer certification & dynamic A4 page counter */}
+          <div
+            style={{ borderTop: '1px solid #e2e8f0', color: '#94a3b8' }}
+            className="flex justify-between items-center text-[10px] pt-4 mt-6 relative z-10"
+          >
+            <span>
+              This is an official computer-generated document from{' '}
+              <strong
+                style={{ color: '#d97706', fontWeight: 800 }}
+                className="font-extrabold text-amber-500 zsb-golden-brand-light"
+              >
+                {companyProfile.companyName}
+              </strong>{' '}
+              System • Validated and archived.
+            </span>
+            <span className="print-page-number-counter font-mono font-bold text-slate-600">
+              <span className="print:hidden">Page 1 of 1</span>
+            </span>
+          </div>
         </div>
       </div>
       )}

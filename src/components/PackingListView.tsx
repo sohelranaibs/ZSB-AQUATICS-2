@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import {
   calculatePackingRow,
@@ -10,6 +10,10 @@ import {
   generateInvoiceNumber,
 } from '../utils/calculations.ts';
 import { PackingItemRow } from '../types/index.ts';
+import {
+  isPackingRowDataEqual,
+  updatePackingRowById,
+} from '../utils/tableRowOptimization.ts';
 import { validatePackingForm } from '../utils/validation.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
 import {
@@ -59,6 +63,18 @@ interface ReportWeightCellInputProps {
   onCommitImmediate: (rowId: string, rawValue: string) => void;
 }
 
+const areReportWeightCellPropsEqual = (
+  prev: ReportWeightCellInputProps,
+  next: ReportWeightCellInputProps
+): boolean =>
+  prev.rowId === next.rowId &&
+  prev.rowIndex === next.rowIndex &&
+  prev.committedValue === next.committedValue &&
+  prev.hasError === next.hasError &&
+  prev.resetToken === next.resetToken &&
+  prev.onScheduleDraft === next.onScheduleDraft &&
+  prev.onCommitImmediate === next.onCommitImmediate;
+
 const ReportWeightCellInput: React.FC<ReportWeightCellInputProps> = memo(
   ({
     rowId,
@@ -85,6 +101,24 @@ const ReportWeightCellInput: React.FC<ReportWeightCellInputProps> = memo(
       }
     }, [committedValue, resetToken]);
 
+    const handleDraftChange = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        const raw = e.target.value;
+        setLocalDraft(raw);
+        onScheduleDraft(rowId, raw);
+      },
+      [onScheduleDraft, rowId]
+    );
+
+    const handleDraftBlur = useCallback(
+      (e: React.FocusEvent<HTMLInputElement>) => {
+        const raw = e.target.value;
+        onCommitImmediate(rowId, raw);
+        setLocalDraft(formatReportWeightDraft(parseReportWeightInput(raw)));
+      },
+      [onCommitImmediate, rowId]
+    );
+
     const isDraftActive = parseReportWeightInput(localDraft) > 0;
 
     return (
@@ -98,15 +132,8 @@ const ReportWeightCellInput: React.FC<ReportWeightCellInputProps> = memo(
           data-testid={`packing-row-${rowIndex + 1}-report-weight`}
           aria-invalid={hasError}
           value={localDraft}
-          onChange={(e) => {
-            const raw = e.target.value;
-            setLocalDraft(raw);
-            onScheduleDraft(rowId, raw);
-          }}
-          onBlur={() => {
-            onCommitImmediate(rowId, localDraft);
-            setLocalDraft(formatReportWeightDraft(parseReportWeightInput(localDraft)));
-          }}
+          onChange={handleDraftChange}
+          onBlur={handleDraftBlur}
           placeholder="0.00"
           title={
             isDraftActive
@@ -128,7 +155,325 @@ const ReportWeightCellInput: React.FC<ReportWeightCellInputProps> = memo(
         )}
       </>
     );
-  }
+  },
+  areReportWeightCellPropsEqual
+);
+
+const createEmptyPackingRow = (id: string): PackingItemRow => ({
+  id,
+  item: '',
+  box: 0,
+  weight: 0,
+  reportWeight: 0,
+  totalWeight: 0,
+  unit: 'KG',
+  rate: 0,
+  amount: 0,
+});
+
+interface PackingItemTableRowProps {
+  row: PackingItemRow;
+  rowIndex: number;
+  exportItemOptions: React.ReactNode;
+  boxPresets: string[];
+  boxOptions: React.ReactNode;
+  weightPresets: string[];
+  weightOptions: React.ReactNode;
+  unitOptions: React.ReactNode;
+  paymentStatus: 'PAID' | 'UNPAID';
+  hasItemError: boolean;
+  hasBoxError: boolean;
+  hasWeightError: boolean;
+  hasRateError: boolean;
+  hasAnyRowError: boolean;
+  reportWeightResetToken: number;
+  onRowChange: (
+    id: string,
+    field: keyof PackingItemRow,
+    value: string | number
+  ) => void;
+  onClearRow: (id: string) => void;
+  onScheduleReportWeightDraft: (rowId: string, rawValue: string) => void;
+  onCommitReportWeightImmediate: (rowId: string, rawValue: string) => void;
+}
+
+const arePackingItemTableRowPropsEqual = (
+  prev: PackingItemTableRowProps,
+  next: PackingItemTableRowProps
+): boolean =>
+  prev.rowIndex === next.rowIndex &&
+  prev.exportItemOptions === next.exportItemOptions &&
+  prev.boxPresets === next.boxPresets &&
+  prev.boxOptions === next.boxOptions &&
+  prev.weightPresets === next.weightPresets &&
+  prev.weightOptions === next.weightOptions &&
+  prev.unitOptions === next.unitOptions &&
+  prev.paymentStatus === next.paymentStatus &&
+  prev.hasItemError === next.hasItemError &&
+  prev.hasBoxError === next.hasBoxError &&
+  prev.hasWeightError === next.hasWeightError &&
+  prev.hasRateError === next.hasRateError &&
+  prev.hasAnyRowError === next.hasAnyRowError &&
+  prev.reportWeightResetToken === next.reportWeightResetToken &&
+  prev.onRowChange === next.onRowChange &&
+  prev.onClearRow === next.onClearRow &&
+  prev.onScheduleReportWeightDraft === next.onScheduleReportWeightDraft &&
+  prev.onCommitReportWeightImmediate === next.onCommitReportWeightImmediate &&
+  isPackingRowDataEqual(prev.row, next.row);
+
+const PackingItemTableRow: React.FC<PackingItemTableRowProps> = memo(
+  ({
+    row,
+    rowIndex,
+    exportItemOptions,
+    boxPresets,
+    boxOptions,
+    weightPresets,
+    weightOptions,
+    unitOptions,
+    paymentStatus,
+    hasItemError,
+    hasBoxError,
+    hasWeightError,
+    hasRateError,
+    hasAnyRowError,
+    reportWeightResetToken,
+    onRowChange,
+    onClearRow,
+    onScheduleReportWeightDraft,
+    onCommitReportWeightImmediate,
+  }) => {
+    const reportWeightVal = Number(row.reportWeight) || 0;
+    const isReportWeightActive = reportWeightVal > 0;
+    const isFilled =
+      row.item.trim() !== '' ||
+      row.box !== 0 ||
+      row.weight !== 0 ||
+      isReportWeightActive ||
+      row.rate !== 0;
+
+    const handleItemChange = useCallback(
+      (e: React.ChangeEvent<HTMLSelectElement>) => {
+        onRowChange(row.id, 'item', e.target.value);
+      },
+      [onRowChange, row.id]
+    );
+
+    const handleBoxChange = useCallback(
+      (e: React.ChangeEvent<HTMLSelectElement>) => {
+        onRowChange(row.id, 'box', parseFloat(e.target.value) || 0);
+      },
+      [onRowChange, row.id]
+    );
+
+    const handleWeightChange = useCallback(
+      (e: React.ChangeEvent<HTMLSelectElement>) => {
+        onRowChange(row.id, 'weight', parseFloat(e.target.value) || 0);
+      },
+      [onRowChange, row.id]
+    );
+
+    const handleUnitChange = useCallback(
+      (e: React.ChangeEvent<HTMLSelectElement>) => {
+        onRowChange(row.id, 'unit', e.target.value);
+      },
+      [onRowChange, row.id]
+    );
+
+    const handleRateChange = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        onRowChange(row.id, 'rate', parseFloat(e.target.value) || 0);
+      },
+      [onRowChange, row.id]
+    );
+
+    const handleClearClick = useCallback(() => {
+      onClearRow(row.id);
+    }, [onClearRow, row.id]);
+
+    return (
+      <tr
+        className={`transition-colors ${
+          hasAnyRowError
+            ? 'bg-rose-50/60 hover:bg-rose-50'
+            : isFilled
+            ? 'bg-amber-50/25 hover:bg-amber-50/60'
+            : rowIndex % 2 === 0
+            ? 'bg-white hover:bg-slate-50'
+            : 'bg-slate-50/50 hover:bg-slate-100/60'
+        }`}
+      >
+        {/* Row Number */}
+        <td className="px-2 py-1.5 border-r border-slate-200 text-center">
+          <span className="zsb-sl-badge">
+            {String(rowIndex + 1).padStart(2, '0')}
+          </span>
+        </td>
+
+        {/* Item Dropdown */}
+        <td className="p-1.5 border-r border-slate-200">
+          <select
+            aria-label={`Row ${rowIndex + 1} Export Item`}
+            aria-invalid={hasItemError}
+            value={row.item}
+            onChange={handleItemChange}
+            className={`w-full border rounded-md px-2 py-1.5 font-semibold focus:bg-white focus:outline-none focus:ring-2 ${
+              hasItemError
+                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 text-rose-900 focus:ring-rose-500'
+                : row.item
+                ? 'bg-white border-slate-300 text-slate-900 focus:ring-amber-500'
+                : 'bg-slate-50 border-slate-200 text-slate-500 focus:ring-amber-500'
+            }`}
+          >
+            <option value="">-- Select Grade / Size --</option>
+            {exportItemOptions}
+          </select>
+        </td>
+
+        {/* Box Dropdown */}
+        <td className="p-1.5 border-r border-slate-200">
+          <select
+            aria-label={`Row ${rowIndex + 1} Box`}
+            aria-invalid={hasBoxError}
+            value={row.box || ''}
+            onChange={handleBoxChange}
+            className={`w-full bg-white border rounded-md px-2 py-1.5 text-center font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 ${
+              hasBoxError
+                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
+                : 'border-slate-200 focus:ring-amber-500'
+            }`}
+          >
+            <option value="0">-</option>
+            {row.box > 0 && !boxPresets.includes(String(row.box)) && (
+              <option value={row.box}>{row.box}</option>
+            )}
+            {boxOptions}
+          </select>
+        </td>
+
+        {/* Weight Dropdown (Inactive when Report Weight (KG) is active) */}
+        <td
+          className={`p-1.5 border-r border-slate-200 transition-colors ${
+            isReportWeightActive ? 'bg-slate-100/80' : ''
+          }`}
+        >
+          <select
+            aria-label={`Row ${rowIndex + 1} Weight`}
+            data-testid={`packing-row-${rowIndex + 1}-weight-select`}
+            aria-invalid={hasWeightError}
+            disabled={isReportWeightActive}
+            title={
+              isReportWeightActive
+                ? 'Inactive: Report Weight (KG) is active for calculation'
+                : 'Active Weight (KG) per box'
+            }
+            value={row.weight || ''}
+            onChange={handleWeightChange}
+            className={`w-full border rounded-md px-2 py-1.5 text-center font-mono font-bold focus:outline-none focus:ring-2 transition ${
+              isReportWeightActive
+                ? 'bg-slate-100 border-slate-200 text-slate-400 opacity-60 cursor-not-allowed line-through'
+                : hasWeightError
+                ? 'bg-rose-50/40 border-rose-500 ring-1 ring-rose-300 text-slate-800 focus:ring-rose-500'
+                : 'bg-white border-slate-200 text-slate-800 focus:ring-amber-500'
+            }`}
+          >
+            <option value="0">-</option>
+            {row.weight > 0 && !weightPresets.includes(String(row.weight)) && (
+              <option value={row.weight}>{row.weight} KG</option>
+            )}
+            {weightOptions}
+          </select>
+          {isReportWeightActive && (
+            <div className="text-[9px] font-bold text-slate-400 text-center uppercase mt-0.5 tracking-tight">
+              Inactive
+            </div>
+          )}
+        </td>
+
+        {/* Editable Report Weight (KG) Input (Debounced onChange + active override over Weight (KG)) */}
+        <td
+          className={`p-1.5 border-r border-slate-200 transition-colors ${
+            isReportWeightActive ? 'bg-emerald-50/60' : 'bg-slate-50/30'
+          }`}
+        >
+          <ReportWeightCellInput
+            rowId={row.id}
+            rowIndex={rowIndex}
+            committedValue={reportWeightVal}
+            hasError={hasWeightError}
+            resetToken={reportWeightResetToken}
+            onScheduleDraft={onScheduleReportWeightDraft}
+            onCommitImmediate={onCommitReportWeightImmediate}
+          />
+        </td>
+
+        {/* Total Weight (Box * Active Weight) */}
+        <td
+          data-testid={`packing-row-${rowIndex + 1}-weight`}
+          className="p-1.5 border-r border-slate-200 bg-amber-50/40 text-right font-mono font-bold tabular-nums text-teal-800 pr-2.5"
+        >
+          {row.totalWeight > 0 ? `${row.totalWeight} KG` : '0'}
+        </td>
+
+        {/* Unit Dropdown */}
+        <td className="p-1.5 border-r border-slate-200">
+          <select
+            aria-label={`Row ${rowIndex + 1} Unit`}
+            value={row.unit}
+            onChange={handleUnitChange}
+            className="w-full bg-slate-50 border border-slate-200 rounded-md px-1 py-1.5 text-center text-[11px] font-bold text-slate-700"
+          >
+            {unitOptions}
+          </select>
+        </td>
+
+        {/* Rate Input */}
+        <td className="p-1.5 border-r border-slate-200">
+          <input
+            aria-label={`Row ${rowIndex + 1} Rate`}
+            aria-invalid={hasRateError}
+            type="number"
+            min="0"
+            step="0.01"
+            value={row.rate || ''}
+            onChange={handleRateChange}
+            className={`w-full bg-white border rounded-md px-2 py-1.5 text-right font-mono tabular-nums text-slate-800 focus:outline-none focus:ring-2 ${
+              hasRateError
+                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
+                : 'border-slate-200 focus:ring-amber-500'
+            }`}
+            placeholder={paymentStatus === 'UNPAID' ? '0.00' : 'Rate > 0'}
+          />
+        </td>
+
+        {/* Amount (Total Weight * Rate) */}
+        <td
+          data-testid={`packing-row-${rowIndex + 1}-total`}
+          className="p-1.5 border-r border-slate-200 text-right font-mono font-bold tabular-nums text-slate-900 pr-2.5 bg-slate-50/40"
+        >
+          {row.amount > 0 ? formatCurrency(row.amount, '') : '0.00'}
+        </td>
+
+        {/* Single Row Clear Button */}
+        <td className="p-1 text-center">
+          <button
+            type="button"
+            onClick={handleClearClick}
+            disabled={!isFilled}
+            title="Clear row"
+            className={`p-1.5 rounded transition ${
+              isFilled
+                ? 'text-slate-500 hover:text-rose-600 hover:bg-rose-50 cursor-pointer'
+                : 'text-slate-300 cursor-not-allowed'
+            }`}
+          >
+            <RotateCcw className="w-3.5 h-3.5 mx-auto" />
+          </button>
+        </td>
+      </tr>
+    );
+  },
+  arePackingItemTableRowPropsEqual
 );
 
 export const PackingListView: React.FC = () => {
@@ -166,26 +511,15 @@ export const PackingListView: React.FC = () => {
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [showReportWeightHelp, setShowReportWeightHelp] = useState<boolean>(false);
 
-  // 5 standard empty rows ready for data entry
-  const createEmptyRow = (id: string): PackingItemRow => ({
-    id,
-    item: '',
-    box: 0,
-    weight: 0,
-    reportWeight: 0,
-    totalWeight: 0,
-    unit: 'KG',
-    rate: 0,
-    amount: 0,
-  });
-
-  const [rows, setRows] = useState<PackingItemRow[]>([
-    createEmptyRow('1'),
-    createEmptyRow('2'),
-    createEmptyRow('3'),
-    createEmptyRow('4'),
-    createEmptyRow('5'),
+  const [rows, setRows] = useState<PackingItemRow[]>(() => [
+    createEmptyPackingRow('1'),
+    createEmptyPackingRow('2'),
+    createEmptyPackingRow('3'),
+    createEmptyPackingRow('4'),
+    createEmptyPackingRow('5'),
   ]);
+  const rowsRef = useRef<PackingItemRow[]>(rows);
+  rowsRef.current = rows;
 
   // Search by dropdowns
   const [searchShippingMark, setSearchShippingMark] = useState<string>('ALL');
@@ -266,16 +600,120 @@ export const PackingListView: React.FC = () => {
     return reconciled;
   }, [clearPendingReportWeights, rows]);
 
-  const validation = validatePackingForm({
-    invoiceNumber,
-    packingDate,
-    shippingMark,
-    flight,
-    destination,
-    shipper,
-    paymentStatus,
-    rows,
-  });
+  const validation = useMemo(
+    () =>
+      validatePackingForm({
+        invoiceNumber,
+        packingDate,
+        shippingMark,
+        flight,
+        destination,
+        shipper,
+        paymentStatus,
+        rows,
+      }),
+    [
+      invoiceNumber,
+      packingDate,
+      shippingMark,
+      flight,
+      destination,
+      shipper,
+      paymentStatus,
+      rows,
+    ]
+  );
+
+  const exportItemOptionElements = useMemo(
+    () =>
+      dropdownOptions.exportItems.map((it) => (
+        <option key={it} value={it}>
+          {it}
+        </option>
+      )),
+    [dropdownOptions.exportItems]
+  );
+
+  const boxOptionElements = useMemo(
+    () =>
+      dropdownOptions.boxes.map((b) => (
+        <option key={b} value={b}>
+          {b}
+        </option>
+      )),
+    [dropdownOptions.boxes]
+  );
+
+  const weightOptionElements = useMemo(
+    () =>
+      dropdownOptions.weights.map((w) => (
+        <option key={w} value={w}>
+          {w} KG
+        </option>
+      )),
+    [dropdownOptions.weights]
+  );
+
+  const unitOptionElements = useMemo(
+    () =>
+      dropdownOptions.units.map((u) => (
+        <option key={u} value={u}>
+          {u}
+        </option>
+      )),
+    [dropdownOptions.units]
+  );
+
+  const shippingMarkOptionElements = useMemo(
+    () =>
+      dropdownOptions.shippingMarks.map((m) => (
+        <option key={m} value={m}>
+          {m}
+        </option>
+      )),
+    [dropdownOptions.shippingMarks]
+  );
+
+  const flightOptionElements = useMemo(
+    () =>
+      dropdownOptions.flights.map((f) => (
+        <option key={f} value={f}>
+          {f}
+        </option>
+      )),
+    [dropdownOptions.flights]
+  );
+
+  const destinationOptionElements = useMemo(
+    () =>
+      dropdownOptions.destinations.map((d) => (
+        <option key={d} value={d}>
+          {d}
+        </option>
+      )),
+    [dropdownOptions.destinations]
+  );
+
+  const shipperOptionElements = useMemo(
+    () =>
+      dropdownOptions.shippers.map((s) => (
+        <option key={s} value={s}>
+          {s}
+        </option>
+      )),
+    [dropdownOptions.shippers]
+  );
+
+  const savedManifestOptionElements = useMemo(
+    () =>
+      packings.map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.invoiceNumber} — {p.shippingMark} (
+          {p.paymentStatus === 'PAID' ? 'PAID' : 'UNPAID'})
+        </option>
+      )),
+    [packings]
+  );
 
   // Load a previously saved manifest into form for editing
   const handleLoadForEdit = (idToEdit: string) => {
@@ -304,7 +742,7 @@ export const PackingListView: React.FC = () => {
       };
     });
     while (loadedRows.length < 5) {
-      loadedRows.push(createEmptyRow(generateRecordId('pkgrow')));
+      loadedRows.push(createEmptyPackingRow(generateRecordId('pkgrow')));
     }
     setRows(loadedRows);
     setValidationAttempted(false);
@@ -332,65 +770,54 @@ export const PackingListView: React.FC = () => {
   }, [editingPackingId]);
 
   // Row update logic (Box, Weight, Report Weight, Rate)
-  const handleRowChange = (
-    id: string,
-    field: keyof PackingItemRow,
-    value: string | number
-  ) => {
-    setRows((prev) =>
-      prev.map((row) => {
-        if (row.id !== id) return row;
-        const updated = { ...row, [field]: value };
-
-        const b = field === 'box' ? Number(value) || 0 : row.box;
-        const w = field === 'weight' ? Number(value) || 0 : row.weight;
-        const rw =
-          field === 'reportWeight'
-            ? Number(value) || 0
-            : Number(row.reportWeight) || 0;
-        const r = field === 'rate' ? Number(value) || 0 : row.rate;
-
-        const calcs = calculatePackingRow(b, w, r, rw);
-        updated.totalWeight = calcs.totalWeight;
-        updated.amount = calcs.amount;
-
-        return updated;
-      })
-    );
-  };
+  const handleRowChange = useCallback(
+    (
+      id: string,
+      field: keyof PackingItemRow,
+      value: string | number
+    ) => {
+      setRows((prev) => updatePackingRowById(prev, id, field, value));
+    },
+    []
+  );
 
   // Clear single row (Requires Super Admin Permission)
-  const handleClearRow = (id: string) => {
-    const targetRow = rows.find((r) => r.id === id);
-    requestSuperAdminSingleDelete(
-      {
-        recordType: 'custom_row',
-        recordId: id,
-        recordTitle: targetRow?.item
-          ? `Packing Item Row — ${targetRow.item}`
-          : `Packing Line Item Row`,
-        recordSubtitle: targetRow
-          ? `Box: ${targetRow.box} · Weight: ${targetRow.totalWeight} KG · Amount: RMB ${targetRow.amount}`
-          : undefined,
-      },
-      () => {
-        clearPendingReportWeights(id);
-        setReportWeightResetToken((t) => t + 1);
-        setRows((prev) =>
-          prev.map((row) => (row.id === id ? createEmptyRow(row.id) : row))
-        );
-        showToast('Super Admin verified: Packing line item row deleted.');
-      }
-    );
-  };
+  const handleClearRow = useCallback(
+    (id: string) => {
+      const targetRow = rowsRef.current.find((r) => r.id === id);
+      requestSuperAdminSingleDelete(
+        {
+          recordType: 'custom_row',
+          recordId: id,
+          recordTitle: targetRow?.item
+            ? `Packing Item Row — ${targetRow.item}`
+            : `Packing Line Item Row`,
+          recordSubtitle: targetRow
+            ? `Box: ${targetRow.box} · Weight: ${targetRow.totalWeight} KG · Amount: RMB ${targetRow.amount}`
+            : undefined,
+        },
+        () => {
+          clearPendingReportWeights(id);
+          setReportWeightResetToken((t) => t + 1);
+          setRows((prev) =>
+            prev.map((row) =>
+              row.id === id ? createEmptyPackingRow(row.id) : row
+            )
+          );
+          showToast('Super Admin verified: Packing line item row deleted.');
+        }
+      );
+    },
+    [clearPendingReportWeights, requestSuperAdminSingleDelete, showToast]
+  );
 
   // Add a new blank row at the bottom
-  const handleAddRow = () => {
+  const handleAddRow = useCallback(() => {
     setRows((prev) => [
       ...prev,
-      createEmptyRow(generateRecordId('pkgrow')),
+      createEmptyPackingRow(generateRecordId('pkgrow')),
     ]);
-  };
+  }, []);
 
   const resetFormFields = () => {
     clearPendingReportWeights();
@@ -403,11 +830,11 @@ export const PackingListView: React.FC = () => {
     setPaymentStatus('UNPAID');
     setPackingDate(new Date().toISOString().slice(0, 10));
     setRows([
-      createEmptyRow('1'),
-      createEmptyRow('2'),
-      createEmptyRow('3'),
-      createEmptyRow('4'),
-      createEmptyRow('5'),
+      createEmptyPackingRow('1'),
+      createEmptyPackingRow('2'),
+      createEmptyPackingRow('3'),
+      createEmptyPackingRow('4'),
+      createEmptyPackingRow('5'),
     ]);
     setValidationAttempted(false);
   };
@@ -419,33 +846,53 @@ export const PackingListView: React.FC = () => {
     showToast('Packing list form cleared and all cells reset.');
   };
 
-  const { totalBox, totalWeight, totalAmount } = calculatePackingTotals(rows);
-  const populatedRowCount = rows.filter(
-    (r) =>
-      r.item.trim() !== '' ||
-      r.box !== 0 ||
-      r.weight !== 0 ||
-      (Number(r.reportWeight) || 0) !== 0 ||
-      r.rate !== 0
-  ).length;
-  const avgRatePerKg =
-    totalWeight > 0 ? Math.round((totalAmount / totalWeight) * 100) / 100 : 0;
+  const { totalBox, totalWeight, totalAmount, populatedRowCount, avgRatePerKg } =
+    useMemo(() => {
+      const totals = calculatePackingTotals(rows);
+      const populatedCount = rows.filter(
+        (r) =>
+          r.item.trim() !== '' ||
+          r.box !== 0 ||
+          r.weight !== 0 ||
+          (Number(r.reportWeight) || 0) !== 0 ||
+          r.rate !== 0
+      ).length;
+      const avgRate =
+        totals.totalWeight > 0
+          ? Math.round((totals.totalAmount / totals.totalWeight) * 100) / 100
+          : 0;
+      return {
+        ...totals,
+        populatedRowCount: populatedCount,
+        avgRatePerKg: avgRate,
+      };
+    }, [rows]);
 
   // Historical stats for the currently selected Shipping Mark
-  const markShipments = packings.filter(
-    (p) => p.shippingMark.toUpperCase() === shippingMark.toUpperCase()
-  );
-  const markTotalBoxes = markShipments.reduce((acc, p) => acc + p.totalBox, 0);
-  const markTotalWeight = markShipments.reduce((acc, p) => acc + p.totalWeight, 0);
+  const { markShipments, markTotalBoxes, markTotalWeight } = useMemo(() => {
+    const normalizedMark = shippingMark.toUpperCase();
+    const matched = packings.filter(
+      (p) => p.shippingMark.toUpperCase() === normalizedMark
+    );
+    return {
+      markShipments: matched,
+      markTotalBoxes: matched.reduce((acc, p) => acc + p.totalBox, 0),
+      markTotalWeight: matched.reduce((acc, p) => acc + p.totalWeight, 0),
+    };
+  }, [packings, shippingMark]);
 
   // Live filtered search results for the right-hand Search By panel
-  const filteredSearchRecords = packings.filter((p) => {
-    const matchMark =
-      searchShippingMark === 'ALL' || p.shippingMark === searchShippingMark;
-    const matchDest =
-      searchDestination === 'ALL' || p.destination === searchDestination;
-    return matchMark && matchDest;
-  });
+  const filteredSearchRecords = useMemo(
+    () =>
+      packings.filter((p) => {
+        const matchMark =
+          searchShippingMark === 'ALL' || p.shippingMark === searchShippingMark;
+        const matchDest =
+          searchDestination === 'ALL' || p.destination === searchDestination;
+        return matchMark && matchDest;
+      }),
+    [packings, searchShippingMark, searchDestination]
+  );
 
   const handleSavePDF = () => {
     const resolvedRows = flushPendingReportWeights();
@@ -572,7 +1019,7 @@ export const PackingListView: React.FC = () => {
     );
   };
 
-  const exportableRows = (() => {
+  const exportableRows = useMemo(() => {
     const validItems = rows.filter(
       (r) =>
         r.item.trim() !== '' ||
@@ -582,7 +1029,7 @@ export const PackingListView: React.FC = () => {
         r.rate > 0
     );
     return validItems.length > 0 ? validItems : rows.slice(0, 5);
-  })();
+  }, [rows]);
 
   const handlePrintSelected = () => {
     const resolvedRows = flushPendingReportWeights();
@@ -931,11 +1378,7 @@ export const PackingListView: React.FC = () => {
                     className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 font-bold text-blue-950 focus:outline-none focus:ring-2 focus:ring-amber-500"
                   >
                     <option value="">-- Select Shipping Mark --</option>
-                    {dropdownOptions.shippingMarks.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
+                    {shippingMarkOptionElements}
                   </select>
                 </div>
 
@@ -963,11 +1406,7 @@ export const PackingListView: React.FC = () => {
                     className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
                   >
                     <option value="">-- Select Flight --</option>
-                    {dropdownOptions.flights.map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
+                    {flightOptionElements}
                   </select>
                 </div>
 
@@ -995,11 +1434,7 @@ export const PackingListView: React.FC = () => {
                     className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
                   >
                     <option value="">-- Select Destination --</option>
-                    {dropdownOptions.destinations.map((d) => (
-                      <option key={d} value={d}>
-                        {d}
-                      </option>
-                    ))}
+                    {destinationOptionElements}
                   </select>
                 </div>
 
@@ -1027,11 +1462,7 @@ export const PackingListView: React.FC = () => {
                     className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
                   >
                     <option value="">-- Select Shipper --</option>
-                    {dropdownOptions.shippers.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
+                    {shipperOptionElements}
                   </select>
                 </div>
               </div>
@@ -1234,14 +1665,6 @@ export const PackingListView: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {rows.map((row, idx) => {
-                    const reportWeightVal = Number(row.reportWeight) || 0;
-                    const isReportWeightActive = reportWeightVal > 0;
-                    const isFilled =
-                      row.item.trim() !== '' ||
-                      row.box !== 0 ||
-                      row.weight !== 0 ||
-                      isReportWeightActive ||
-                      row.rate !== 0;
                     const rowErr = validationAttempted
                       ? validation.rowErrors[row.id]
                       : undefined;
@@ -1250,224 +1673,28 @@ export const PackingListView: React.FC = () => {
                       Boolean(validation.fieldErrors.rows) &&
                       idx === 0;
                     return (
-                      <tr
+                      <PackingItemTableRow
                         key={row.id}
-                        className={`transition-colors ${
-                          rowErr || highlightFirstEmptyRow
-                            ? 'bg-rose-50/60 hover:bg-rose-50'
-                            : isFilled
-                            ? 'bg-amber-50/25 hover:bg-amber-50/60'
-                            : idx % 2 === 0
-                            ? 'bg-white hover:bg-slate-50'
-                            : 'bg-slate-50/50 hover:bg-slate-100/60'
-                        }`}
-                      >
-                        {/* Row Number */}
-                        <td className="px-2 py-1.5 border-r border-slate-200 text-center">
-                          <span className="zsb-sl-badge">
-                            {String(idx + 1).padStart(2, '0')}
-                          </span>
-                        </td>
-
-                        {/* Item Dropdown */}
-                        <td className="p-1.5 border-r border-slate-200">
-                          <select
-                            aria-label={`Row ${idx + 1} Export Item`}
-                            aria-invalid={Boolean(rowErr?.item || highlightFirstEmptyRow)}
-                            value={row.item}
-                            onChange={(e) =>
-                              handleRowChange(row.id, 'item', e.target.value)
-                            }
-                            className={`w-full border rounded-md px-2 py-1.5 font-semibold focus:bg-white focus:outline-none focus:ring-2 ${
-                              rowErr?.item || highlightFirstEmptyRow
-                                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 text-rose-900 focus:ring-rose-500'
-                                : row.item
-                                ? 'bg-white border-slate-300 text-slate-900 focus:ring-amber-500'
-                                : 'bg-slate-50 border-slate-200 text-slate-500 focus:ring-amber-500'
-                            }`}
-                          >
-                            <option value="">-- Select Grade / Size --</option>
-                            {dropdownOptions.exportItems.map((it) => (
-                              <option key={it} value={it}>
-                                {it}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-
-                        {/* Box Dropdown */}
-                        <td className="p-1.5 border-r border-slate-200">
-                          <select
-                            aria-label={`Row ${idx + 1} Box`}
-                            aria-invalid={Boolean(rowErr?.box || highlightFirstEmptyRow)}
-                            value={row.box || ''}
-                            onChange={(e) =>
-                              handleRowChange(
-                                row.id,
-                                'box',
-                                parseFloat(e.target.value) || 0
-                              )
-                            }
-                            className={`w-full bg-white border rounded-md px-2 py-1.5 text-center font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 ${
-                              rowErr?.box || highlightFirstEmptyRow
-                                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
-                                : 'border-slate-200 focus:ring-amber-500'
-                            }`}
-                          >
-                            <option value="0">-</option>
-                            {row.box > 0 && !dropdownOptions.boxes.includes(String(row.box)) && (
-                              <option value={row.box}>{row.box}</option>
-                            )}
-                            {dropdownOptions.boxes.map((b) => (
-                              <option key={b} value={b}>
-                                {b}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-
-                        {/* Weight Dropdown (Inactive when Report Weight (KG) is active) */}
-                        <td
-                          className={`p-1.5 border-r border-slate-200 transition-colors ${
-                            isReportWeightActive ? 'bg-slate-100/80' : ''
-                          }`}
-                        >
-                          <select
-                            aria-label={`Row ${idx + 1} Weight`}
-                            data-testid={`packing-row-${idx + 1}-weight-select`}
-                            aria-invalid={Boolean(rowErr?.weight || highlightFirstEmptyRow)}
-                            disabled={isReportWeightActive}
-                            title={
-                              isReportWeightActive
-                                ? 'Inactive: Report Weight (KG) is active for calculation'
-                                : 'Active Weight (KG) per box'
-                            }
-                            value={row.weight || ''}
-                            onChange={(e) =>
-                              handleRowChange(
-                                row.id,
-                                'weight',
-                                parseFloat(e.target.value) || 0
-                              )
-                            }
-                            className={`w-full border rounded-md px-2 py-1.5 text-center font-mono font-bold focus:outline-none focus:ring-2 transition ${
-                              isReportWeightActive
-                                ? 'bg-slate-100 border-slate-200 text-slate-400 opacity-60 cursor-not-allowed line-through'
-                                : rowErr?.weight || highlightFirstEmptyRow
-                                ? 'bg-rose-50/40 border-rose-500 ring-1 ring-rose-300 text-slate-800 focus:ring-rose-500'
-                                : 'bg-white border-slate-200 text-slate-800 focus:ring-amber-500'
-                            }`}
-                          >
-                            <option value="0">-</option>
-                            {row.weight > 0 && !dropdownOptions.weights.includes(String(row.weight)) && (
-                              <option value={row.weight}>{row.weight} KG</option>
-                            )}
-                            {dropdownOptions.weights.map((w) => (
-                              <option key={w} value={w}>
-                                {w} KG
-                              </option>
-                            ))}
-                          </select>
-                          {isReportWeightActive && (
-                            <div className="text-[9px] font-bold text-slate-400 text-center uppercase mt-0.5 tracking-tight">
-                              Inactive
-                            </div>
-                          )}
-                        </td>
-
-                        {/* Editable Report Weight (KG) Input (Debounced onChange + active override over Weight (KG)) */}
-                        <td
-                          className={`p-1.5 border-r border-slate-200 transition-colors ${
-                            isReportWeightActive ? 'bg-emerald-50/60' : 'bg-slate-50/30'
-                          }`}
-                        >
-                          <ReportWeightCellInput
-                            rowId={row.id}
-                            rowIndex={idx}
-                            committedValue={reportWeightVal}
-                            hasError={Boolean(rowErr?.weight || highlightFirstEmptyRow)}
-                            resetToken={reportWeightResetToken}
-                            onScheduleDraft={scheduleReportWeightCommit}
-                            onCommitImmediate={commitReportWeightForRow}
-                          />
-                        </td>
-
-                        {/* Total Weight (Box * Active Weight) */}
-                        <td
-                          data-testid={`packing-row-${idx + 1}-weight`}
-                          className="p-1.5 border-r border-slate-200 bg-amber-50/40 text-right font-mono font-bold tabular-nums text-teal-800 pr-2.5"
-                        >
-                          {row.totalWeight > 0 ? `${row.totalWeight} KG` : '0'}
-                        </td>
-
-                        {/* Unit Dropdown */}
-                        <td className="p-1.5 border-r border-slate-200">
-                          <select
-                            aria-label={`Row ${idx + 1} Unit`}
-                            value={row.unit}
-                            onChange={(e) =>
-                              handleRowChange(row.id, 'unit', e.target.value)
-                            }
-                            className="w-full bg-slate-50 border border-slate-200 rounded-md px-1 py-1.5 text-center text-[11px] font-bold text-slate-700"
-                          >
-                            {dropdownOptions.units.map((u) => (
-                              <option key={u} value={u}>
-                                {u}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-
-                        {/* Rate Input */}
-                        <td className="p-1.5 border-r border-slate-200">
-                          <input
-                            aria-label={`Row ${idx + 1} Rate`}
-                            aria-invalid={Boolean(rowErr?.rate || highlightFirstEmptyRow)}
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={row.rate || ''}
-                            onChange={(e) =>
-                              handleRowChange(
-                                row.id,
-                                'rate',
-                                parseFloat(e.target.value) || 0
-                              )
-                            }
-                            className={`w-full bg-white border rounded-md px-2 py-1.5 text-right font-mono tabular-nums text-slate-800 focus:outline-none focus:ring-2 ${
-                              rowErr?.rate || highlightFirstEmptyRow
-                                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
-                                : 'border-slate-200 focus:ring-amber-500'
-                            }`}
-                            placeholder={paymentStatus === 'UNPAID' ? '0.00' : 'Rate > 0'}
-                          />
-                        </td>
-
-                        {/* Amount (Total Weight * Rate) */}
-                        <td
-                          data-testid={`packing-row-${idx + 1}-total`}
-                          className="p-1.5 border-r border-slate-200 text-right font-mono font-bold tabular-nums text-slate-900 pr-2.5 bg-slate-50/40"
-                        >
-                          {row.amount > 0 ? formatCurrency(row.amount, '') : '0.00'}
-                        </td>
-
-                        {/* Single Row Clear Button */}
-                        <td className="p-1 text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleClearRow(row.id)}
-                            disabled={!isFilled}
-                            title="Clear row"
-                            className={`p-1.5 rounded transition ${
-                              isFilled
-                                ? 'text-slate-500 hover:text-rose-600 hover:bg-rose-50 cursor-pointer'
-                                : 'text-slate-300 cursor-not-allowed'
-                            }`}
-                          >
-                            <RotateCcw className="w-3.5 h-3.5 mx-auto" />
-                          </button>
-                        </td>
-                      </tr>
+                        row={row}
+                        rowIndex={idx}
+                        exportItemOptions={exportItemOptionElements}
+                        boxPresets={dropdownOptions.boxes}
+                        boxOptions={boxOptionElements}
+                        weightPresets={dropdownOptions.weights}
+                        weightOptions={weightOptionElements}
+                        unitOptions={unitOptionElements}
+                        paymentStatus={paymentStatus}
+                        hasItemError={Boolean(rowErr?.item || highlightFirstEmptyRow)}
+                        hasBoxError={Boolean(rowErr?.box || highlightFirstEmptyRow)}
+                        hasWeightError={Boolean(rowErr?.weight || highlightFirstEmptyRow)}
+                        hasRateError={Boolean(rowErr?.rate || highlightFirstEmptyRow)}
+                        hasAnyRowError={Boolean(rowErr || highlightFirstEmptyRow)}
+                        reportWeightResetToken={reportWeightResetToken}
+                        onRowChange={handleRowChange}
+                        onClearRow={handleClearRow}
+                        onScheduleReportWeightDraft={scheduleReportWeightCommit}
+                        onCommitReportWeightImmediate={commitReportWeightForRow}
+                      />
                     );
                   })}
                 </tbody>
@@ -1818,11 +2045,7 @@ export const PackingListView: React.FC = () => {
                 <option value="">
                   {packings.length > 0 ? '-- Select Manifest to Edit --' : '-- No saved manifests --'}
                 </option>
-                {packings.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.invoiceNumber} — {p.shippingMark} ({p.paymentStatus === 'PAID' ? 'PAID' : 'UNPAID'})
-                  </option>
-                ))}
+                {savedManifestOptionElements}
               </select>
             </div>
           </div>
@@ -1849,11 +2072,7 @@ export const PackingListView: React.FC = () => {
                   className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-bold bg-white"
                 >
                   <option value="ALL">ALL MARKS</option>
-                  {dropdownOptions.shippingMarks.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
+                  {shippingMarkOptionElements}
                 </select>
               </div>
 
@@ -1867,11 +2086,7 @@ export const PackingListView: React.FC = () => {
                   className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-semibold bg-white"
                 >
                   <option value="ALL">ALL DESTINATIONS</option>
-                  {dropdownOptions.destinations.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
+                  {destinationOptionElements}
                 </select>
               </div>
             </div>
@@ -2114,18 +2329,29 @@ export const PackingListView: React.FC = () => {
               </div>
             </div>
 
-            <table className="w-full text-xs border border-slate-300 border-collapse">
+            <table className="w-full text-xs border border-slate-300 border-collapse" style={{ tableLayout: 'fixed', width: '100%' }}>
+              <colgroup>
+                <col style={{ width: '6%' }} />
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '7%' }} />
+                <col style={{ width: '11%' }} />
+                <col style={{ width: '13%' }} />
+              </colgroup>
               <thead>
-                <tr className="bg-slate-100 text-slate-800 uppercase font-bold text-[11px] border-b border-slate-300">
-                  <th className="p-2 border-r border-slate-300 text-center w-12">SL</th>
+                <tr className="bg-slate-100 text-slate-800 uppercase font-bold text-[10px] border-b border-slate-300">
+                  <th className="p-2 border-r border-slate-300 text-center">SL</th>
                   <th className="p-2 border-r border-slate-300 text-left">ITEM / SIZE</th>
-                  <th className="p-2 border-r border-slate-300 text-center w-20">BOX</th>
-                  <th className="p-2 border-r border-slate-300 text-center w-20">WEIGHT (KG)</th>
-                  <th className="p-2 border-r border-slate-300 text-center w-24">REPORT WEIGHT (KG)</th>
-                  <th className="p-2 border-r border-slate-300 text-right w-28">TOTAL WEIGHT</th>
-                  <th className="p-2 border-r border-slate-300 text-center w-16">UNIT</th>
-                  <th className="p-2 border-r border-slate-300 text-right w-24">RATE (RMB)</th>
-                  <th className="p-2 text-right w-32">AMOUNT (RMB)</th>
+                  <th className="p-2 border-r border-slate-300 text-center">BOX</th>
+                  <th className="p-2 border-r border-slate-300 text-center">WEIGHT (KG)</th>
+                  <th className="p-2 border-r border-slate-300 text-center">REPORT WT (KG)</th>
+                  <th className="p-2 border-r border-slate-300 text-right">TOTAL WEIGHT</th>
+                  <th className="p-2 border-r border-slate-300 text-center">UNIT</th>
+                  <th className="p-2 border-r border-slate-300 text-right">RATE (RMB)</th>
+                  <th className="p-2 text-right">AMOUNT (RMB)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">

@@ -2,32 +2,15 @@ import React, { useMemo } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import { useSyncTelemetrySnapshot } from '../context/VolatileFeedbackStore.ts';
 import {
-  buildExporterPaymentSlipRows,
-  calculateExporterSlipTotals,
-} from '../utils/calculations.ts';
-import {
   computeTotalPersistedRecords,
   getSyncStatusDisplay,
 } from '../utils/syncStatus.ts';
 import {
   Menu,
-  Save,
-  Printer,
-  Download,
-  Upload,
   Archive,
-  Layers,
-  Sparkles,
-  Calculator,
-  ChevronRight,
   RefreshCw,
   AlertCircle,
   Database,
-  FileDown,
-  Loader2,
-  LogOut,
-  ShieldCheck,
-  Keyboard,
   Zap,
   Pause,
   Smartphone,
@@ -45,6 +28,7 @@ import { DisplayMode, ZOOM_PRESETS } from '../utils/displayViewport.ts';
 import { buildWorkbookSheets } from './ThemeSidebarNav.tsx';
 
 interface ExcelHeaderRibbonProps {
+  sheets?: ReturnType<typeof buildWorkbookSheets>;
   onOpenShortcutsModal?: () => void;
   displayMode?: DisplayMode;
   onChangeDisplayMode?: (mode: DisplayMode) => void;
@@ -127,7 +111,7 @@ const HeaderSyncControls: React.FC<HeaderSyncControlsProps> = React.memo(
     return (
       <div
         data-testid="header-sync-group"
-        className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border bg-[#1F3349] shrink-0 transition-colors ${
+        className={`flex items-center gap-2 sm:gap-2.5 px-3 py-1 rounded-full border bg-[#1F3349] shrink-0 transition-colors ${
           syncDisplay.isSlowSync || syncDisplay.indicatorColor === 'rose'
             ? 'border-amber-400/70'
             : 'border-white/15'
@@ -135,7 +119,7 @@ const HeaderSyncControls: React.FC<HeaderSyncControlsProps> = React.memo(
       >
         {/* Live Sync Background Auto-save Toggle */}
         <div
-          className="flex items-center space-x-1 text-[11px] whitespace-nowrap shrink-0 pr-1.5 border-r border-white/15"
+          className="flex items-center space-x-1.5 text-[11px] whitespace-nowrap shrink-0 pr-2 border-r border-white/15"
           title={
             isLiveSyncEnabled
               ? 'Live Sync is ON: Background database auto-save is active. Click to pause for high-frequency data entry.'
@@ -143,7 +127,7 @@ const HeaderSyncControls: React.FC<HeaderSyncControlsProps> = React.memo(
           }
         >
           <Zap
-            className={`w-3 h-3 transition-colors ${
+            className={`w-3.5 h-3.5 transition-colors ${
               isLiveSyncEnabled ? 'text-[#00B14F]' : 'text-slate-400'
             }`}
           />
@@ -230,7 +214,7 @@ const HeaderSyncControls: React.FC<HeaderSyncControlsProps> = React.memo(
 
           <span
             data-testid="header-last-backup-timestamp"
-            className="text-[10px] font-mono font-semibold text-sky-200 border-l border-white/20 pl-1.5"
+            className="text-[10px] font-mono font-semibold text-sky-200 border-l border-white/20 pl-2"
           >
             Last Backup: {syncDisplay.formattedBackupTime}
             <span
@@ -258,7 +242,7 @@ const HeaderSyncControls: React.FC<HeaderSyncControlsProps> = React.memo(
               ? 'Slow connection detected: Click Force Sync to immediately flush all ledgers to backup storage (Ctrl+S)'
               : 'Force Sync: Immediately flush all ledgers & update backup timestamp (Ctrl+S)'
           }
-          className={`flex items-center space-x-1 px-2 py-0.5 text-[10px] font-bold rounded border transition whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-60 disabled:cursor-wait ${
+          className={`flex items-center space-x-1 px-2.5 py-0.5 text-[11px] font-bold rounded-full border transition whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-60 disabled:cursor-wait ${
             syncDisplay.shouldHighlightForceSync
               ? 'border-amber-400 bg-amber-500/20 text-amber-200 hover:bg-amber-500/30'
               : 'border-white/25 bg-white/10 hover:bg-white/20 text-white'
@@ -316,7 +300,7 @@ const HeaderBottomSyncStatus: React.FC<{ totalRecordsCount: number; rmbExchangeR
   });
 
 export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
-  onOpenShortcutsModal,
+  sheets,
   displayMode = 'smart_mobile',
   onChangeDisplayMode,
   zoomPercent = 100,
@@ -335,8 +319,6 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
     activeTab,
     setActiveTab,
     companyProfile,
-    exportDatabaseJSON,
-    importDatabaseJSON,
     openSnapshotModal,
     snapshots,
     purchases,
@@ -347,7 +329,6 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
     isLiveSyncEnabled,
     toggleLiveSync,
     currentUser,
-    logout,
     auditLogs,
   } = useApp();
 
@@ -357,22 +338,6 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
     payments: payments.length,
     otherCosts: otherCosts.length,
   });
-
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
-
-  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      if (content) {
-        importDatabaseJSON(content);
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
 
 
 
@@ -411,13 +376,14 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
 
   const workbookSheets = useMemo(
     () =>
+      sheets ??
       buildWorkbookSheets({
         purchasesCount: purchases.length,
         packingsCount: packings.length,
         paymentsCount: payments.length,
         auditLogsCount: auditLogs.length,
       }),
-    [purchases.length, packings.length, payments.length, auditLogs.length]
+    [sheets, purchases.length, packings.length, payments.length, auditLogs.length]
   );
 
   const activeSheetMeta = workbookSheets.find((s) => s.id === activeTab) || workbookSheets[0];
@@ -469,11 +435,11 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
         </span>
       </div>
 
-      {/* Top Company & Control Header Bar (Deep Navy #273E56 Matching Reference Top L-Frame) */}
+      {/* Top Control Header Bar (Deep Navy #273E56: Left Sidebar Toggle + Search | Right Sync + Snapshots + User) */}
       {!isFullScreen && (
-      <div className="bg-[#273E56] px-3 sm:px-5 py-2.5 flex flex-wrap items-center justify-between gap-2 sm:gap-3">
-        {/* Left: Sidebar Toggle & Company Branding */}
-        <div className="flex items-center space-x-2.5 sm:space-x-3">
+      <div className="bg-[#273E56] px-3 sm:px-4 py-2 flex flex-wrap lg:flex-nowrap items-center justify-between gap-2 sm:gap-3">
+        {/* Left: Sidebar Toggle + Global Cross-Database Search Bar */}
+        <div className="flex items-center gap-2 sm:gap-2.5 flex-1 min-w-[180px] max-w-xs xl:max-w-sm">
           {onToggleSidebar && (
             <button
               type="button"
@@ -485,68 +451,13 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
               <PanelLeft className="w-4 h-4" />
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => setActiveTab('dashboard')}
-            title="Return to Sheet 01 · Executive Overview"
-            className="w-9 h-9 rounded-full bg-white p-0.5 border border-[#CBD8E6] shadow-2xs flex items-center justify-center overflow-hidden shrink-0 cursor-pointer hover:border-[#1D6CE0] transition"
-          >
-            <img
-              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
-              alt={companyProfile.companyName}
-              className="w-full h-full object-contain rounded-full"
-            />
-          </button>
-          <div>
-            <div className="flex items-center space-x-2">
-              <button
-                type="button"
-                onClick={() => setActiveTab('dashboard')}
-                className="text-base sm:text-lg font-black tracking-tight text-amber-400 hover:text-amber-300 zsb-golden-brand cursor-pointer text-left leading-tight transition-colors"
-                title="Go to Executive Overview (Sheet 01)"
-              >
-                <span className="zsb-golden-brand">{companyProfile.companyName}</span>
-              </button>
-              <span className="hidden 2xl:inline-block text-[10px] font-mono uppercase tracking-widest text-sky-200 border-l border-white/20 pl-2">
-                Export Ledger
-              </span>
-            </div>
-            <div className="hidden 2xl:flex flex-wrap items-center gap-x-2.5 gap-y-0.5 mt-0.5 text-[10px] text-slate-300 leading-tight">
-              <div className="flex items-center space-x-1">
-                <span className="text-slate-400 font-medium">Addr:</span>
-                <span className="font-semibold text-slate-100">{companyProfile.address}</span>
-              </div>
-              <span className="text-white/30">•</span>
-              <div className="flex items-center space-x-1">
-                <span className="text-slate-400 font-medium">Tel:</span>
-                <span className="font-mono font-semibold text-slate-100">
-                  {companyProfile.mobiles.join(', ')}
-                </span>
-              </div>
-              <span className="text-white/30">•</span>
-              <div className="flex items-center space-x-1">
-                <span className="text-sky-300 font-bold">Email:</span>
-                <span className="font-mono font-semibold text-slate-100">
-                  {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com'
-                    ? companyProfile.email
-                    : 'zsbaquatics@gmail.com'}
-                </span>
-              </div>
-            </div>
-            <div className="hidden md:flex 2xl:hidden items-center gap-x-2 mt-0.5 text-[10px] text-slate-300 max-w-[230px] truncate leading-tight">
-              <span className="truncate">{companyProfile.address}</span>
-            </div>
+          <div className="flex-1 min-w-[150px]">
+            <GlobalSearchBar />
           </div>
         </div>
 
-        {/* Center: Global Cross-Database Search Bar */}
-        <div className="flex-1 max-w-xs xl:max-w-sm mx-1 min-w-[170px] order-3 xl:order-2 w-full xl:w-auto">
-          <GlobalSearchBar />
-        </div>
-
-        {/* Right: Quick Macro Actions & Background Sync Status */}
-        <div className="flex items-center gap-1.5 order-2 xl:order-3 flex-wrap justify-end">
-          {/* Background Synchronization Indicator: Live Auto-Save Toggle + Last Backup Timestamp + Force Sync */}
+        {/* Right: Background Sync Status + Snapshots + Active User Profile */}
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 ml-auto">
           <HeaderSyncControls
             totalRecordsCount={totalRecordsCount}
             isLiveSyncEnabled={isLiveSyncEnabled}
@@ -558,79 +469,21 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
             type="button"
             data-testid="ribbon-snapshots-btn"
             onClick={openSnapshotModal}
-            className="flex items-center space-x-1 px-2.5 py-1 text-[11px] font-bold bg-[#1D6CE0] hover:bg-[#1558BD] text-white rounded-lg shadow-2xs transition whitespace-nowrap shrink-0 cursor-pointer"
+            className="flex items-center space-x-1.5 px-3 py-1 text-[11px] font-bold bg-[#1D6CE0] hover:bg-[#1558BD] text-white rounded-full shadow-2xs transition whitespace-nowrap shrink-0 cursor-pointer"
             title="Open Database Snapshot & Local JSON Recovery Manager (Shortcut: Ctrl+Shift+S)"
           >
-            <Archive className="w-3 h-3 text-white" />
+            <Archive className="w-3.5 h-3.5 text-white" />
             <span>Snapshots ({snapshots.length})</span>
-          </button>
-
-          <button
-            type="button"
-            data-testid="ribbon-shortcuts-btn"
-            onClick={onOpenShortcutsModal}
-            className="flex items-center space-x-1 px-2 py-1 text-[11px] font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/15 rounded-lg transition whitespace-nowrap shrink-0 cursor-pointer"
-            title="Open Global Keyboard Shortcuts Reference (Shortcut: Ctrl+/ or ?)"
-          >
-            <Keyboard className="w-3 h-3 text-sky-200 shrink-0" />
-            <span className="hidden 2xl:inline">Shortcuts</span>
-            <kbd className="px-1 py-0 bg-white/15 border border-white/20 rounded text-[9px] font-mono text-white">
-              Ctrl+/
-            </kbd>
-          </button>
-
-          <button
-            onClick={exportDatabaseJSON}
-            className="flex items-center space-x-1 px-2 py-1 text-[11px] font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/15 rounded-lg transition cursor-pointer whitespace-nowrap shrink-0"
-            title="Export full database backup as JSON"
-          >
-            <Download className="w-3 h-3 text-sky-300" />
-            <span className="hidden 2xl:inline">Backup DB</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center space-x-1 px-2 py-1 text-[11px] font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/15 rounded-lg transition cursor-pointer whitespace-nowrap shrink-0"
-            title="Restore database from JSON"
-          >
-            <Upload className="w-3 h-3 text-emerald-300" />
-            <span className="hidden 2xl:inline">Restore</span>
-          </button>
-
-          <button
-            type="button"
-            data-testid="ribbon-audit-logs-btn"
-            onClick={() => setActiveTab('audit_logs')}
-            className={`flex items-center space-x-1 px-2 py-1 text-[11px] font-semibold rounded-lg border transition cursor-pointer whitespace-nowrap shrink-0 ${
-              activeTab === 'audit_logs'
-                ? 'bg-[#EDF2F7] text-[#1F3349] border-[#EDF2F7] font-bold'
-                : 'bg-white/10 hover:bg-white/20 text-white border-white/15'
-            }`}
-            title="Open System Audit Logs (Entries, Edits & Deletions)"
-          >
-            <ShieldCheck className={`w-3 h-3 shrink-0 ${activeTab === 'audit_logs' ? 'text-[#1D6CE0]' : 'text-emerald-300'}`} />
-            <span className="hidden lg:inline">Audit ({auditLogs.length})</span>
-          </button>
-
-          <button
-            type="button"
-            data-testid="ribbon-landing-page-btn"
-            onClick={logout}
-            className="flex items-center space-x-1 px-2 py-1 text-[11px] font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/15 rounded-lg transition cursor-pointer whitespace-nowrap shrink-0"
-            title="Return to ZSB AQUATICS Landing Page"
-          >
-            <span>Landing</span>
           </button>
 
           {/* Top-Right Active User Profile Lockup */}
           {currentUser && (
-            <div className="hidden xl:flex items-center gap-2 pl-2 border-l border-white/15">
+            <div className="hidden xl:flex items-center gap-2 pl-2.5 border-l border-white/15 shrink-0">
               <div className="text-right leading-tight">
-                <div className="text-[11px] font-bold text-white">
+                <div className="text-[11px] font-bold text-white whitespace-nowrap">
                   {currentUser.displayName}
                 </div>
-                <div className="text-[9px] font-mono font-bold text-sky-200 uppercase tracking-wider">
+                <div className="text-[9px] font-mono font-bold text-sky-200 uppercase tracking-wider whitespace-nowrap">
                   {currentUser.role === 'SUPER_ADMIN' ? 'ADMIN' : currentUser.role}
                 </div>
               </div>
@@ -639,36 +492,13 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
               </div>
             </div>
           )}
-
-          <button
-            type="button"
-            data-testid="ribbon-logout-btn"
-            onClick={logout}
-            className="flex items-center space-x-1 px-2 py-1 text-[11px] font-semibold bg-white/10 hover:bg-rose-500/80 text-white border border-white/15 hover:border-rose-400 rounded-lg transition cursor-pointer whitespace-nowrap shrink-0"
-            title={
-              currentUser
-                ? `Signed in as ${currentUser.displayName} (${currentUser.role}). Click to lock & sign out.`
-                : 'Sign out to login screen'
-            }
-          >
-            <LogOut className="w-3 h-3 text-rose-300 shrink-0" />
-            <span className="hidden sm:inline">Sign Out</span>
-          </button>
-
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleImportFile}
-            accept=".json"
-            className="hidden"
-          />
         </div>
       </div>
       )}
 
       {/* Clean Compact Navy Formula Bar + Display & Zoom Toolbar */}
-      <div className="bg-[#1F3349] px-2.5 sm:px-5 py-1.5 border-t border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-slate-200">
-        <div className={`${isFullScreen ? 'flex' : 'hidden xl:flex'} flex-wrap items-center gap-2 min-w-0 flex-1 basis-auto`}>
+      <div className="bg-[#1F3349] px-3 sm:px-4 py-1.5 border-t border-white/10 flex flex-wrap md:flex-nowrap items-center justify-between gap-2.5 text-xs font-mono text-slate-200">
+        <div className={`${isFullScreen ? 'flex' : 'hidden md:flex'} items-center gap-2 min-w-0 flex-1 overflow-hidden`}>
           {isFullScreen && (
             <button
               type="button"
@@ -680,25 +510,25 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
             </button>
           )}
 
-          <div className="font-bold select-none text-sky-300 italic hidden xl:inline">
+          <div className="px-1.5 py-0.5 rounded bg-white/10 font-bold select-none text-sky-300 italic text-[11px] shrink-0">
             fx
           </div>
-          <div className="h-4 w-px bg-white/15 hidden xl:block" />
-          <div className="flex-1 overflow-x-auto whitespace-nowrap text-slate-200 hidden xl:block">
-            <span className="text-slate-200 font-medium">{formulaText}</span>
+          <div className="h-4 w-px bg-white/15 shrink-0" />
+          <div className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-slate-200 min-w-0">
+            <span className="text-slate-200 font-medium text-[11px]">{formulaText}</span>
           </div>
         </div>
 
         {/* Smart Mobile Display Adjust / Desktop View / Zoom In / Zoom Out / Full Screen Toolbar */}
         <div
           data-testid="display-viewport-toolbar"
-          className="flex items-center flex-wrap gap-1 sm:gap-1.5 shrink-0 w-full sm:w-auto justify-between sm:justify-end"
+          className="flex items-center flex-nowrap gap-2 sm:gap-2.5 shrink-0 w-full md:w-auto justify-between md:justify-end ml-auto"
         >
           {/* Smart Mobile Adjust vs Desktop View Mode Switcher */}
           <div
             role="group"
             aria-label="Display Viewport Mode"
-            className="inline-flex items-center rounded-md border border-white/15 bg-[#273E56] p-0.5"
+            className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-[#273E56] px-1.5 py-1"
           >
             <button
               type="button"
@@ -706,13 +536,13 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
               onClick={() => onChangeDisplayMode?.('smart_mobile')}
               aria-pressed={displayMode === 'smart_mobile'}
               title="Smart Mobile Display Adjust: Automatically optimizes layout, table scrolling, and responsive touch controls for mobile & tablet screens"
-              className={`flex items-center space-x-1 px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold transition cursor-pointer ${
+              className={`flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-bold transition cursor-pointer ${
                 displayMode === 'smart_mobile'
                   ? 'bg-white text-[#1F3349] shadow-2xs'
                   : 'text-slate-200 hover:text-white hover:bg-white/10'
               }`}
             >
-              <Smartphone className="w-3 h-3 shrink-0" />
+              <Smartphone className="w-3.5 h-3.5 shrink-0" />
               <span>Smart Mobile</span>
             </button>
 
@@ -722,13 +552,13 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
               onClick={() => onChangeDisplayMode?.('desktop_full')}
               aria-pressed={displayMode === 'desktop_full'}
               title="Show Desktop View (1440px Full Workbook Sheet): Renders the complete desktop spreadsheet layout scaled to fit any screen"
-              className={`flex items-center space-x-1 px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold transition cursor-pointer ${
+              className={`flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-bold transition cursor-pointer ${
                 displayMode === 'desktop_full'
                   ? 'bg-white text-[#1F3349] shadow-2xs'
                   : 'text-slate-200 hover:text-white hover:bg-white/10'
               }`}
             >
-              <Monitor className="w-3 h-3 shrink-0" />
+              <Monitor className="w-3.5 h-3.5 shrink-0" />
               <span>Desktop View</span>
             </button>
           </div>
@@ -737,7 +567,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
           <div
             role="group"
             aria-label="Zoom Controls"
-            className="inline-flex items-center rounded-md border border-white/15 bg-[#273E56] p-0.5 space-x-0.5"
+            className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-[#273E56] px-2 py-1"
           >
             <button
               type="button"
@@ -746,9 +576,9 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
               disabled={zoomPercent <= 40}
               aria-label="Zoom Out"
               title="Zoom Out (-10%)"
-              className="flex items-center justify-center w-5 sm:w-6 h-5 rounded text-slate-200 hover:bg-white/10 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+              className="flex items-center justify-center w-6 h-6 rounded-full text-slate-200 hover:bg-white/10 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
             >
-              <ZoomOut className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+              <ZoomOut className="w-3.5 h-3.5" />
             </button>
 
             <select
@@ -757,7 +587,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
               value={zoomPercent}
               onChange={(e) => onSelectZoomPreset?.(Number(e.target.value))}
               title={`Current Display Scale: ${effectivePercentLabel}. Select a preset zoom level (50% - 200%).`}
-              className="bg-white text-[#1F3349] border border-[#CBD8E6] rounded px-1 sm:px-1.5 py-0.5 text-[10px] sm:text-[11px] font-mono font-bold focus:outline-none focus:border-[#1D6CE0] cursor-pointer"
+              className="bg-white text-[#1F3349] border border-[#CBD8E6] rounded-md px-2 py-0.5 text-[11px] font-mono font-bold focus:outline-none focus:border-[#1D6CE0] cursor-pointer"
             >
               {!ZOOM_PRESETS.includes(zoomPercent) && (
                 <option value={zoomPercent}>{effectivePercentLabel}</option>
@@ -778,9 +608,9 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
               disabled={zoomPercent >= 200}
               aria-label="Zoom In"
               title="Zoom In (+10%)"
-              className="flex items-center justify-center w-5 sm:w-6 h-5 rounded text-slate-200 hover:bg-white/10 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+              className="flex items-center justify-center w-6 h-6 rounded-full text-slate-200 hover:bg-white/10 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
             >
-              <ZoomIn className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+              <ZoomIn className="w-3.5 h-3.5" />
             </button>
 
             {zoomPercent !== 100 && (
@@ -790,9 +620,9 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
                 onClick={onZoomReset}
                 aria-label="Reset Zoom to 100%"
                 title="Reset Zoom to 100%"
-                className="flex items-center justify-center px-1 sm:px-1.5 h-5 rounded bg-white/15 hover:bg-white/25 text-white text-[10px] font-bold transition cursor-pointer"
+                className="flex items-center justify-center px-2 py-0.5 rounded-full bg-white/15 hover:bg-white/25 text-white text-[10px] font-bold transition cursor-pointer"
               >
-                <RotateCcw className="w-2.5 h-2.5 mr-0.5" />
+                <RotateCcw className="w-3 h-3 mr-0.5" />
                 <span>100%</span>
               </button>
             )}
@@ -809,7 +639,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
                 ? 'Exit Full Screen Workspace (Esc)'
                 : 'Show Full Screen Workspace (Maximizes active sheet & hides top banner)'
             }
-            className={`flex items-center space-x-1 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md border text-[10px] sm:text-[11px] font-bold transition cursor-pointer ${
+            className={`flex items-center space-x-1.5 px-3 py-1 rounded-full border text-[11px] font-bold transition cursor-pointer ${
               isFullScreen
                 ? 'bg-white text-[#1F3349] border-white'
                 : 'bg-white/10 hover:bg-white/20 text-white border-white/15'
@@ -817,12 +647,12 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
           >
             {isFullScreen ? (
               <>
-                <Minimize2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                <Minimize2 className="w-3.5 h-3.5 shrink-0" />
                 <span>Exit Full</span>
               </>
             ) : (
               <>
-                <Maximize2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                <Maximize2 className="w-3.5 h-3.5 shrink-0" />
                 <span>Full Screen</span>
               </>
             )}

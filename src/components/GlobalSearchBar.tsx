@@ -59,13 +59,27 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
     [purchases, packings, payments, otherCosts, supplierCredits]
   );
 
-  // Computed search results
+  // Computed search results (lazy-evaluated only when dropdown is open or query is non-empty)
   const searchResults = useMemo(() => {
+    if (!isOpen && !query.trim()) {
+      return {
+        items: [],
+        totalMatches: 0,
+        countsByModule: {
+          all: 0,
+          purchase: 0,
+          packing: 0,
+          payment: 0,
+          other_cost: 0,
+          supplier_credit: 0,
+        },
+      };
+    }
     return searchAllRecords(query, dataset, {
       filterModule: selectedModule,
       limit: 25,
     });
-  }, [query, dataset, selectedModule]);
+  }, [isOpen, query, dataset, selectedModule]);
 
   // Handle outside click to close dropdown
   useEffect(() => {
@@ -241,7 +255,7 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
           ref={dropdownRef}
           id="global-search-results-list"
           data-testid="global-search-dropdown"
-          className="absolute right-0 mt-1.5 w-[94vw] sm:w-[540px] md:w-[620px] max-w-[calc(100vw-1.5rem)] bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden max-h-[500px] flex flex-col"
+          className="absolute left-0 mt-1.5 w-[94vw] sm:w-[540px] md:w-[620px] max-w-[calc(100vw-1.5rem)] bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden max-h-[500px] flex flex-col"
         >
           {/* Header Bar with Module Tabs */}
           <div className="bg-slate-50 px-3 py-2 border-b border-slate-200 flex items-center justify-between gap-2 overflow-x-auto text-xs shrink-0">

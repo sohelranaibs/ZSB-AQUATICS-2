@@ -78,8 +78,33 @@ function isNonTableChromeMutationTarget(node: Node | null): boolean {
   const el = node instanceof HTMLElement ? node : node?.parentElement;
   if (!el) return false;
   return Boolean(
-    el.closest('header, nav, [data-testid="global-toast-banner"], #global-pdf-export-host')
+    el.closest('header, nav, aside, [data-testid="global-toast-banner"], #global-pdf-export-host')
   );
+}
+
+const TABLE_STRUCTURAL_TAGS = new Set(['TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR']);
+
+function nodeContainsTableStructure(node: Node): boolean {
+  if (!(node instanceof HTMLElement)) return false;
+  if (TABLE_STRUCTURAL_TAGS.has(node.tagName)) return true;
+  return Boolean(node.querySelector('table, tr'));
+}
+
+function isTableStructuralMutation(m: MutationRecord): boolean {
+  if (isNonTableChromeMutationTarget(m.target)) {
+    return false;
+  }
+  const targetEl = m.target instanceof HTMLElement ? m.target : m.target?.parentElement;
+  if (targetEl && TABLE_STRUCTURAL_TAGS.has(targetEl.tagName)) {
+    return true;
+  }
+  for (let i = 0; i < m.addedNodes.length; i++) {
+    if (nodeContainsTableStructure(m.addedNodes[i])) return true;
+  }
+  for (let i = 0; i < m.removedNodes.length; i++) {
+    if (nodeContainsTableStructure(m.removedNodes[i])) return true;
+  }
+  return false;
 }
 
 export const GlobalTableScrollController: React.FC = () => {
@@ -91,7 +116,7 @@ export const GlobalTableScrollController: React.FC = () => {
     let rafId = 0;
 
     const applyTenRowCapToAllTables = () => {
-      const tables = Array.from(document.querySelectorAll('table'));
+      const tables = document.getElementsByTagName('table');
       if (tables.length === 0) return;
 
       // Phase 1: Batch all layout reads first to avoid read/write thrashing
@@ -104,7 +129,8 @@ export const GlobalTableScrollController: React.FC = () => {
         nextMaxHeight: number;
       }> = [];
 
-      for (const table of tables) {
+      for (let tIdx = 0; tIdx < tables.length; tIdx++) {
+        const table = tables[tIdx];
         if (table.parentElement?.closest('table')) {
           continue;
         }
@@ -117,11 +143,11 @@ export const GlobalTableScrollController: React.FC = () => {
           continue;
         }
 
-        const tbodyRows = Array.from(
-          table.querySelectorAll(':scope > tbody > tr')
-        ) as HTMLElement[];
+        const tbody = table.tBodies[0];
+        const tbodyRows = tbody ? tbody.rows : null;
+        const rowCount = tbodyRows ? tbodyRows.length : 0;
 
-        if (tbodyRows.length <= MAX_VISIBLE_TABLE_ROWS) {
+        if (!tbodyRows || rowCount <= MAX_VISIBLE_TABLE_ROWS) {
           if (
             container.getAttribute('data-ten-row-scroll') === 'active' ||
             container.hasAttribute('data-ten-row-sig')
@@ -131,12 +157,12 @@ export const GlobalTableScrollController: React.FC = () => {
           continue;
         }
 
-        const thead = table.querySelector(':scope > thead') as HTMLElement | null;
-        const tfoot = table.querySelector(':scope > tfoot') as HTMLElement | null;
+        const thead = table.tHead as HTMLElement | null;
+        const tfoot = table.tFoot as HTMLElement | null;
         const theadHeight = measureLocalHeight(thead);
         const tfootHeight = measureLocalHeight(tfoot);
         const nextSig = computeTableScrollSignature({
-          rowCount: tbodyRows.length,
+          rowCount,
           containerWidth: container.clientWidth,
           theadHeight,
           tfootHeight,
@@ -149,12 +175,11 @@ export const GlobalTableScrollController: React.FC = () => {
           continue;
         }
 
-        const rowHeights = tbodyRows
-          .slice(0, MAX_VISIBLE_TABLE_ROWS)
-          .map((tr) => measureLocalHeight(tr));
-        while (rowHeights.length < tbodyRows.length) {
-          rowHeights.push(0);
+        const rowHeights: number[] = [];
+        for (let rIdx = 0; rIdx < MAX_VISIBLE_TABLE_ROWS; rIdx++) {
+          rowHeights.push(measureLocalHeight(tbodyRows[rIdx] as HTMLElement));
         }
+        rowHeights.push(0);
 
         const nextMaxHeight = calculateScrollViewportMaxHeight({
           theadHeight,
@@ -216,17 +241,13 @@ export const GlobalTableScrollController: React.FC = () => {
     // Initial pass
     applyTenRowCapToAllTables();
 
-    // Re-evaluate only on structural DOM additions/removals outside header/nav/toast/offscreen chrome
+    // Re-evaluate only when tables or table rows are structurally added or removed
     const mutationObserver = new MutationObserver((mutations) => {
-      let hasRelevantMutation = false;
-      for (const m of mutations) {
-        if (!isNonTableChromeMutationTarget(m.target)) {
-          hasRelevantMutation = true;
+      for (let i = 0; i < mutations.length; i++) {
+        if (isTableStructuralMutation(mutations[i])) {
+          scheduleScan();
           break;
         }
-      }
-      if (hasRelevantMutation) {
-        scheduleScan();
       }
     });
     const rootNode = document.getElementById('root') || document.body;
@@ -235,14 +256,6 @@ export const GlobalTableScrollController: React.FC = () => {
       subtree: true,
     });
 
-    let resizeObserver: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== 'undefined') {
-      resizeObserver = new ResizeObserver(() => {
-        scheduleScan();
-      });
-      resizeObserver.observe(rootNode);
-    }
-
     window.addEventListener('resize', scheduleScan, { passive: true });
 
     return () => {
@@ -250,7 +263,6 @@ export const GlobalTableScrollController: React.FC = () => {
         cancelAnimationFrame(rafId);
       }
       mutationObserver.disconnect();
-      resizeObserver?.disconnect();
       window.removeEventListener('resize', scheduleScan);
     };
   }, []);

@@ -8,10 +8,10 @@
   --zsb-border: #cbd8e6;
   --zsb-sidebar-bg: #273e56;
   --zsb-sidebar-border: #1e3247;
-  --zsb-btn-bg: #273e56;
-  --zsb-btn-hover: #1e3247;
-  --zsb-teal: #273e56;
-  --zsb-teal-hover: #1e3247;
+  --zsb-btn-bg: #fbbf24;
+  --zsb-btn-hover: #f59e0b;
+  --zsb-teal: #fbbf24;
+  --zsb-teal-hover: #f59e0b;
   --zsb-emerald: #00b14f;
   --zsb-navy-ink: #0f172a;
   --zsb-slate-muted: #64748b;
@@ -35,10 +35,11 @@
   }
 
   button {
-    background-color: #273e56;
-    color: #ffffff;
-    padding: 0.25rem 0.625rem;
-    border-radius: 0.375rem;
+    background-color: #fbbf24;
+    background-image: linear-gradient(180deg, #ffba55 0%, #f7941d 52%, #e67b08 100%);
+    color: #000000;
+    padding: 0.35rem 0.85rem;
+    border-radius: 9999px;
   }
 
   th,
@@ -65,94 +66,276 @@
   border: 1px solid var(--zsb-border);
 }
 
-/* Unified #273E56 Corporate Button Styling Across All Buttons */
+/* ============================================================================
+   UNIFIED 3D GOLDEN-ORANGE CAPSULE & CONCAVE SILVER MEDALLION BUTTON SYSTEM
+   Matches reference tactile pill: glossy golden-orange body + crisp black text
+   + protruding concave silver-white circular icon medallion on the left.
+   ============================================================================ */
 .zsb-teal-cta,
 .zsb-aqua-cta {
-  background-color: #273e56 !important;
-  color: #ffffff !important;
+  background-color: #fbbf24 !important;
+  background-image: linear-gradient(180deg, #ffba55 0%, #f7941d 52%, #e67b08 100%) !important;
+  color: #000000 !important;
+  border: 1.5px solid #f7a638 !important;
+  border-radius: 9999px !important;
   font-weight: 700;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  text-shadow: none !important;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 250, 235, 0.72),
+    inset 0 -3px 5px rgba(154, 52, 18, 0.25),
+    0 4px 10px -2px rgba(15, 23, 42, 0.22),
+    0 1px 3px rgba(245, 146, 30, 0.35) !important;
 }
 
-.zsb-teal-cta:hover,
-.zsb-aqua-cta:hover {
-  background-color: #273e56 !important;
-  filter: brightness(1.08);
-}
-
-button:not([data-testid^="db-cell-trigger-"]):not(.packing-ledger-plain-table *):not([data-zsb-clicked="true"]):not(.zsb-golden-brand):not(.zsb-clear-icon-btn),
-[type="button"]:not([data-testid^="db-cell-trigger-"]):not(.packing-ledger-plain-table *):not([data-zsb-clicked="true"]):not(.zsb-golden-brand):not(.zsb-clear-icon-btn),
-[type="submit"]:not(.packing-ledger-plain-table *):not([data-zsb-clicked="true"]),
-[type="reset"]:not(.packing-ledger-plain-table *):not([data-zsb-clicked="true"]) {
-  background-color: #273e56 !important;
-  background-image: none !important;
-  color: #ffffff !important;
-  border: 1px solid rgba(255, 255, 255, 0.24) !important;
-}
-
-button:not([data-testid^="db-cell-trigger-"]):not(.packing-ledger-plain-table *):not([data-zsb-clicked="true"]):not(.zsb-clear-icon-btn):hover:not(:disabled),
-[type="button"]:not([data-testid^="db-cell-trigger-"]):not(.packing-ledger-plain-table *):not([data-zsb-clicked="true"]):not(.zsb-clear-icon-btn):hover:not(:disabled),
-[type="submit"]:not(.packing-ledger-plain-table *):not([data-zsb-clicked="true"]):hover:not(:disabled),
-[type="reset"]:not(.packing-ledger-plain-table *):not([data-zsb-clicked="true"]):hover:not(:disabled) {
-  background-color: #273e56 !important;
-  border-color: rgba(251, 191, 36, 0.65) !important;
-  color: #ffffff !important;
-  filter: brightness(1.08);
-}
-
-button[aria-pressed="true"]:not(.packing-ledger-plain-table *):not([data-zsb-clicked="true"]) {
+.zsb-teal-cta:hover:not(:disabled),
+.zsb-aqua-cta:hover:not(:disabled) {
+  background-color: #f59e0b !important;
+  background-image: linear-gradient(180deg, #ffc66b 0%, #fb9c24 52%, #ec840c 100%) !important;
   border-color: #fbbf24 !important;
-  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.55) !important;
+  color: #000000 !important;
 }
 
-button:not([data-testid^="db-cell-trigger-"]):not(.packing-ledger-plain-table *):not([data-zsb-clicked="true"]):not(.zsb-clear-icon-btn) *:not(.zsb-golden-brand):not(.zsb-golden-brand-light) {
-  color: #ffffff !important;
+button:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))),
+[type="button"]:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))),
+[type="submit"]:not(:where(:has(img))),
+[type="reset"]:not(:where(:has(img))) {
+  background-color: #fbbf24 !important;
+  background-image: linear-gradient(180deg, #ffba55 0%, #f7941d 52%, #e67b08 100%) !important;
+  color: #000000 !important;
+  border: 1.5px solid #f7a638 !important;
+  border-radius: 9999px !important;
+  text-shadow: none !important;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 250, 235, 0.72),
+    inset 0 -3px 5px rgba(154, 52, 18, 0.25),
+    0 3px 8px -2px rgba(15, 23, 42, 0.22),
+    0 1px 3px rgba(245, 146, 30, 0.32) !important;
+  overflow: visible !important;
 }
 
-button:not([data-testid^="db-cell-trigger-"]):not(.packing-ledger-plain-table *):not(.zsb-clear-icon-btn) :is(span, kbd, div):not(:has(img)):not([data-testid="header-sync-status-dot"]):not([data-testid="header-sync-status-dot"] *):not([role="switch"] *) {
+button:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))):hover:not(:disabled),
+[type="button"]:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))):hover:not(:disabled),
+[type="submit"]:not(:where(:has(img))):hover:not(:disabled),
+[type="reset"]:not(:where(:has(img))):hover:not(:disabled) {
+  background-color: #f59e0b !important;
+  background-image: linear-gradient(180deg, #ffc66b 0%, #fb9c24 52%, #ec840c 100%) !important;
+  border-color: #fde68a !important;
+  color: #000000 !important;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 252, 240, 0.8),
+    inset 0 -3px 5px rgba(154, 52, 18, 0.28),
+    0 5px 12px -2px rgba(15, 23, 42, 0.28),
+    0 2px 5px rgba(245, 146, 30, 0.4) !important;
+  filter: none !important;
+}
+
+button:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))):disabled,
+[type="button"]:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))):disabled,
+[type="submit"]:not(:where(:has(img))):disabled,
+[type="reset"]:not(:where(:has(img))):disabled {
+  background-color: #fbbf24 !important;
+  background-image: linear-gradient(180deg, #ffca7a 0%, #f5a642 52%, #e68c24 100%) !important;
+  color: #000000 !important;
+  border: 1.5px solid #f7b863 !important;
+  opacity: 0.75 !important;
+}
+
+button:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))) *:not(svg):not(path):not(circle):not(rect):not(line):not(polyline):not(polygon):not(ellipse),
+[type="button"]:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))) *:not(svg):not(path):not(circle):not(rect):not(line):not(polyline):not(polygon):not(ellipse),
+[type="submit"]:not(:where(:has(img))) *:not(svg):not(path):not(circle):not(rect):not(line):not(polyline):not(polygon):not(ellipse),
+[type="reset"]:not(:where(:has(img))) *:not(svg):not(path):not(circle):not(rect):not(line):not(polyline):not(polygon):not(ellipse) {
+  color: #000000 !important;
+  text-shadow: none !important;
+}
+
+button:not(:has(img)).zsb-golden-brand,
+button:not(:has(img)) .zsb-golden-brand,
+button:not(:has(img)) .zsb-golden-brand-light,
+[type="button"]:not(:has(img)).zsb-golden-brand,
+[type="button"]:not(:has(img)) .zsb-golden-brand,
+[type="button"]:not(:has(img)) .zsb-golden-brand-light {
+  color: #000000 !important;
+}
+
+button:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))) :is(span, kbd, div) {
   background-color: transparent !important;
+  background-image: none !important;
+}
+
+/* Preserve circular & lockup company logo buttons cleanly */
+button:has(> img) {
+  background-color: #ffffff !important;
+  background-image: none !important;
+  border: 2px solid #f7941d !important;
+  border-radius: 9999px !important;
+  padding: 2px !important;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.18) !important;
+}
+
+button:has(img):not(:has(> img)) {
+  background-color: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0.75rem !important;
+}
+
+/* Keep Live Sync switch track & thumb clean */
+button[role="switch"] {
+  background-color: #fbbf24 !important;
+  background-image: linear-gradient(180deg, #ffba55 0%, #f7941d 100%) !important;
+  border: 1px solid #d97706 !important;
+  border-radius: 9999px !important;
+}
+
+button[role="switch"] > span {
+  background-color: #0f172a !important;
+}
+
+button[role="switch"][aria-checked="false"] > span {
+  background-color: #475569 !important;
+}
+
+/* Protruding 3D Concave Silver-White Circular Icon Medallion (primary icon inside labeled buttons) */
+:is(
+  button:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], .zsb-help-icon-btn, .zsb-clear-icon-btn, :has(img))),
+  [type="button"]:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], .zsb-help-icon-btn, .zsb-clear-icon-btn, :has(img))),
+  [type="submit"],
+  [type="reset"]
+) svg.lucide:first-of-type {
+  order: -1 !important;
+  box-sizing: content-box !important;
+  padding: 0.36em !important;
+  margin: -0.18em 0.32em -0.18em -0.28em !important;
+  border-radius: 9999px !important;
+  background-color: #eef2f9 !important;
+  background-image: radial-gradient(circle at 68% 68%, #ffffff 0%, #f4f6fb 48%, #d2d9ec 84%, #bdc6de 100%) !important;
+  border: 2px solid #ffffff !important;
+  box-shadow:
+    inset 3px 3px 6px rgba(100, 116, 139, 0.4),
+    inset -2px -2px 5px rgba(255, 255, 255, 0.98),
+    0 3px 8px rgba(15, 23, 42, 0.26),
+    0 0 0 1px rgba(203, 213, 225, 0.78) !important;
+  flex-shrink: 0 !important;
+  position: relative;
+  z-index: 2;
+}
+
+/* Trailing secondary chevrons/icons inside multi-icon buttons stay crisp black & unboxed */
+html body :is(
+  button:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))),
+  [type="button"]:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img)))
+) svg.lucide.lucide.lucide:not(:first-of-type) {
+  order: 99 !important;
+  background: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  color: #000000 !important;
+}
+
+/* Stacked sidebar & compact header buttons use tighter vertical medallion overlap for slim capsule height */
+:is(aside, header) :is(button, [type="button"]) svg.lucide:first-of-type {
+  padding: 0.28em !important;
+  margin: -0.32em 0.24em -0.32em -0.22em !important;
+}
+
+/* Icon-only compact/circular buttons keep their concave silver-white medallion centered without negative offset */
+html body :is(
+  button.zsb-clear-icon-btn,
+  button.zsb-help-icon-btn,
+  button[data-testid="login-toggle-password-btn"],
+  button[data-testid="zoom-out-btn"],
+  button[data-testid="zoom-in-btn"],
+  button[data-testid="sidebar-collapse-btn"],
+  button[data-testid="sidebar-expand-btn"],
+  button[data-testid="mobile-ledger-menu-btn"],
+  button[class*="w-5"][class*="h-5"],
+  button[class*="w-6"][class*="h-6"],
+  button[class*="w-7"][class*="h-7"],
+  button[class*="w-8"][class*="h-8"],
+  button[class*="w-9"][class*="h-9"],
+  button:has(> svg.lucide:only-child):not(:has(span, div)):not([class*="px-"])
+) {
+  padding: 2px !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto !important;
+  min-width: fit-content !important;
+}
+
+html body :is(
+  button.zsb-clear-icon-btn,
+  button.zsb-help-icon-btn,
+  button[data-testid="login-toggle-password-btn"],
+  button[data-testid="zoom-out-btn"],
+  button[data-testid="zoom-in-btn"],
+  button[data-testid="sidebar-collapse-btn"],
+  button[data-testid="sidebar-expand-btn"],
+  button[data-testid="mobile-ledger-menu-btn"],
+  button[class*="w-5"][class*="h-5"],
+  button[class*="w-6"][class*="h-6"],
+  button[class*="w-7"][class*="h-7"],
+  button[class*="w-8"][class*="h-8"],
+  button[class*="w-9"][class*="h-9"],
+  button:has(> svg.lucide:only-child):not(:has(span, div)):not([class*="px-"])
+) svg.lucide {
+  margin: 0 !important;
+  padding: 0.28em !important;
+  border-width: 1.5px !important;
 }
 
 /* Inline input clear icon button */
 button.zsb-clear-icon-btn {
-  background-color: transparent !important;
-  border: none !important;
-  color: #64748b !important;
-  padding: 0.125rem !important;
+  background-color: #fbbf24 !important;
+  background-image: linear-gradient(180deg, #ffba55 0%, #f7941d 100%) !important;
+  border: 1.5px solid #f7a638 !important;
+  color: #000000 !important;
+  padding: 1.5px !important;
   border-radius: 9999px !important;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
-button.zsb-clear-icon-btn:hover {
-  background-color: #f1f5f9 !important;
-  color: #0f172a !important;
+button.zsb-clear-icon-btn:hover:not(:disabled) {
+  background-color: #f59e0b !important;
+  color: #000000 !important;
 }
 
-/* Inline database cell trigger reset */
+/* Inline database cell trigger reset (table cell text wrapper, not a pushbutton) */
 button[data-testid^="db-cell-trigger-"] {
   background-color: transparent !important;
+  background-image: none !important;
   border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
   color: inherit !important;
+  text-shadow: none !important;
   padding: 0.125rem !important;
 }
 
 /* Compact circular help icon trigger (overrides global base button padding) */
 button.zsb-help-icon-btn {
-  padding: 0 !important;
+  padding: 1px !important;
   border-radius: 9999px !important;
-  width: 1.125rem !important;
-  height: 1.125rem !important;
-  min-width: 1.125rem !important;
-  min-height: 1.125rem !important;
-  background-color: rgba(0, 137, 123, 0.35) !important;
-  border-color: rgba(128, 203, 196, 0.65) !important;
+  width: 1.25rem !important;
+  height: 1.25rem !important;
+  min-width: 1.25rem !important;
+  min-height: 1.25rem !important;
+  background-color: #fbbf24 !important;
+  background-image: linear-gradient(180deg, #ffba55 0%, #f7941d 100%) !important;
+  border: 1.5px solid #f7a638 !important;
+  color: #000000 !important;
 }
 
 button.zsb-help-icon-btn svg {
-  width: 0.75rem !important;
-  height: 0.75rem !important;
+  width: 0.72rem !important;
+  height: 0.72rem !important;
+  padding: 0.12rem !important;
   flex-shrink: 0;
 }
 
@@ -175,8 +358,7 @@ button.zsb-help-icon-btn svg {
   background-color: #1f3349 !important;
 }
 
-.packing-ledger-plain-table thead *,
-.packing-ledger-plain-table thead svg {
+.packing-ledger-plain-table thead *:not(svg):not(svg *):not(button):not(button *) {
   color: #ffffff !important;
 }
 
@@ -190,52 +372,415 @@ button.zsb-help-icon-btn svg {
   color: #000000 !important;
 }
 
-.packing-ledger-plain-table tbody *:not(tr):not(td):not(svg):not(path):not(button[data-zsb-clicked="true"]):not(button:active),
-.packing-ledger-plain-table tfoot *:not(tr):not(td):not(svg):not(path):not(button[data-zsb-clicked="true"]):not(button:active) {
+.packing-ledger-plain-table tbody *:not(tr):not(td):not(svg):not(svg *):not(button):not(button *),
+.packing-ledger-plain-table tfoot *:not(tr):not(td):not(svg):not(svg *):not(button):not(button *) {
   background-color: transparent !important;
   background-image: none !important;
   color: #000000 !important;
 }
 
-.packing-ledger-plain-table tbody svg,
-.packing-ledger-plain-table tfoot svg {
-  color: #000000 !important;
-}
-
-.packing-ledger-plain-table input[type="text"],
-.packing-ledger-plain-table button:not([data-testid^="db-cell-trigger-"]):not([data-zsb-clicked="true"]) {
+.packing-ledger-plain-table input[type="text"] {
   border: 1px solid #cbd5e1 !important;
   background-color: #ffffff !important;
   color: #000000 !important;
 }
 
-/* Clicked / Active State for ALL Buttons -> Golden Color (#fbbf24) */
-button:not([data-testid^="db-cell-trigger-"])[data-zsb-clicked="true"]:not(:disabled),
-button:not([data-testid^="db-cell-trigger-"]):active:not(:disabled),
-[type="button"]:not([data-testid^="db-cell-trigger-"])[data-zsb-clicked="true"]:not(:disabled),
-[type="button"]:not([data-testid^="db-cell-trigger-"]):active:not(:disabled),
+.packing-ledger-plain-table button:not([data-testid^="db-cell-trigger-"]) {
+  border: 1.5px solid #f7a638 !important;
+  border-radius: 9999px !important;
+  background-color: #fbbf24 !important;
+  background-image: linear-gradient(180deg, #ffba55 0%, #f7941d 52%, #e67b08 100%) !important;
+  color: #000000 !important;
+}
+
+.packing-ledger-plain-table button:not([data-testid^="db-cell-trigger-"]):hover:not(:disabled) {
+  border-color: #fde68a !important;
+  background-color: #f59e0b !important;
+  background-image: linear-gradient(180deg, #ffc66b 0%, #fb9c24 52%, #ec840c 100%) !important;
+  color: #000000 !important;
+}
+
+/* Clicked / Active / Pressed State for ALL Buttons -> Distinct Pressed Depth + Bright Rim + Crisp Black Text */
+button:not([data-testid^="db-cell-trigger-"]):not([role="switch"]):not(:has(> img))[data-zsb-clicked="true"]:not(:disabled),
+button:not([data-testid^="db-cell-trigger-"]):not([role="switch"]):not(:has(> img))[aria-pressed="true"]:not(:disabled),
+button:not([data-testid^="db-cell-trigger-"]):not([role="switch"]):not(:has(> img)):active:not(:disabled),
+[type="button"]:not([data-testid^="db-cell-trigger-"]):not([role="switch"]):not(:has(> img))[data-zsb-clicked="true"]:not(:disabled),
+[type="button"]:not([data-testid^="db-cell-trigger-"]):not([role="switch"]):not(:has(> img))[aria-pressed="true"]:not(:disabled),
+[type="button"]:not([data-testid^="db-cell-trigger-"]):not([role="switch"]):not(:has(> img)):active:not(:disabled),
 [type="submit"][data-zsb-clicked="true"]:not(:disabled),
 [type="submit"]:active:not(:disabled),
 [type="reset"][data-zsb-clicked="true"]:not(:disabled),
 [type="reset"]:active:not(:disabled),
 .packing-ledger-plain-table button:not([data-testid^="db-cell-trigger-"])[data-zsb-clicked="true"]:not(:disabled),
 .packing-ledger-plain-table button:not([data-testid^="db-cell-trigger-"]):active:not(:disabled) {
-  background-color: #fbbf24 !important;
-  background-image: none !important;
+  background-color: #f59e0b !important;
+  background-image: linear-gradient(180deg, #ffb340 0%, #eb820c 52%, #d96b04 100%) !important;
   color: #000000 !important;
-  border: 1px solid #d97706 !important;
+  border: 2px solid #78350f !important;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 248, 220, 0.7),
+    0 0 0 2px rgba(253, 230, 138, 0.75),
+    0 4px 10px rgba(15, 23, 42, 0.28) !important;
   filter: none !important;
 }
 
-button:not([data-testid^="db-cell-trigger-"])[data-zsb-clicked="true"]:not(:disabled) *,
-button:not([data-testid^="db-cell-trigger-"]):active:not(:disabled) *,
-[type="button"]:not([data-testid^="db-cell-trigger-"])[data-zsb-clicked="true"]:not(:disabled) *,
-[type="button"]:not([data-testid^="db-cell-trigger-"]):active:not(:disabled) *,
-[type="submit"][data-zsb-clicked="true"]:not(:disabled) *,
-[type="submit"]:active:not(:disabled) *,
-[type="reset"][data-zsb-clicked="true"]:not(:disabled) *,
-[type="reset"]:active:not(:disabled) * {
+button:not([data-testid^="db-cell-trigger-"]):not([role="switch"])[aria-current="page"]:not(:disabled) {
+  background-color: #f59e0b !important;
+  background-image: linear-gradient(180deg, #ffbe5c 0%, #f58a12 52%, #dc6e04 100%) !important;
   color: #000000 !important;
+  border: 2px solid #ffffff !important;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 250, 235, 0.78),
+    0 0 0 2px rgba(251, 191, 36, 0.65),
+    0 4px 12px rgba(15, 23, 42, 0.35) !important;
+}
+
+button:not([data-testid^="db-cell-trigger-"]):not([role="switch"])[data-zsb-clicked="true"]:not(:disabled) *:not(svg):not(svg *),
+button:not([data-testid^="db-cell-trigger-"]):not([role="switch"])[aria-pressed="true"]:not(:disabled) *:not(svg):not(svg *),
+button:not([data-testid^="db-cell-trigger-"]):not([role="switch"])[aria-current="page"]:not(:disabled) *:not(svg):not(svg *),
+button:not([data-testid^="db-cell-trigger-"]):not([role="switch"]):active:not(:disabled) *:not(svg):not(svg *),
+[type="button"]:not([data-testid^="db-cell-trigger-"]):not([role="switch"])[data-zsb-clicked="true"]:not(:disabled) *:not(svg):not(svg *),
+[type="button"]:not([data-testid^="db-cell-trigger-"]):not([role="switch"])[aria-pressed="true"]:not(:disabled) *:not(svg):not(svg *),
+[type="button"]:not([data-testid^="db-cell-trigger-"]):not([role="switch"]):active:not(:disabled) *:not(svg):not(svg *),
+[type="submit"][data-zsb-clicked="true"]:not(:disabled) *:not(svg):not(svg *),
+[type="submit"]:active:not(:disabled) *:not(svg):not(svg *),
+[type="reset"][data-zsb-clicked="true"]:not(:disabled) *:not(svg):not(svg *),
+[type="reset"]:active:not(:disabled) *:not(svg):not(svg *) {
+  color: #000000 !important;
+  text-shadow: none !important;
+}
+
+html body :is(button, [type="button"]):has(img) .zsb-golden-brand {
+  color: #fbbf24 !important;
+}
+
+html body :is(button, [type="button"]):has(img) .text-sky-200 {
+  color: #bae6fd !important;
+}
+
+/* ============================================================================
+   COLORFUL ICON SYSTEM (All Lucide Icons Across Buttons, Dark Bars & Cards)
+   Rich high-contrast jewel tones inside silver-white button medallions & light cards;
+   bright luminous colors on dark #273e56 / #1e3247 surfaces.
+   ============================================================================ */
+svg.lucide {
+  color: #1d4ed8 !important;
+}
+
+svg.lucide :is(path, circle, rect, line, polyline, polygon, ellipse) {
+  color: inherit !important;
+}
+
+button svg.lucide,
+[type="button"] svg.lucide,
+[type="submit"] svg.lucide,
+[type="reset"] svg.lucide {
+  stroke-width: 2.3 !important;
+}
+
+/* 1. Base & Light/Golden Surface Jewel Tones */
+svg.lucide:is(
+  .lucide-layout-dashboard, .lucide-search, .lucide-monitor, .lucide-smartphone,
+  .lucide-panel-left, .lucide-menu, .lucide-globe, .lucide-zoom-in,
+  .lucide-eye, .lucide-eye-off, .lucide-calculator, .lucide-bar-chart-3,
+  .lucide-chart-column, .lucide-pie-chart, .lucide-table, .lucide-table-2,
+  .lucide-map-pin, .lucide-phone
+) {
+  color: #1d4ed8 !important; /* Royal Blue */
+}
+
+svg.lucide:is(
+  .lucide-plus, .lucide-plus-circle, .lucide-circle-plus, .lucide-file-plus,
+  .lucide-file-plus-2, .lucide-save, .lucide-check, .lucide-check-circle,
+  .lucide-check-circle-2, .lucide-circle-check, .lucide-check-square, .lucide-square-check,
+  .lucide-upload, .lucide-upload-cloud, .lucide-cloud-upload, .lucide-file-up,
+  .lucide-file-spreadsheet, .lucide-trending-up, .lucide-arrow-up-right,
+  .lucide-play, .lucide-play-circle, .lucide-circle-play, .lucide-user-plus,
+  .lucide-user-check, .lucide-shield-check, .lucide-package-check,
+  .lucide-file-check-2, .lucide-banknote, .lucide-dollar-sign, .lucide-coins
+) {
+  color: #047857 !important; /* Emerald Green */
+}
+
+svg.lucide:is(
+  .lucide-trash-2, .lucide-log-out, .lucide-x, .lucide-alert-circle,
+  .lucide-circle-alert, .lucide-alert-triangle, .lucide-triangle-alert,
+  .lucide-shield-alert, .lucide-trending-down, .lucide-arrow-down-right,
+  .lucide-minus, .lucide-minus-circle, .lucide-circle-minus, .lucide-zoom-out,
+  .lucide-heart-crack, .lucide-bell-off, .lucide-user-minus,
+  .lucide-pause, .lucide-pause-circle, .lucide-circle-pause
+) {
+  color: #be123c !important; /* Crimson Rose */
+}
+
+svg.lucide:is(
+  .lucide-database, .lucide-archive, .lucide-layers, .lucide-lock,
+  .lucide-unlock, .lucide-key, .lucide-key-round, .lucide-maximize-2,
+  .lucide-minimize-2, .lucide-history, .lucide-award, .lucide-sparkles,
+  .lucide-qr-code, .lucide-image, .lucide-file-image, .lucide-image-down
+) {
+  color: #6d28d9 !important; /* Royal Violet */
+}
+
+svg.lucide:is(
+  .lucide-package, .lucide-boxes, .lucide-plane, .lucide-download,
+  .lucide-file-down, .lucide-refresh-cw, .lucide-rotate-ccw, .lucide-repeat,
+  .lucide-arrow-left-right, .lucide-arrow-right-left, .lucide-arrow-up-down,
+  .lucide-arrow-down-up, .lucide-receipt, .lucide-wallet, .lucide-credit-card,
+  .lucide-shopping-cart, .lucide-file-text, .lucide-file-json,
+  .lucide-folder-open, .lucide-copy
+) {
+  color: #0f766e !important; /* Deep Teal */
+}
+
+svg.lucide:is(
+  .lucide-printer, .lucide-settings, .lucide-sliders-horizontal, .lucide-keyboard,
+  .lucide-calendar, .lucide-calendar-clock, .lucide-clock, .lucide-chevron-left,
+  .lucide-chevron-right, .lucide-chevron-up, .lucide-chevron-down,
+  .lucide-arrow-left, .lucide-arrow-right, .lucide-arrow-up, .lucide-arrow-down,
+  .lucide-arrow-down-left, .lucide-building, .lucide-building-2,
+  .lucide-landmark, .lucide-external-link, .lucide-move-horizontal, .lucide-activity
+) {
+  color: #3730a3 !important; /* Deep Indigo */
+}
+
+svg.lucide:is(
+  .lucide-zap, .lucide-bell, .lucide-help-circle, .lucide-circle-help,
+  .lucide-scale, .lucide-percent, .lucide-badge-percent, .lucide-send,
+  .lucide-loader-2
+) {
+  color: #c2410c !important; /* Burnt Orange */
+}
+
+svg.lucide:is(
+  .lucide-users, .lucide-user, .lucide-edit-2, .lucide-edit-3,
+  .lucide-square-pen, .lucide-pen, .lucide-pen-tool, .lucide-mail,
+  .lucide-mail-check, .lucide-filter, .lucide-tag
+) {
+  color: #a21caf !important; /* Deep Magenta */
+}
+
+/* 2. Light Card Surfaces -> High-Contrast Jewel Tones */
+:is(.zsb-surface-card, .zsb-surface-subcard, .bg-white, .bg-slate-50, .bg-emerald-50, .bg-blue-50, .bg-amber-50, .bg-rose-50, .packing-ledger-plain-table tbody, .packing-ledger-plain-table tfoot) svg.lucide {
+  color: #1d4ed8 !important;
+}
+
+:is(.zsb-surface-card, .zsb-surface-subcard, .bg-white, .bg-slate-50, .bg-emerald-50, .bg-blue-50, .bg-amber-50, .bg-rose-50, .packing-ledger-plain-table tbody, .packing-ledger-plain-table tfoot) svg.lucide:is(
+  .lucide-plus, .lucide-plus-circle, .lucide-circle-plus, .lucide-file-plus,
+  .lucide-file-plus-2, .lucide-save, .lucide-check, .lucide-check-circle,
+  .lucide-check-circle-2, .lucide-circle-check, .lucide-check-square, .lucide-square-check,
+  .lucide-upload, .lucide-upload-cloud, .lucide-cloud-upload, .lucide-file-up,
+  .lucide-file-spreadsheet, .lucide-trending-up, .lucide-arrow-up-right,
+  .lucide-play, .lucide-play-circle, .lucide-circle-play, .lucide-user-plus,
+  .lucide-user-check, .lucide-shield-check, .lucide-package-check,
+  .lucide-file-check-2, .lucide-banknote, .lucide-dollar-sign, .lucide-coins
+) {
+  color: #047857 !important;
+}
+
+:is(.zsb-surface-card, .zsb-surface-subcard, .bg-white, .bg-slate-50, .bg-emerald-50, .bg-blue-50, .bg-amber-50, .bg-rose-50, .packing-ledger-plain-table tbody, .packing-ledger-plain-table tfoot) svg.lucide:is(
+  .lucide-trash-2, .lucide-log-out, .lucide-x, .lucide-alert-circle,
+  .lucide-circle-alert, .lucide-alert-triangle, .lucide-triangle-alert,
+  .lucide-shield-alert, .lucide-trending-down, .lucide-arrow-down-right,
+  .lucide-minus, .lucide-minus-circle, .lucide-circle-minus, .lucide-zoom-out,
+  .lucide-heart-crack, .lucide-bell-off, .lucide-user-minus,
+  .lucide-pause, .lucide-pause-circle, .lucide-circle-pause
+) {
+  color: #be123c !important;
+}
+
+:is(.zsb-surface-card, .zsb-surface-subcard, .bg-white, .bg-slate-50, .bg-emerald-50, .bg-blue-50, .bg-amber-50, .bg-rose-50, .packing-ledger-plain-table tbody, .packing-ledger-plain-table tfoot) svg.lucide:is(
+  .lucide-database, .lucide-archive, .lucide-layers, .lucide-lock,
+  .lucide-unlock, .lucide-key, .lucide-key-round, .lucide-maximize-2,
+  .lucide-minimize-2, .lucide-history, .lucide-award, .lucide-sparkles,
+  .lucide-qr-code, .lucide-image, .lucide-file-image, .lucide-image-down
+) {
+  color: #6d28d9 !important;
+}
+
+:is(.zsb-surface-card, .zsb-surface-subcard, .bg-white, .bg-slate-50, .bg-emerald-50, .bg-blue-50, .bg-amber-50, .bg-rose-50, .packing-ledger-plain-table tbody, .packing-ledger-plain-table tfoot) svg.lucide:is(
+  .lucide-package, .lucide-boxes, .lucide-plane, .lucide-download,
+  .lucide-file-down, .lucide-refresh-cw, .lucide-rotate-ccw, .lucide-repeat,
+  .lucide-arrow-left-right, .lucide-arrow-right-left, .lucide-arrow-up-down,
+  .lucide-arrow-down-up, .lucide-receipt, .lucide-wallet, .lucide-credit-card,
+  .lucide-shopping-cart, .lucide-file-text, .lucide-file-json,
+  .lucide-folder-open, .lucide-copy
+) {
+  color: #0f766e !important;
+}
+
+:is(.zsb-surface-card, .zsb-surface-subcard, .bg-white, .bg-slate-50, .bg-emerald-50, .bg-blue-50, .bg-amber-50, .bg-rose-50, .packing-ledger-plain-table tbody, .packing-ledger-plain-table tfoot) svg.lucide:is(
+  .lucide-printer, .lucide-settings, .lucide-sliders-horizontal, .lucide-keyboard,
+  .lucide-calendar, .lucide-calendar-clock, .lucide-clock, .lucide-chevron-left,
+  .lucide-chevron-right, .lucide-chevron-up, .lucide-chevron-down,
+  .lucide-arrow-left, .lucide-arrow-right, .lucide-arrow-up, .lucide-arrow-down,
+  .lucide-arrow-down-left, .lucide-building, .lucide-building-2,
+  .lucide-landmark, .lucide-external-link, .lucide-move-horizontal, .lucide-activity
+) {
+  color: #3730a3 !important;
+}
+
+:is(.zsb-surface-card, .zsb-surface-subcard, .bg-white, .bg-slate-50, .bg-emerald-50, .bg-blue-50, .bg-amber-50, .bg-rose-50, .packing-ledger-plain-table tbody, .packing-ledger-plain-table tfoot) svg.lucide:is(
+  .lucide-zap, .lucide-bell, .lucide-help-circle, .lucide-circle-help,
+  .lucide-scale, .lucide-percent, .lucide-badge-percent, .lucide-send,
+  .lucide-loader-2
+) {
+  color: #c2410c !important;
+}
+
+:is(.zsb-surface-card, .zsb-surface-subcard, .bg-white, .bg-slate-50, .bg-emerald-50, .bg-blue-50, .bg-amber-50, .bg-rose-50, .packing-ledger-plain-table tbody, .packing-ledger-plain-table tfoot) svg.lucide:is(
+  .lucide-users, .lucide-user, .lucide-edit-2, .lucide-edit-3,
+  .lucide-square-pen, .lucide-pen, .lucide-pen-tool, .lucide-mail,
+  .lucide-mail-check, .lucide-filter, .lucide-tag
+) {
+  color: #a21caf !important;
+}
+
+/* 3. Dark Navy / Slate / Emerald Surfaces (including dark headers inside cards) -> Bright Luminous Colors */
+:is(header, aside, .packing-ledger-plain-table thead, [class*="bg-[#273E56]"], [class*="bg-[#1E3247]"], [class*="bg-[#1F3349]"], .bg-slate-900, .bg-emerald-900) svg.lucide {
+  color: #38bdf8 !important;
+}
+
+:is(header, aside, .packing-ledger-plain-table thead, [class*="bg-[#273E56]"], [class*="bg-[#1E3247]"], [class*="bg-[#1F3349]"], .bg-slate-900, .bg-emerald-900) svg.lucide:is(
+  .lucide-plus, .lucide-plus-circle, .lucide-circle-plus, .lucide-file-plus,
+  .lucide-file-plus-2, .lucide-save, .lucide-check, .lucide-check-circle,
+  .lucide-check-circle-2, .lucide-circle-check, .lucide-upload, .lucide-file-spreadsheet,
+  .lucide-trending-up, .lucide-arrow-up-right, .lucide-shield-check, .lucide-banknote,
+  .lucide-dollar-sign, .lucide-coins, .lucide-zap
+) {
+  color: #34d399 !important; /* Luminous Emerald */
+}
+
+:is(header, aside, .packing-ledger-plain-table thead, [class*="bg-[#273E56]"], [class*="bg-[#1E3247]"], [class*="bg-[#1F3349]"], .bg-slate-900, .bg-emerald-900) svg.lucide:is(
+  .lucide-trash-2, .lucide-log-out, .lucide-x, .lucide-alert-circle,
+  .lucide-circle-alert, .lucide-alert-triangle, .lucide-triangle-alert,
+  .lucide-shield-alert, .lucide-trending-down, .lucide-heart-crack
+) {
+  color: #fb7185 !important; /* Luminous Rose */
+}
+
+:is(header, aside, .packing-ledger-plain-table thead, [class*="bg-[#273E56]"], [class*="bg-[#1E3247]"], [class*="bg-[#1F3349]"], .bg-slate-900, .bg-emerald-900) svg.lucide:is(
+  .lucide-database, .lucide-archive, .lucide-layers, .lucide-lock,
+  .lucide-key-round, .lucide-sparkles, .lucide-history
+) {
+  color: #c084fc !important; /* Luminous Violet */
+}
+
+:is(header, aside, .packing-ledger-plain-table thead, [class*="bg-[#273E56]"], [class*="bg-[#1E3247]"], [class*="bg-[#1F3349]"], .bg-slate-900, .bg-emerald-900) svg.lucide:is(
+  .lucide-package, .lucide-boxes, .lucide-plane, .lucide-download,
+  .lucide-refresh-cw, .lucide-receipt, .lucide-wallet, .lucide-shopping-cart
+) {
+  color: #2dd4bf !important; /* Luminous Teal */
+}
+
+:is(header, aside, .packing-ledger-plain-table thead, [class*="bg-[#273E56]"], [class*="bg-[#1E3247]"], [class*="bg-[#1F3349]"], .bg-slate-900, .bg-emerald-900) svg.lucide:is(
+  .lucide-bell, .lucide-pause, .lucide-scale, .lucide-help-circle, .lucide-circle-help,
+  .lucide-arrow-up-down, .lucide-arrow-down-up, .lucide-chevron-up, .lucide-chevron-down,
+  .lucide-calendar, .lucide-calendar-clock, .lucide-clock, .lucide-activity
+) {
+  color: #fbbf24 !important; /* Luminous Gold */
+}
+
+:is(header, aside, .packing-ledger-plain-table thead, [class*="bg-[#273E56]"], [class*="bg-[#1E3247]"], [class*="bg-[#1F3349]"], .bg-slate-900, .bg-emerald-900) svg.lucide:is(
+  .lucide-users, .lucide-user, .lucide-mail, .lucide-edit-2, .lucide-edit-3
+) {
+  color: #f472b6 !important; /* Luminous Pink */
+}
+
+/* 4. Golden Buttons & Header White Search Boxes Reclaim High-Contrast Jewel Tones */
+:is(button, [type="button"], [type="submit"], [type="reset"], header .bg-white) svg.lucide.lucide {
+  color: #1d4ed8 !important;
+}
+
+:is(button, [type="button"], [type="submit"], [type="reset"], header .bg-white) svg.lucide.lucide:is(
+  .lucide-plus, .lucide-plus-circle, .lucide-circle-plus, .lucide-file-plus,
+  .lucide-file-plus-2, .lucide-save, .lucide-check, .lucide-check-circle,
+  .lucide-check-circle-2, .lucide-circle-check, .lucide-check-square, .lucide-square-check,
+  .lucide-upload, .lucide-upload-cloud, .lucide-cloud-upload, .lucide-file-up,
+  .lucide-file-spreadsheet, .lucide-trending-up, .lucide-arrow-up-right,
+  .lucide-play, .lucide-play-circle, .lucide-circle-play, .lucide-user-plus,
+  .lucide-user-check, .lucide-shield-check, .lucide-package-check,
+  .lucide-file-check-2, .lucide-banknote, .lucide-dollar-sign, .lucide-coins
+) {
+  color: #047857 !important;
+}
+
+:is(button, [type="button"], [type="submit"], [type="reset"], header .bg-white) svg.lucide.lucide:is(
+  .lucide-trash-2, .lucide-log-out, .lucide-x, .lucide-alert-circle,
+  .lucide-circle-alert, .lucide-alert-triangle, .lucide-triangle-alert,
+  .lucide-shield-alert, .lucide-trending-down, .lucide-arrow-down-right,
+  .lucide-minus, .lucide-minus-circle, .lucide-circle-minus, .lucide-zoom-out,
+  .lucide-heart-crack, .lucide-bell-off, .lucide-user-minus,
+  .lucide-pause, .lucide-pause-circle, .lucide-circle-pause
+) {
+  color: #be123c !important;
+}
+
+:is(button, [type="button"], [type="submit"], [type="reset"], header .bg-white) svg.lucide.lucide:is(
+  .lucide-database, .lucide-archive, .lucide-layers, .lucide-lock,
+  .lucide-unlock, .lucide-key, .lucide-key-round, .lucide-maximize-2,
+  .lucide-minimize-2, .lucide-history, .lucide-award, .lucide-sparkles,
+  .lucide-qr-code, .lucide-image, .lucide-file-image, .lucide-image-down
+) {
+  color: #6d28d9 !important;
+}
+
+:is(button, [type="button"], [type="submit"], [type="reset"], header .bg-white) svg.lucide.lucide:is(
+  .lucide-package, .lucide-boxes, .lucide-plane, .lucide-download,
+  .lucide-file-down, .lucide-refresh-cw, .lucide-rotate-ccw, .lucide-repeat,
+  .lucide-arrow-left-right, .lucide-arrow-right-left, .lucide-arrow-up-down,
+  .lucide-arrow-down-up, .lucide-receipt, .lucide-wallet, .lucide-credit-card,
+  .lucide-shopping-cart, .lucide-file-text, .lucide-file-json,
+  .lucide-folder-open, .lucide-copy
+) {
+  color: #0f766e !important;
+}
+
+:is(button, [type="button"], [type="submit"], [type="reset"], header .bg-white) svg.lucide.lucide:is(
+  .lucide-printer, .lucide-settings, .lucide-sliders-horizontal, .lucide-keyboard,
+  .lucide-calendar, .lucide-calendar-clock, .lucide-clock, .lucide-chevron-left,
+  .lucide-chevron-right, .lucide-chevron-up, .lucide-chevron-down,
+  .lucide-arrow-left, .lucide-arrow-right, .lucide-arrow-up, .lucide-arrow-down,
+  .lucide-arrow-down-left, .lucide-building, .lucide-building-2,
+  .lucide-landmark, .lucide-external-link, .lucide-move-horizontal, .lucide-activity
+) {
+  color: #3730a3 !important;
+}
+
+:is(button, [type="button"], [type="submit"], [type="reset"], header .bg-white) svg.lucide.lucide:is(
+  .lucide-zap, .lucide-bell, .lucide-help-circle, .lucide-circle-help,
+  .lucide-scale, .lucide-percent, .lucide-badge-percent, .lucide-send,
+  .lucide-loader-2
+) {
+  color: #c2410c !important;
+}
+
+:is(button, [type="button"], [type="submit"], [type="reset"], header .bg-white) svg.lucide.lucide:is(
+  .lucide-users, .lucide-user, .lucide-edit-2, .lucide-edit-3,
+  .lucide-square-pen, .lucide-pen, .lucide-pen-tool, .lucide-mail,
+  .lucide-mail-check, .lucide-filter, .lucide-tag
+) {
+  color: #a21caf !important;
+}
+
+/* 5. KPI & Solid Colored Circular/Square Badges keep crisp white icons inside colorful badges */
+html body :is(
+  .bg-gradient-to-br,
+  .bg-gradient-to-r,
+  .text-white[class*="bg-[#1D6CE0]"],
+  .text-white[class*="bg-[#00B14F]"],
+  .text-white[class*="bg-[#7C3AED]"],
+  .text-white[class*="bg-[#F97316]"],
+  .text-white[class*="bg-[#E11D48]"],
+  .text-white.bg-blue-600,
+  .text-white.bg-emerald-600,
+  .text-white.bg-rose-600,
+  .text-white.bg-purple-600,
+  .text-white.bg-amber-600,
+  .text-white.bg-teal-600,
+  .text-white.bg-indigo-600
+):not(button):not([type="button"]):not([type="submit"]):not([type="reset"]) svg.lucide.lucide.lucide {
+  color: #ffffff !important;
 }
 
 /* Crisp Editorial Brand Wordmark for Screen Headers — Golden & Bold */
@@ -319,12 +864,114 @@ button:not([data-testid^="db-cell-trigger-"]):active:not(:disabled) *,
   .zsb-print-paper {
     color-scheme: light;
     color: #0f172a;
+    box-sizing: border-box;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
   .zsb-print-paper input,
   .zsb-print-paper select,
   .zsb-print-paper textarea {
     color-scheme: light;
   }
+}
+
+/* ============================================================================
+   UNIFIED PRINTABLE DOCUMENT & TABLE LAYOUT RULES (#printable-document & .zsb-print-paper)
+   Ensures interactive views, Print Preview modal, PDF exports, and @media print
+   share identical table geometry, column widths, and cell formatting.
+   ============================================================================ */
+#printable-document,
+.zsb-print-paper {
+  box-sizing: border-box !important;
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+}
+
+#printable-document *,
+.zsb-print-paper * {
+  box-sizing: border-box;
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+}
+
+#printable-document table,
+.zsb-print-paper table {
+  width: 100% !important;
+  max-width: 100% !important;
+  border-collapse: collapse !important;
+  border-spacing: 0 !important;
+  table-layout: fixed !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+#printable-document thead,
+.zsb-print-paper thead {
+  display: table-header-group;
+}
+
+#printable-document tfoot,
+.zsb-print-paper tfoot {
+  display: table-footer-group;
+}
+
+#printable-document th,
+#printable-document td,
+.zsb-print-paper th,
+.zsb-print-paper td {
+  vertical-align: middle !important;
+  box-sizing: border-box !important;
+  line-height: 1.35 !important;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+#printable-document :is(th.text-right, td.text-right, th.font-mono, td.font-mono, td.tabular-nums),
+.zsb-print-paper :is(th.text-right, td.text-right, th.font-mono, td.font-mono, td.tabular-nums) {
+  font-variant-numeric: tabular-nums !important;
+  white-space: nowrap;
+}
+
+/* Default proportional column widths for standard 5-column (Purchase), 5/6-column (Payment),
+   7-column (Daily P&L / Exporter Slip / Mortality), 8-column (AWB / Statement), and 9-column (Packing) tables
+   when no explicit <colgroup> is present */
+#printable-document table:not(:has(colgroup)) th.w-10,
+.zsb-print-paper table:not(:has(colgroup)) th.w-10 {
+  width: 6% !important;
+}
+
+#printable-document table:not(:has(colgroup)) th.w-12,
+.zsb-print-paper table:not(:has(colgroup)) th.w-12 {
+  width: 7% !important;
+}
+
+#printable-document table:not(:has(colgroup)) th.w-16,
+.zsb-print-paper table:not(:has(colgroup)) th.w-16 {
+  width: 8% !important;
+}
+
+#printable-document table:not(:has(colgroup)) th.w-20,
+.zsb-print-paper table:not(:has(colgroup)) th.w-20 {
+  width: 10% !important;
+}
+
+#printable-document table:not(:has(colgroup)) th.w-24,
+.zsb-print-paper table:not(:has(colgroup)) th.w-24 {
+  width: 12% !important;
+}
+
+#printable-document table:not(:has(colgroup)) th.w-28,
+.zsb-print-paper table:not(:has(colgroup)) th.w-28 {
+  width: 15% !important;
+}
+
+#printable-document table:not(:has(colgroup)) th.w-32,
+.zsb-print-paper table:not(:has(colgroup)) th.w-32 {
+  width: 17% !important;
+}
+
+#printable-document table:not(:has(colgroup)) th.w-36,
+.zsb-print-paper table:not(:has(colgroup)) th.w-36 {
+  width: 20% !important;
 }
 
 @media print {
@@ -338,6 +985,13 @@ button:not([data-testid^="db-cell-trigger-"]):active:not(:disabled) *,
       font-weight: 700;
       color: #334155;
     }
+  }
+
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   /* Dynamic A4 page number counter for printed vouchers and packing lists */
@@ -371,25 +1025,64 @@ button:not([data-testid^="db-cell-trigger-"]):active:not(:disabled) *,
     color: #000000 !important;
     margin: 0 !important;
     padding: 0 !important;
+    width: 100% !important;
+    min-height: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
-  /* Hide all app chrome, navigation, headers, main tabs, and floating buttons */
+  [data-testid="app-workspace-root"] {
+    display: block !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Hide all app chrome, navigation, headers, and floating buttons */
   header,
   nav,
-  main,
   footer,
   aside,
   .print\:hidden {
     display: none !important;
   }
 
+  /* When PrintPreviewModal is open, isolate #printable-modal-backdrop and hide underlying workspace siblings */
+  body:has(#printable-modal-backdrop) main,
+  body:has(#printable-modal-backdrop) [data-testid="app-workspace-root"] > :not(#printable-modal-backdrop) {
+    display: none !important;
+  }
+
+  /* When printing directly from an interactive view (modal closed), normalize main canvas */
+  body:not(:has(#printable-modal-backdrop)) [data-testid="sheet-viewport-scroll-wrapper"] {
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+  }
+
+  body:not(:has(#printable-modal-backdrop)) main {
+    display: block !important;
+    zoom: 1 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
   /* Modal container reset for print output */
   #printable-modal-backdrop {
     position: static !important;
     inset: auto !important;
-    background: transparent !important;
+    background: #ffffff !important;
     padding: 0 !important;
     margin: 0 !important;
+    width: 100% !important;
     box-shadow: none !important;
     border: none !important;
     overflow: visible !important;
@@ -399,38 +1092,93 @@ button:not([data-testid^="db-cell-trigger-"]):active:not(:disabled) *,
   #printable-modal-card {
     max-width: 100% !important;
     width: 100% !important;
+    max-height: none !important;
     border: none !important;
     box-shadow: none !important;
     border-radius: 0 !important;
     overflow: visible !important;
     display: block !important;
     background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
-  #printable-document {
+  #printable-document,
+  .zsb-print-paper {
     display: block !important;
-    padding: 0 !important;
+    position: relative !important;
+    box-sizing: border-box !important;
+    width: 760px !important;
+    max-width: 100% !important;
+    padding: 24px 28px !important;
     margin: 0 auto !important;
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 2px !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Preserve multi-column grids inside printable documents regardless of print viewport width */
+  #printable-document :is(.grid-cols-2, .sm\:grid-cols-2),
+  .zsb-print-paper :is(.grid-cols-2, .sm\:grid-cols-2) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  #printable-document :is(.grid-cols-3, .sm\:grid-cols-3),
+  .zsb-print-paper :is(.grid-cols-3, .sm\:grid-cols-3) {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  #printable-document :is(.grid-cols-4, .sm\:grid-cols-4),
+  .zsb-print-paper :is(.grid-cols-4, .sm\:grid-cols-4) {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+
+  #printable-document :is(.grid-cols-5, .sm\:grid-cols-5),
+  .zsb-print-paper :is(.grid-cols-5, .sm\:grid-cols-5) {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+
+  /* Force consistent table layout, column widths, and cell styling in print media */
+  #printable-document table,
+  .zsb-print-paper table,
+  table {
     width: 100% !important;
     max-width: 100% !important;
-    box-shadow: none !important;
-    border: none !important;
-    background: #ffffff !important;
-    color: #000000 !important;
+    border-collapse: collapse !important;
+    border-spacing: 0 !important;
+    table-layout: fixed !important;
+    page-break-inside: auto;
+    font-variant-numeric: tabular-nums !important;
   }
 
-  table {
-    page-break-inside: auto;
+  thead {
+    display: table-header-group !important;
+  }
+
+  tfoot {
+    display: table-footer-group !important;
   }
 
   tr {
-    page-break-inside: avoid;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
     page-break-after: auto;
   }
 
   th,
   td {
     vertical-align: middle !important;
+    box-sizing: border-box !important;
+    line-height: 1.35 !important;
+    overflow-wrap: break-word;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   [data-ten-row-scroll="active"],

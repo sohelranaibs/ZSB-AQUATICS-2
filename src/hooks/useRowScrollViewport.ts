@@ -52,11 +52,13 @@ export function useRowScrollViewport(
         return;
       }
 
-      const thead = table.querySelector('thead') as HTMLElement | null;
-      const tfoot = includeFooter ? (table.querySelector('tfoot') as HTMLElement | null) : null;
-      const tbodyRows = Array.from(table.querySelectorAll('tbody > tr')) as HTMLElement[];
+      const thead = table.tHead as HTMLElement | null;
+      const tfoot = includeFooter ? (table.tFoot as HTMLElement | null) : null;
+      const tbody = table.tBodies[0];
+      const tbodyRows = tbody ? tbody.rows : null;
+      const actualRowCount = tbodyRows ? tbodyRows.length : 0;
 
-      if (tbodyRows.length <= maxVisibleRows) {
+      if (!tbodyRows || actualRowCount <= maxVisibleRows) {
         lastSigRef.current = '';
         setMaxHeight(undefined);
         return;
@@ -65,7 +67,7 @@ export function useRowScrollViewport(
       const theadHeight = measureElementHeight(thead);
       const tfootHeight = measureElementHeight(tfoot);
       const sig = computeTableScrollSignature({
-        rowCount: tbodyRows.length,
+        rowCount: actualRowCount,
         containerWidth: container.clientWidth,
         theadHeight,
         tfootHeight,
@@ -75,12 +77,11 @@ export function useRowScrollViewport(
         return;
       }
 
-      const rowHeights = tbodyRows
-        .slice(0, maxVisibleRows)
-        .map((tr) => measureElementHeight(tr));
-      while (rowHeights.length < tbodyRows.length) {
-        rowHeights.push(0);
+      const rowHeights: number[] = [];
+      for (let i = 0; i < maxVisibleRows; i++) {
+        rowHeights.push(measureElementHeight(tbodyRows[i] as HTMLElement));
       }
+      rowHeights.push(0);
 
       const nextHeight = calculateScrollViewportMaxHeight({
         theadHeight,

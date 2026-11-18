@@ -1167,6 +1167,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = useCallback((msg: string) => {
+    publishToastMessage(msg);
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => {
+      if (getToastSnapshot() === msg) {
+        publishToastMessage(null);
+      }
+    }, 3500);
+  }, []);
+
   const flushAllStoresNow = async (
     entityLabel: string = 'All Ledgers (Force Sync)',
     options?: { targetStatus?: SyncStatusState; silent?: boolean }
@@ -1283,54 +1296,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const triggerManualSync = (
-    entityLabel: string = 'All Ledgers',
-    targetStatus?: SyncStatusState
-  ) => {
-    void flushAllStoresNow(entityLabel, {
-      targetStatus,
-      silent: entityLabel.includes('Live Sync Restored'),
-    });
-  };
+  const flushAllStoresNowRef = useRef(flushAllStoresNow);
+  flushAllStoresNowRef.current = flushAllStoresNow;
 
-  const forceSyncNow = (entityLabel: string = 'All Ledgers (Force Sync)') => {
-    return flushAllStoresNow(entityLabel, { silent: false });
-  };
+  const triggerManualSync = useCallback(
+    (entityLabel: string = 'All Ledgers', targetStatus?: SyncStatusState) => {
+      void flushAllStoresNowRef.current(entityLabel, {
+        targetStatus,
+        silent: entityLabel.includes('Live Sync Restored'),
+      });
+    },
+    []
+  );
 
-  const toggleLiveSync = (forcedValue?: boolean) => {
-    const nextValue =
-      forcedValue !== undefined ? forcedValue : !isLiveSyncEnabledRef.current;
-    isLiveSyncEnabledRef.current = nextValue;
-    setIsLiveSyncEnabled(nextValue);
-    try {
-      localStorage.setItem(STORAGE_KEYS.LIVE_SYNC, String(nextValue));
-    } catch (e) {
-      console.error(e);
-    }
-    if (nextValue) {
-      // When turning Live Sync on, immediately flush all state to storage and show Synced
-      void flushAllStoresNow('All Ledgers (Live Sync Restored)', {
-        targetStatus: 'synced',
-        silent: true,
-      });
-      updateSyncTelemetry({ hasUnsyncedChanges: false });
-      showToast('Live Sync enabled: Auto-saving database changes in the background.');
-    } else {
-      if (syncTimerRef.current) {
-        clearTimeout(syncTimerRef.current);
+  const forceSyncNow = useCallback((entityLabel: string = 'All Ledgers (Force Sync)') => {
+    return flushAllStoresNowRef.current(entityLabel, { silent: false });
+  }, []);
+
+  const toggleLiveSync = useCallback(
+    (forcedValue?: boolean) => {
+      const nextValue =
+        forcedValue !== undefined ? forcedValue : !isLiveSyncEnabledRef.current;
+      isLiveSyncEnabledRef.current = nextValue;
+      setIsLiveSyncEnabled(nextValue);
+      try {
+        localStorage.setItem(STORAGE_KEYS.LIVE_SYNC, String(nextValue));
+      } catch (e) {
+        console.error(e);
       }
-      if (slowSyncWatchTimerRef.current) {
-        clearTimeout(slowSyncWatchTimerRef.current);
+      if (nextValue) {
+        // When turning Live Sync on, immediately flush all state to storage and show Synced
+        void flushAllStoresNowRef.current('All Ledgers (Live Sync Restored)', {
+          targetStatus: 'synced',
+          silent: true,
+        });
+        updateSyncTelemetry({ hasUnsyncedChanges: false });
+        showToast('Live Sync enabled: Auto-saving database changes in the background.');
+      } else {
+        if (syncTimerRef.current) {
+          clearTimeout(syncTimerRef.current);
+        }
+        if (slowSyncWatchTimerRef.current) {
+          clearTimeout(slowSyncWatchTimerRef.current);
+        }
+        updateSyncTelemetry({
+          syncStartedAtMs: null,
+          syncStatus: 'paused',
+        });
+        showToast(
+          'Live Sync paused: Background auto-saving disabled. Use "Force Sync" (Ctrl+S) to back up now.'
+        );
       }
-      updateSyncTelemetry({
-        syncStartedAtMs: null,
-        syncStatus: 'paused',
-      });
-      showToast(
-        'Live Sync paused: Background auto-saving disabled. Use "Force Sync" (Ctrl+S) to back up now.'
-      );
-    }
-  };
+    },
+    [showToast]
+  );
 
   const persistWithSyncIndicator = (
     entityLabel: string,
@@ -1521,6 +1540,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Automated Monthly Recurring Expense Deduction Engine (idempotent per ruleId + YYYY-MM)
   useEffect(() => {
+    if (recurringExpenses.length === 0) return;
     const todayStr = new Date().toISOString().slice(0, 10);
     const dueCycles = getDueRecurringExpenseCycles(recurringExpenses, otherCosts, todayStr);
     if (dueCycles.length === 0) return;
@@ -1573,14 +1593,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [recurringExpenses, otherCosts]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(
-        STORAGE_KEYS.PARTNER_NOTIFICATIONS,
-        JSON.stringify(partnerNotifications.slice(0, 100))
-      );
-    } catch (e) {
-      console.error(e);
-    }
+    if (isInitialMountRef.current) return undefined;
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(
+          STORAGE_KEYS.PARTNER_NOTIFICATIONS,
+          JSON.stringify(partnerNotifications.slice(0, 100))
+        );
+      } catch (e) {
+        console.error(e);
+      }
+    }, 80);
+    return () => clearTimeout(timer);
   }, [partnerNotifications]);
 
   useEffect(() => {
@@ -1596,11 +1620,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [snapshots]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(auditLogs));
-    } catch (e) {
-      console.error(e);
-    }
+    if (isInitialMountRef.current) return undefined;
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(auditLogs));
+      } catch (e) {
+        console.error(e);
+      }
+    }, 80);
+    return () => clearTimeout(timer);
   }, [auditLogs]);
 
   useEffect(() => {
@@ -1682,19 +1710,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {
       // ignore
     }
-  }, []);
-
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const showToast = useCallback((msg: string) => {
-    publishToastMessage(msg);
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current);
-    }
-    toastTimerRef.current = setTimeout(() => {
-      if (getToastSnapshot() === msg) {
-        publishToastMessage(null);
-      }
-    }, 3200);
   }, []);
 
   const addAuditLog = (input: CreateAuditLogInput): AuditLogRecord => {
@@ -4258,7 +4273,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast(`Opened shipment details for ${targetRef} in Packing DB.`);
   };
 
-  const clearFocusedShipment = () => {
+  const clearFocusedShipment = useCallback(() => {
     setFocusedShipmentInvoice(null);
     try {
       if (typeof window !== 'undefined' && window.history?.replaceState) {
@@ -4267,7 +4282,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {
       // ignore
     }
-  };
+  }, []);
 
   const contextValue = useMemo<AppContextType>(
     () => ({

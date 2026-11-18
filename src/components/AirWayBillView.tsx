@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback, memo } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import {
   collectPackingManifestRecords,
@@ -19,6 +19,10 @@ import {
   formatAirWayBillExportFilename,
   mergeAirWayBillRows,
 } from '../utils/airWayBill.ts';
+import {
+  isAirWayBillRowDataEqual,
+  updateCustomAirWayBillRowById,
+} from '../utils/tableRowOptimization.ts';
 import {
   exportElementToPdf,
   exportElementToPng,
@@ -47,6 +51,236 @@ import {
 } from './PngShareModal.tsx';
 
 const AWB_OVERRIDES_STORAGE_KEY = 'zsb_awb_row_overrides_v2';
+
+const formatAwbCellNumber = (val: number) => {
+  if (!val || val === 0) return '';
+  return val.toLocaleString('en-US', {
+    minimumFractionDigits: val % 1 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  });
+};
+
+interface AirWayBillTableRowProps {
+  row: AirWayBillRow;
+  rowIndex: number;
+  onRowEditableChange: (
+    row: AirWayBillRow,
+    field: 'rmbPerBox' | 'rate' | 'date' | 'shipper' | 'flight' | 'totalBox',
+    rawValue: string
+  ) => void;
+}
+
+const areAirWayBillTableRowPropsEqual = (
+  prev: AirWayBillTableRowProps,
+  next: AirWayBillTableRowProps
+): boolean =>
+  prev.rowIndex === next.rowIndex &&
+  prev.onRowEditableChange === next.onRowEditableChange &&
+  isAirWayBillRowDataEqual(prev.row, next.row);
+
+const AirWayBillTableRow: React.FC<AirWayBillTableRowProps> = memo(
+  ({ row, rowIndex, onRowEditableChange }) => {
+    const rowNum = rowIndex + 1;
+    const isFromPackingList = Boolean(row.packingId);
+
+    const handleDateChange = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        onRowEditableChange(row, 'date', e.target.value);
+      },
+      [onRowEditableChange, row]
+    );
+
+    const handleShipperChange = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        onRowEditableChange(row, 'shipper', e.target.value);
+      },
+      [onRowEditableChange, row]
+    );
+
+    const handleFlightChange = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        onRowEditableChange(row, 'flight', e.target.value);
+      },
+      [onRowEditableChange, row]
+    );
+
+    const handleTotalBoxChange = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        onRowEditableChange(row, 'totalBox', e.target.value);
+      },
+      [onRowEditableChange, row]
+    );
+
+    const handleRmbPerBoxChange = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        onRowEditableChange(row, 'rmbPerBox', e.target.value);
+      },
+      [onRowEditableChange, row]
+    );
+
+    const handleRateChange = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        onRowEditableChange(row, 'rate', e.target.value);
+      },
+      [onRowEditableChange, row]
+    );
+
+    return (
+      <tr
+        data-testid={`awb-table-row-${rowNum}`}
+        style={{ backgroundColor: '#ffffff', color: '#000000' }}
+        className="hover:bg-sky-50/40 transition"
+      >
+        {/* 0. SL # */}
+        <td
+          style={{ border: '1.5px solid #000000', height: '36px' }}
+          className="px-2 py-1 text-center"
+        >
+          <span className="zsb-sl-badge">
+            {String(rowNum).padStart(2, '0')}
+          </span>
+        </td>
+
+        {/* 1. DATE */}
+        <td
+          style={{ border: '1.5px solid #000000', height: '36px' }}
+          className="px-2 py-1 text-center font-mono font-semibold text-xs sm:text-sm whitespace-nowrap"
+        >
+          {isFromPackingList ? (
+            <span data-testid={`awb-row-${rowNum}-date`}>
+              {formatDate(row.date)}
+            </span>
+          ) : (
+            <input
+              type="date"
+              aria-label={`Row ${rowNum} Date`}
+              value={row.date}
+              onChange={handleDateChange}
+              className="w-full h-full text-center font-mono text-xs sm:text-sm bg-transparent focus:bg-amber-50 focus:outline-none px-1"
+            />
+          )}
+        </td>
+
+        {/* 2. SHIPPER */}
+        <td
+          style={{ border: '1.5px solid #000000', height: '36px' }}
+          className="px-2.5 py-1 text-center font-bold text-xs sm:text-sm whitespace-nowrap"
+        >
+          {isFromPackingList ? (
+            <span data-testid={`awb-row-${rowNum}-shipper`}>
+              {row.shipper}
+            </span>
+          ) : (
+            <input
+              type="text"
+              aria-label={`Row ${rowNum} Shipper`}
+              placeholder=""
+              value={row.shipper}
+              onChange={handleShipperChange}
+              className="w-full h-full text-center font-bold text-xs sm:text-sm bg-transparent focus:bg-amber-50 focus:outline-none px-1"
+            />
+          )}
+        </td>
+
+        {/* 3. FLIGHT */}
+        <td
+          style={{ border: '1.5px solid #000000', height: '36px' }}
+          className="px-2 py-1 text-center font-mono font-bold text-xs sm:text-sm whitespace-nowrap"
+        >
+          {isFromPackingList ? (
+            <span data-testid={`awb-row-${rowNum}-flight`}>
+              {row.flight}
+            </span>
+          ) : (
+            <input
+              type="text"
+              aria-label={`Row ${rowNum} Flight`}
+              placeholder=""
+              value={row.flight}
+              onChange={handleFlightChange}
+              className="w-full h-full text-center font-mono font-bold text-xs sm:text-sm bg-transparent focus:bg-amber-50 focus:outline-none px-1"
+            />
+          )}
+        </td>
+
+        {/* 4. TOTAL BOX */}
+        <td
+          style={{ border: '1.5px solid #000000', height: '36px' }}
+          className="px-2 py-1 text-center font-mono font-bold text-xs sm:text-sm tabular-nums"
+        >
+          {isFromPackingList ? (
+            <span data-testid={`awb-row-${rowNum}-box`}>
+              {row.totalBox > 0 ? row.totalBox : ''}
+            </span>
+          ) : (
+            <input
+              type="number"
+              min="0"
+              step="1"
+              aria-label={`Row ${rowNum} Total Box`}
+              value={row.totalBox > 0 ? row.totalBox : ''}
+              onChange={handleTotalBoxChange}
+              className="w-full h-full text-center font-mono font-bold text-xs sm:text-sm bg-transparent focus:bg-amber-50 focus:outline-none px-1 tabular-nums"
+            />
+          )}
+        </td>
+
+        {/* 5. RMB/PER BOX (EDITABLE) */}
+        <td
+          style={{ border: '1.5px solid #000000', height: '36px' }}
+          className="px-1.5 py-1 text-center font-mono font-bold text-xs sm:text-sm tabular-nums bg-amber-50/25"
+        >
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            aria-label={`Row ${rowNum} RMB/Per Box`}
+            data-testid={`awb-row-${rowNum}-rmb-per-box`}
+            value={row.rmbPerBox > 0 ? row.rmbPerBox : ''}
+            onChange={handleRmbPerBoxChange}
+            className="w-full h-full text-center font-mono font-bold text-xs sm:text-sm bg-transparent focus:bg-amber-100/70 focus:outline-none px-1.5 py-0.5 rounded tabular-nums"
+          />
+        </td>
+
+        {/* 6. TOTAL RMB (= TOTAL BOX * RMB/PER BOX) */}
+        <td
+          data-testid={`awb-row-${rowNum}-total-rmb`}
+          style={{ border: '1.5px solid #000000', height: '36px' }}
+          className="px-2.5 py-1 text-center font-mono font-bold text-xs sm:text-sm tabular-nums"
+        >
+          {formatAwbCellNumber(row.totalRmb)}
+        </td>
+
+        {/* 7. RATE (EDITABLE) */}
+        <td
+          style={{ border: '1.5px solid #000000', height: '36px' }}
+          className="px-1.5 py-1 text-center font-mono font-bold text-xs sm:text-sm tabular-nums bg-amber-50/25"
+        >
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            aria-label={`Row ${rowNum} Rate`}
+            data-testid={`awb-row-${rowNum}-rate`}
+            value={row.rate > 0 ? row.rate : ''}
+            onChange={handleRateChange}
+            className="w-full h-full text-center font-mono font-bold text-xs sm:text-sm bg-transparent focus:bg-amber-100/70 focus:outline-none px-1.5 py-0.5 rounded tabular-nums"
+          />
+        </td>
+
+        {/* 8. BDT AMOUNT (= TOTAL RMB * RATE) */}
+        <td
+          data-testid={`awb-row-${rowNum}-bdt-amount`}
+          style={{ border: '1.5px solid #000000', height: '36px' }}
+          className="px-2.5 py-1 text-center font-mono font-extrabold text-xs sm:text-sm tabular-nums"
+        >
+          {formatAwbCellNumber(row.bdtAmount)}
+        </td>
+      </tr>
+    );
+  },
+  areAirWayBillTableRowPropsEqual
+);
 
 export const AirWayBillView: React.FC = () => {
   const {
@@ -137,60 +371,51 @@ export const AirWayBillView: React.FC = () => {
       depsKey: `${selectedMonth}|${selectedShipper}|${selectedFlight}`,
     });
 
-  const handleRowEditableChange = (
-    row: AirWayBillRow,
-    field: 'rmbPerBox' | 'rate' | 'date' | 'shipper' | 'flight' | 'totalBox',
-    rawValue: string
-  ) => {
-    if (row.packingId && (field === 'rmbPerBox' || field === 'rate')) {
-      const numVal = rawValue === '' ? 0 : parseFloat(rawValue) || 0;
-      setRowOverrides((prev) => ({
-        ...prev,
-        [row.packingId!]: {
-          ...prev[row.packingId!],
-          [field]: numVal,
-        },
-      }));
+  const handleRowEditableChange = useCallback(
+    (
+      row: AirWayBillRow,
+      field: 'rmbPerBox' | 'rate' | 'date' | 'shipper' | 'flight' | 'totalBox',
+      rawValue: string
+    ) => {
+      if (row.packingId && (field === 'rmbPerBox' || field === 'rate')) {
+        const numVal = rawValue === '' ? 0 : parseFloat(rawValue) || 0;
+        if (row[field] === numVal) return;
+        setRowOverrides((prev) => {
+          const existing = prev[row.packingId!];
+          if (existing && existing[field] === numVal) return prev;
+          return {
+            ...prev,
+            [row.packingId!]: {
+              ...existing,
+              [field]: numVal,
+            },
+          };
+        });
 
-      // Also persist onto saved PackingRecord if it exists in packings
-      if (row.packingId !== 'draft-packing-manifest') {
-        const nextRmbPerBox =
-          field === 'rmbPerBox' ? numVal : row.rmbPerBox;
-        const nextRate = field === 'rate' ? numVal : row.rate;
-        updatePacking(
-          row.packingId,
-          {
-            awbRmbPerBox: nextRmbPerBox,
-            awbRate: nextRate,
-          },
-          true
-        );
-      }
-      return;
-    }
-
-    // Custom row update
-    setCustomRows((prev) =>
-      prev.map((r) => {
-        if (r.id !== row.id) return r;
-        const updated = { ...r };
-        if (field === 'date' || field === 'shipper' || field === 'flight') {
-          updated[field] = rawValue;
-        } else {
-          const numVal = rawValue === '' ? 0 : parseFloat(rawValue) || 0;
-          updated[field] = numVal;
+        // Also persist onto saved PackingRecord if it exists in packings
+        if (row.packingId !== 'draft-packing-manifest') {
+          const nextRmbPerBox =
+            field === 'rmbPerBox' ? numVal : row.rmbPerBox;
+          const nextRate = field === 'rate' ? numVal : row.rate;
+          updatePacking(
+            row.packingId,
+            {
+              awbRmbPerBox: nextRmbPerBox,
+              awbRate: nextRate,
+            },
+            true
+          );
         }
-        const computed = calculateAirWayBillRow(
-          updated.totalBox,
-          updated.rmbPerBox,
-          updated.rate
-        );
-        updated.totalRmb = computed.totalRmb;
-        updated.bdtAmount = computed.bdtAmount;
-        return updated;
-      })
-    );
-  };
+        return;
+      }
+
+      // Custom row update with bailout
+      setCustomRows((prev) =>
+        updateCustomAirWayBillRowById(prev, row.id, field, rawValue)
+      );
+    },
+    [updatePacking]
+  );
 
   const handleApplyBulkRates = () => {
     const hasBulkRmb = bulkRmbPerBox.trim() !== '' && !Number.isNaN(Number(bulkRmbPerBox));
@@ -242,12 +467,12 @@ export const AirWayBillView: React.FC = () => {
     showToast('Applied RMB/Per Box and Rate across active Flight Return Bill rows.');
   };
 
-  const handleAddRow = () => {
+  const handleAddRow = useCallback(() => {
     setCustomRows((prev) => [
       ...prev,
       createEmptyAirWayBillRow(`awb-custom-${Date.now()}-${prev.length + 1}`),
     ]);
-  };
+  }, []);
 
   const handleResetFiltersAndOverrides = () => {
     setSelectedMonth('all');
@@ -762,177 +987,14 @@ export const AirWayBillView: React.FC = () => {
           </thead>
 
           <tbody>
-            {displayRows.map((row, idx) => {
-              const rowNum = idx + 1;
-              const isFromPackingList = Boolean(row.packingId);
-
-              return (
-                <tr
-                  key={row.id}
-                  data-testid={`awb-table-row-${rowNum}`}
-                  style={{ backgroundColor: '#ffffff', color: '#000000' }}
-                  className="hover:bg-sky-50/40 transition"
-                >
-                  {/* 0. SL # */}
-                  <td
-                    style={{ border: '1.5px solid #000000', height: '36px' }}
-                    className="px-2 py-1 text-center"
-                  >
-                    <span className="zsb-sl-badge">
-                      {String(rowNum).padStart(2, '0')}
-                    </span>
-                  </td>
-
-                  {/* 1. DATE */}
-                  <td
-                    style={{ border: '1.5px solid #000000', height: '36px' }}
-                    className="px-2 py-1 text-center font-mono font-semibold text-xs sm:text-sm whitespace-nowrap"
-                  >
-                    {isFromPackingList ? (
-                      <span data-testid={`awb-row-${rowNum}-date`}>
-                        {formatDate(row.date)}
-                      </span>
-                    ) : (
-                      <input
-                        type="date"
-                        aria-label={`Row ${rowNum} Date`}
-                        value={row.date}
-                        onChange={(e) =>
-                          handleRowEditableChange(row, 'date', e.target.value)
-                        }
-                        className="w-full h-full text-center font-mono text-xs sm:text-sm bg-transparent focus:bg-amber-50 focus:outline-none px-1"
-                      />
-                    )}
-                  </td>
-
-                  {/* 2. SHIPPER */}
-                  <td
-                    style={{ border: '1.5px solid #000000', height: '36px' }}
-                    className="px-2.5 py-1 text-center font-bold text-xs sm:text-sm whitespace-nowrap"
-                  >
-                    {isFromPackingList ? (
-                      <span data-testid={`awb-row-${rowNum}-shipper`}>
-                        {row.shipper}
-                      </span>
-                    ) : (
-                      <input
-                        type="text"
-                        aria-label={`Row ${rowNum} Shipper`}
-                        placeholder=""
-                        value={row.shipper}
-                        onChange={(e) =>
-                          handleRowEditableChange(row, 'shipper', e.target.value)
-                        }
-                        className="w-full h-full text-center font-bold text-xs sm:text-sm bg-transparent focus:bg-amber-50 focus:outline-none px-1"
-                      />
-                    )}
-                  </td>
-
-                  {/* 3. FLIGHT */}
-                  <td
-                    style={{ border: '1.5px solid #000000', height: '36px' }}
-                    className="px-2 py-1 text-center font-mono font-bold text-xs sm:text-sm whitespace-nowrap"
-                  >
-                    {isFromPackingList ? (
-                      <span data-testid={`awb-row-${rowNum}-flight`}>
-                        {row.flight}
-                      </span>
-                    ) : (
-                      <input
-                        type="text"
-                        aria-label={`Row ${rowNum} Flight`}
-                        placeholder=""
-                        value={row.flight}
-                        onChange={(e) =>
-                          handleRowEditableChange(row, 'flight', e.target.value)
-                        }
-                        className="w-full h-full text-center font-mono font-bold text-xs sm:text-sm bg-transparent focus:bg-amber-50 focus:outline-none px-1"
-                      />
-                    )}
-                  </td>
-
-                  {/* 4. TOTAL BOX */}
-                  <td
-                    style={{ border: '1.5px solid #000000', height: '36px' }}
-                    className="px-2 py-1 text-center font-mono font-bold text-xs sm:text-sm tabular-nums"
-                  >
-                    {isFromPackingList ? (
-                      <span data-testid={`awb-row-${rowNum}-box`}>
-                        {row.totalBox > 0 ? row.totalBox : ''}
-                      </span>
-                    ) : (
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        aria-label={`Row ${rowNum} Total Box`}
-                        value={row.totalBox > 0 ? row.totalBox : ''}
-                        onChange={(e) =>
-                          handleRowEditableChange(row, 'totalBox', e.target.value)
-                        }
-                        className="w-full h-full text-center font-mono font-bold text-xs sm:text-sm bg-transparent focus:bg-amber-50 focus:outline-none px-1 tabular-nums"
-                      />
-                    )}
-                  </td>
-
-                  {/* 5. RMB/PER BOX (EDITABLE) */}
-                  <td
-                    style={{ border: '1.5px solid #000000', height: '36px' }}
-                    className="px-1.5 py-1 text-center font-mono font-bold text-xs sm:text-sm tabular-nums bg-amber-50/25"
-                  >
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      aria-label={`Row ${rowNum} RMB/Per Box`}
-                      data-testid={`awb-row-${rowNum}-rmb-per-box`}
-                      value={row.rmbPerBox > 0 ? row.rmbPerBox : ''}
-                      onChange={(e) =>
-                        handleRowEditableChange(row, 'rmbPerBox', e.target.value)
-                      }
-                      className="w-full h-full text-center font-mono font-bold text-xs sm:text-sm bg-transparent focus:bg-amber-100/70 focus:outline-none px-1.5 py-0.5 rounded tabular-nums"
-                    />
-                  </td>
-
-                  {/* 6. TOTAL RMB (= TOTAL BOX * RMB/PER BOX) */}
-                  <td
-                    data-testid={`awb-row-${rowNum}-total-rmb`}
-                    style={{ border: '1.5px solid #000000', height: '36px' }}
-                    className="px-2.5 py-1 text-center font-mono font-bold text-xs sm:text-sm tabular-nums"
-                  >
-                    {formatCellNumber(row.totalRmb)}
-                  </td>
-
-                  {/* 7. RATE (EDITABLE) */}
-                  <td
-                    style={{ border: '1.5px solid #000000', height: '36px' }}
-                    className="px-1.5 py-1 text-center font-mono font-bold text-xs sm:text-sm tabular-nums bg-amber-50/25"
-                  >
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      aria-label={`Row ${rowNum} Rate`}
-                      data-testid={`awb-row-${rowNum}-rate`}
-                      value={row.rate > 0 ? row.rate : ''}
-                      onChange={(e) =>
-                        handleRowEditableChange(row, 'rate', e.target.value)
-                      }
-                      className="w-full h-full text-center font-mono font-bold text-xs sm:text-sm bg-transparent focus:bg-amber-100/70 focus:outline-none px-1.5 py-0.5 rounded tabular-nums"
-                    />
-                  </td>
-
-                  {/* 8. BDT AMOUNT (= TOTAL RMB * RATE) */}
-                  <td
-                    data-testid={`awb-row-${rowNum}-bdt-amount`}
-                    style={{ border: '1.5px solid #000000', height: '36px' }}
-                    className="px-2.5 py-1 text-center font-mono font-extrabold text-xs sm:text-sm tabular-nums"
-                  >
-                    {formatCellNumber(row.bdtAmount)}
-                  </td>
-                </tr>
-              );
-            })}
+            {displayRows.map((row, idx) => (
+              <AirWayBillTableRow
+                key={row.id}
+                row={row}
+                rowIndex={idx}
+                onRowEditableChange={handleRowEditableChange}
+              />
+            ))}
           </tbody>
 
           {/* Footer: Matches Reference Image ("TOTAL AMOUNT (BDT)" spanning RMB/PER BOX..RATE + value in BDT AMOUNT) */}

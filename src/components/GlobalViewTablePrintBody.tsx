@@ -402,7 +402,7 @@ export const GlobalOffscreenPrintHost: React.FC<GlobalOffscreenPrintHostProps> =
                         <td className="py-1.5 px-1.5 border-r-2 border-black align-middle">
                           {row ? row.flight : ''}
                         </td>
-                        <td className="py-1 px-2 border-r-2 border-black font-black text-2xl leading-none tracking-wider uppercase align-middle">
+                        <td className="py-1 px-2 border-r-2 border-black font-black text-[20px] leading-none tracking-wider uppercase align-middle">
                           {row ? row.mark : ''}
                         </td>
                         <td className="py-1.5 px-1.5 border-r-2 border-black font-mono align-middle">

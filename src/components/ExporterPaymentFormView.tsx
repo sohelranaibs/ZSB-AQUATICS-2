@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import {
   calculatePaymentRow,
@@ -19,6 +19,10 @@ import {
   calculateExporterHistoryTotals,
 } from '../utils/exporterHistory.ts';
 import { PaymentItemRow, ExporterStatus } from '../types/index.ts';
+import {
+  isExporterHistoryRowDataEqual,
+  updateCustomExporterPaymentRowById,
+} from '../utils/tableRowOptimization.ts';
 import { validateExporterPaymentForm } from '../utils/validation.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
 import {
@@ -57,6 +61,300 @@ import {
   ExporterRecordSharePayload,
   parseExporterWeChatDeepLinkFromSearch,
 } from '../utils/exporterWeChatShare.ts';
+
+interface ExporterPaymentHistoryTableRowProps {
+  row: PaymentItemRow;
+  rowIndex: number;
+  statusOptionElements: React.ReactNode;
+  isRowEditing: boolean;
+  hasDescriptionError: boolean;
+  hasDebitError: boolean;
+  hasReportError: boolean;
+  hasCreditError: boolean;
+  hasAnyRowError: boolean;
+  onRowChange: (
+    row: PaymentItemRow,
+    field: 'description' | 'debitAmount' | 'reportAmount' | 'creditAmount' | 'status',
+    value: string | number
+  ) => void;
+  onEditRow: (row: PaymentItemRow, idx: number) => void;
+  onDeleteRow: (row: PaymentItemRow, idx: number) => void;
+}
+
+const areExporterHistoryRowPropsEqual = (
+  prev: ExporterPaymentHistoryTableRowProps,
+  next: ExporterPaymentHistoryTableRowProps
+): boolean =>
+  prev.rowIndex === next.rowIndex &&
+  prev.statusOptionElements === next.statusOptionElements &&
+  prev.isRowEditing === next.isRowEditing &&
+  prev.hasDescriptionError === next.hasDescriptionError &&
+  prev.hasDebitError === next.hasDebitError &&
+  prev.hasReportError === next.hasReportError &&
+  prev.hasCreditError === next.hasCreditError &&
+  prev.hasAnyRowError === next.hasAnyRowError &&
+  prev.onRowChange === next.onRowChange &&
+  prev.onEditRow === next.onEditRow &&
+  prev.onDeleteRow === next.onDeleteRow &&
+  isExporterHistoryRowDataEqual(prev.row, next.row);
+
+const ExporterPaymentHistoryTableRow: React.FC<ExporterPaymentHistoryTableRowProps> =
+  memo(
+    ({
+      row,
+      rowIndex,
+      statusOptionElements,
+      isRowEditing,
+      hasDescriptionError,
+      hasDebitError,
+      hasReportError,
+      hasCreditError,
+      hasAnyRowError,
+      onRowChange,
+      onEditRow,
+      onDeleteRow,
+    }) => {
+      const rowStatus = row.status === 'PAID' ? 'PAID' : 'UNPAID';
+
+      const handleDescriptionChange = useCallback(
+        (e: React.ChangeEvent<HTMLInputElement>) => {
+          onRowChange(row, 'description', e.target.value);
+        },
+        [onRowChange, row]
+      );
+
+      const handleDebitChange = useCallback(
+        (e: React.ChangeEvent<HTMLInputElement>) => {
+          onRowChange(row, 'debitAmount', parseFloat(e.target.value) || 0);
+        },
+        [onRowChange, row]
+      );
+
+      const handleReportChange = useCallback(
+        (e: React.ChangeEvent<HTMLInputElement>) => {
+          onRowChange(row, 'reportAmount', parseFloat(e.target.value) || 0);
+        },
+        [onRowChange, row]
+      );
+
+      const handleCreditChange = useCallback(
+        (e: React.ChangeEvent<HTMLInputElement>) => {
+          onRowChange(row, 'creditAmount', parseFloat(e.target.value) || 0);
+        },
+        [onRowChange, row]
+      );
+
+      const handleStatusChange = useCallback(
+        (e: React.ChangeEvent<HTMLSelectElement>) => {
+          onRowChange(row, 'status', e.target.value);
+        },
+        [onRowChange, row]
+      );
+
+      const handleEditClick = useCallback(() => {
+        onEditRow(row, rowIndex);
+      }, [onEditRow, row, rowIndex]);
+
+      const handleDeleteClick = useCallback(() => {
+        onDeleteRow(row, rowIndex);
+      }, [onDeleteRow, row, rowIndex]);
+
+      return (
+        <tr
+          className={
+            isRowEditing
+              ? 'bg-amber-50/90 ring-1 ring-inset ring-teal-600'
+              : hasAnyRowError
+              ? 'bg-rose-50/60 hover:bg-rose-50'
+              : rowIndex % 2 === 0
+              ? 'bg-white hover:bg-teal-50/30'
+              : 'bg-slate-50/70 hover:bg-teal-50/30'
+          }
+        >
+          <td className="p-1.5 border-r border-slate-200 text-center">
+            <span className="zsb-sl-badge">
+              {String(rowIndex + 1).padStart(2, '0')}
+            </span>
+          </td>
+
+          {/* Description Input */}
+          <td className="p-1 border-r border-slate-200">
+            <div className="flex flex-col gap-0.5">
+              {row.date && (
+                <div className="flex items-center gap-1.5 px-1 text-[10px] font-mono text-slate-500">
+                  <span className="font-bold text-teal-900">
+                    {row.shippingMark}
+                  </span>
+                  <span>·</span>
+                  <span>Packing Date: {formatDate(row.date)}</span>
+                </div>
+              )}
+              <input
+                id={`exporter-row-desc-${row.id}`}
+                type="text"
+                aria-label={`Exporter payment row ${rowIndex + 1} particulars`}
+                aria-invalid={hasDescriptionError}
+                value={row.description}
+                onChange={handleDescriptionChange}
+                placeholder="e.g. AAD - Export shipment settlement..."
+                className={`w-full border rounded px-2 py-1 text-slate-800 font-medium focus:bg-white focus:outline-none focus:ring-1 ${
+                  isRowEditing
+                    ? 'bg-white border-teal-600 ring-1 ring-teal-500'
+                    : hasDescriptionError
+                    ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
+                    : 'bg-slate-50 border-slate-200 focus:ring-teal-600'
+                }`}
+              />
+            </div>
+          </td>
+
+          {/* Debit Amount (Show Only) */}
+          <td className="p-1 border-r border-slate-200 bg-slate-50/50">
+            <input
+              type="number"
+              data-testid={`exporter-row-debit-${rowIndex + 1}`}
+              aria-label={`Exporter payment row ${rowIndex + 1} debit amount`}
+              aria-invalid={hasDebitError}
+              min="0"
+              step="0.01"
+              value={row.debitAmount || ''}
+              onChange={handleDebitChange}
+              title="Display only — does not affect Balance calculation"
+              className={`w-full bg-white border rounded px-2 py-1.5 text-right font-mono text-slate-600 font-semibold focus:outline-none focus:ring-1 ${
+                isRowEditing
+                  ? 'border-teal-600 ring-1 ring-teal-500'
+                  : hasDebitError
+                  ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
+                  : 'border-slate-200 focus:ring-teal-600'
+              }`}
+              placeholder="0.00"
+            />
+          </td>
+
+          {/* Report Amount (Right side of Debit - drives Balance = Report - Credit) */}
+          <td className="p-1 border-r border-slate-200 bg-sky-50/40">
+            <input
+              type="number"
+              data-testid={`exporter-row-report-${rowIndex + 1}`}
+              aria-label={`Exporter payment row ${rowIndex + 1} report amount`}
+              aria-invalid={hasReportError}
+              min="0"
+              step="0.01"
+              value={row.reportAmount || ''}
+              onChange={handleReportChange}
+              title="Report RMB used in Balance = REPORT (RMB) - CREDIT (RMB)"
+              className={`w-full bg-white border rounded px-2 py-1.5 text-right font-mono text-slate-900 font-bold focus:outline-none focus:ring-1 ${
+                isRowEditing
+                  ? 'border-teal-600 ring-1 ring-teal-500'
+                  : hasReportError
+                  ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
+                  : 'border-sky-300 focus:ring-teal-600'
+              }`}
+              placeholder="0.00"
+            />
+          </td>
+
+          {/* Credit Amount */}
+          <td className="p-1 border-r border-slate-200">
+            <input
+              type="number"
+              data-testid={`exporter-row-credit-${rowIndex + 1}`}
+              aria-label={`Exporter payment row ${rowIndex + 1} credit amount`}
+              aria-invalid={hasCreditError}
+              min="0"
+              step="0.01"
+              value={row.creditAmount || ''}
+              onChange={handleCreditChange}
+              className={`w-full bg-white border rounded px-2 py-1.5 text-right font-mono text-emerald-800 font-semibold focus:outline-none focus:ring-1 ${
+                isRowEditing
+                  ? 'border-teal-600 ring-1 ring-teal-500'
+                  : hasCreditError
+                  ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
+                  : 'border-slate-200 focus:ring-teal-600'
+              }`}
+              placeholder="0.00"
+            />
+          </td>
+
+          {/* Row Balance (= REPORT - CREDIT) */}
+          <td
+            data-testid={`exporter-row-balance-${rowIndex + 1}`}
+            className="p-1 border-r border-slate-200 text-right font-mono font-bold text-slate-900 pr-2.5 bg-slate-50"
+          >
+            {row.balance.toFixed(2)}
+          </td>
+
+          {/* Status Column (PAID, UNPAID) */}
+          <td className="p-1 border-r border-slate-200 text-center">
+            <select
+              aria-label={`Exporter payment row ${rowIndex + 1} status`}
+              value={rowStatus}
+              onChange={handleStatusChange}
+              className={`w-full text-center text-[11px] font-black uppercase rounded px-1.5 py-1.5 border cursor-pointer focus:outline-none ${
+                rowStatus === 'PAID'
+                  ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                  : 'bg-rose-100 text-rose-900 border-rose-300'
+              }`}
+            >
+              {statusOptionElements}
+            </select>
+          </td>
+
+          {/* Edit Row Column */}
+          <td className="p-1 border-r border-slate-200 text-center">
+            <button
+              type="button"
+              data-testid={`edit-exporter-row-${rowIndex + 1}`}
+              onClick={handleEditClick}
+              title={
+                isRowEditing
+                  ? `Save Exporter row ${rowIndex + 1}`
+                  : `Edit Exporter row ${rowIndex + 1}`
+              }
+              aria-label={
+                isRowEditing
+                  ? `Save Exporter row ${rowIndex + 1}`
+                  : `Edit Exporter row ${rowIndex + 1}`
+              }
+              className={`inline-flex items-center justify-center gap-0.5 px-1.5 py-1 rounded font-bold text-[10px] border transition cursor-pointer ${
+                isRowEditing
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700'
+                  : 'bg-teal-50 hover:bg-teal-600 text-teal-800 hover:text-white border-teal-200'
+              }`}
+            >
+              {isRowEditing ? (
+                <>
+                  <Check className="w-3 h-3" />
+                  <span>Save</span>
+                </>
+              ) : (
+                <>
+                  <Edit2 className="w-3 h-3" />
+                  <span>Edit</span>
+                </>
+              )}
+            </button>
+          </td>
+
+          {/* Delete Row Column */}
+          <td className="p-1 text-center">
+            <button
+              type="button"
+              data-testid={`delete-exporter-row-${rowIndex + 1}`}
+              onClick={handleDeleteClick}
+              title={`Delete Exporter row ${rowIndex + 1}`}
+              aria-label={`Delete Exporter row ${rowIndex + 1}`}
+              className="inline-flex items-center justify-center gap-0.5 px-1.5 py-1 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 rounded font-bold text-[10px] transition cursor-pointer"
+            >
+              <Trash2 className="w-3 h-3" />
+              <span>Del</span>
+            </button>
+          </td>
+        </tr>
+      );
+    },
+    areExporterHistoryRowPropsEqual
+  );
 
 export const ExporterPaymentFormView: React.FC = () => {
   const {
@@ -179,6 +477,16 @@ export const ExporterPaymentFormView: React.FC = () => {
       ? dropdownOptions.paymentStatuses
       : ['PAID', 'UNPAID'];
   }, [dropdownOptions.paymentStatuses]);
+
+  const statusOptionElements = useMemo(
+    () =>
+      statusOptions.map((st) => (
+        <option key={st} value={st} className="bg-white text-slate-900">
+          {st}
+        </option>
+      )),
+    [statusOptions]
+  );
 
   // Available Shipping Marks & Packing Dates for Automatic Exporter Database Lookup
   const availableMarks = useMemo(() => {
@@ -373,132 +681,131 @@ export const ExporterPaymentFormView: React.FC = () => {
     }
   };
 
-  const handleRowChange = (
-    row: PaymentItemRow,
-    field: 'description' | 'debitAmount' | 'reportAmount' | 'creditAmount' | 'status',
-    value: string | number
-  ) => {
-    const currentReport = row.reportAmount ?? 0;
+  const handleRowChange = useCallback(
+    (
+      row: PaymentItemRow,
+      field: 'description' | 'debitAmount' | 'reportAmount' | 'creditAmount' | 'status',
+      value: string | number
+    ) => {
+      if (row[field] === value) return;
+      const currentReport = row.reportAmount ?? 0;
 
-    if (row.packingId) {
-      if (field === 'description') {
-        const nextDesc = String(value);
-        setRowDescriptionOverrides((prev) => ({ ...prev, [row.id]: nextDesc }));
-      } else if (field === 'debitAmount') {
-        const nextDebit = Math.max(0, Number(value) || 0);
-        const preservedBalance = calculatePaymentRow(currentReport, row.creditAmount);
-        updatePacking(row.packingId, {
-          debitAmount: nextDebit,
-          settledAmount: nextDebit,
-          reportAmount: currentReport,
-          balanceAmount: preservedBalance,
-        });
-      } else if (field === 'reportAmount') {
-        const nextReport = Math.max(0, Number(value) || 0);
-        const nextBalance = calculatePaymentRow(nextReport, row.creditAmount);
-        updatePacking(row.packingId, {
-          reportAmount: nextReport,
-          balanceAmount: nextBalance,
-        });
-      } else if (field === 'creditAmount') {
-        const nextCredit = Math.max(0, Number(value) || 0);
-        const nextBalance = calculatePaymentRow(currentReport, nextCredit);
-        updatePacking(row.packingId, {
-          reportAmount: currentReport,
-          creditAmount: nextCredit,
-          balanceAmount: nextBalance,
-        });
-      } else if (field === 'status') {
-        const nextStatus = String(value) as ExporterStatus;
-        updatePacking(row.packingId, {
-          exporterStatus: nextStatus,
-          paymentStatus: nextStatus,
-        });
+      if (row.packingId) {
+        if (field === 'description') {
+          const nextDesc = String(value);
+          setRowDescriptionOverrides((prev) =>
+            prev[row.id] === nextDesc ? prev : { ...prev, [row.id]: nextDesc }
+          );
+        } else if (field === 'debitAmount') {
+          const nextDebit = Math.max(0, Number(value) || 0);
+          const preservedBalance = calculatePaymentRow(currentReport, row.creditAmount);
+          updatePacking(row.packingId, {
+            debitAmount: nextDebit,
+            settledAmount: nextDebit,
+            reportAmount: currentReport,
+            balanceAmount: preservedBalance,
+          });
+        } else if (field === 'reportAmount') {
+          const nextReport = Math.max(0, Number(value) || 0);
+          const nextBalance = calculatePaymentRow(nextReport, row.creditAmount);
+          updatePacking(row.packingId, {
+            reportAmount: nextReport,
+            balanceAmount: nextBalance,
+          });
+        } else if (field === 'creditAmount') {
+          const nextCredit = Math.max(0, Number(value) || 0);
+          const nextBalance = calculatePaymentRow(currentReport, nextCredit);
+          updatePacking(row.packingId, {
+            reportAmount: currentReport,
+            creditAmount: nextCredit,
+            balanceAmount: nextBalance,
+          });
+        } else if (field === 'status') {
+          const nextStatus = String(value) as ExporterStatus;
+          updatePacking(row.packingId, {
+            exporterStatus: nextStatus,
+            paymentStatus: nextStatus,
+          });
+        }
+        return;
       }
-      return;
-    }
 
-    if (row.paymentId) {
-      if (field === 'description') {
-        const nextDesc = String(value);
-        setRowDescriptionOverrides((prev) => ({ ...prev, [row.id]: nextDesc }));
-        updatePayment(row.paymentId, {
-          description: nextDesc,
-        });
-      } else if (field === 'debitAmount') {
-        const nextDebit = Math.max(0, Number(value) || 0);
-        const preservedBalance = calculatePaymentRow(currentReport, row.creditAmount);
-        updatePayment(row.paymentId, {
-          totalAmount: nextDebit,
-          reportAmount: currentReport,
-          balance: preservedBalance,
-        });
-      } else if (field === 'reportAmount') {
-        const nextReport = Math.max(0, Number(value) || 0);
-        const nextBalance = calculatePaymentRow(nextReport, row.creditAmount);
-        updatePayment(row.paymentId, {
-          reportAmount: nextReport,
-          balance: nextBalance,
-        });
-      } else if (field === 'creditAmount') {
-        const nextCredit = Math.max(0, Number(value) || 0);
-        const nextBalance = calculatePaymentRow(currentReport, nextCredit);
-        updatePayment(row.paymentId, {
-          reportAmount: currentReport,
-          paidAmount: nextCredit,
-          balance: nextBalance,
-        });
-      } else if (field === 'status') {
-        updatePayment(row.paymentId, {
-          status: String(value) as ExporterStatus,
-        });
+      if (row.paymentId) {
+        if (field === 'description') {
+          const nextDesc = String(value);
+          setRowDescriptionOverrides((prev) =>
+            prev[row.id] === nextDesc ? prev : { ...prev, [row.id]: nextDesc }
+          );
+          updatePayment(row.paymentId, {
+            description: nextDesc,
+          });
+        } else if (field === 'debitAmount') {
+          const nextDebit = Math.max(0, Number(value) || 0);
+          const preservedBalance = calculatePaymentRow(currentReport, row.creditAmount);
+          updatePayment(row.paymentId, {
+            totalAmount: nextDebit,
+            reportAmount: currentReport,
+            balance: preservedBalance,
+          });
+        } else if (field === 'reportAmount') {
+          const nextReport = Math.max(0, Number(value) || 0);
+          const nextBalance = calculatePaymentRow(nextReport, row.creditAmount);
+          updatePayment(row.paymentId, {
+            reportAmount: nextReport,
+            balance: nextBalance,
+          });
+        } else if (field === 'creditAmount') {
+          const nextCredit = Math.max(0, Number(value) || 0);
+          const nextBalance = calculatePaymentRow(currentReport, nextCredit);
+          updatePayment(row.paymentId, {
+            reportAmount: currentReport,
+            paidAmount: nextCredit,
+            balance: nextBalance,
+          });
+        } else if (field === 'status') {
+          updatePayment(row.paymentId, {
+            status: String(value) as ExporterStatus,
+          });
+        }
+        return;
       }
-      return;
-    }
 
-    setCustomRows((prev) => {
-      const baseList =
-        prev.length > 0
-          ? prev
-          : dbHistoryRows.length === 0
-          ? [
-              {
-                ...createEmptyRow(
-                  'exp-default-1',
-                  shippingMark !== 'ALL' ? shippingMark : ''
-                ),
-                date,
-              },
-              {
-                ...createEmptyRow(
-                  'exp-default-2',
-                  shippingMark !== 'ALL' ? shippingMark : ''
-                ),
-                date,
-              },
-              {
-                ...createEmptyRow(
-                  'exp-default-3',
-                  shippingMark !== 'ALL' ? shippingMark : ''
-                ),
-                date,
-              },
-            ]
-          : [];
-      return baseList.map((r) => {
-        if (r.id !== row.id) return r;
-        const updated = { ...r, [field]: value };
-        const rep =
-          field === 'reportAmount' ? Number(value) || 0 : (r.reportAmount ?? 0);
-        const cred =
-          field === 'creditAmount' ? Number(value) || 0 : r.creditAmount;
-        updated.balance = calculatePaymentRow(rep, cred);
-        return updated;
+      setCustomRows((prev) => {
+        const baseList =
+          prev.length > 0
+            ? prev
+            : dbHistoryRows.length === 0
+            ? [
+                {
+                  ...createEmptyRow(
+                    'exp-default-1',
+                    shippingMark !== 'ALL' ? shippingMark : ''
+                  ),
+                  date,
+                },
+                {
+                  ...createEmptyRow(
+                    'exp-default-2',
+                    shippingMark !== 'ALL' ? shippingMark : ''
+                  ),
+                  date,
+                },
+                {
+                  ...createEmptyRow(
+                    'exp-default-3',
+                    shippingMark !== 'ALL' ? shippingMark : ''
+                  ),
+                  date,
+                },
+              ]
+            : [];
+        return updateCustomExporterPaymentRowById(baseList, row.id, field, value);
       });
-    });
-  };
+    },
+    [date, dbHistoryRows.length, shippingMark, updatePacking, updatePayment]
+  );
 
-  const handleAddRow = () => {
+  const handleAddRow = useCallback(() => {
     setCustomRows((prev) => [
       ...prev,
       createEmptyRow(
@@ -506,52 +813,64 @@ export const ExporterPaymentFormView: React.FC = () => {
         shippingMark !== 'ALL' ? shippingMark : ''
       ),
     ]);
-  };
+  }, [shippingMark]);
 
-  const handleEditRow = (row: PaymentItemRow, idx: number) => {
-    if (editingRowId === row.id) {
-      setEditingRowId(null);
-      showToast(`Saved changes for Exporter row #${idx + 1}.`);
-      return;
-    }
-    setEditingRowId(row.id);
-    setTimeout(() => {
-      const inputEl = document.getElementById(
-        `exporter-row-desc-${row.id}`
-      ) as HTMLInputElement | null;
-      if (inputEl) {
-        inputEl.focus();
-        inputEl.select();
+  const handleEditRow = useCallback(
+    (row: PaymentItemRow, idx: number) => {
+      let didFinishEditing = false;
+      setEditingRowId((prev) => {
+        if (prev === row.id) {
+          didFinishEditing = true;
+          return null;
+        }
+        return row.id;
+      });
+      if (didFinishEditing) {
+        showToast(`Saved changes for Exporter row #${idx + 1}.`);
+        return;
       }
-    }, 0);
-  };
+      setTimeout(() => {
+        const inputEl = document.getElementById(
+          `exporter-row-desc-${row.id}`
+        ) as HTMLInputElement | null;
+        if (inputEl) {
+          inputEl.focus();
+          inputEl.select();
+        }
+      }, 0);
+    },
+    [showToast]
+  );
 
-  const handleDeleteRow = (row: PaymentItemRow, idx: number) => {
-    if (editingRowId === row.id) {
-      setEditingRowId(null);
-    }
-    if (row.packingId) {
-      deletePacking(row.packingId);
-      return;
-    }
-    if (row.paymentId) {
-      deletePayment(row.paymentId);
-      return;
-    }
-    requestSuperAdminSingleDelete(
-      {
-        recordType: 'custom_row',
-        recordId: row.id,
-        recordTitle: `Exporter Ledger Row #${idx + 1}${row.shippingMark ? ` (${row.shippingMark})` : ''}`,
-        recordSubtitle: row.description || `Date: ${row.date || '-'}`,
-      },
-      () => {
-        setCustomRows((prev) => prev.filter((r) => r.id !== row.id));
-        setDeletedRowIds((prev) => (prev.includes(row.id) ? prev : [...prev, row.id]));
-        showToast(`Super Admin verified: Deleted Exporter row #${idx + 1}.`);
+  const handleDeleteRow = useCallback(
+    (row: PaymentItemRow, idx: number) => {
+      setEditingRowId((prev) => (prev === row.id ? null : prev));
+      if (row.packingId) {
+        deletePacking(row.packingId);
+        return;
       }
-    );
-  };
+      if (row.paymentId) {
+        deletePayment(row.paymentId);
+        return;
+      }
+      requestSuperAdminSingleDelete(
+        {
+          recordType: 'custom_row',
+          recordId: row.id,
+          recordTitle: `Exporter Ledger Row #${idx + 1}${row.shippingMark ? ` (${row.shippingMark})` : ''}`,
+          recordSubtitle: row.description || `Date: ${row.date || '-'}`,
+        },
+        () => {
+          setCustomRows((prev) => prev.filter((r) => r.id !== row.id));
+          setDeletedRowIds((prev) =>
+            prev.includes(row.id) ? prev : [...prev, row.id]
+          );
+          showToast(`Super Admin verified: Deleted Exporter row #${idx + 1}.`);
+        }
+      );
+    },
+    [deletePacking, deletePayment, requestSuperAdminSingleDelete, showToast]
+  );
 
   const resetFormFields = () => {
     setShippingMark('ALL');
@@ -981,20 +1300,22 @@ export const ExporterPaymentFormView: React.FC = () => {
               id="exporter-lookup-mark-select"
               value={shippingMark}
               onChange={(e) => handleSelectShippingMark(e.target.value)}
-              className="w-full h-[36px] bg-teal-50/50 border-2 border-teal-600/40 rounded-lg px-2.5 font-black text-xs sm:text-sm text-slate-950 focus:bg-white focus:border-teal-700 focus:outline-none"
+              className="w-full h-[38px] bg-teal-50/50 border-2 border-teal-600/40 rounded-lg px-2.5 font-black text-[17px] leading-tight text-slate-950 focus:bg-white focus:border-teal-700 focus:outline-none"
             >
-              <option value="ALL">ALL SHIPPING MARKS ({packings.length})</option>
-              <optgroup label="Marks with Saved Exporter Records">
+              <option value="ALL" className="text-[17px] font-bold">
+                ALL SHIPPING MARKS ({packings.length})
+              </option>
+              <optgroup label="Marks with Saved Exporter Records" className="text-[17px] font-black">
                 {availableMarks.dbMarks.map((mk) => (
-                  <option key={mk} value={mk}>
+                  <option key={mk} value={mk} className="text-[17px] font-black">
                     {mk}
                   </option>
                 ))}
               </optgroup>
               {availableMarks.otherMarks.length > 0 && (
-                <optgroup label="Other Registered Shipping Marks">
+                <optgroup label="Other Registered Shipping Marks" className="text-[17px] font-black">
                   {availableMarks.otherMarks.map((mk) => (
-                    <option key={mk} value={mk}>
+                    <option key={mk} value={mk} className="text-[17px] font-black">
                       {mk}
                     </option>
                   ))}
@@ -1444,235 +1765,31 @@ export const ExporterPaymentFormView: React.FC = () => {
                       validationAttempted &&
                       Boolean(validation.fieldErrors.rows) &&
                       idx === 0;
-                    const rowStatus = row.status === 'PAID' ? 'PAID' : 'UNPAID';
                     const isRowEditing = editingRowId === row.id;
                     return (
-                      <tr
+                      <ExporterPaymentHistoryTableRow
                         key={row.id}
-                        className={
-                          isRowEditing
-                            ? 'bg-amber-50/90 ring-1 ring-inset ring-teal-600'
-                            : rowErr || highlightFirstEmptyRow
-                            ? 'bg-rose-50/60 hover:bg-rose-50'
-                            : idx % 2 === 0
-                            ? 'bg-white hover:bg-teal-50/30'
-                            : 'bg-slate-50/70 hover:bg-teal-50/30'
-                        }
-                      >
-                        <td className="p-1.5 border-r border-slate-200 text-center">
-                          <span className="zsb-sl-badge">
-                            {String(idx + 1).padStart(2, '0')}
-                          </span>
-                        </td>
-
-                        {/* Description Input */}
-                        <td className="p-1 border-r border-slate-200">
-                          <div className="flex flex-col gap-0.5">
-                            {row.date && (
-                              <div className="flex items-center gap-1.5 px-1 text-[10px] font-mono text-slate-500">
-                                <span className="font-bold text-teal-900">
-                                  {row.shippingMark}
-                                </span>
-                                <span>·</span>
-                                <span>Packing Date: {formatDate(row.date)}</span>
-                              </div>
-                            )}
-                            <input
-                              id={`exporter-row-desc-${row.id}`}
-                              type="text"
-                              aria-label={`Exporter payment row ${idx + 1} particulars`}
-                              aria-invalid={Boolean(
-                                rowErr?.description || highlightFirstEmptyRow
-                              )}
-                              value={row.description}
-                              onChange={(e) =>
-                                handleRowChange(row, 'description', e.target.value)
-                              }
-                              placeholder="e.g. AAD - Export shipment settlement..."
-                              className={`w-full border rounded px-2 py-1 text-slate-800 font-medium focus:bg-white focus:outline-none focus:ring-1 ${
-                                isRowEditing
-                                  ? 'bg-white border-teal-600 ring-1 ring-teal-500'
-                                  : rowErr?.description || highlightFirstEmptyRow
-                                  ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
-                                  : 'bg-slate-50 border-slate-200 focus:ring-teal-600'
-                              }`}
-                            />
-                          </div>
-                        </td>
-
-                        {/* Debit Amount (Show Only) */}
-                        <td className="p-1 border-r border-slate-200 bg-slate-50/50">
-                          <input
-                            type="number"
-                            data-testid={`exporter-row-debit-${idx + 1}`}
-                            aria-label={`Exporter payment row ${idx + 1} debit amount`}
-                            aria-invalid={Boolean(
-                              rowErr?.debitAmount || highlightFirstEmptyRow
-                            )}
-                            min="0"
-                            step="0.01"
-                            value={row.debitAmount || ''}
-                            onChange={(e) =>
-                              handleRowChange(
-                                row,
-                                'debitAmount',
-                                parseFloat(e.target.value) || 0
-                              )
-                            }
-                            title="Display only — does not affect Balance calculation"
-                            className={`w-full bg-white border rounded px-2 py-1.5 text-right font-mono text-slate-600 font-semibold focus:outline-none focus:ring-1 ${
-                              isRowEditing
-                                ? 'border-teal-600 ring-1 ring-teal-500'
-                                : rowErr?.debitAmount || highlightFirstEmptyRow
-                                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
-                                : 'border-slate-200 focus:ring-teal-600'
-                            }`}
-                            placeholder="0.00"
-                          />
-                        </td>
-
-                        {/* Report Amount (Right side of Debit - drives Balance = Report - Credit) */}
-                        <td className="p-1 border-r border-slate-200 bg-sky-50/40">
-                          <input
-                            type="number"
-                            data-testid={`exporter-row-report-${idx + 1}`}
-                            aria-label={`Exporter payment row ${idx + 1} report amount`}
-                            aria-invalid={Boolean(
-                              rowErr?.reportAmount || highlightFirstEmptyRow
-                            )}
-                            min="0"
-                            step="0.01"
-                            value={row.reportAmount || ''}
-                            onChange={(e) =>
-                              handleRowChange(
-                                row,
-                                'reportAmount',
-                                parseFloat(e.target.value) || 0
-                              )
-                            }
-                            title="Report RMB used in Balance = REPORT (RMB) - CREDIT (RMB)"
-                            className={`w-full bg-white border rounded px-2 py-1.5 text-right font-mono text-slate-900 font-bold focus:outline-none focus:ring-1 ${
-                              isRowEditing
-                                ? 'border-teal-600 ring-1 ring-teal-500'
-                                : rowErr?.reportAmount || highlightFirstEmptyRow
-                                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
-                                : 'border-sky-300 focus:ring-teal-600'
-                            }`}
-                            placeholder="0.00"
-                          />
-                        </td>
-
-                        {/* Credit Amount */}
-                        <td className="p-1 border-r border-slate-200">
-                          <input
-                            type="number"
-                            data-testid={`exporter-row-credit-${idx + 1}`}
-                            aria-label={`Exporter payment row ${idx + 1} credit amount`}
-                            aria-invalid={Boolean(
-                              rowErr?.creditAmount || highlightFirstEmptyRow
-                            )}
-                            min="0"
-                            step="0.01"
-                            value={row.creditAmount || ''}
-                            onChange={(e) =>
-                              handleRowChange(
-                                row,
-                                'creditAmount',
-                                parseFloat(e.target.value) || 0
-                              )
-                            }
-                            className={`w-full bg-white border rounded px-2 py-1.5 text-right font-mono text-emerald-800 font-semibold focus:outline-none focus:ring-1 ${
-                              isRowEditing
-                                ? 'border-teal-600 ring-1 ring-teal-500'
-                                : rowErr?.creditAmount || highlightFirstEmptyRow
-                                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
-                                : 'border-slate-200 focus:ring-teal-600'
-                            }`}
-                            placeholder="0.00"
-                          />
-                        </td>
-
-                        {/* Row Balance (= REPORT - CREDIT) */}
-                        <td
-                          data-testid={`exporter-row-balance-${idx + 1}`}
-                          className="p-1 border-r border-slate-200 text-right font-mono font-bold text-slate-900 pr-2.5 bg-slate-50"
-                        >
-                          {row.balance.toFixed(2)}
-                        </td>
-
-                        {/* Status Column (PAID, UNPAID) */}
-                        <td className="p-1 border-r border-slate-200 text-center">
-                          <select
-                            aria-label={`Exporter payment row ${idx + 1} status`}
-                            value={rowStatus}
-                            onChange={(e) =>
-                              handleRowChange(row, 'status', e.target.value)
-                            }
-                            className={`w-full text-center text-[11px] font-black uppercase rounded px-1.5 py-1.5 border cursor-pointer focus:outline-none ${
-                              rowStatus === 'PAID'
-                                ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                                : 'bg-rose-100 text-rose-900 border-rose-300'
-                            }`}
-                          >
-                            {statusOptions.map((st) => (
-                              <option key={st} value={st} className="bg-white text-slate-900">
-                                {st}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-
-                        {/* Edit Row Column */}
-                        <td className="p-1 border-r border-slate-200 text-center">
-                          <button
-                            type="button"
-                            data-testid={`edit-exporter-row-${idx + 1}`}
-                            onClick={() => handleEditRow(row, idx)}
-                            title={
-                              isRowEditing
-                                ? `Save Exporter row ${idx + 1}`
-                                : `Edit Exporter row ${idx + 1}`
-                            }
-                            aria-label={
-                              isRowEditing
-                                ? `Save Exporter row ${idx + 1}`
-                                : `Edit Exporter row ${idx + 1}`
-                            }
-                            className={`inline-flex items-center justify-center gap-0.5 px-1.5 py-1 rounded font-bold text-[10px] border transition cursor-pointer ${
-                              isRowEditing
-                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700'
-                                : 'bg-teal-50 hover:bg-teal-600 text-teal-800 hover:text-white border-teal-200'
-                            }`}
-                          >
-                            {isRowEditing ? (
-                              <>
-                                <Check className="w-3 h-3" />
-                                <span>Save</span>
-                              </>
-                            ) : (
-                              <>
-                                <Edit2 className="w-3 h-3" />
-                                <span>Edit</span>
-                              </>
-                            )}
-                          </button>
-                        </td>
-
-                        {/* Delete Row Column */}
-                        <td className="p-1 text-center">
-                          <button
-                            type="button"
-                            data-testid={`delete-exporter-row-${idx + 1}`}
-                            onClick={() => handleDeleteRow(row, idx)}
-                            title={`Delete Exporter row ${idx + 1}`}
-                            aria-label={`Delete Exporter row ${idx + 1}`}
-                            className="inline-flex items-center justify-center gap-0.5 px-1.5 py-1 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 rounded font-bold text-[10px] transition cursor-pointer"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            <span>Del</span>
-                          </button>
-                        </td>
-                      </tr>
+                        row={row}
+                        rowIndex={idx}
+                        statusOptionElements={statusOptionElements}
+                        isRowEditing={isRowEditing}
+                        hasDescriptionError={Boolean(
+                          rowErr?.description || highlightFirstEmptyRow
+                        )}
+                        hasDebitError={Boolean(
+                          rowErr?.debitAmount || highlightFirstEmptyRow
+                        )}
+                        hasReportError={Boolean(
+                          rowErr?.reportAmount || highlightFirstEmptyRow
+                        )}
+                        hasCreditError={Boolean(
+                          rowErr?.creditAmount || highlightFirstEmptyRow
+                        )}
+                        hasAnyRowError={Boolean(rowErr || highlightFirstEmptyRow)}
+                        onRowChange={handleRowChange}
+                        onEditRow={handleEditRow}
+                        onDeleteRow={handleDeleteRow}
+                      />
                     );
                   })}
                 </tbody>

@@ -362,13 +362,18 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     showToast('Reverted all invalid cell inputs to their valid saved formats.');
   };
 
-  // Smart Data Sync live reconciliation analysis across Purchase DB & Payment DB
-  const smartSyncAnalysis = useMemo(
-    () => analyzePurchasePaymentReconciliation(purchases, payments),
-    [purchases, payments]
-  );
+  // Smart Data Sync live reconciliation analysis across Purchase DB & Payment DB (skipped when viewing Packing DB)
+  const smartSyncAnalysis = useMemo(() => {
+    if (activeDbType === 'packing') {
+      return analyzePurchasePaymentReconciliation([], []);
+    }
+    return analyzePurchasePaymentReconciliation(purchases, payments);
+  }, [activeDbType, purchases, payments]);
 
   const syncSupplierLedgerRows = useMemo(() => {
+    if (activeDbType === 'packing') {
+      return [];
+    }
     return buildSupplierRecordHistory(purchases, payments, supplierCredits || [], {
       supplierName: syncLedgerSupplier,
       fromDate: syncLedgerFromDate,
@@ -376,6 +381,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
       sortDirection: syncLedgerSortDirection,
     });
   }, [
+    activeDbType,
     purchases,
     payments,
     supplierCredits,
@@ -689,6 +695,13 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     }
   }, [focusedShipmentInvoice]);
 
+  useEffect(() => {
+    if (!focusedShipmentInvoice) {
+      setActiveDbType(initialType);
+      setSelectedIds([]);
+    }
+  }, [initialType, focusedShipmentInvoice]);
+
   const focusedShipmentRecord = useMemo(() => {
     if (!focusedShipmentInvoice) return null;
     return findShipmentByDeepLink(packings, {
@@ -838,45 +851,37 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     }
   };
 
-  // In-memory dataset indices for fast indexed search & filtering
+  // In-memory dataset indices for fast indexed search & filtering (lazily built only for the active dataset)
+  const isPurchaseDbActive = activeDbType === 'purchase';
+  const isPackingDbActive = activeDbType === 'packing';
+
   const purchaseIndices = useMemo(
     () =>
-      buildDatasetIndices(purchases, {
+      buildDatasetIndices(isPurchaseDbActive ? purchases : [], {
         getInvoice: (p) => p.invoiceNumber,
         getDate: (p) => p.date,
         getParty: (p) => p.description,
         getSearchableText: (p) =>
           `${p.invoiceNumber} ${p.description} ${p.contactNumber || ''} ${p.remarks || ''}`,
       }),
-    [purchases]
+    [isPurchaseDbActive, purchases]
   );
 
   const packingIndices = useMemo(
     () =>
-      buildDatasetIndices(packings, {
+      buildDatasetIndices(isPackingDbActive ? packings : [], {
         getInvoice: (p) => p.invoiceNumber,
         getDate: (p) => p.packingDate || p.fromDate || p.toDate,
         getParty: (p) => p.shippingMark,
         getSearchableText: (p) =>
           `${p.invoiceNumber} ${p.shippingMark} ${p.destination} ${p.shipper} ${p.flight} ${p.remarks || ''}`,
       }),
-    [packings]
-  );
-
-  const paymentIndices = useMemo(
-    () =>
-      buildDatasetIndices(payments, {
-        getInvoice: (p) => p.invoiceNumber,
-        getDate: (p) => p.date,
-        getParty: (p) => p.description,
-        getSearchableText: (p) =>
-          `${p.invoiceNumber} ${p.description} ${p.shippingMark || ''} ${p.status} ${p.remarks || ''}`,
-      }),
-    [payments]
+    [isPackingDbActive, packings]
   );
 
   // Filtered lists reactive to search term, date range, reconciliation status, and field validation filter using index queries
   const filteredPurchases = useMemo(() => {
+    if (activeDbType !== 'purchase') return [];
     const candidateRecords = queryIndexedRecords(purchases, purchaseIndices, {
       searchTerm,
       startDate,
@@ -900,6 +905,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
       return true;
     });
   }, [
+    activeDbType,
     purchases,
     purchaseIndices,
     validationFilter,
@@ -912,6 +918,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   ]);
 
   const filteredPackings = useMemo(() => {
+    if (activeDbType !== 'packing') return [];
     const candidateRecords = queryIndexedRecords(packings, packingIndices, {
       searchTerm,
       startDate,
@@ -928,6 +935,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
       return true;
     });
   }, [
+    activeDbType,
     packings,
     packingIndices,
     validationFilter,
@@ -938,6 +946,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   ]);
 
   const filteredPayments = useMemo(() => {
+    if (activeDbType !== 'payment') return [];
     const activeSearch = (paymentSearchQuery || (activeDbType === 'payment' ? searchTerm : '')).trim();
 
     return payments.filter((pm) => {
@@ -993,28 +1002,31 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
 
   // Sorted records based on active sort configuration
   const sortedPurchases = useMemo(() => {
+    if (activeDbType !== 'purchase') return [];
     return sortPurchaseRecords(
       filteredPurchases,
       purchaseSort,
       smartSyncAnalysis.purchaseReconciliations
     );
-  }, [filteredPurchases, purchaseSort, smartSyncAnalysis.purchaseReconciliations]);
+  }, [activeDbType, filteredPurchases, purchaseSort, smartSyncAnalysis.purchaseReconciliations]);
 
   const sortedPackings = useMemo(() => {
+    if (activeDbType !== 'packing') return [];
     return sortPackingRecords(
       filteredPackings,
       packingSort,
       companyProfile.rmbExchangeRate || 16.5
     );
-  }, [filteredPackings, packingSort, companyProfile.rmbExchangeRate]);
+  }, [activeDbType, filteredPackings, packingSort, companyProfile.rmbExchangeRate]);
 
   const sortedPayments = useMemo(() => {
+    if (activeDbType !== 'payment') return [];
     return sortPaymentRecords(
       filteredPayments,
       paymentSort,
       smartSyncAnalysis.paymentReconciliations
     );
-  }, [filteredPayments, paymentSort, smartSyncAnalysis.paymentReconciliations]);
+  }, [activeDbType, filteredPayments, paymentSort, smartSyncAnalysis.paymentReconciliations]);
 
   const {
     maxHeight: syncLedgerScrollMaxHeight,
@@ -1398,6 +1410,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
           <button
             onClick={() => {
               setActiveDbType('purchase');
+              setActiveTab('purchase_db');
               setSelectedIds([]);
             }}
             className={`px-3 py-1.5 rounded text-xs font-bold uppercase transition cursor-pointer ${
@@ -1411,6 +1424,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
           <button
             onClick={() => {
               setActiveDbType('packing');
+              setActiveTab('packing_db');
               setSelectedIds([]);
             }}
             className={`px-3 py-1.5 rounded text-xs font-bold uppercase transition cursor-pointer ${
@@ -1424,6 +1438,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
           <button
             onClick={() => {
               setActiveDbType('payment');
+              setActiveTab('payment_db');
               setSelectedIds([]);
             }}
             className={`px-3 py-1.5 rounded text-xs font-bold uppercase transition cursor-pointer ${
@@ -1490,14 +1505,15 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2.5">
               {/* Reconciliation Filter Buttons */}
-              <div className="flex items-center bg-white/90 p-1 rounded-lg border border-slate-300 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5 bg-white/90 p-1.5 rounded-xl border border-slate-300 text-xs">
                 <button
                   type="button"
                   data-testid="smart-sync-filter-all"
+                  aria-pressed={reconciliationFilter === 'all'}
                   onClick={() => setReconciliationFilter('all')}
-                  className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap ${
                     reconciliationFilter === 'all'
                       ? 'bg-[#273E56] text-white'
                       : 'text-slate-700 hover:bg-slate-100'
@@ -1508,8 +1524,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 <button
                   type="button"
                   data-testid="smart-sync-filter-discrepancies"
+                  aria-pressed={reconciliationFilter === 'discrepancies'}
                   onClick={() => setReconciliationFilter('discrepancies')}
-                  className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap ${
                     reconciliationFilter === 'discrepancies'
                       ? 'bg-rose-600 text-white'
                       : 'text-rose-700 hover:bg-rose-50'
@@ -1524,8 +1541,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 <button
                   type="button"
                   data-testid="smart-sync-filter-reconciled"
+                  aria-pressed={reconciliationFilter === 'reconciled'}
                   onClick={() => setReconciliationFilter('reconciled')}
-                  className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap ${
                     reconciliationFilter === 'reconciled'
                       ? 'bg-emerald-700 text-white'
                       : 'text-emerald-800 hover:bg-emerald-50'
@@ -1545,13 +1563,13 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 data-testid="smart-sync-reconcile-all-btn"
                 disabled={smartSyncAnalysis.summary.discrepancyCount === 0}
                 onClick={() => handleSmartSyncReconcile()}
-                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wide shadow-sm transition ${
+                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-black uppercase tracking-wide shadow-sm transition whitespace-nowrap ${
                   smartSyncAnalysis.summary.discrepancyCount > 0
                     ? 'bg-rose-600 hover:bg-rose-700 text-white cursor-pointer'
                     : 'bg-emerald-700/20 text-emerald-900 border border-emerald-300 cursor-not-allowed'
                 }`}
               >
-                <Zap className="w-4 h-4" />
+                <Zap className="w-3.5 h-3.5 shrink-0" />
                 <span>
                   {smartSyncAnalysis.summary.discrepancyCount > 0
                     ? `Smart Sync & Reconcile (${smartSyncAnalysis.summary.discrepancyCount})`
@@ -1632,7 +1650,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               <button
                 type="button"
                 onClick={() => setLastSyncLog([])}
-                className="text-emerald-200 hover:text-white text-[11px] font-bold underline cursor-pointer"
+                className="px-2.5 py-1 text-emerald-200 hover:text-white text-xs font-bold underline cursor-pointer"
               >
                 Dismiss
               </button>
@@ -1641,29 +1659,31 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
 
           {/* Supplier Account Reconciliation Ledger Table (Matching Image Formula: Balance = Prev + Debit - Credit) */}
           <div className="mt-4 pt-4 border-t border-slate-200/90" data-testid="smart-sync-supplier-ledger">
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3">
+              <div className="flex flex-wrap items-center gap-2.5">
                 <button
                   type="button"
+                  data-testid="toggle-supplier-reconciliation-ledger-btn"
+                  aria-expanded={isSyncLedgerExpanded}
                   onClick={() => setIsSyncLedgerExpanded((prev) => !prev)}
-                  className="flex items-center gap-1.5 text-xs font-black uppercase text-slate-900 hover:text-purple-800 transition cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-black uppercase tracking-wide text-slate-900 hover:text-purple-800 transition cursor-pointer whitespace-nowrap"
                 >
                   {isSyncLedgerExpanded ? (
-                    <ChevronUp className="w-4 h-4 text-purple-700" />
+                    <ChevronUp className="w-3.5 h-3.5 text-purple-700 shrink-0" />
                   ) : (
-                    <ChevronDown className="w-4 h-4 text-purple-700" />
+                    <ChevronDown className="w-3.5 h-3.5 text-purple-700 shrink-0" />
                   )}
                   <span>SUPPLIER ACCOUNT RECONCILIATION LEDGER</span>
                 </button>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-100 text-blue-900 text-[10px] font-mono font-bold border border-blue-200">
-                  <Calculator className="w-3 h-3 text-blue-700" />
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-100 text-blue-900 text-[10px] font-mono font-bold border border-blue-200">
+                  <Calculator className="w-3 h-3 text-blue-700 shrink-0" />
                   <span>Formula: Balance = Prev Balance + Debit Amount - Credit Amount (Credit Amount = Paid Amount)</span>
                 </span>
               </div>
 
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 {/* Supplier Filter Select */}
-                <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-lg border border-slate-300 shadow-xs">
+                <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-lg border border-slate-300 shadow-xs">
                   <span className="text-[10px] font-bold uppercase text-slate-500">Supplier:</span>
                   <select
                     data-testid="smart-sync-supplier-select"
@@ -1682,7 +1702,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 </div>
 
                 {/* From Date Input */}
-                <label className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-lg border border-slate-300 shadow-xs">
+                <label className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-lg border border-slate-300 shadow-xs">
                   <span className="text-[10px] font-bold uppercase text-slate-500 whitespace-nowrap">
                     From Date:
                   </span>
@@ -1697,7 +1717,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 </label>
 
                 {/* To Date Input */}
-                <label className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-lg border border-slate-300 shadow-xs">
+                <label className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-lg border border-slate-300 shadow-xs">
                   <span className="text-[10px] font-bold uppercase text-slate-500 whitespace-nowrap">
                     To Date:
                   </span>
@@ -1719,19 +1739,21 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                       setSyncLedgerFromDate('');
                       setSyncLedgerToDate('');
                     }}
-                    className="px-2 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-[10px] font-bold uppercase whitespace-nowrap shrink-0 cursor-pointer transition"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold uppercase whitespace-nowrap shrink-0 cursor-pointer transition"
                     title="Clear From/To Date filter"
                   >
-                    Clear Dates
+                    <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+                    <span>Clear Dates</span>
                   </button>
                 )}
 
                 {/* Sort Direction Toggle */}
-                <div className="flex items-center bg-white p-0.5 rounded-lg border border-slate-300 shadow-xs">
+                <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-300 shadow-xs">
                   <button
                     type="button"
+                    aria-pressed={syncLedgerSortDirection === 'asc'}
                     onClick={() => setSyncLedgerSortDirection('asc')}
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition cursor-pointer whitespace-nowrap ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition cursor-pointer whitespace-nowrap ${
                       syncLedgerSortDirection === 'asc'
                         ? 'bg-blue-700 text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
@@ -1742,8 +1764,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   </button>
                   <button
                     type="button"
+                    aria-pressed={syncLedgerSortDirection === 'desc'}
                     onClick={() => setSyncLedgerSortDirection('desc')}
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition cursor-pointer whitespace-nowrap ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition cursor-pointer whitespace-nowrap ${
                       syncLedgerSortDirection === 'desc'
                         ? 'bg-blue-700 text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
@@ -1760,7 +1783,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   data-testid="sync-ledger-export-pdf-btn"
                   onClick={handleExportSyncLedgerPdf}
                   disabled={isExportingSyncLedgerPdf}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#00897b] hover:bg-[#00796b] disabled:opacity-60 text-white text-[11px] font-bold uppercase tracking-wide shadow-xs transition cursor-pointer whitespace-nowrap shrink-0"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#00897b] hover:bg-[#00796b] disabled:opacity-60 text-white text-xs font-bold uppercase tracking-wide shadow-xs transition cursor-pointer whitespace-nowrap shrink-0"
                   title="Export Supplier Account Reconciliation Ledger as official A4 PDF"
                 >
                   {isExportingSyncLedgerPdf ? (
@@ -1779,27 +1802,27 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 {selectedLedgerRowIds.length > 0 && (
                   <div
                     data-testid="reconciliation-ledger-bulk-bar"
-                    className="mb-2 px-3 py-2 rounded-lg bg-[#273E56] text-white flex flex-wrap items-center justify-between gap-2 text-xs shadow-sm"
+                    className="mb-2 px-3.5 py-2 rounded-lg bg-[#273E56] text-white flex flex-wrap items-center justify-between gap-2.5 text-xs shadow-sm"
                   >
                     <div className="flex items-center gap-2">
                       <span
                         data-testid="reconciliation-selected-count"
-                        className="px-2 py-0.5 rounded bg-[#1D6CE0] text-white font-mono font-black text-[11px]"
+                        className="px-2.5 py-1 rounded bg-[#1D6CE0] text-white font-mono font-black text-xs"
                       >
                         {selectedLedgerRowIds.length} Selected
                       </span>
                       <button
                         type="button"
                         onClick={() => setSelectedLedgerRowIds([])}
-                        className="text-[11px] text-slate-300 hover:text-white underline cursor-pointer"
+                        className="px-2.5 py-1 rounded-lg text-xs font-bold text-slate-200 hover:text-white cursor-pointer"
                       >
                         Clear Selection
                       </button>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
-                      <div className="flex items-center gap-1 bg-[#1F3349] px-2 py-1 rounded border border-[#3B5572]">
-                        <span className="text-[10px] font-bold uppercase text-[#93C5FD]">
+                      <div className="flex items-center gap-1.5 bg-[#1F3349] px-2.5 py-1 rounded-lg border border-[#3B5572]">
+                        <span className="text-[11px] font-bold uppercase text-[#93C5FD]">
                           Status:
                         </span>
                         <select
@@ -1819,7 +1842,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                           type="button"
                           data-testid="reconciliation-bulk-status-apply-btn"
                           onClick={() => handleLedgerBatchStatusUpdate()}
-                          className="ml-1 px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black uppercase cursor-pointer"
+                          className="ml-1 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase cursor-pointer whitespace-nowrap"
                         >
                           Update Status
                         </button>
@@ -1829,9 +1852,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         type="button"
                         data-testid="reconciliation-bulk-delete-btn"
                         onClick={handleLedgerBatchDeleteSelected}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-black uppercase cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase cursor-pointer whitespace-nowrap"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-3.5 h-3.5 shrink-0" />
                         <span>Delete Selected ({selectedLedgerRowIds.length})</span>
                       </button>
                     </div>
@@ -2322,12 +2345,13 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center bg-white p-1 rounded-lg border border-slate-300 text-xs">
+          <div className="flex items-center gap-1.5 bg-white p-1.5 rounded-xl border border-slate-300 text-xs">
             <button
               type="button"
               data-testid="validation-filter-all-btn"
+              aria-pressed={validationFilter === 'all'}
               onClick={() => setValidationFilter('all')}
-              className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap ${
                 validationFilter === 'all'
                   ? 'bg-[#273E56] text-white'
                   : 'text-slate-700 hover:bg-slate-100'
@@ -2338,8 +2362,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
             <button
               type="button"
               data-testid="validation-filter-invalid-btn"
+              aria-pressed={validationFilter === 'invalid_only'}
               onClick={() => setValidationFilter('invalid_only')}
-              className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap ${
                 validationFilter === 'invalid_only'
                   ? 'bg-rose-600 text-white'
                   : 'text-rose-700 hover:bg-rose-50'
@@ -3303,14 +3328,15 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 <span className="font-bold text-[#273E56] uppercase text-[11px] shrink-0">
                   Ledger:
                 </span>
-                <div className="flex items-center space-x-1 bg-white p-1 rounded-lg border border-slate-200 shadow-2xs">
+                <div className="flex flex-wrap items-center gap-1.5 bg-white p-1.5 rounded-xl border border-slate-200 shadow-2xs">
                   <button
                     type="button"
+                    aria-pressed={paymentCategoryFilter === 'all'}
                     onClick={() => {
                       setPaymentCategoryFilter('all');
                       setSelectedIds([]);
                     }}
-                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap ${
                       paymentCategoryFilter === 'all'
                         ? 'bg-[#273E56] text-white shadow-xs'
                         : 'text-slate-700 hover:bg-slate-100'
@@ -3320,11 +3346,12 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   </button>
                   <button
                     type="button"
+                    aria-pressed={paymentCategoryFilter === 'supplier'}
                     onClick={() => {
                       setPaymentCategoryFilter('supplier');
                       setSelectedIds([]);
                     }}
-                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap ${
                       paymentCategoryFilter === 'supplier'
                         ? 'bg-[#1877d2] text-white shadow-xs'
                         : 'text-slate-700 hover:bg-slate-100'
@@ -3335,11 +3362,12 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   </button>
                   <button
                     type="button"
+                    aria-pressed={paymentCategoryFilter === 'exporter'}
                     onClick={() => {
                       setPaymentCategoryFilter('exporter');
                       setSelectedIds([]);
                     }}
-                    className={`px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer whitespace-nowrap ${
                       paymentCategoryFilter === 'exporter'
                         ? 'bg-[#00897b] text-white shadow-xs'
                         : 'text-slate-700 hover:bg-slate-100'

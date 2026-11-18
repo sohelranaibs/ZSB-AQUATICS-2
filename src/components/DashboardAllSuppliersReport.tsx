@@ -81,7 +81,7 @@ export const DashboardAllSuppliersReport: React.FC = () => {
   const handleExportAllSuppliersCsv = () => {
     const csv = generateAllSuppliersReportCSV(report, currency);
     const filename = buildAllSuppliersReportCsvFilename();
-    downloadCsvFile(filename, csv);
+    downloadCsvFile(csv, filename);
     showToast(`Exported ${report.filteredSuppliers.length} suppliers report to ${filename}`);
   };
 
@@ -517,22 +517,22 @@ export const DashboardAllSuppliersReport: React.FC = () => {
                       </td>
 
                       <td className="py-2.5 px-3 text-right">
-                        <div className="inline-flex items-center justify-end gap-1.5">
+                        <div className="inline-flex items-center justify-end gap-2">
                           <button
                             type="button"
                             aria-expanded={isExpanded}
                             aria-pressed={isExpanded}
                             data-testid={`supplier-history-toggle-${row.slug}`}
                             onClick={() => toggleExpandSupplier(row.supplierKey)}
-                            className="px-2.5 py-1 rounded-md text-[11px] font-semibold inline-flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                           >
-                            {isExpanded ? (
-                              <ChevronDown className="w-3 h-3 shrink-0" />
-                            ) : (
-                              <ChevronRight className="w-3 h-3 shrink-0" />
-                            )}
-                            <History className="w-3 h-3 shrink-0" />
+                            <History className="w-3.5 h-3.5 shrink-0" />
                             <span>History ({row.historyCount})</span>
+                            {isExpanded ? (
+                              <ChevronDown className="w-3.5 h-3.5 shrink-0" />
+                            ) : (
+                              <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+                            )}
                           </button>
 
                           <button
@@ -540,9 +540,9 @@ export const DashboardAllSuppliersReport: React.FC = () => {
                             data-testid={`supplier-pdf-btn-${row.slug}`}
                             onClick={() => handleExportSingleSupplierPdf(row)}
                             title={`Export ${row.supplierName} Reconciliation Ledger PDF`}
-                            className="px-2 py-1 rounded-md text-[11px] font-semibold inline-flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                           >
-                            <FileText className="w-3 h-3 shrink-0" />
+                            <FileText className="w-3.5 h-3.5 shrink-0" />
                             <span>PDF</span>
                           </button>
                         </div>
@@ -571,21 +571,21 @@ export const DashboardAllSuppliersReport: React.FC = () => {
                                 </span>
                               </div>
 
-                              <div className="flex flex-wrap items-center gap-1.5">
+                              <div className="flex flex-wrap items-center gap-2">
                                 <button
                                   type="button"
                                   onClick={() => setActiveTab('payment_form')}
-                                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold inline-flex items-center gap-1 cursor-pointer"
+                                  className="px-3 py-1.5 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                                 >
-                                  <Wallet className="w-3 h-3 shrink-0" />
+                                  <Wallet className="w-3.5 h-3.5 shrink-0" />
                                   <span>Record Payment</span>
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => handleExportSingleSupplierPdf(row)}
-                                  className="px-2.5 py-1 rounded-md text-[11px] font-semibold inline-flex items-center gap-1 cursor-pointer"
+                                  className="px-3 py-1.5 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                                 >
-                                  <FileText className="w-3 h-3 shrink-0" />
+                                  <FileText className="w-3.5 h-3.5 shrink-0" />
                                   <span>Export Supplier PDF</span>
                                 </button>
                               </div>

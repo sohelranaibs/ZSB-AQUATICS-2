@@ -21,6 +21,13 @@ import {
 } from '../utils/dailyProfitLoss.ts';
 import { exportElementToPdf, resolveCompanyLogoSrc } from '../utils/pdfGenerator.ts';
 import { yieldForDomFrame } from '../utils/pdfExportStyles.ts';
+import { useDebouncedStoreSave } from '../hooks/useDebouncedStoreSave.ts';
+import {
+  FORM_DRAFT_STORAGE_KEYS,
+  loadFormDraft,
+  sanitizeProfitLossFormDraft,
+  saveFormDraftJson,
+} from '../utils/formDraftStorage.ts';
 import { DailyProfitLossSection } from './DailyProfitLossSection.tsx';
 import { SupplierCreditRecord } from '../types/index.ts';
 import {
@@ -78,13 +85,33 @@ export const ProfitLossView: React.FC = () => {
 
   const [isDownloadingPdf, setIsDownloadingPdf] = useState<boolean>(false);
 
-  const [newCategory, setNewCategory] = useState<string>(dropdownOptions.costingCategories[0] || 'Air Freight & Cargo');
-  const [newCostDate, setNewCostDate] = useState<string>(() =>
-    new Date().toISOString().slice(0, 10)
+  const initialProfitLossDraft = useMemo(
+    () =>
+      loadFormDraft(
+        FORM_DRAFT_STORAGE_KEYS.PROFIT_LOSS_FORM,
+        sanitizeProfitLossFormDraft
+      ),
+    []
   );
-  const [newAmount, setNewAmount] = useState<string>('');
-  const [newDesc, setNewDesc] = useState<string>('');
-  const [newRef, setNewRef] = useState<string>('');
+
+  const [newCategory, setNewCategory] = useState<string>(
+    () =>
+      initialProfitLossDraft?.newCategory ||
+      dropdownOptions.costingCategories[0] ||
+      'Air Freight & Cargo'
+  );
+  const [newCostDate, setNewCostDate] = useState<string>(
+    () => initialProfitLossDraft?.newCostDate || new Date().toISOString().slice(0, 10)
+  );
+  const [newAmount, setNewAmount] = useState<string>(
+    () => initialProfitLossDraft?.newAmount || ''
+  );
+  const [newDesc, setNewDesc] = useState<string>(
+    () => initialProfitLossDraft?.newDesc || ''
+  );
+  const [newRef, setNewRef] = useState<string>(
+    () => initialProfitLossDraft?.newRef || ''
+  );
   const [trendWindow, setTrendWindow] = useState<TrendWindowMode>('active');
   const [chartType, setChartType] = useState<'composed' | 'area'>('composed');
   const [supplierWindow, setSupplierWindow] = useState<SupplierPerformanceWindow>('6m');
@@ -93,15 +120,63 @@ export const ProfitLossView: React.FC = () => {
   // Supplier Credit Tracking Module State
   const [creditFilter, setCreditFilter] = useState<'all' | 'open' | 'applied'>('all');
   const [creditSupplier, setCreditSupplier] = useState<string>(
-    dropdownOptions.suppliers[0] || 'ABDULLAH VAI'
+    () =>
+      initialProfitLossDraft?.creditSupplier ||
+      dropdownOptions.suppliers[0] ||
+      'ABDULLAH VAI'
   );
-  const [creditAmount, setCreditAmount] = useState<string>('');
-  const [creditReason, setCreditReason] = useState<string>(SUPPLIER_CREDIT_REASONS[0]);
-  const [creditRefInvoice, setCreditRefInvoice] = useState<string>('');
-  const [creditDate, setCreditDate] = useState<string>(() =>
-    new Date().toISOString().slice(0, 10)
+  const [creditAmount, setCreditAmount] = useState<string>(
+    () => initialProfitLossDraft?.creditAmount || ''
   );
-  const [creditRemarks, setCreditRemarks] = useState<string>('');
+  const [creditReason, setCreditReason] = useState<string>(
+    () => initialProfitLossDraft?.creditReason || SUPPLIER_CREDIT_REASONS[0]
+  );
+  const [creditRefInvoice, setCreditRefInvoice] = useState<string>(
+    () => initialProfitLossDraft?.creditRefInvoice || ''
+  );
+  const [creditDate, setCreditDate] = useState<string>(
+    () => initialProfitLossDraft?.creditDate || new Date().toISOString().slice(0, 10)
+  );
+  const [creditRemarks, setCreditRemarks] = useState<string>(
+    () => initialProfitLossDraft?.creditRemarks || ''
+  );
+
+  const serializedProfitLossDraft = useMemo(
+    () =>
+      JSON.stringify({
+        newCategory,
+        newCostDate,
+        newAmount,
+        newDesc,
+        newRef,
+        creditSupplier,
+        creditAmount,
+        creditReason,
+        creditRefInvoice,
+        creditDate,
+        creditRemarks,
+      }),
+    [
+      newCategory,
+      newCostDate,
+      newAmount,
+      newDesc,
+      newRef,
+      creditSupplier,
+      creditAmount,
+      creditReason,
+      creditRefInvoice,
+      creditDate,
+      creditRemarks,
+    ]
+  );
+
+  useDebouncedStoreSave('Profit & Loss Form Draft', serializedProfitLossDraft, () => {
+    saveFormDraftJson(
+      FORM_DRAFT_STORAGE_KEYS.PROFIT_LOSS_FORM,
+      serializedProfitLossDraft
+    );
+  });
 
   const summary = calculateProfitLoss(
     purchases,

@@ -401,7 +401,25 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   const handleExportSyncLedgerPdf = async () => {
     if (isExportingSyncLedgerPdf) return;
     setIsExportingSyncLedgerPdf(true);
+    const safeSupplier =
+      syncLedgerSupplier === 'ALL'
+        ? 'ALL_SUPPLIERS'
+        : syncLedgerSupplier.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const dateTag =
+      syncLedgerFromDate || syncLedgerToDate
+        ? `${syncLedgerFromDate || 'START'}_to_${syncLedgerToDate || 'END'}`
+        : new Date().toISOString().slice(0, 10);
+    const pdfFilename = `ZSB_AQUATICS_SUPPLIER_RECONCILIATION_LEDGER_${safeSupplier}_${dateTag}.pdf`;
     try {
+      await yieldForDomFrame();
+      const canvasEl = document.getElementById('supplier-reconciliation-ledger-pdf-canvas');
+      if (canvasEl) {
+        const ok = await exportElementToPdf(canvasEl, pdfFilename);
+        if (ok) {
+          showToast(`Exported PDF: ${pdfFilename}`);
+          return;
+        }
+      }
       const result = exportSupplierReconciliationLedgerPdf({
         companyProfile,
         supplierFilter: syncLedgerSupplier,
@@ -418,22 +436,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
       }
     } catch (err) {
       console.error('Supplier Reconciliation Ledger PDF export failed:', err);
-      const safeSupplier =
-        syncLedgerSupplier === 'ALL'
-          ? 'ALL_SUPPLIERS'
-          : syncLedgerSupplier.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const dateTag =
-        syncLedgerFromDate || syncLedgerToDate
-          ? `${syncLedgerFromDate || 'START'}_to_${syncLedgerToDate || 'END'}`
-          : new Date().toISOString().slice(0, 10);
-      const fallbackFilename = `ZSB_AQUATICS_SUPPLIER_RECONCILIATION_LEDGER_${safeSupplier}_${dateTag}.pdf`;
-      await yieldForDomFrame();
-      const ok = await exportElementToPdf('supplier-reconciliation-ledger-pdf-canvas', fallbackFilename);
-      if (ok) {
-        showToast(`Exported PDF: ${fallbackFilename}`);
-      } else {
-        showToast('Failed to export Supplier Reconciliation Ledger PDF. Please try again.');
-      }
+      showToast('Failed to export Supplier Reconciliation Ledger PDF. Please try again.');
     } finally {
       setIsExportingSyncLedgerPdf(false);
     }

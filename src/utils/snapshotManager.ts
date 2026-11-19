@@ -74,6 +74,49 @@ export interface SnapshotValidationResult {
 export const SNAPSHOT_SCHEMA_VERSION = 1;
 export const SNAPSHOT_APP_IDENTIFIER = 'ZSB_AQUATICS_ENTERPRISE_LEDGER' as const;
 export const DEFAULT_MAX_SNAPSHOTS = 25;
+export const DEFAULT_SNAPSHOT_RETENTION_DAYS = 30;
+export const DEFAULT_MIN_RETAINED_SNAPSHOTS = 1;
+export const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+export interface SnapshotRetentionItemStatus {
+  snapshotId: string;
+  ageDays: number;
+  ageMs: number;
+  isOlderThanThreshold: boolean;
+  isFlaggedForDeletion: boolean;
+  isProtectedRecent: boolean;
+  estimatedBytes: number;
+}
+
+export interface SnapshotCleanupPlan {
+  retainedSnapshots: DatabaseSnapshot[];
+  flaggedSnapshots: DatabaseSnapshot[];
+  flaggedIds: string[];
+  protectedSnapshotIds: string[];
+  protectedExpiredCount: number;
+  statusById: Record<string, SnapshotRetentionItemStatus>;
+  totalStorageBytes: number;
+  reclaimableStorageBytes: number;
+  retainedStorageBytes: number;
+  maxAgeDays: number;
+  minRetainedCount: number;
+  evaluatedAtIso: string;
+}
+
+export interface SnapshotCleanupResult {
+  retainedSnapshots: DatabaseSnapshot[];
+  deletedSnapshots: DatabaseSnapshot[];
+  deletedIds: string[];
+  deletedCount: number;
+  retainedCount: number;
+  protectedExpiredCount: number;
+  reclaimedBytes: number;
+  remainingBytes: number;
+  maxAgeDays: number;
+  minRetainedCount: number;
+  cleanedAtIso: string;
+}
+
 
 /**
  * Deep-clones JSON-serializable data to guarantee snapshot immutability.
@@ -643,3 +686,179 @@ export function appendSnapshotWithRetention(
   const combined = [newSnapshot, ...filtered];
   return combined.slice(0, Math.max(1, maxSnapshots));
 }
+
+/**
+ * Estimates serialized JSON byte size for a single DatabaseSnapshot.
+ */
+export function estimateSnapshotBytes(snapshot: DatabaseSnapshot): number {
+  if (!snapshot || typeof snapshot !== 'object') return 0;
+  try {
+    return JSON.stringify(snapshot).length;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Formats byte counts into human-readable storage telemetry (B / KB / MB).
+ */
+export function formatStorageBytes(bytes: number): string {
+  const safe = Math.max(0, Number(bytes) || 0);
+  if (safe < 1024) {
+    return `${Math.round(safe)} B`;
+  }
+  if (safe < 1024 * 1024) {
+    return `${(safe / 1024).toFixed(1)} KB`;
+  }
+  return `${(safe / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+/**
+ * Calculates age in days and milliseconds for a snapshot timestamp relative to referenceNowMs.
+ */
+export function calculateSnapshotAgeDays(
+  createdAtIso: string,
+  referenceNowMs: number = Date.now()
+): { ageDays: number; ageMs: number } {
+  if (!createdAtIso || typeof createdAtIso !== 'string') {
+    return { ageDays: 0, ageMs: 0 };
+  }
+  const parsedMs = Date.parse(createdAtIso);
+  if (Number.isNaN(parsedMs)) {
+    return { ageDays: 0, ageMs: 0 };
+  }
+  const ageMs = Math.max(0, referenceNowMs - parsedMs);
+  const ageDays = Math.floor(ageMs / MS_PER_DAY);
+  return { ageDays, ageMs };
+}
+
+/**
+ * Evaluates all local snapshots against the 30-day retention rule while guaranteeing
+ * that at least `minRetainedCount` (default 1) most recent snapshot is always protected and kept.
+ */
+export function evaluateSnapshotCleanupPlan(
+  snapshots: DatabaseSnapshot[],
+  options?: {
+    maxAgeDays?: number;
+    minRetainedCount?: number;
+    referenceNowMs?: number;
+  }
+): SnapshotCleanupPlan {
+  const safeList = Array.isArray(snapshots)
+    ? snapshots.filter((s): s is DatabaseSnapshot => Boolean(s && typeof s === 'object' && s.id))
+    : [];
+
+  const maxAgeDays = Math.max(1, options?.maxAgeDays ?? DEFAULT_SNAPSHOT_RETENTION_DAYS);
+  const minRetainedCount = Math.max(1, options?.minRetainedCount ?? DEFAULT_MIN_RETAINED_SNAPSHOTS);
+  const referenceNowMs = options?.referenceNowMs ?? Date.now();
+  const thresholdMs = maxAgeDays * MS_PER_DAY;
+  const evaluatedAtIso = new Date(referenceNowMs).toISOString();
+
+  // Sort newest-first by createdAt timestamp (tie-break by original array index)
+  const indexed = safeList.map((snap, originalIndex) => {
+    const parsedMs = Date.parse(snap.createdAt);
+    return {
+      snap,
+      originalIndex,
+      timestampMs: Number.isNaN(parsedMs) ? referenceNowMs : parsedMs,
+    };
+  });
+
+  indexed.sort((a, b) => {
+    if (b.timestampMs !== a.timestampMs) {
+      return b.timestampMs - a.timestampMs;
+    }
+    return a.originalIndex - b.originalIndex;
+  });
+
+  const retainedSnapshots: DatabaseSnapshot[] = [];
+  const flaggedSnapshots: DatabaseSnapshot[] = [];
+  const flaggedIds: string[] = [];
+  const protectedSnapshotIds: string[] = [];
+  let protectedExpiredCount = 0;
+  let totalStorageBytes = 0;
+  let reclaimableStorageBytes = 0;
+  let retainedStorageBytes = 0;
+  const statusById: Record<string, SnapshotRetentionItemStatus> = {};
+
+  indexed.forEach((entry, rankIndex) => {
+    const { snap } = entry;
+    const { ageDays, ageMs } = calculateSnapshotAgeDays(snap.createdAt, referenceNowMs);
+    const isOlderThanThreshold = ageMs > thresholdMs;
+    const isProtectedRecent = rankIndex < minRetainedCount;
+    const isFlaggedForDeletion = !isProtectedRecent && isOlderThanThreshold;
+    const estimatedBytes = estimateSnapshotBytes(snap);
+
+    totalStorageBytes += estimatedBytes;
+
+    if (isProtectedRecent) {
+      protectedSnapshotIds.push(snap.id);
+      if (isOlderThanThreshold) {
+        protectedExpiredCount += 1;
+      }
+    }
+
+    if (isFlaggedForDeletion) {
+      flaggedSnapshots.push(snap);
+      flaggedIds.push(snap.id);
+      reclaimableStorageBytes += estimatedBytes;
+    } else {
+      retainedSnapshots.push(snap);
+      retainedStorageBytes += estimatedBytes;
+    }
+
+    statusById[snap.id] = {
+      snapshotId: snap.id,
+      ageDays,
+      ageMs,
+      isOlderThanThreshold,
+      isFlaggedForDeletion,
+      isProtectedRecent,
+      estimatedBytes,
+    };
+  });
+
+  return {
+    retainedSnapshots,
+    flaggedSnapshots,
+    flaggedIds,
+    protectedSnapshotIds,
+    protectedExpiredCount,
+    statusById,
+    totalStorageBytes,
+    reclaimableStorageBytes,
+    retainedStorageBytes,
+    maxAgeDays,
+    minRetainedCount,
+    evaluatedAtIso,
+  };
+}
+
+/**
+ * Executes the 30-day snapshot cleanup policy, deleting snapshots older than `maxAgeDays`
+ * while always keeping at least `minRetainedCount` (default 1) most recent snapshot.
+ */
+export function cleanupExpiredSnapshots(
+  snapshots: DatabaseSnapshot[],
+  options?: {
+    maxAgeDays?: number;
+    minRetainedCount?: number;
+    referenceNowMs?: number;
+  }
+): SnapshotCleanupResult {
+  const plan = evaluateSnapshotCleanupPlan(snapshots, options);
+  return {
+    retainedSnapshots: plan.retainedSnapshots,
+    deletedSnapshots: plan.flaggedSnapshots,
+    deletedIds: plan.flaggedIds,
+    deletedCount: plan.flaggedSnapshots.length,
+    retainedCount: plan.retainedSnapshots.length,
+    protectedExpiredCount: plan.protectedExpiredCount,
+    reclaimedBytes: plan.reclaimableStorageBytes,
+    remainingBytes: plan.retainedStorageBytes,
+    maxAgeDays: plan.maxAgeDays,
+    minRetainedCount: plan.minRetainedCount,
+    cleanedAtIso: plan.evaluatedAtIso,
+  };
+}
+

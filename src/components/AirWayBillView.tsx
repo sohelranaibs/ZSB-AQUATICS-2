@@ -6,6 +6,7 @@ import {
   formatYearMonthLabel,
 } from '../utils/calculations.ts';
 import { useRowScrollViewport } from '../hooks/useRowScrollViewport.ts';
+import { useDebouncedStoreSave } from '../hooks/useDebouncedStoreSave.ts';
 import { MAX_VISIBLE_TABLE_ROWS } from '../utils/tableScroll.ts';
 import {
   AirWayBillRow,
@@ -28,6 +29,7 @@ import {
   exportElementToPng,
   resolveCompanyLogoSrc,
 } from '../utils/pdfGenerator.ts';
+import { yieldForDomFrame } from '../utils/pdfExportStyles.ts';
 import { COMPANY_LOGO_URL } from '../context/initialData.ts';
 import {
   ZSB_VIEW_SHORTCUT_EVENT,
@@ -322,13 +324,14 @@ export const AirWayBillView: React.FC = () => {
   const sheetCaptureRef = useRef<HTMLDivElement>(null);
   const awbScrollRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(AWB_OVERRIDES_STORAGE_KEY, JSON.stringify(rowOverrides));
-    } catch {
-      // Ignore storage quota errors
-    }
-  }, [rowOverrides]);
+  const serializedAwbDraft = useMemo(
+    () => JSON.stringify({ rowOverrides, customRows }),
+    [rowOverrides, customRows]
+  );
+
+  useDebouncedStoreSave('Flight Return Bill', serializedAwbDraft, () => {
+    localStorage.setItem(AWB_OVERRIDES_STORAGE_KEY, JSON.stringify(rowOverrides));
+  });
 
   // Combine saved Packing List records with any active draft in Packing List Form
   const allManifestRecords = useMemo(
@@ -502,15 +505,19 @@ export const AirWayBillView: React.FC = () => {
   };
 
   const handleDirectExport = async (format: 'pdf' | 'png') => {
-    if (!sheetCaptureRef.current || isExporting) return;
+    if (isExporting) return;
     setIsExporting(format);
     const filename = formatAirWayBillExportFilename(selectedMonth, selectedShipper, format);
     try {
+      await yieldForDomFrame();
+      const targetEl =
+        document.getElementById('awb-print-preview-document') || sheetCaptureRef.current;
+      if (!targetEl) return;
       if (format === 'pdf') {
-        await exportElementToPdf(sheetCaptureRef.current, filename);
+        await exportElementToPdf(targetEl, filename);
         showToast(`Saved Flight Return Bill PDF: ${filename}`);
       } else {
-        await exportElementToPng(sheetCaptureRef.current, filename);
+        await exportElementToPng(targetEl, filename);
         showToast(`Saved Flight Return Bill PNG: ${filename}`);
       }
     } catch {
@@ -1115,6 +1122,363 @@ export const AirWayBillView: React.FC = () => {
         </div>
       </div>
 
+      {/* Offscreen Print-Preview-Identical A4 Document for One-Click PDF/PNG Export */}
+      {(isExporting !== null || isShareModalOpen) && (
+        <div
+          id="awb-print-preview-host"
+          aria-hidden="true"
+          className="fixed -left-[10000px] top-0 pointer-events-none print:hidden"
+          style={{ width: '760px', zIndex: -1 }}
+        >
+          <div
+            id="awb-print-preview-document"
+            className="zsb-print-paper relative w-[760px] max-w-[760px] bg-white rounded-sm border border-slate-300 p-7 space-y-5 text-slate-900 overflow-hidden"
+            style={{
+              width: '760px',
+              backgroundColor: '#ffffff',
+              color: '#000000',
+              position: 'relative',
+            }}
+          >
+            {/* Centered Watermark Logo */}
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 flex items-center justify-center pointer-events-none select-none z-0 overflow-hidden"
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                pointerEvents: 'none',
+                userSelect: 'none',
+                zIndex: 0,
+                opacity: 0.07,
+              }}
+            >
+              <img
+                src={resolveCompanyLogoSrc(companyProfile.logoUrl)}
+                alt=""
+                style={{
+                  width: '340px',
+                  height: '340px',
+                  objectFit: 'contain',
+                  borderRadius: '9999px',
+                }}
+              />
+            </div>
+
+            {/* Official Document Header (Identical to PrintPreviewModal) */}
+            <div
+              style={{ borderBottom: '2px solid #0f172a', position: 'relative', zIndex: 10 }}
+              className="pb-3.5 text-center space-y-1 relative z-10"
+            >
+              <div className="flex items-center justify-center gap-3.5 mb-1">
+                <div
+                  style={{
+                    width: '64px',
+                    height: '64px',
+                    borderRadius: '9999px',
+                    overflow: 'hidden',
+                    border: '2px solid #fbbf24',
+                    backgroundColor: '#ffffff',
+                    padding: '2px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <img
+                    src={resolveCompanyLogoSrc(companyProfile.logoUrl)}
+                    alt={companyProfile.companyName}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'contain',
+                      borderRadius: '9999px',
+                      display: 'block',
+                    }}
+                  />
+                </div>
+                <div
+                  className="zsb-3d-text-print text-3xl sm:text-4xl font-black tracking-widest uppercase"
+                  style={{
+                    color: '#f59e0b',
+                    fontFamily: "'Cinzel', Georgia, Cambria, 'Times New Roman', Times, serif",
+                    fontWeight: 900,
+                    letterSpacing: '0.09em',
+                    textShadow:
+                      '1px 1px 0px #b45309, 2px 2px 0px #92400e, 3px 3px 0px #78350f, 4px 4px 0px #451a03, 5px 5px 7px rgba(15, 23, 42, 0.35)',
+                  }}
+                >
+                  {companyProfile.companyName}
+                </div>
+              </div>
+
+              <div style={{ color: '#000000' }} className="text-xs sm:text-sm font-bold tracking-wide">
+                Address: {companyProfile.address}
+              </div>
+
+              <div style={{ color: '#000000' }} className="text-xs sm:text-sm font-bold font-mono">
+                Mobile: {companyProfile.mobiles.join(' , ')} | EMAIL:{' '}
+                {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com'
+                  ? companyProfile.email
+                  : 'zsbaquatics@gmail.com'}
+                , Website : {companyProfile.website || 'www.zsbaquatics.com'}
+              </div>
+
+              <div
+                style={{ backgroundColor: '#0f172a', color: '#ffffff' }}
+                className="inline-block mt-2 px-5 py-1.5 rounded text-xs font-bold tracking-widest uppercase shadow-sm"
+              >
+                {`FLIGHT RETURN BILL — MONTHLY STATEMENT (${
+                  selectedMonth !== 'all' ? formatYearMonthLabel(selectedMonth) : 'ALL ACTIVE MONTHS'
+                })`}
+              </div>
+            </div>
+
+            {/* A4 Portrait Optimized Table (Identical to PrintPreviewModal type === 'air_way_bill') */}
+            <div className="space-y-3 relative z-10">
+              <table
+                style={{
+                  borderCollapse: 'collapse',
+                  width: '100%',
+                  tableLayout: 'fixed',
+                }}
+                className="text-[11px] font-sans"
+              >
+                <colgroup>
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '13%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '9%' }} />
+                  <col style={{ width: '16%' }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th
+                      colSpan={8}
+                      style={{
+                        backgroundColor: '#2f75b5',
+                        color: '#ffffff',
+                        border: '1.5px solid #000000',
+                        letterSpacing: '0.04em',
+                      }}
+                      className="py-1.5 px-3 text-center text-base font-extrabold uppercase"
+                    >
+                      FLIGHT RETURN BILL
+                    </th>
+                  </tr>
+                  <tr
+                    style={{
+                      backgroundColor: '#bdd7ee',
+                      color: '#000000',
+                    }}
+                    className="text-[10px] font-extrabold uppercase text-center leading-tight"
+                  >
+                    <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+                      DATE
+                    </th>
+                    <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+                      SHIPPER
+                    </th>
+                    <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+                      FLIGHT
+                    </th>
+                    <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+                      TOTAL BOX
+                    </th>
+                    <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+                      RMB/PER BOX
+                    </th>
+                    <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+                      TOTAL RMB
+                    </th>
+                    <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+                      RATE
+                    </th>
+                    <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
+                      BDT AMOUNT
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayRows.map((row, idx) => (
+                    <tr key={row.id || idx} style={{ backgroundColor: '#ffffff', color: '#000000' }}>
+                      <td
+                        style={{ border: '1.5px solid #000000', height: '27px' }}
+                        className="py-1 px-1 text-center font-mono font-semibold text-[10.5px] truncate"
+                      >
+                        {row.date ? formatDate(row.date) : ''}
+                      </td>
+                      <td
+                        style={{ border: '1.5px solid #000000', height: '27px' }}
+                        className="py-1 px-1 text-center font-bold text-[10.5px] truncate"
+                      >
+                        {row.shipper || ''}
+                      </td>
+                      <td
+                        style={{ border: '1.5px solid #000000', height: '27px' }}
+                        className="py-1 px-1 text-center font-mono font-bold text-[10.5px] truncate"
+                      >
+                        {row.flight || ''}
+                      </td>
+                      <td
+                        style={{ border: '1.5px solid #000000', height: '27px' }}
+                        className="py-1 px-1 text-center font-mono font-bold text-[10.5px] tabular-nums"
+                      >
+                        {row.totalBox > 0 ? row.totalBox : ''}
+                      </td>
+                      <td
+                        style={{ border: '1.5px solid #000000', height: '27px' }}
+                        className="py-1 px-1 text-center font-mono font-bold text-[10.5px] tabular-nums"
+                      >
+                        {row.rmbPerBox > 0 ? row.rmbPerBox : ''}
+                      </td>
+                      <td
+                        style={{ border: '1.5px solid #000000', height: '27px' }}
+                        className="py-1 px-1 text-center font-mono font-bold text-[10.5px] tabular-nums"
+                      >
+                        {row.totalRmb > 0
+                          ? row.totalRmb.toLocaleString('en-US', {
+                              minimumFractionDigits: row.totalRmb % 1 === 0 ? 0 : 2,
+                              maximumFractionDigits: 2,
+                            })
+                          : ''}
+                      </td>
+                      <td
+                        style={{ border: '1.5px solid #000000', height: '27px' }}
+                        className="py-1 px-1 text-center font-mono font-bold text-[10.5px] tabular-nums"
+                      >
+                        {row.rate > 0 ? row.rate : ''}
+                      </td>
+                      <td
+                        style={{ border: '1.5px solid #000000', height: '27px' }}
+                        className="py-1 px-1 text-center font-mono font-extrabold text-[10.5px] tabular-nums"
+                      >
+                        {row.bdtAmount > 0
+                          ? row.bdtAmount.toLocaleString('en-US', {
+                              minimumFractionDigits: row.bdtAmount % 1 === 0 ? 0 : 2,
+                              maximumFractionDigits: 2,
+                            })
+                          : ''}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={4} style={{ border: 'none' }} className="p-1"></td>
+                    <td
+                      colSpan={3}
+                      style={{
+                        backgroundColor: '#bdd7ee',
+                        color: '#000000',
+                        border: '1.5px solid #000000',
+                        height: '29px',
+                      }}
+                      className="py-1 px-2 text-center text-[10.5px] font-extrabold uppercase"
+                    >
+                      TOTAL AMOUNT (BDT)
+                    </td>
+                    <td
+                      style={{
+                        backgroundColor: '#ffffff',
+                        color: '#000000',
+                        border: '1.5px solid #000000',
+                        height: '29px',
+                      }}
+                      className="py-1 px-1.5 text-center font-mono font-black text-[11px] tabular-nums"
+                    >
+                      {(totals.totalAmountBDT || 0).toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {/* Dual Official Signatures (Identical to PrintPreviewModal) */}
+            <div className="pt-12 grid grid-cols-2 gap-8 text-center text-xs relative z-10">
+              <div className="flex flex-col items-center">
+                <div style={{ borderBottom: '2px solid #0f172a' }} className="w-52 pb-1.5">
+                  <div
+                    style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', color: '#0f172a' }}
+                    className="text-base font-bold tracking-wider"
+                  >
+                    {companyProfile.managingPartner}
+                  </div>
+                </div>
+                <div
+                  style={{ color: '#0f172a' }}
+                  className="mt-1.5 font-bold uppercase tracking-wider text-xs"
+                >
+                  Managing Partner
+                </div>
+                <div
+                  style={{ color: '#d97706', fontWeight: 800 }}
+                  className="text-[10px] uppercase font-extrabold text-amber-500 zsb-golden-brand-light"
+                >
+                  {companyProfile.companyName}
+                </div>
+              </div>
+
+              <div className="flex flex-col items-center">
+                <div style={{ borderBottom: '2px solid #0f172a' }} className="w-52 pb-1.5">
+                  <div
+                    style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', color: '#0f172a' }}
+                    className="text-base font-bold tracking-wider"
+                  >
+                    {companyProfile.partner}
+                  </div>
+                </div>
+                <div
+                  style={{ color: '#0f172a' }}
+                  className="mt-1.5 font-bold uppercase tracking-wider text-xs"
+                >
+                  Partner
+                </div>
+                <div
+                  style={{ color: '#d97706', fontWeight: 800 }}
+                  className="text-[10px] uppercase font-extrabold text-amber-500 zsb-golden-brand-light"
+                >
+                  {companyProfile.companyName}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer certification & dynamic A4 page counter */}
+            <div
+              style={{ borderTop: '1px solid #e2e8f0', color: '#94a3b8' }}
+              className="flex justify-between items-center text-[10px] pt-4 mt-6 relative z-10"
+            >
+              <span>
+                This is an official computer-generated document from{' '}
+                <strong
+                  style={{ color: '#d97706', fontWeight: 800 }}
+                  className="font-extrabold text-amber-500 zsb-golden-brand-light"
+                >
+                  {companyProfile.companyName}
+                </strong>{' '}
+                System • Validated and archived.
+              </span>
+              <span className="print-page-number-counter font-mono font-bold text-slate-600">
+                <span className="print:hidden">Page 1 of 1</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Interactive PNG WeChat Share Modal */}
       {isShareModalOpen && (
         <PngShareModal
@@ -1134,7 +1498,7 @@ export const AirWayBillView: React.FC = () => {
             flight: selectedFlight,
             totals,
           }}
-          targetElementId="awb-printable-sheet"
+          targetElementId="awb-print-preview-document"
           defaultFilename={formatAirWayBillExportFilename(selectedMonth, selectedShipper, 'png')}
         />
       )}

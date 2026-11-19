@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ESSENTIAL_EXPORT_CSS_PROPS,
+  buildInlineExportStyleText,
   needsLegacyColorConversion,
   shouldSkipExportCssValue,
   getJsPdfImageFormat,
@@ -15,6 +16,7 @@ describe('pdfExportStyles pure optimization helpers', () => {
     assert.ok(ESSENTIAL_EXPORT_CSS_PROPS.includes('border-collapse'));
     assert.ok(ESSENTIAL_EXPORT_CSS_PROPS.includes('grid-template-columns'));
     assert.ok(ESSENTIAL_EXPORT_CSS_PROPS.includes('font-variant-numeric'));
+    assert.ok(ESSENTIAL_EXPORT_CSS_PROPS.includes('text-overflow'));
     assert.ok(ESSENTIAL_EXPORT_CSS_PROPS.includes('fill'));
   });
 
@@ -35,6 +37,34 @@ describe('pdfExportStyles pure optimization helpers', () => {
       shouldSkipExportCssValue('background-image', 'url("data:image/png;base64,AAA")'),
       false
     );
+  });
+
+  it('prevents orphan border-*-style:solid when border-*-width is 0px (Tailwind Preflight)', () => {
+    const mockStyles: Record<string, string> = {
+      display: 'block',
+      'border-top-width': '0px',
+      'border-top-style': 'solid',
+      'border-top-color': 'rgb(0, 0, 0)',
+      'border-right-width': '0px',
+      'border-right-style': 'solid',
+      'border-right-color': 'rgb(0, 0, 0)',
+      'border-bottom-width': '2px',
+      'border-bottom-style': 'solid',
+      'border-bottom-color': 'rgb(15, 23, 42)',
+      'border-left-width': '0px',
+      'border-left-style': 'solid',
+      'border-left-color': 'rgb(0, 0, 0)',
+      'border-top-left-radius': '4px',
+    };
+    const cssText = buildInlineExportStyleText((prop) => mockStyles[prop] || '');
+    assert.equal(cssText.includes('border-top-style'), false);
+    assert.equal(cssText.includes('border-top-color'), false);
+    assert.equal(cssText.includes('border-right-style'), false);
+    assert.equal(cssText.includes('border-left-style'), false);
+    assert.equal(cssText.includes('border-bottom-width:2px;'), true);
+    assert.equal(cssText.includes('border-bottom-style:solid;'), true);
+    assert.equal(cssText.includes('border-bottom-color:rgb(15, 23, 42);'), true);
+    assert.equal(cssText.includes('border-top-left-radius:4px;'), true);
   });
 
   it('detects modern color functions requiring rgb conversion', () => {

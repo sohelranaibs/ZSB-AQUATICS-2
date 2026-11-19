@@ -18,6 +18,7 @@ import {
   ExporterSlipFilterOptions,
 } from '../utils/calculations.ts';
 import { useRowScrollViewport } from '../hooks/useRowScrollViewport.ts';
+import { useDebouncedStoreSave } from '../hooks/useDebouncedStoreSave.ts';
 import { MAX_VISIBLE_TABLE_ROWS } from '../utils/tableScroll.ts';
 import { ExporterPaymentSlipRow, ExporterStatus } from '../types/index.ts';
 import {
@@ -375,13 +376,11 @@ export const ExporterPaymentSlipView: React.FC = () => {
   const customRowsRef = useRef<ExporterPaymentSlipRow[]>(customRows);
   customRowsRef.current = customRows;
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(CUSTOM_SLIP_ROWS_STORAGE_KEY, JSON.stringify(customRows));
-    } catch (e) {
-      console.error(e);
-    }
-  }, [customRows]);
+  const serializedSlipRows = useMemo(() => JSON.stringify(customRows), [customRows]);
+
+  useDebouncedStoreSave('Exporter Payment Slip', serializedSlipRows, () => {
+    localStorage.setItem(CUSTOM_SLIP_ROWS_STORAGE_KEY, serializedSlipRows);
+  });
 
   useEffect(() => {
     const handleClearAll = () => {

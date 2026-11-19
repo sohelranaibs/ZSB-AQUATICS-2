@@ -25,6 +25,14 @@ import {
 } from '../utils/tableRowOptimization.ts';
 import { validateExporterPaymentForm } from '../utils/validation.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
+import { useDebouncedStoreSave } from '../hooks/useDebouncedStoreSave.ts';
+import {
+  FORM_DRAFT_STORAGE_KEYS,
+  clearFormDraft,
+  loadFormDraft,
+  sanitizeExporterPaymentFormDraft,
+  saveFormDraftJson,
+} from '../utils/formDraftStorage.ts';
 import {
   ZSB_VIEW_SHORTCUT_EVENT,
   ViewShortcutEventDetail,
@@ -382,20 +390,53 @@ export const ExporterPaymentFormView: React.FC = () => {
   const historyScrollRef = useRef<HTMLDivElement>(null);
 
   const nextVoucherNo = generateInvoiceNumber('EXP-PAY', exporterPayments.length);
-  const [invoiceNumber, setInvoiceNumber] = useState<string>(nextVoucherNo);
-  const [date, setDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
-  const [shippingMark, setShippingMark] = useState<string>('ALL');
-  const [selectedPackingDate, setSelectedPackingDate] = useState<string>('ALL');
-  const [fromDate, setFromDate] = useState<string>('');
-  const [toDate, setToDate] = useState<string>('');
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('ALL');
-  const [contactNumber, setContactNumber] = useState<string>('');
+  const initialExporterDraft = useMemo(
+    () =>
+      loadFormDraft(
+        FORM_DRAFT_STORAGE_KEYS.EXPORTER_PAYMENT_FORM,
+        sanitizeExporterPaymentFormDraft
+      ),
+    []
+  );
+
+  const [invoiceNumber, setInvoiceNumber] = useState<string>(
+    () => initialExporterDraft?.invoiceNumber?.trim() || nextVoucherNo
+  );
+  const [date, setDate] = useState<string>(
+    () => initialExporterDraft?.date || new Date().toISOString().slice(0, 10)
+  );
+  const [shippingMark, setShippingMark] = useState<string>(
+    () => initialExporterDraft?.shippingMark || 'ALL'
+  );
+  const [selectedPackingDate, setSelectedPackingDate] = useState<string>(
+    () => initialExporterDraft?.selectedPackingDate || 'ALL'
+  );
+  const [fromDate, setFromDate] = useState<string>(
+    () => initialExporterDraft?.fromDate || ''
+  );
+  const [toDate, setToDate] = useState<string>(
+    () => initialExporterDraft?.toDate || ''
+  );
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>(
+    () => initialExporterDraft?.selectedStatusFilter || 'ALL'
+  );
+  const [contactNumber, setContactNumber] = useState<string>(
+    () => initialExporterDraft?.contactNumber || ''
+  );
 
   // Exporter Specific Fields
-  const [exporterStatus, setExporterStatus] = useState<ExporterStatus>('UNPAID');
-  const [returnRMB, setReturnRMB] = useState<number>(0);
-  const [exportGoodsRef, setExportGoodsRef] = useState<string>('');
-  const [remarks, setRemarks] = useState<string>('');
+  const [exporterStatus, setExporterStatus] = useState<ExporterStatus>(
+    () => (initialExporterDraft?.exporterStatus as ExporterStatus) || 'UNPAID'
+  );
+  const [returnRMB, setReturnRMB] = useState<number>(
+    () => initialExporterDraft?.returnRMB ?? 0
+  );
+  const [exportGoodsRef, setExportGoodsRef] = useState<string>(
+    () => initialExporterDraft?.exportGoodsRef || ''
+  );
+  const [remarks, setRemarks] = useState<string>(
+    () => initialExporterDraft?.remarks || ''
+  );
 
   const createEmptyRow = (id: string, defaultMark = ''): PaymentItemRow => ({
     id,
@@ -409,16 +450,77 @@ export const ExporterPaymentFormView: React.FC = () => {
   });
 
   // Optional custom rows added on top of automatic Exporter DB record history
-  const [customRows, setCustomRows] = useState<PaymentItemRow[]>([]);
+  const [customRows, setCustomRows] = useState<PaymentItemRow[]>(
+    () => initialExporterDraft?.customRows || []
+  );
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [deletedRowIds, setDeletedRowIds] = useState<string[]>([]);
   const [rowDescriptionOverrides, setRowDescriptionOverrides] = useState<
     Record<string, string>
-  >({});
+  >(() => initialExporterDraft?.rowDescriptionOverrides || {});
   const [historySyncRevision, setHistorySyncRevision] = useState<number>(0);
   const [lastSyncEvent, setLastSyncEvent] = useState<PaymentSyncEventDetail | null>(
     null
   );
+
+  const [overallPreviousAmount, setOverallPreviousAmount] = useState<number>(
+    () => initialExporterDraft?.overallPreviousAmount ?? 0
+  );
+  const [overallReportAmount, setOverallReportAmount] = useState<number>(
+    () => initialExporterDraft?.overallReportAmount ?? 0
+  );
+  const [overallPaidAmount, setOverallPaidAmount] = useState<number>(
+    () => initialExporterDraft?.overallPaidAmount ?? 0
+  );
+
+  const serializedExporterPaymentDraft = useMemo(
+    () =>
+      JSON.stringify({
+        invoiceNumber,
+        date,
+        shippingMark,
+        selectedPackingDate,
+        fromDate,
+        toDate,
+        selectedStatusFilter,
+        contactNumber,
+        exporterStatus,
+        returnRMB,
+        exportGoodsRef,
+        remarks,
+        overallPreviousAmount,
+        overallReportAmount,
+        overallPaidAmount,
+        customRows,
+        rowDescriptionOverrides,
+      }),
+    [
+      invoiceNumber,
+      date,
+      shippingMark,
+      selectedPackingDate,
+      fromDate,
+      toDate,
+      selectedStatusFilter,
+      contactNumber,
+      exporterStatus,
+      returnRMB,
+      exportGoodsRef,
+      remarks,
+      overallPreviousAmount,
+      overallReportAmount,
+      overallPaidAmount,
+      customRows,
+      rowDescriptionOverrides,
+    ]
+  );
+
+  useDebouncedStoreSave('Exporter Payment Draft', serializedExporterPaymentDraft, () => {
+    saveFormDraftJson(
+      FORM_DRAFT_STORAGE_KEYS.EXPORTER_PAYMENT_FORM,
+      serializedExporterPaymentDraft
+    );
+  });
 
   // Automated synchronization listener: refreshes Exporter & Supplier Record History whenever a payment entry is confirmed
   useEffect(() => {
@@ -436,10 +538,6 @@ export const ExporterPaymentFormView: React.FC = () => {
       window.removeEventListener(ZSB_PAYMENT_ENTRY_CONFIRMED_EVENT, handlePaymentSync);
     };
   }, []);
-
-  const [overallPreviousAmount, setOverallPreviousAmount] = useState<number>(0);
-  const [overallReportAmount, setOverallReportAmount] = useState<number>(0);
-  const [overallPaidAmount, setOverallPaidAmount] = useState<number>(0);
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isAddingNewMark, setIsAddingNewMark] = useState<boolean>(false);
@@ -873,6 +971,7 @@ export const ExporterPaymentFormView: React.FC = () => {
   );
 
   const resetFormFields = () => {
+    clearFormDraft(FORM_DRAFT_STORAGE_KEYS.EXPORTER_PAYMENT_FORM);
     setShippingMark('ALL');
     setSelectedPackingDate('ALL');
     setFromDate('');
@@ -1055,6 +1154,7 @@ export const ExporterPaymentFormView: React.FC = () => {
       }
     }
 
+    clearFormDraft(FORM_DRAFT_STORAGE_KEYS.EXPORTER_PAYMENT_FORM);
     setCustomRows([]);
     setEditingRowId(null);
 

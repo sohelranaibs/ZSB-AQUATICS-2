@@ -101,10 +101,13 @@ import {
   DatabaseSnapshot,
   SnapshotTrigger,
   SnapshotValidationResult,
+  SnapshotCleanupResult,
   createDatabaseSnapshot,
   serializeSnapshotToJSON,
   validateAndParseSnapshotJSON,
   appendSnapshotWithRetention,
+  cleanupExpiredSnapshots,
+  formatStorageBytes,
 } from '../utils/snapshotManager.ts';
 import { emitPaymentSyncTrigger } from '../utils/paymentSync.ts';
 import {
@@ -143,6 +146,7 @@ import {
   publishToastMessage,
   getToastSnapshot,
   updateSyncTelemetry,
+  triggerDebouncedAutoSaveIndicator,
 } from './VolatileFeedbackStore.ts';
 
 const createEmptyPackingDraftRows = (): PackingItemRow[] =>
@@ -432,6 +436,11 @@ interface AppContextType {
     options?: { includeSettings?: boolean; createPreRestoreBackup?: boolean }
   ) => boolean;
   deleteSnapshot: (snapshotId: string) => void;
+  cleanupOldSnapshots: (options?: {
+    maxAgeDays?: number;
+    minRetainedCount?: number;
+    silent?: boolean;
+  }) => SnapshotCleanupResult;
   downloadSnapshotJSON: (snapshotId?: string) => void;
   importSnapshotFromJSON: (
     jsonStr: string,
@@ -1394,6 +1403,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         debouncedSaveTimersRef.current.delete(entityLabel);
         try {
           await writeFn();
+          triggerDebouncedAutoSaveIndicator(entityLabel);
           if (syncTimerRef.current) {
             clearTimeout(syncTimerRef.current);
           }
@@ -1419,6 +1429,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
           updateSyncTelemetry({
             syncStartedAtMs: null,
+            isAutoSaving: false,
             syncStatus: 'error',
           });
         }
@@ -4091,6 +4102,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  const cleanupOldSnapshots = useCallback(
+    (options?: {
+      maxAgeDays?: number;
+      minRetainedCount?: number;
+      silent?: boolean;
+    }): SnapshotCleanupResult => {
+      const result = cleanupExpiredSnapshots(snapshots, {
+        maxAgeDays: options?.maxAgeDays,
+        minRetainedCount: options?.minRetainedCount,
+      });
+
+      if (result.deletedCount > 0) {
+        setSnapshots(result.retainedSnapshots);
+        try {
+          localStorage.setItem(
+            STORAGE_KEYS.SNAPSHOTS,
+            JSON.stringify(result.retainedSnapshots)
+          );
+        } catch (e) {
+          console.error(e);
+        }
+
+        addAuditLog({
+          action: 'DELETE',
+          module: 'Database',
+          summary: `Snapshot Cleanup Utility purged ${result.deletedCount} snapshot(s) older than ${result.maxAgeDays} days`,
+          details: `Freed ${formatStorageBytes(result.reclaimedBytes)} · Retained ${result.retainedCount} recent snapshot(s)`,
+        });
+
+        if (!options?.silent) {
+          showToast(
+            `Snapshot Cleanup: Deleted ${result.deletedCount} snapshot(s) older than ${result.maxAgeDays} days (${formatStorageBytes(result.reclaimedBytes)} freed · ${result.retainedCount} retained).`
+          );
+        }
+      } else if (!options?.silent) {
+        showToast(
+          result.protectedExpiredCount > 0
+            ? `No snapshots deleted: Kept the most recent snapshot (${result.retainedCount} total) to preserve at least 1 recovery checkpoint.`
+            : `Storage already optimal: No snapshots older than ${result.maxAgeDays} days found (${result.retainedCount} retained).`
+        );
+      }
+
+      return result;
+    },
+    [snapshots, showToast]
+  );
+
   const downloadSnapshotJSON = (snapshotId?: string) => {
     let target = snapshotId ? snapshots.find((s) => s.id === snapshotId) : undefined;
     if (!target) {
@@ -4422,6 +4480,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createSnapshot,
       restoreSnapshot,
       deleteSnapshot,
+      cleanupOldSnapshots,
       downloadSnapshotJSON,
       importSnapshotFromJSON,
       triggerManualSync,

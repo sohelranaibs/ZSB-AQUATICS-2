@@ -7,6 +7,10 @@ import {
   appendSnapshotWithRetention,
   computeSnapshotChecksum,
   describeSnapshotTrigger,
+  calculateSnapshotAgeDays,
+  formatStorageBytes,
+  evaluateSnapshotCleanupPlan,
+  cleanupExpiredSnapshots,
   SnapshotPayload,
 } from './snapshotManager.ts';
 
@@ -254,3 +258,111 @@ test('describeSnapshotTrigger returns clean labels and computeSnapshotChecksum i
   assert.equal(describeSnapshotTrigger('auto_pre_clear'), 'Auto Safety Backup (Pre-Clear)');
   assert.equal(describeSnapshotTrigger('manual'), 'Manual Snapshot');
 });
+
+test('evaluateSnapshotCleanupPlan and cleanupExpiredSnapshots flag and delete snapshots older than 30 days while keeping recent ones', () => {
+  const payload = buildSamplePayload();
+  const referenceNowMs = Date.parse('2026-11-18T12:00:00.000Z');
+
+  // 5 days old (recent)
+  const snapRecent = createDatabaseSnapshot(payload, {
+    id: 'snap-recent-5d',
+    label: 'Recent 5d Backup',
+    createdAt: '2026-11-13T12:00:00.000Z',
+  });
+  // 20 days old (within 30 days)
+  const snap20d = createDatabaseSnapshot(payload, {
+    id: 'snap-20d',
+    label: '20d Backup',
+    createdAt: '2026-10-29T12:00:00.000Z',
+  });
+  // 45 days old (expired > 30 days)
+  const snap45d = createDatabaseSnapshot(payload, {
+    id: 'snap-expired-45d',
+    label: 'Expired 45d Backup',
+    createdAt: '2026-10-04T12:00:00.000Z',
+  });
+  // 65 days old (expired > 30 days)
+  const snap65d = createDatabaseSnapshot(payload, {
+    id: 'snap-expired-65d',
+    label: 'Expired 65d Backup',
+    createdAt: '2026-09-14T12:00:00.000Z',
+  });
+
+  const plan = evaluateSnapshotCleanupPlan([snap45d, snapRecent, snap65d, snap20d], {
+    maxAgeDays: 30,
+    minRetainedCount: 1,
+    referenceNowMs,
+  });
+
+  assert.equal(plan.retainedSnapshots.length, 2);
+  assert.equal(plan.retainedSnapshots[0].id, 'snap-recent-5d');
+  assert.equal(plan.retainedSnapshots[1].id, 'snap-20d');
+  assert.equal(plan.flaggedSnapshots.length, 2);
+  assert.deepEqual(plan.flaggedIds, ['snap-expired-45d', 'snap-expired-65d']);
+  assert.equal(plan.statusById['snap-recent-5d'].isProtectedRecent, true);
+  assert.equal(plan.statusById['snap-recent-5d'].isFlaggedForDeletion, false);
+  assert.equal(plan.statusById['snap-expired-45d'].ageDays, 45);
+  assert.equal(plan.statusById['snap-expired-45d'].isFlaggedForDeletion, true);
+  assert.ok(plan.reclaimableStorageBytes > 0);
+
+  const cleaned = cleanupExpiredSnapshots([snap45d, snapRecent, snap65d, snap20d], {
+    maxAgeDays: 30,
+    minRetainedCount: 1,
+    referenceNowMs,
+  });
+
+  assert.equal(cleaned.deletedCount, 2);
+  assert.equal(cleaned.retainedCount, 2);
+  assert.deepEqual(cleaned.deletedIds, ['snap-expired-45d', 'snap-expired-65d']);
+  assert.ok(cleaned.reclaimedBytes > 0);
+});
+
+test('cleanupExpiredSnapshots always keeps at least one recent snapshot even when all snapshots are older than 30 days', () => {
+  const payload = buildSamplePayload();
+  const referenceNowMs = Date.parse('2026-11-18T12:00:00.000Z');
+
+  // Both snapshots are older than 30 days (42 days old and 80 days old)
+  const snap42d = createDatabaseSnapshot(payload, {
+    id: 'snap-42d-newest',
+    label: '42d Old Checkpoint',
+    createdAt: '2026-10-07T12:00:00.000Z',
+  });
+  const snap80d = createDatabaseSnapshot(payload, {
+    id: 'snap-80d-oldest',
+    label: '80d Old Checkpoint',
+    createdAt: '2026-08-30T12:00:00.000Z',
+  });
+
+  const result = cleanupExpiredSnapshots([snap80d, snap42d], {
+    maxAgeDays: 30,
+    minRetainedCount: 1,
+    referenceNowMs,
+  });
+
+  assert.equal(result.retainedCount, 1);
+  assert.equal(result.retainedSnapshots[0].id, 'snap-42d-newest');
+  assert.equal(result.deletedCount, 1);
+  assert.equal(result.deletedSnapshots[0].id, 'snap-80d-oldest');
+  assert.equal(result.protectedExpiredCount, 1);
+
+  // When only 1 snapshot exists and it is older than 30 days, it is still kept
+  const singleResult = cleanupExpiredSnapshots([snap80d], {
+    maxAgeDays: 30,
+    minRetainedCount: 1,
+    referenceNowMs,
+  });
+  assert.equal(singleResult.retainedCount, 1);
+  assert.equal(singleResult.deletedCount, 0);
+  assert.equal(singleResult.retainedSnapshots[0].id, 'snap-80d-oldest');
+  assert.equal(singleResult.protectedExpiredCount, 1);
+});
+
+test('calculateSnapshotAgeDays and formatStorageBytes handle edge cases cleanly', () => {
+  const nowMs = Date.parse('2026-11-18T12:00:00.000Z');
+  assert.equal(calculateSnapshotAgeDays('2026-11-08T12:00:00.000Z', nowMs).ageDays, 10);
+  assert.equal(calculateSnapshotAgeDays('invalid-date', nowMs).ageDays, 0);
+  assert.equal(formatStorageBytes(512), '512 B');
+  assert.equal(formatStorageBytes(2048), '2.0 KB');
+  assert.equal(formatStorageBytes(1048576 * 1.5), '1.50 MB');
+});
+

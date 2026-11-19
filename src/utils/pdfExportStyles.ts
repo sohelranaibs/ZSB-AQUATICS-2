@@ -75,6 +75,7 @@ export const ESSENTIAL_EXPORT_CSS_PROPS: readonly string[] = [
   'white-space',
   'word-break',
   'overflow-wrap',
+  'text-overflow',
   // Color & Background
   'color',
   'background-color',
@@ -112,6 +113,14 @@ export const ESSENTIAL_EXPORT_CSS_PROPS: readonly string[] = [
   'stroke-linecap',
   'stroke-linejoin',
 ] as const;
+
+const BORDER_SIDES = ['top', 'right', 'bottom', 'left'] as const;
+
+export function isZeroCssLength(val: string): boolean {
+  if (!val) return true;
+  const trimmed = val.trim();
+  return trimmed === '0' || trimmed === '0px' || trimmed === '0rem' || trimmed === '0em';
+}
 
 /**
  * Returns true if a CSS value requires conversion from oklch/oklab/color-mix/color()
@@ -176,6 +185,8 @@ export function shouldSkipExportCssValue(prop: string, val: string): boolean {
       return val === 'normal';
     case 'text-transform':
       return val === 'none';
+    case 'text-overflow':
+      return val === 'clip';
     case 'margin-top':
     case 'margin-right':
     case 'margin-bottom':
@@ -192,7 +203,7 @@ export function shouldSkipExportCssValue(prop: string, val: string): boolean {
     case 'border-top-right-radius':
     case 'border-bottom-right-radius':
     case 'border-bottom-left-radius':
-      return val === '0px';
+      return isZeroCssLength(val);
     case 'border-top-style':
     case 'border-right-style':
     case 'border-bottom-style':
@@ -200,10 +211,62 @@ export function shouldSkipExportCssValue(prop: string, val: string): boolean {
       return val === 'none';
     case 'row-gap':
     case 'column-gap':
-      return val === 'normal' || val === '0px';
+      return val === 'normal' || isZeroCssLength(val);
     default:
       return false;
   }
+}
+
+/**
+ * Builds an inline CSS style string from computed style properties while preventing
+ * Tailwind Preflight's `border-style: solid; border-width: 0px` from emitting
+ * `border-*-style: solid` without a positive border width (which would otherwise
+ * default to `border-width: medium` / 3px inside an isolated SVG <foreignObject>).
+ */
+export function buildInlineExportStyleText(
+  getPropertyValue: (prop: string) => string,
+  convertColor?: (val: string) => string
+): string {
+  const activeBorderSides = new Set<string>();
+  for (let s = 0; s < BORDER_SIDES.length; s++) {
+    const side = BORDER_SIDES[s];
+    const widthVal = getPropertyValue(`border-${side}-width`);
+    const styleVal = getPropertyValue(`border-${side}-style`);
+    if (!isZeroCssLength(widthVal) && styleVal && styleVal !== 'none' && styleVal !== 'hidden') {
+      activeBorderSides.add(side);
+    }
+  }
+
+  let cssText = '';
+  for (let i = 0; i < ESSENTIAL_EXPORT_CSS_PROPS.length; i++) {
+    const prop = ESSENTIAL_EXPORT_CSS_PROPS[i];
+
+    // Guard border-*-width / style / color: only emit if that side actually has a visible border
+    if (prop.startsWith('border-')) {
+      let matchedSide: string | null = null;
+      if (prop.startsWith('border-top-') && !prop.startsWith('border-top-left') && !prop.startsWith('border-top-right')) {
+        matchedSide = 'top';
+      } else if (prop.startsWith('border-right-')) {
+        matchedSide = 'right';
+      } else if (prop.startsWith('border-bottom-') && !prop.startsWith('border-bottom-left') && !prop.startsWith('border-bottom-right')) {
+        matchedSide = 'bottom';
+      } else if (prop.startsWith('border-left-')) {
+        matchedSide = 'left';
+      }
+      if (matchedSide && !activeBorderSides.has(matchedSide)) {
+        continue;
+      }
+    }
+
+    let val = getPropertyValue(prop);
+    if (shouldSkipExportCssValue(prop, val)) continue;
+    if (convertColor && needsLegacyColorConversion(val)) {
+      val = convertColor(val);
+    }
+    cssText += `${prop}:${val};`;
+  }
+
+  return cssText;
 }
 
 /**

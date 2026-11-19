@@ -67,6 +67,7 @@ import { MonthlyReportsExportView } from './MonthlyReportsExportView.tsx';
 import { DailyFinancialSummaryWidget } from './DailyFinancialSummaryWidget.tsx';
 import { QuickFinancialPulseSidebar } from './QuickFinancialPulseSidebar.tsx';
 import { DashboardAlertsWidget } from './DashboardAlertsWidget.tsx';
+import { DashboardQuickSummaryWidget } from './DashboardQuickSummaryWidget.tsx';
 
 export const DashboardView: React.FC = () => {
   const {
@@ -82,6 +83,7 @@ export const DashboardView: React.FC = () => {
     profitDistributions,
     externalDebts,
     balanceIncomes,
+    supplierCredits,
     companyProfile,
     mortalities,
     addMortality,
@@ -342,6 +344,16 @@ export const DashboardView: React.FC = () => {
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
+      {/* Quick Summary Widget: Daily-Updated Mini-Cards for Total Purchases Today & Total Pending Payments */}
+      <DashboardQuickSummaryWidget
+        purchases={purchases}
+        payments={payments}
+        packings={packings}
+        supplierCredits={supplierCredits}
+        currency={companyProfile.currency}
+        onNavigateTab={setActiveTab}
+      />
+
       {/* Top 5-Card BI Executive Overview Strip — Decorated in 1 Single Horizontal Row */}
       <section
         aria-label="Executive BI KPI Overview Strip"

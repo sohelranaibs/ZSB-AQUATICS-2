@@ -63,18 +63,29 @@ const HeaderSyncControls: React.FC<HeaderSyncControlsProps> = React.memo(
       isSlowConnection,
       isForcingSync,
       hasUnsyncedChanges,
+      isAutoSaving,
+      lastAutoSaveTriggeredAtMs,
     } = useSyncTelemetrySnapshot();
 
     const [nowMs, setNowMs] = React.useState<number>(() => Date.now());
 
     React.useEffect(() => {
       setNowMs(Date.now());
-      const tickMs = syncStatus === 'saving' || isForcingSync ? 1000 : 10000;
+      const tickMs =
+        syncStatus === 'saving' || isForcingSync || isAutoSaving ? 500 : 10000;
       const interval = window.setInterval(() => {
         setNowMs(Date.now());
       }, tickMs);
       return () => window.clearInterval(interval);
-    }, [lastSyncedAt, lastBackupAt, syncStatus, isForcingSync, hasUnsyncedChanges]);
+    }, [
+      lastSyncedAt,
+      lastBackupAt,
+      syncStatus,
+      isForcingSync,
+      hasUnsyncedChanges,
+      isAutoSaving,
+      lastAutoSaveTriggeredAtMs,
+    ]);
 
     const syncDisplay = useMemo(
       () =>
@@ -90,6 +101,8 @@ const HeaderSyncControls: React.FC<HeaderSyncControlsProps> = React.memo(
             syncStartedAtMs,
             isSlowConnection,
             isForcingSync,
+            isAutoSaving,
+            lastAutoSaveTriggeredAtMs,
           },
           nowMs
         ),
@@ -104,6 +117,8 @@ const HeaderSyncControls: React.FC<HeaderSyncControlsProps> = React.memo(
         syncStartedAtMs,
         isSlowConnection,
         isForcingSync,
+        isAutoSaving,
+        lastAutoSaveTriggeredAtMs,
         nowMs,
       ]
     );
@@ -168,6 +183,7 @@ const HeaderSyncControls: React.FC<HeaderSyncControlsProps> = React.memo(
           data-sync-freshness={syncDisplay.freshnessTier}
           data-sync-color={syncDisplay.indicatorColor}
           data-sync-slow={syncDisplay.isSlowSync ? 'true' : 'false'}
+          data-autosaving={syncDisplay.showAutoSavingIndicator ? 'true' : 'false'}
           aria-label={`${syncDisplay.ariaLabel}. Last backup at ${syncDisplay.formattedBackupDateTime}.`}
           title={`Background Sync: ${syncDisplay.statusBannerLabel} (${syncDisplay.freshnessLabel})\nLast Successful Backup: ${syncDisplay.formattedBackupDateTime} (${syncDisplay.backupElapsedText})\nRecords Protected: ${totalRecordsCount} ledger entries`}
           className="flex items-center space-x-1.5 text-[11px] whitespace-nowrap shrink-0"
@@ -214,16 +230,29 @@ const HeaderSyncControls: React.FC<HeaderSyncControlsProps> = React.memo(
 
           <span
             data-testid="header-last-backup-timestamp"
-            className="text-[10px] font-mono font-semibold text-sky-200 border-l border-white/20 pl-2"
+            className="text-[10px] font-mono font-semibold text-sky-200 border-l border-white/20 pl-2 inline-flex items-center gap-1.5"
           >
-            Last Backup: {syncDisplay.formattedBackupTime}
-            <span
-              data-testid="header-sync-elapsed-badge"
-              className="hidden 2xl:inline text-slate-300"
-            >
-              {' '}
-              · {syncDisplay.backupElapsedText}
+            <span>
+              Last Backup: {syncDisplay.formattedBackupTime}
+              <span
+                data-testid="header-sync-elapsed-badge"
+                className="hidden 2xl:inline text-slate-300"
+              >
+                {' '}
+                · {syncDisplay.backupElapsedText}
+              </span>
             </span>
+
+            {syncDisplay.showAutoSavingIndicator && (
+              <span
+                data-testid="header-autosaving-indicator"
+                aria-live="polite"
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-400/15 border border-amber-300/35 text-[10px] font-sans font-medium text-amber-200 animate-pulse transition-opacity duration-200"
+              >
+                <RefreshCw className="w-2.5 h-2.5 text-amber-300 animate-spin shrink-0" />
+                <span>{syncDisplay.autoSavingLabel}</span>
+              </span>
+            )}
           </span>
         </div>
 

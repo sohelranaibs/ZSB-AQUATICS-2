@@ -20,6 +20,13 @@ import {
 } from '../utils/totalBalance.ts';
 import { exportElementToPdf } from '../utils/pdfGenerator.ts';
 import { yieldForDomFrame } from '../utils/pdfExportStyles.ts';
+import { useDebouncedStoreSave } from '../hooks/useDebouncedStoreSave.ts';
+import {
+  FORM_DRAFT_STORAGE_KEYS,
+  loadFormDraft,
+  sanitizeTotalBalanceFormDraft,
+  saveFormDraftJson,
+} from '../utils/formDraftStorage.ts';
 import { buildPartnerFinancialStatementData } from '../utils/partnerFinancialStatement.ts';
 import { ExternalDebtsCard } from './ExternalDebtsCard.tsx';
 import { PartnerCapitalChartCard } from './PartnerCapitalChartCard.tsx';
@@ -101,26 +108,61 @@ export const TotalBalanceView: React.FC = () => {
   const currency = companyProfile.currency || 'TK';
   const [isExportingFinancialStatement, setIsExportingFinancialStatement] = useState(false);
 
-  // Partner Deposit Form State
-  const [depositDate, setDepositDate] = useState(today);
-  const [partnerName, setPartnerName] = useState(
-    companyProfile.managingPartner || 'Md. Mizanur Rahman'
+  const initialTotalBalanceDraft = useMemo(
+    () =>
+      loadFormDraft(
+        FORM_DRAFT_STORAGE_KEYS.TOTAL_BALANCE_FORM,
+        sanitizeTotalBalanceFormDraft
+      ),
+    []
   );
-  const [depositAmount, setDepositAmount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<string>(PARTNER_PAYMENT_METHODS[0]);
-  const [depositRef, setDepositRef] = useState('');
-  const [depositNotes, setDepositNotes] = useState('');
+
+  // Partner Deposit Form State
+  const [depositDate, setDepositDate] = useState(
+    () => initialTotalBalanceDraft?.depositDate || today
+  );
+  const [partnerName, setPartnerName] = useState(
+    () =>
+      initialTotalBalanceDraft?.partnerName ||
+      companyProfile.managingPartner ||
+      'Md. Mizanur Rahman'
+  );
+  const [depositAmount, setDepositAmount] = useState(
+    () => initialTotalBalanceDraft?.depositAmount || ''
+  );
+  const [paymentMethod, setPaymentMethod] = useState<string>(
+    () => initialTotalBalanceDraft?.paymentMethod || PARTNER_PAYMENT_METHODS[0]
+  );
+  const [depositRef, setDepositRef] = useState(
+    () => initialTotalBalanceDraft?.depositRef || ''
+  );
+  const [depositNotes, setDepositNotes] = useState(
+    () => initialTotalBalanceDraft?.depositNotes || ''
+  );
   const [depositError, setDepositError] = useState('');
 
   // Partner Withdrawals Form State
-  const [withdrawalDate, setWithdrawalDate] = useState(today);
-  const [withdrawalPartnerName, setWithdrawalPartnerName] = useState(
-    companyProfile.managingPartner || 'Md. Mizanur Rahman'
+  const [withdrawalDate, setWithdrawalDate] = useState(
+    () => initialTotalBalanceDraft?.withdrawalDate || today
   );
-  const [withdrawalAmount, setWithdrawalAmount] = useState('');
-  const [withdrawalMethod, setWithdrawalMethod] = useState<string>(PARTNER_PAYMENT_METHODS[0]);
-  const [withdrawalRef, setWithdrawalRef] = useState('');
-  const [withdrawalNotes, setWithdrawalNotes] = useState('');
+  const [withdrawalPartnerName, setWithdrawalPartnerName] = useState(
+    () =>
+      initialTotalBalanceDraft?.withdrawalPartnerName ||
+      companyProfile.managingPartner ||
+      'Md. Mizanur Rahman'
+  );
+  const [withdrawalAmount, setWithdrawalAmount] = useState(
+    () => initialTotalBalanceDraft?.withdrawalAmount || ''
+  );
+  const [withdrawalMethod, setWithdrawalMethod] = useState<string>(
+    () => initialTotalBalanceDraft?.withdrawalMethod || PARTNER_PAYMENT_METHODS[0]
+  );
+  const [withdrawalRef, setWithdrawalRef] = useState(
+    () => initialTotalBalanceDraft?.withdrawalRef || ''
+  );
+  const [withdrawalNotes, setWithdrawalNotes] = useState(
+    () => initialTotalBalanceDraft?.withdrawalNotes || ''
+  );
   const [withdrawalError, setWithdrawalError] = useState('');
 
   // Add / Delete Partner State (Supports 4+ Company Partners)
@@ -135,16 +177,84 @@ export const TotalBalanceView: React.FC = () => {
   const [deletePartnerError, setDeletePartnerError] = useState('');
 
   // Costing Deduction (-) vs Income Addition (+) Form State
-  const [entryMode, setEntryMode] = useState<'cost' | 'income'>('cost');
-  const [entryDate, setEntryDate] = useState(today);
-  const [costCategory, setCostCategory] = useState(
-    dropdownOptions.costingCategories[0] || 'Air Freight & Cargo'
+  const [entryMode, setEntryMode] = useState<'cost' | 'income'>(
+    () => initialTotalBalanceDraft?.entryMode || 'cost'
   );
-  const [incomeSource, setIncomeSource] = useState<string>(INCOME_SOURCE_PRESETS[0]);
-  const [entryAmount, setEntryAmount] = useState('');
-  const [entryRef, setEntryRef] = useState('');
-  const [entryDescription, setEntryDescription] = useState('');
+  const [entryDate, setEntryDate] = useState(
+    () => initialTotalBalanceDraft?.entryDate || today
+  );
+  const [costCategory, setCostCategory] = useState(
+    () =>
+      initialTotalBalanceDraft?.costCategory ||
+      dropdownOptions.costingCategories[0] ||
+      'Air Freight & Cargo'
+  );
+  const [incomeSource, setIncomeSource] = useState<string>(
+    () => initialTotalBalanceDraft?.incomeSource || INCOME_SOURCE_PRESETS[0]
+  );
+  const [entryAmount, setEntryAmount] = useState(
+    () => initialTotalBalanceDraft?.entryAmount || ''
+  );
+  const [entryRef, setEntryRef] = useState(
+    () => initialTotalBalanceDraft?.entryRef || ''
+  );
+  const [entryDescription, setEntryDescription] = useState(
+    () => initialTotalBalanceDraft?.entryDescription || ''
+  );
   const [entryError, setEntryError] = useState('');
+
+  const serializedTotalBalanceDraft = useMemo(
+    () =>
+      JSON.stringify({
+        depositDate,
+        partnerName,
+        depositAmount,
+        paymentMethod,
+        depositRef,
+        depositNotes,
+        withdrawalDate,
+        withdrawalPartnerName,
+        withdrawalAmount,
+        withdrawalMethod,
+        withdrawalRef,
+        withdrawalNotes,
+        entryMode,
+        entryDate,
+        costCategory,
+        incomeSource,
+        entryAmount,
+        entryRef,
+        entryDescription,
+      }),
+    [
+      depositDate,
+      partnerName,
+      depositAmount,
+      paymentMethod,
+      depositRef,
+      depositNotes,
+      withdrawalDate,
+      withdrawalPartnerName,
+      withdrawalAmount,
+      withdrawalMethod,
+      withdrawalRef,
+      withdrawalNotes,
+      entryMode,
+      entryDate,
+      costCategory,
+      incomeSource,
+      entryAmount,
+      entryRef,
+      entryDescription,
+    ]
+  );
+
+  useDebouncedStoreSave('Total Balance Form Draft', serializedTotalBalanceDraft, () => {
+    saveFormDraftJson(
+      FORM_DRAFT_STORAGE_KEYS.TOTAL_BALANCE_FORM,
+      serializedTotalBalanceDraft
+    );
+  });
 
   // Unified Ledger Filter State
   const [searchQuery, setSearchQuery] = useState('');

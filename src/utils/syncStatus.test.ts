@@ -316,4 +316,74 @@ test('getSyncStatusDisplay exposes last backup timestamp separately and highligh
   );
   assert.equal(forcingSync.statusBannerLabel, 'Forcing Sync...');
   assert.equal(forcingSync.formattedBackupTime, '10:15:30');
+  assert.equal(forcingSync.showAutoSavingIndicator, true);
+  assert.equal(forcingSync.autoSavingLabel, 'Auto-saving...');
 });
+
+test('shouldShowAutoSavingIndicator and getSyncStatusDisplay briefly show Auto-saving... when a debounced data-entry change is saved', () => {
+  const backupDate = new Date(2026, 9, 28, 11, 20, 0);
+  const backupIso = backupDate.toISOString();
+  const triggeredAtMs = backupDate.getTime();
+
+  // Immediately after debounced store save -> visible ('Auto-saving...')
+  const activeBrief = getSyncStatusDisplay(
+    {
+      status: 'synced',
+      lastSyncedAt: backupIso,
+      lastBackupAt: backupIso,
+      lastSyncedEntity: 'Packing Draft',
+      totalRecordsCount: 10,
+      isAutoSaving: true,
+      lastAutoSaveTriggeredAtMs: triggeredAtMs,
+    },
+    triggeredAtMs + 200
+  );
+  assert.equal(activeBrief.showAutoSavingIndicator, true);
+  assert.equal(activeBrief.autoSavingLabel, 'Auto-saving...');
+
+  // Still within AUTO_SAVE_INDICATOR_HOLD_MS window even after status returns to 'synced'
+  const withinHoldWindow = getSyncStatusDisplay(
+    {
+      status: 'synced',
+      lastSyncedAt: backupIso,
+      lastBackupAt: backupIso,
+      lastSyncedEntity: 'Packing Draft',
+      totalRecordsCount: 10,
+      isAutoSaving: false,
+      lastAutoSaveTriggeredAtMs: triggeredAtMs,
+    },
+    triggeredAtMs + 500
+  );
+  assert.equal(withinHoldWindow.showAutoSavingIndicator, true);
+
+  // After hold window expires -> hidden
+  const expiredWindow = getSyncStatusDisplay(
+    {
+      status: 'synced',
+      lastSyncedAt: backupIso,
+      lastBackupAt: backupIso,
+      lastSyncedEntity: 'Packing Draft',
+      totalRecordsCount: 10,
+      isAutoSaving: false,
+      lastAutoSaveTriggeredAtMs: triggeredAtMs,
+    },
+    triggeredAtMs + 1500
+  );
+  assert.equal(expiredWindow.showAutoSavingIndicator, false);
+
+  // Hidden when Live Sync is paused
+  const whenPaused = getSyncStatusDisplay(
+    {
+      status: 'paused',
+      lastSyncedAt: backupIso,
+      lastBackupAt: backupIso,
+      totalRecordsCount: 10,
+      isLiveSyncEnabled: false,
+      isAutoSaving: true,
+      lastAutoSaveTriggeredAtMs: triggeredAtMs,
+    },
+    triggeredAtMs + 100
+  );
+  assert.equal(whenPaused.showAutoSavingIndicator, false);
+});
+

@@ -1,5 +1,8 @@
 import { useSyncExternalStore } from 'react';
-import type { SyncStatusState } from '../utils/syncStatus.ts';
+import {
+  AUTO_SAVE_INDICATOR_HOLD_MS,
+  type SyncStatusState,
+} from '../utils/syncStatus.ts';
 
 export interface SyncTelemetrySnapshot {
   syncStatus: SyncStatusState;
@@ -10,6 +13,8 @@ export interface SyncTelemetrySnapshot {
   isSlowConnection: boolean;
   isForcingSync: boolean;
   hasUnsyncedChanges: boolean;
+  isAutoSaving: boolean;
+  lastAutoSaveTriggeredAtMs: number | null;
 }
 
 type Listener = () => void;
@@ -47,9 +52,12 @@ let currentSyncSnapshot: SyncTelemetrySnapshot = {
   isSlowConnection: false,
   isForcingSync: false,
   hasUnsyncedChanges: false,
+  isAutoSaving: false,
+  lastAutoSaveTriggeredAtMs: null,
 };
 
 const syncListeners = new Set<Listener>();
+let autoSaveHoldTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function subscribeSyncTelemetry(listener: Listener): () => void {
   syncListeners.add(listener);
@@ -77,12 +85,56 @@ export function updateSyncTelemetry(
     next.syncStartedAtMs === currentSyncSnapshot.syncStartedAtMs &&
     next.isSlowConnection === currentSyncSnapshot.isSlowConnection &&
     next.isForcingSync === currentSyncSnapshot.isForcingSync &&
-    next.hasUnsyncedChanges === currentSyncSnapshot.hasUnsyncedChanges
+    next.hasUnsyncedChanges === currentSyncSnapshot.hasUnsyncedChanges &&
+    next.isAutoSaving === currentSyncSnapshot.isAutoSaving &&
+    next.lastAutoSaveTriggeredAtMs === currentSyncSnapshot.lastAutoSaveTriggeredAtMs
   ) {
     return;
   }
   currentSyncSnapshot = next;
   syncListeners.forEach((listener) => listener());
+}
+
+/**
+ * Triggers the subtle 'Auto-saving...' indicator next to the synchronization timestamp
+ * in the header whenever a debounced data-entry change is saved to the store.
+ */
+export function triggerDebouncedAutoSaveIndicator(
+  entityLabel?: string,
+  holdDurationMs: number = AUTO_SAVE_INDICATOR_HOLD_MS
+): void {
+  if (currentSyncSnapshot.syncStatus === 'paused') {
+    updateSyncTelemetry({
+      hasUnsyncedChanges: true,
+      isAutoSaving: false,
+      lastSyncedEntity: entityLabel || currentSyncSnapshot.lastSyncedEntity,
+    });
+    return;
+  }
+
+  const nowMs = Date.now();
+  const nowIso = new Date(nowMs).toISOString();
+
+  if (autoSaveHoldTimer) {
+    clearTimeout(autoSaveHoldTimer);
+    autoSaveHoldTimer = null;
+  }
+
+  updateSyncTelemetry({
+    hasUnsyncedChanges: false,
+    isAutoSaving: true,
+    lastAutoSaveTriggeredAtMs: nowMs,
+    lastSyncedAt: nowIso,
+    lastBackupAt: nowIso,
+    lastSyncedEntity: entityLabel || currentSyncSnapshot.lastSyncedEntity,
+  });
+
+  autoSaveHoldTimer = setTimeout(() => {
+    autoSaveHoldTimer = null;
+    updateSyncTelemetry({
+      isAutoSaving: false,
+    });
+  }, Math.max(150, holdDurationMs));
 }
 
 export function useSyncTelemetrySnapshot(): SyncTelemetrySnapshot {
@@ -92,3 +144,4 @@ export function useSyncTelemetrySnapshot(): SyncTelemetrySnapshot {
     getSyncTelemetrySnapshot
   );
 }
+

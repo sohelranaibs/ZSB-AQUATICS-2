@@ -3,10 +3,8 @@ import html2canvas from 'html2canvas';
 import { formatDate } from './calculations.ts';
 import { COMPANY_LOGO_URL } from '../context/initialData.ts';
 import {
-  ESSENTIAL_EXPORT_CSS_PROPS,
   getScaledDimensions,
   needsLegacyColorConversion,
-  shouldSkipExportCssValue,
 } from './pdfExportStyles.ts';
 
 let cachedCompanyLogoDataUrl: string | null = null;
@@ -241,9 +239,34 @@ async function ensureSelfContainedImageDataUrl(img: HTMLImageElement): Promise<s
   return cachedCompanyLogoDataUrl || syncResult;
 }
 
+function getCollectedDocumentCss(): string {
+  if (typeof document === 'undefined') return '';
+  const chunks: string[] = [];
+  for (let i = 0; i < document.styleSheets.length; i++) {
+    const sheet = document.styleSheets[i];
+    try {
+      const rules = sheet.cssRules;
+      if (!rules) continue;
+      for (let j = 0; j < rules.length; j++) {
+        const cssText = rules[j].cssText;
+        if (cssText.startsWith('@import')) continue;
+        // Strip external url(...) references (e.g. remote font files) so SVG <image> loader never blocks or taints
+        const sanitizedRule = cssText.replace(
+          /url\((?!['"]?data:)[^)]+\)/gi,
+          'none'
+        );
+        chunks.push(sanitizedRule);
+      }
+    } catch {
+      // Ignore cross-origin stylesheets
+    }
+  }
+  return chunks.join('\n');
+}
+
 /**
  * Renders a live DOM element to a 2x high-resolution canvas using the browser's native
- * SVG <foreignObject> engine (with all computed styles and base64 images inlined),
+ * SVG <foreignObject> engine (with all document stylesheets and base64 images embedded),
  * ensuring 100% pixel-for-pixel fidelity with the Print Preview Modal.
  */
 async function renderElementViaSvgForeignObject(
@@ -253,54 +276,67 @@ async function renderElementViaSvgForeignObject(
 ): Promise<HTMLCanvasElement | null> {
   if (typeof window === 'undefined' || typeof XMLSerializer === 'undefined') return null;
 
-  const rect = element.getBoundingClientRect();
-  const width = Math.round(rect.width) || targetWidth || 760;
-  const height = Math.max(Math.round(rect.height), element.scrollHeight);
-  if (width <= 0 || height <= 0) return null;
+  const exportWidth = targetWidth || 760;
 
-  const clone = element.cloneNode(true) as HTMLElement;
-  const origNodes = [element, ...Array.from(element.querySelectorAll('*'))];
-  const cloneNodes = [clone, ...Array.from(clone.querySelectorAll('*'))];
-
-  origNodes.forEach((orig, idx) => {
-    const target = cloneNodes[idx];
-    if (!(orig instanceof HTMLElement || orig instanceof SVGElement)) return;
-    if (!(target instanceof HTMLElement || target instanceof SVGElement)) return;
-
-    const cs = window.getComputedStyle(orig);
-    let cssText = '';
-    for (let i = 0; i < ESSENTIAL_EXPORT_CSS_PROPS.length; i++) {
-      const prop = ESSENTIAL_EXPORT_CSS_PROPS[i];
-      let val = cs.getPropertyValue(prop);
-      if (shouldSkipExportCssValue(prop, val)) continue;
-      if (needsLegacyColorConversion(val)) {
-        val = toLegacyRgbColor(val, null);
-      }
-      cssText += `${prop}:${val};`;
+  // Temporarily normalize any ancestor CSS zoom (e.g. main[data-testid="sheet-zoom-canvas"])
+  // and lock element width to exportWidth so measurements match A4 Print Preview geometry.
+  const zoomedAncestors: Array<{ el: HTMLElement; prevZoom: string }> = [];
+  let parentCursor: HTMLElement | null = element.parentElement;
+  while (parentCursor) {
+    const inlineZoom = (parentCursor.style as unknown as Record<string, string>).zoom || '';
+    const computedZoom =
+      (window.getComputedStyle(parentCursor) as unknown as Record<string, string>).zoom || '';
+    if (inlineZoom || (computedZoom && computedZoom !== '1' && computedZoom !== 'normal')) {
+      zoomedAncestors.push({ el: parentCursor, prevZoom: inlineZoom });
+      (parentCursor.style as unknown as Record<string, string>).zoom = '1';
     }
-    target.style.cssText = cssText;
+    parentCursor = parentCursor.parentElement;
+  }
 
-    // Unlock rigid sub-pixel width/height on leaf text nodes so labels/badges never wrap or clip inside SVG foreignObject
-    const tagName = orig.tagName.toUpperCase();
-    const isLeafTextElement =
-      orig !== element &&
-      orig.children.length === 0 &&
-      tagName !== 'IMG' &&
-      tagName !== 'SVG' &&
-      tagName !== 'TH' &&
-      tagName !== 'TD' &&
-      tagName !== 'COL' &&
-      tagName !== 'HR' &&
-      tagName !== 'INPUT' &&
-      tagName !== 'SELECT' &&
-      tagName !== 'TEXTAREA' &&
-      !orig.classList.contains('zsb-sl-badge');
+  const prevElStyles = {
+    width: element.style.width,
+    minWidth: element.style.minWidth,
+    maxWidth: element.style.maxWidth,
+    maxHeight: element.style.maxHeight,
+  };
 
-    if (isLeafTextElement && target instanceof HTMLElement) {
-      target.style.width = 'auto';
-      target.style.height = 'auto';
-      target.style.inlineSize = 'auto';
-      target.style.blockSize = 'auto';
+  let width = exportWidth;
+  let height = 0;
+  let rootFontFamily =
+    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+  const clone = element.cloneNode(true) as HTMLElement;
+
+  try {
+    element.style.width = `${exportWidth}px`;
+    element.style.minWidth = `${exportWidth}px`;
+    element.style.maxWidth = `${exportWidth}px`;
+    element.style.maxHeight = 'none';
+
+    const rootCs = window.getComputedStyle(element);
+    if (rootCs.fontFamily) {
+      rootFontFamily = rootCs.fontFamily;
+    }
+
+    const rect = element.getBoundingClientRect();
+    width = Math.round(rect.width) || element.offsetWidth || exportWidth;
+    height = Math.max(Math.round(rect.height), element.scrollHeight, element.offsetHeight);
+    if (width <= 0 || height <= 0) return null;
+  } finally {
+    element.style.width = prevElStyles.width;
+    element.style.minWidth = prevElStyles.minWidth;
+    element.style.maxWidth = prevElStyles.maxWidth;
+    element.style.maxHeight = prevElStyles.maxHeight;
+    for (let i = 0; i < zoomedAncestors.length; i++) {
+      const item = zoomedAncestors[i];
+      (item.el.style as unknown as Record<string, string>).zoom = item.prevZoom;
+    }
+  }
+
+  // Uncap any scroll-managed containers inside the clone so all rows render without scrollbars
+  clone.querySelectorAll('[data-row-scroll-managed="true"]').forEach((node) => {
+    if (node instanceof HTMLElement) {
+      node.style.maxHeight = 'none';
+      node.style.overflow = 'visible';
     }
   });
 
@@ -323,16 +359,33 @@ async function renderElementViaSvgForeignObject(
   // Convert <input>, <select>, and <textarea> elements into crisp static text nodes
   clone.querySelectorAll('input, select, textarea').forEach((ctrl) => {
     const el = ctrl as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-    let displayVal = el.value || '';
+    if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) {
+      const span = document.createElement('span');
+      span.textContent = el.checked ? '☑' : '☐';
+      span.className = el.className;
+      span.style.display = 'inline-block';
+      span.style.textAlign = 'center';
+      el.replaceWith(span);
+      return;
+    }
+    let displayVal =
+      el instanceof HTMLSelectElement
+        ? el.selectedOptions?.[0]?.textContent?.trim() || el.value || ''
+        : el.value || '';
     if (el instanceof HTMLInputElement && el.type === 'date' && displayVal) {
       displayVal = formatDate(displayVal);
     }
     const span = document.createElement('span');
     span.textContent = displayVal;
-    span.style.cssText = el.style.cssText;
+    span.className = el.className;
+    if (el.getAttribute('style')) {
+      span.setAttribute('style', el.getAttribute('style') || '');
+    }
     span.style.display = 'inline-block';
     span.style.width = '100%';
-    span.style.textAlign = el.tagName === 'TEXTAREA' ? 'left' : 'center';
+    if (!span.style.textAlign) {
+      span.style.textAlign = el.tagName === 'TEXTAREA' ? 'left' : 'center';
+    }
     span.style.verticalAlign = 'middle';
     span.style.color = '#000000';
     span.style.border = 'none';
@@ -340,7 +393,7 @@ async function renderElementViaSvgForeignObject(
     el.replaceWith(span);
   });
 
-  // Normalize root clone positioning for foreignObject viewport
+  // Normalize root clone positioning for foreignObject viewport while preserving its classes & padding
   clone.style.margin = '0px';
   clone.style.position = 'relative';
   clone.style.left = '0px';
@@ -349,17 +402,29 @@ async function renderElementViaSvgForeignObject(
   clone.style.width = `${width}px`;
   clone.style.minWidth = `${width}px`;
   clone.style.maxWidth = `${width}px`;
-  clone.style.height = `${height}px`;
+  clone.style.minHeight = `${height}px`;
   clone.style.boxSizing = 'border-box';
   clone.style.backgroundColor = '#ffffff';
   clone.style.color = '#000000';
+  clone.style.fontFamily = rootFontFamily;
   clone.style.boxShadow = 'none';
   clone.style.borderRadius = '2px';
   clone.style.border = '1px solid #cbd5e1';
   clone.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
 
+  const collectedCss = getCollectedDocumentCss().replace(/\]\]>/g, '');
+  const extraExportCss = `
+    *, *::before, *::after {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    .print\\:hidden {
+      display: none !important;
+    }
+  `;
   const serialized = new XMLSerializer().serializeToString(clone);
-  const svgMarkup = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><foreignObject x="0" y="0" width="100%" height="100%">${serialized}</foreignObject></svg>`;
+  const svgMarkup = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><style><![CDATA[${collectedCss}\n${extraExportCss}]]></style><foreignObject x="0" y="0" width="100%" height="100%">${serialized}</foreignObject></svg>`;
   const svgDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`;
 
   const img = new Image();

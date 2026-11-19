@@ -16,6 +16,15 @@ import {
 } from '../utils/tableRowOptimization.ts';
 import { validatePackingForm } from '../utils/validation.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
+import { useDebouncedStoreSave } from '../hooks/useDebouncedStoreSave.ts';
+import {
+  FORM_DRAFT_STORAGE_KEYS,
+  clearFormDraft,
+  hasMeaningfulPackingDraft,
+  loadFormDraft,
+  sanitizePackingFormDraft,
+  saveFormDraftJson,
+} from '../utils/formDraftStorage.ts';
 import {
   REPORT_WEIGHT_DEBOUNCE_MS,
   parseReportWeightInput,
@@ -486,6 +495,7 @@ export const PackingListView: React.FC = () => {
     updatePacking,
     editingPackingId,
     setEditingPackingId,
+    setPackingDraft,
     openPrintModal,
     openDataCenterModal,
     setActiveTab,
@@ -493,33 +503,110 @@ export const PackingListView: React.FC = () => {
     requestSuperAdminSingleDelete,
   } = useApp();
 
-  // Manifest Header Fields (From Date & To Date removed per user request)
+  // Manifest Header Fields (hydrated from localStorage unsaved draft if available)
   const nextInvoiceNo = generateInvoiceNumber('PKG', packings.length);
-  const [invoiceNumber, setInvoiceNumber] = useState<string>(nextInvoiceNo);
-  const [packingDate, setPackingDate] = useState<string>(() =>
-    new Date().toISOString().slice(0, 10)
+  const initialPackingDraft = useMemo(() => {
+    if (editingPackingId) return null;
+    const loaded = loadFormDraft(
+      FORM_DRAFT_STORAGE_KEYS.PACKING_FORM,
+      sanitizePackingFormDraft
+    );
+    return hasMeaningfulPackingDraft(loaded) ? loaded : null;
+  }, []);
+
+  const [invoiceNumber, setInvoiceNumber] = useState<string>(
+    () => initialPackingDraft?.invoiceNumber?.trim() || nextInvoiceNo
   );
-  const [shippingMark, setShippingMark] = useState<string>('');
-  const [flight, setFlight] = useState<string>('');
-  const [destination, setDestination] = useState<string>('');
-  const [shipper, setShipper] = useState<string>('');
+  const [packingDate, setPackingDate] = useState<string>(
+    () => initialPackingDraft?.packingDate || new Date().toISOString().slice(0, 10)
+  );
+  const [shippingMark, setShippingMark] = useState<string>(
+    () => initialPackingDraft?.shippingMark || ''
+  );
+  const [flight, setFlight] = useState<string>(
+    () => initialPackingDraft?.flight || ''
+  );
+  const [destination, setDestination] = useState<string>(
+    () => initialPackingDraft?.destination || ''
+  );
+  const [shipper, setShipper] = useState<string>(
+    () => initialPackingDraft?.shipper || ''
+  );
   const [paymentStatus, setPaymentStatus] = useState<'PAID' | 'UNPAID'>(
-    'UNPAID'
+    () => initialPackingDraft?.paymentStatus || 'UNPAID'
   );
-  const [remarks, setRemarks] = useState<string>('');
+  const [remarks, setRemarks] = useState<string>(
+    () => initialPackingDraft?.remarks || ''
+  );
   const [lastSavedRecord, setLastSavedRecord] = useState<{ id: string; invoiceNumber: string } | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [showReportWeightHelp, setShowReportWeightHelp] = useState<boolean>(false);
 
-  const [rows, setRows] = useState<PackingItemRow[]>(() => [
-    createEmptyPackingRow('1'),
-    createEmptyPackingRow('2'),
-    createEmptyPackingRow('3'),
-    createEmptyPackingRow('4'),
-    createEmptyPackingRow('5'),
-  ]);
+  const [rows, setRows] = useState<PackingItemRow[]>(() => {
+    if (initialPackingDraft && initialPackingDraft.rows.length > 0) {
+      const hydrated = [...initialPackingDraft.rows];
+      while (hydrated.length < 5) {
+        hydrated.push(createEmptyPackingRow(String(hydrated.length + 1)));
+      }
+      return hydrated;
+    }
+    return [
+      createEmptyPackingRow('1'),
+      createEmptyPackingRow('2'),
+      createEmptyPackingRow('3'),
+      createEmptyPackingRow('4'),
+      createEmptyPackingRow('5'),
+    ];
+  });
   const rowsRef = useRef<PackingItemRow[]>(rows);
   rowsRef.current = rows;
+
+  const serializedDraftPayload = useMemo(
+    () =>
+      JSON.stringify({
+        invoiceNumber,
+        packingDate,
+        shippingMark,
+        flight,
+        destination,
+        shipper,
+        paymentStatus,
+        remarks,
+        rows,
+      }),
+    [
+      invoiceNumber,
+      packingDate,
+      shippingMark,
+      flight,
+      destination,
+      shipper,
+      paymentStatus,
+      remarks,
+      rows,
+    ]
+  );
+
+  useDebouncedStoreSave('Packing List Draft', serializedDraftPayload, () => {
+    if (!editingPackingId) {
+      saveFormDraftJson(
+        FORM_DRAFT_STORAGE_KEYS.PACKING_FORM,
+        serializedDraftPayload
+      );
+      setPackingDraft((prev) => ({
+        ...prev,
+        invoiceNumber,
+        packingDate,
+        shippingMark,
+        flight,
+        destination,
+        shipper,
+        paymentStatus,
+        remarks,
+        rows,
+      }));
+    }
+  });
 
   // Search by dropdowns
   const [searchShippingMark, setSearchShippingMark] = useState<string>('ALL');
@@ -554,9 +641,17 @@ export const PackingListView: React.FC = () => {
 
   useEffect(() => {
     return () => {
+      const pendingKeys = Object.keys(pendingReportWeightDraftsRef.current);
+      if (pendingKeys.length > 0 && !editingPackingId) {
+        const reconciledRows = reconcilePackingRowsWithReportDrafts(
+          rowsRef.current,
+          { ...pendingReportWeightDraftsRef.current }
+        );
+        rowsRef.current = reconciledRows;
+      }
       clearPendingReportWeights();
     };
-  }, [clearPendingReportWeights]);
+  }, [clearPendingReportWeights, editingPackingId]);
 
   const commitReportWeightForRow = useCallback(
     (id: string, rawValue: string) => {
@@ -820,6 +915,7 @@ export const PackingListView: React.FC = () => {
   }, []);
 
   const resetFormFields = () => {
+    clearFormDraft(FORM_DRAFT_STORAGE_KEYS.PACKING_FORM);
     clearPendingReportWeights();
     setReportWeightResetToken((t) => t + 1);
     setShippingMark('');

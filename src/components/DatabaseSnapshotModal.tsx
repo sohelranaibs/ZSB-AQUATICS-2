@@ -1,10 +1,16 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import {
   DatabaseSnapshot,
+  SnapshotCleanupResult,
+  DEFAULT_SNAPSHOT_RETENTION_DAYS,
+  DEFAULT_MIN_RETAINED_SNAPSHOTS,
   describeSnapshotTrigger,
   serializeSnapshotToJSON,
   createDatabaseSnapshot,
+  evaluateSnapshotCleanupPlan,
+  formatStorageBytes,
+  calculateSnapshotAgeDays,
 } from '../utils/snapshotManager.ts';
 import { formatCurrency } from '../utils/calculations.ts';
 import {
@@ -23,7 +29,10 @@ import {
   ShieldCheck,
   Copy,
   Check,
+  HardDrive,
 } from 'lucide-react';
+
+const AUTO_CLEANUP_STORAGE_KEY = 'zsb_snapshot_auto_cleanup_v1';
 
 export const DatabaseSnapshotModal: React.FC = () => {
   const {
@@ -33,6 +42,7 @@ export const DatabaseSnapshotModal: React.FC = () => {
     createSnapshot,
     restoreSnapshot,
     deleteSnapshot,
+    cleanupOldSnapshots,
     downloadSnapshotJSON,
     importSnapshotFromJSON,
     purchases,
@@ -51,6 +61,16 @@ export const DatabaseSnapshotModal: React.FC = () => {
   const [expandedJsonId, setExpandedJsonId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  const [autoCleanupEnabled, setAutoCleanupEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(AUTO_CLEANUP_STORAGE_KEY);
+      return saved === null ? true : saved === 'true';
+    } catch {
+      return true;
+    }
+  });
+  const [lastCleanupReport, setLastCleanupReport] = useState<SnapshotCleanupResult | null>(null);
+
   // Import / Paste JSON state
   const [jsonTextInput, setJsonTextInput] = useState<string>('');
   const [importStatus, setImportStatus] = useState<{
@@ -61,9 +81,60 @@ export const DatabaseSnapshotModal: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const cleanupPlan = useMemo(
+    () =>
+      evaluateSnapshotCleanupPlan(snapshots, {
+        maxAgeDays: DEFAULT_SNAPSHOT_RETENTION_DAYS,
+        minRetainedCount: DEFAULT_MIN_RETAINED_SNAPSHOTS,
+      }),
+    [snapshots]
+  );
+
+  // Automatically flag and delete expired snapshots (>30 days) while keeping at least 1 recent snapshot
+  useEffect(() => {
+    if (!snapshotModalOpen || !autoCleanupEnabled) return;
+    if (cleanupPlan.flaggedSnapshots.length === 0) return;
+
+    const result = cleanupOldSnapshots({
+      maxAgeDays: DEFAULT_SNAPSHOT_RETENTION_DAYS,
+      minRetainedCount: DEFAULT_MIN_RETAINED_SNAPSHOTS,
+      silent: false,
+    });
+    if (result.deletedCount > 0) {
+      setLastCleanupReport(result);
+    }
+  }, [snapshotModalOpen, autoCleanupEnabled, cleanupPlan.flaggedSnapshots.length, cleanupOldSnapshots]);
+
   if (!snapshotModalOpen) {
     return null;
   }
+
+  const handleToggleAutoCleanup = (checked: boolean) => {
+    setAutoCleanupEnabled(checked);
+    try {
+      localStorage.setItem(AUTO_CLEANUP_STORAGE_KEY, String(checked));
+    } catch {
+      // ignore storage errors
+    }
+  };
+
+  const handleRunManualCleanup = () => {
+    const result = cleanupOldSnapshots({
+      maxAgeDays: DEFAULT_SNAPSHOT_RETENTION_DAYS,
+      minRetainedCount: DEFAULT_MIN_RETAINED_SNAPSHOTS,
+      silent: false,
+    });
+    setLastCleanupReport(result);
+    setImportStatus({
+      type: 'success',
+      message:
+        result.deletedCount > 0
+          ? `30-Day Cleanup Complete: Flagged and deleted ${result.deletedCount} snapshot(s) older than ${result.maxAgeDays} days (${formatStorageBytes(result.reclaimedBytes)} reclaimed · ${result.retainedCount} recent snapshot(s) retained).`
+          : result.protectedExpiredCount > 0
+          ? `30-Day Cleanup Verified: 0 snapshots deleted — protected the most recent snapshot (${result.retainedCount} kept) so at least 1 recovery point remains available.`
+          : `30-Day Cleanup Verified: Storage is already optimal — no snapshots older than ${result.maxAgeDays} days found (${result.retainedCount} recent snapshot(s) retained).`,
+    });
+  };
 
   const liveTotalRecords =
     purchases.length + packings.length + payments.length + otherCosts.length;
@@ -389,6 +460,170 @@ export const DatabaseSnapshotModal: React.FC = () => {
                 </div>
               </form>
 
+              {/* Storage Performance & 30-Day Snapshot Cleanup Utility */}
+              <section
+                aria-label="30-Day Snapshot Cleanup Utility"
+                data-testid="snapshot-cleanup-utility"
+                className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <HardDrive className="w-4 h-4 text-[#00897b] shrink-0" />
+                      <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wide">
+                        30-Day Storage Performance &amp; Snapshot Cleanup Utility
+                      </h3>
+                    </div>
+                    <p className="text-[11px] text-slate-600">
+                      Automatically flags and deletes local snapshots older than {DEFAULT_SNAPSHOT_RETENTION_DAYS} days while always keeping at least {DEFAULT_MIN_RETAINED_SNAPSHOTS} recent snapshot to maintain storage performance.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                    <label
+                      htmlFor="snapshot-auto-cleanup-toggle"
+                      className="flex items-center space-x-1.5 text-[11px] font-bold text-slate-800 cursor-pointer select-none"
+                    >
+                      <input
+                        id="snapshot-auto-cleanup-toggle"
+                        data-testid="auto-cleanup-toggle"
+                        type="checkbox"
+                        checked={autoCleanupEnabled}
+                        onChange={(e) => handleToggleAutoCleanup(e.target.checked)}
+                        className="rounded border-slate-300 text-[#00897b] focus:ring-[#00897b]"
+                      />
+                      <span>Auto-Clean (&gt;30d)</span>
+                    </label>
+
+                    <button
+                      type="button"
+                      data-testid="run-snapshot-cleanup-btn"
+                      onClick={handleRunManualCleanup}
+                      className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-black transition whitespace-nowrap shrink-0 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>
+                        {cleanupPlan.flaggedSnapshots.length > 0
+                          ? `Clean Up ${cleanupPlan.flaggedSnapshots.length} Expired (>30d)`
+                          : 'Run 30-Day Cleanup'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Unboxed Tabular Storage & Retention Telemetry */}
+                <div
+                  data-testid="snapshot-cleanup-telemetry"
+                  className="pt-2 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono tabular-nums text-slate-600"
+                >
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <span>
+                      Retained:{' '}
+                      <strong
+                        className="text-slate-900"
+                        data-testid="snapshot-cleanup-retained-count"
+                      >
+                        {cleanupPlan.retainedSnapshots.length}
+                      </strong>
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <span>
+                      Flagged (&gt;{cleanupPlan.maxAgeDays}d):{' '}
+                      <strong
+                        className={
+                          cleanupPlan.flaggedSnapshots.length > 0
+                            ? 'text-rose-700'
+                            : 'text-emerald-700'
+                        }
+                        data-testid="snapshot-cleanup-flagged-count"
+                      >
+                        {cleanupPlan.flaggedSnapshots.length}
+                      </strong>
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <span>
+                      Protected Newest:{' '}
+                      <strong
+                        className="text-teal-800"
+                        data-testid="snapshot-cleanup-protected-count"
+                      >
+                        {cleanupPlan.protectedSnapshotIds.length} (Min {cleanupPlan.minRetainedCount} Kept)
+                      </strong>
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <span>
+                      Archive Footprint:{' '}
+                      <strong
+                        className="text-slate-900"
+                        data-testid="snapshot-cleanup-storage-bytes"
+                      >
+                        {formatStorageBytes(cleanupPlan.totalStorageBytes)}
+                      </strong>
+                    </span>
+                    {cleanupPlan.reclaimableStorageBytes > 0 && (
+                      <>
+                        <span aria-hidden="true">·</span>
+                        <span className="text-rose-700 font-bold">
+                          Reclaimable: {formatStorageBytes(cleanupPlan.reclaimableStorageBytes)}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Flagged / Recently Auto-Cleaned Audit Report */}
+                {cleanupPlan.flaggedSnapshots.length > 0 && (
+                  <div
+                    data-testid="snapshot-flagged-preview-banner"
+                    className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-950 text-[11px] flex flex-wrap items-center justify-between gap-2"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>
+                        <strong>{cleanupPlan.flaggedSnapshots.length} local snapshot(s)</strong>{' '}
+                        exceed the 30-day retention window and are flagged for deletion (
+                        {formatStorageBytes(cleanupPlan.reclaimableStorageBytes)} reclaimable).
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {lastCleanupReport && lastCleanupReport.deletedCount > 0 && (
+                  <div
+                    data-testid="snapshot-cleanup-report-banner"
+                    className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-950 text-[11px] space-y-1"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center space-x-1.5 font-bold">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>
+                          Flagged &amp; Deleted {lastCleanupReport.deletedCount} Expired Snapshot(s) (&gt;{lastCleanupReport.maxAgeDays} Days) · Freed {formatStorageBytes(lastCleanupReport.reclaimedBytes)} · Kept {lastCleanupReport.retainedCount} Recent Snapshot(s)
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setLastCleanupReport(null)}
+                        className="text-xs font-bold text-black px-2 py-0.5 cursor-pointer"
+                        aria-label="Dismiss cleanup report"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                    <div className="text-emerald-800 font-mono tabular-nums">
+                      Purged:{' '}
+                      {lastCleanupReport.deletedSnapshots
+                        .map((s) => {
+                          const age = calculateSnapshotAgeDays(s.createdAt).ageDays;
+                          return `${s.label} (${age}d old)`;
+                        })
+                        .join(' · ')}
+                    </div>
+                  </div>
+                )}
+              </section>
+
               {/* Saved Local Snapshots Header & Restore Options */}
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
@@ -432,11 +667,19 @@ export const DatabaseSnapshotModal: React.FC = () => {
                     {snapshots.map((snap, idx) => {
                       const isExpanded = expandedJsonId === snap.id;
                       const isCopied = copiedId === snap.id;
+                      const retentionStatus = cleanupPlan.statusById[snap.id];
+                      const isFlagged = Boolean(retentionStatus?.isFlaggedForDeletion);
+                      const isProtectedRecent = Boolean(retentionStatus?.isProtectedRecent);
+                      const ageDays = retentionStatus?.ageDays ?? calculateSnapshotAgeDays(snap.createdAt).ageDays;
                       return (
                         <div
                           key={snap.id}
                           data-testid={`snapshot-card-${snap.id}`}
-                          className="p-4 rounded-xl bg-white border border-slate-200 hover:border-slate-300 transition space-y-3"
+                          className={`p-4 rounded-xl bg-white border transition space-y-3 ${
+                            isFlagged
+                              ? 'border-rose-300 bg-rose-50/30'
+                              : 'border-slate-200 hover:border-slate-300'
+                          }`}
                         >
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div className="space-y-1">
@@ -444,6 +687,33 @@ export const DatabaseSnapshotModal: React.FC = () => {
                                 <span className="font-bold text-slate-900 text-sm">
                                   {snap.label}
                                 </span>
+                                <span className="text-slate-300" aria-hidden="true">
+                                  ·
+                                </span>
+                                {isFlagged ? (
+                                  <span
+                                    data-testid="snapshot-flagged-indicator"
+                                    className="text-[11px] font-bold font-mono tabular-nums text-rose-700"
+                                  >
+                                    Flagged for Cleanup ({ageDays}d old &gt; 30d limit)
+                                  </span>
+                                ) : isProtectedRecent ? (
+                                  <span
+                                    data-testid="snapshot-protected-indicator"
+                                    className="text-[11px] font-bold font-mono tabular-nums text-teal-700"
+                                  >
+                                    {retentionStatus?.isOlderThanThreshold
+                                      ? `Protected Recent (${ageDays}d old · Kept as Last Snapshot)`
+                                      : `Protected Recent (${ageDays}d old · Latest Kept)`}
+                                  </span>
+                                ) : (
+                                  <span
+                                    data-testid="snapshot-retained-indicator"
+                                    className="text-[11px] font-semibold font-mono tabular-nums text-slate-600"
+                                  >
+                                    Retained ({ageDays}d old)
+                                  </span>
+                                )}
                               </div>
                               {/* Unboxed clean metadata with typographic separators */}
                               <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 font-mono tabular-nums">
@@ -456,6 +726,12 @@ export const DatabaseSnapshotModal: React.FC = () => {
                                 <span className="font-bold text-slate-700">
                                   {snap.recordCounts.totalRecords} records
                                 </span>
+                                {retentionStatus && (
+                                  <>
+                                    <span aria-hidden="true">·</span>
+                                    <span>{formatStorageBytes(retentionStatus.estimatedBytes)}</span>
+                                  </>
+                                )}
                               </div>
                               {snap.notes && (
                                 <p className="text-[11px] text-slate-600 italic">
@@ -684,7 +960,7 @@ export const DatabaseSnapshotModal: React.FC = () => {
         {/* Modal Footer */}
         <div className="bg-slate-50 px-5 py-3 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-500 shrink-0">
           <span>
-            Local Storage Key: <code className="font-mono text-slate-700">zsb_database_snapshots_v1</code> (Up to 25 snapshots retained)
+            Local Storage Key: <code className="font-mono text-slate-700">zsb_database_snapshots_v2</code> (30-day auto-cleanup · Min 1 recent kept · Up to 25 snapshots)
           </span>
           <button
             type="button"

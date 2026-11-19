@@ -10,6 +10,8 @@ export type SyncFreshnessTier = 'up_to_date' | 'recent' | 'stale' | 'out_of_sync
 export type SyncIndicatorColor = 'emerald' | 'sky' | 'amber' | 'rose';
 
 export const SLOW_SYNC_THRESHOLD_MS = 2500;
+export const AUTO_SAVE_INDICATOR_HOLD_MS = 950;
+export const DATA_ENTRY_AUTOSAVE_DEBOUNCE_MS = 250;
 
 export interface SyncMetadata {
   status: SyncStatusState;
@@ -24,6 +26,8 @@ export interface SyncMetadata {
   slowSyncThresholdMs?: number;
   isSlowConnection?: boolean;
   isForcingSync?: boolean;
+  isAutoSaving?: boolean;
+  lastAutoSaveTriggeredAtMs?: number | null;
 }
 
 export interface SyncFreshnessInfo {
@@ -72,6 +76,8 @@ export interface SyncDisplayInfo {
   freshnessLabel: 'Up-to-date' | 'Synced Recently' | 'Sync Stale' | 'Out of Sync';
   elapsedText: string;
   isUpToDateWithDb: boolean;
+  showAutoSavingIndicator: boolean;
+  autoSavingLabel: 'Auto-saving...';
 }
 
 /**
@@ -197,6 +203,42 @@ export function detectSlowSync(params: {
   const nowMs = params.nowMs ?? Date.now();
   const thresholdMs = Math.max(250, params.thresholdMs ?? SLOW_SYNC_THRESHOLD_MS);
   return nowMs - params.syncStartedAtMs >= thresholdMs;
+}
+
+/**
+ * Determines whether the subtle 'Auto-saving...' indicator next to the header
+ * synchronization timestamp should be visible.
+ */
+export function shouldShowAutoSavingIndicator(params: {
+  status: SyncStatusState;
+  isLiveSyncEnabled?: boolean;
+  isAutoSaving?: boolean;
+  lastAutoSaveTriggeredAtMs?: number | null;
+  nowMs?: number;
+  holdDurationMs?: number;
+}): boolean {
+  if (
+    params.isLiveSyncEnabled === false ||
+    params.status === 'paused' ||
+    params.status === 'error'
+  ) {
+    return false;
+  }
+  if (params.status === 'saving' || Boolean(params.isAutoSaving)) {
+    return true;
+  }
+  if (
+    typeof params.lastAutoSaveTriggeredAtMs === 'number' &&
+    Number.isFinite(params.lastAutoSaveTriggeredAtMs)
+  ) {
+    const nowMs = params.nowMs ?? Date.now();
+    const holdMs = Math.max(100, params.holdDurationMs ?? AUTO_SAVE_INDICATOR_HOLD_MS);
+    const elapsed = nowMs - params.lastAutoSaveTriggeredAtMs;
+    if (elapsed >= 0 && elapsed < holdMs) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -339,6 +381,14 @@ export function getSyncStatusDisplay(
     freshness.freshnessTier === 'stale' ||
     freshness.freshnessTier === 'out_of_sync';
 
+  const showAutoSavingIndicator = shouldShowAutoSavingIndicator({
+    status: meta.status,
+    isLiveSyncEnabled: meta.isLiveSyncEnabled,
+    isAutoSaving: meta.isAutoSaving,
+    lastAutoSaveTriggeredAtMs: meta.lastAutoSaveTriggeredAtMs,
+    nowMs,
+  });
+
   if (!isLiveSyncActive || meta.status === 'paused') {
     const detail = meta.hasUnsyncedChanges
       ? 'Unsaved changes pending (Click to sync)'
@@ -367,6 +417,8 @@ export function getSyncStatusDisplay(
       freshnessLabel: freshness.freshnessLabel,
       elapsedText: freshness.elapsedText,
       isUpToDateWithDb: freshness.isUpToDateWithDb,
+      showAutoSavingIndicator: false,
+      autoSavingLabel: 'Auto-saving...',
     };
   }
 
@@ -400,6 +452,8 @@ export function getSyncStatusDisplay(
       freshnessLabel: freshness.freshnessLabel,
       elapsedText: isSlowSync ? 'Slow connection' : freshness.elapsedText,
       isUpToDateWithDb: freshness.isUpToDateWithDb,
+      showAutoSavingIndicator: true,
+      autoSavingLabel: 'Auto-saving...',
     };
   }
 
@@ -424,6 +478,8 @@ export function getSyncStatusDisplay(
       freshnessLabel: freshness.freshnessLabel,
       elapsedText: freshness.elapsedText,
       isUpToDateWithDb: freshness.isUpToDateWithDb,
+      showAutoSavingIndicator: false,
+      autoSavingLabel: 'Auto-saving...',
     };
   }
 
@@ -447,5 +503,7 @@ export function getSyncStatusDisplay(
     freshnessLabel: freshness.freshnessLabel,
     elapsedText: freshness.elapsedText,
     isUpToDateWithDb: freshness.isUpToDateWithDb,
+    showAutoSavingIndicator,
+    autoSavingLabel: 'Auto-saving...',
   };
 }

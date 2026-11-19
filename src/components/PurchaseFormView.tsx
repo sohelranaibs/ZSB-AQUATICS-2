@@ -16,6 +16,15 @@ import {
 } from '../utils/tableRowOptimization.ts';
 import { validatePurchaseForm } from '../utils/validation.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
+import { useDebouncedStoreSave } from '../hooks/useDebouncedStoreSave.ts';
+import {
+  FORM_DRAFT_STORAGE_KEYS,
+  clearFormDraft,
+  hasMeaningfulPurchaseDraft,
+  loadFormDraft,
+  sanitizePurchaseFormDraft,
+  saveFormDraftJson,
+} from '../utils/formDraftStorage.ts';
 import { exportElementToPng } from '../utils/pdfGenerator.ts';
 import { yieldForDomFrame } from '../utils/pdfExportStyles.ts';
 import {
@@ -254,29 +263,94 @@ export const PurchaseFormView: React.FC = () => {
     requestSuperAdminSingleDelete,
   } = useApp();
 
-  // Invoice header state
+  // Invoice header state (hydrated from localStorage unsaved draft if available)
   const nextInvoiceNo = generateInvoiceNumber('PUR', purchases.length);
-  const [invoiceNumber, setInvoiceNumber] = useState<string>(nextInvoiceNo);
-  const [date, setDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
-  const [description, setDescription] = useState<string>('');
-  const [contactNumber, setContactNumber] = useState<string>('');
-  const [remarks, setRemarks] = useState<string>('');
+  const initialPurchaseDraft = useMemo(() => {
+    if (editingPurchaseId) return null;
+    const loaded = loadFormDraft(
+      FORM_DRAFT_STORAGE_KEYS.PURCHASE_FORM,
+      sanitizePurchaseFormDraft
+    );
+    return hasMeaningfulPurchaseDraft(loaded) ? loaded : null;
+  }, []);
+
+  const [invoiceNumber, setInvoiceNumber] = useState<string>(
+    () => initialPurchaseDraft?.invoiceNumber?.trim() || nextInvoiceNo
+  );
+  const [date, setDate] = useState<string>(
+    () => initialPurchaseDraft?.date || new Date().toISOString().slice(0, 10)
+  );
+  const [description, setDescription] = useState<string>(
+    () => initialPurchaseDraft?.description || ''
+  );
+  const [contactNumber, setContactNumber] = useState<string>(
+    () => initialPurchaseDraft?.contactNumber || ''
+  );
+  const [remarks, setRemarks] = useState<string>(
+    () => initialPurchaseDraft?.remarks || ''
+  );
   const [lastSavedRecord, setLastSavedRecord] = useState<{ id: string; invoiceNumber: string } | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
 
-  const [rows, setRows] = useState<PurchaseItemRow[]>(() => [
-    createEmptyPurchaseRow('1'),
-    createEmptyPurchaseRow('2'),
-    createEmptyPurchaseRow('3'),
-    createEmptyPurchaseRow('4'),
-    createEmptyPurchaseRow('5'),
-  ]);
+  const [rows, setRows] = useState<PurchaseItemRow[]>(() => {
+    if (initialPurchaseDraft && initialPurchaseDraft.rows.length > 0) {
+      const hydrated = [...initialPurchaseDraft.rows];
+      while (hydrated.length < 5) {
+        hydrated.push(createEmptyPurchaseRow(String(hydrated.length + 1)));
+      }
+      return hydrated;
+    }
+    return [
+      createEmptyPurchaseRow('1'),
+      createEmptyPurchaseRow('2'),
+      createEmptyPurchaseRow('3'),
+      createEmptyPurchaseRow('4'),
+      createEmptyPurchaseRow('5'),
+    ];
+  });
   const rowsRef = useRef<PurchaseItemRow[]>(rows);
   rowsRef.current = rows;
 
   // Overall invoice-level settlement summary inputs (empty / 0 by default)
-  const [overallPreviousAmount, setOverallPreviousAmount] = useState<number>(0);
-  const [overallPaidAmount, setOverallPaidAmount] = useState<number>(0);
+  const [overallPreviousAmount, setOverallPreviousAmount] = useState<number>(
+    () => initialPurchaseDraft?.overallPreviousAmount ?? 0
+  );
+  const [overallPaidAmount, setOverallPaidAmount] = useState<number>(
+    () => initialPurchaseDraft?.overallPaidAmount ?? 0
+  );
+
+  const serializedPurchaseDraft = useMemo(
+    () =>
+      JSON.stringify({
+        invoiceNumber,
+        date,
+        description,
+        contactNumber,
+        remarks,
+        overallPreviousAmount,
+        overallPaidAmount,
+        rows,
+      }),
+    [
+      invoiceNumber,
+      date,
+      description,
+      contactNumber,
+      remarks,
+      overallPreviousAmount,
+      overallPaidAmount,
+      rows,
+    ]
+  );
+
+  useDebouncedStoreSave('Purchase Form Draft', serializedPurchaseDraft, () => {
+    if (!editingPurchaseId) {
+      saveFormDraftJson(
+        FORM_DRAFT_STORAGE_KEYS.PURCHASE_FORM,
+        serializedPurchaseDraft
+      );
+    }
+  });
 
   // Search input by supplier/description
   const [searchDescription, setSearchDescription] = useState<string>('');
@@ -468,6 +542,7 @@ export const PurchaseFormView: React.FC = () => {
   }, [editingPurchaseId]);
 
   const resetFormFields = () => {
+    clearFormDraft(FORM_DRAFT_STORAGE_KEYS.PURCHASE_FORM);
     setDescription('');
     setContactNumber('');
     setRemarks('');

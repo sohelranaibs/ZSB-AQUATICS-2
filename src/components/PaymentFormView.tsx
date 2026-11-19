@@ -15,6 +15,15 @@ import {
   emitPaymentSyncTrigger,
   ZSB_PAYMENT_ENTRY_CONFIRMED_EVENT,
 } from '../utils/paymentSync.ts';
+import { useDebouncedStoreSave } from '../hooks/useDebouncedStoreSave.ts';
+import {
+  FORM_DRAFT_STORAGE_KEYS,
+  clearFormDraft,
+  hasMeaningfulPaymentDraft,
+  loadFormDraft,
+  sanitizePaymentFormDraft,
+  saveFormDraftJson,
+} from '../utils/formDraftStorage.ts';
 import {
   Save,
   Printer,
@@ -67,16 +76,78 @@ export const PaymentFormView: React.FC = () => {
     [supplierPayments.length]
   );
 
-  // Form States
-  const [invoiceNumber, setInvoiceNumber] = useState<string>(nextInvoiceNo);
-  const [date, setDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
-  const [supplierName, setSupplierName] = useState<string>('');
-  const [creditAmount, setCreditAmount] = useState<string>('');
-  const [paymentMode, setPaymentMode] = useState<string>('Cash');
-  const [refPurchaseInvoice, setRefPurchaseInvoice] = useState<string>('');
-  const [remarks, setRemarks] = useState<string>('');
-  const [voucherStatus, setVoucherStatus] = useState<ExporterStatus>('PAID');
-  const [contactNumber, setContactNumber] = useState<string>('');
+  // Form States (hydrated from localStorage unsaved draft if available)
+  const initialPaymentDraft = useMemo(() => {
+    if (editingPaymentId) return null;
+    const loaded = loadFormDraft(
+      FORM_DRAFT_STORAGE_KEYS.PAYMENT_FORM,
+      sanitizePaymentFormDraft
+    );
+    return hasMeaningfulPaymentDraft(loaded) ? loaded : null;
+  }, []);
+
+  const [invoiceNumber, setInvoiceNumber] = useState<string>(
+    () => initialPaymentDraft?.invoiceNumber?.trim() || nextInvoiceNo
+  );
+  const [date, setDate] = useState<string>(
+    () => initialPaymentDraft?.date || new Date().toISOString().slice(0, 10)
+  );
+  const [supplierName, setSupplierName] = useState<string>(
+    () => initialPaymentDraft?.supplierName || ''
+  );
+  const [creditAmount, setCreditAmount] = useState<string>(
+    () => initialPaymentDraft?.creditAmount || ''
+  );
+  const [paymentMode, setPaymentMode] = useState<string>(
+    () => initialPaymentDraft?.paymentMode || 'Cash'
+  );
+  const [refPurchaseInvoice, setRefPurchaseInvoice] = useState<string>(
+    () => initialPaymentDraft?.refPurchaseInvoice || ''
+  );
+  const [remarks, setRemarks] = useState<string>(
+    () => initialPaymentDraft?.remarks || ''
+  );
+  const [voucherStatus, setVoucherStatus] = useState<ExporterStatus>(
+    () => initialPaymentDraft?.voucherStatus || 'PAID'
+  );
+  const [contactNumber, setContactNumber] = useState<string>(
+    () => initialPaymentDraft?.contactNumber || ''
+  );
+
+  const serializedPaymentDraft = useMemo(
+    () =>
+      JSON.stringify({
+        invoiceNumber,
+        date,
+        supplierName,
+        creditAmount,
+        paymentMode,
+        refPurchaseInvoice,
+        remarks,
+        voucherStatus,
+        contactNumber,
+      }),
+    [
+      invoiceNumber,
+      date,
+      supplierName,
+      creditAmount,
+      paymentMode,
+      refPurchaseInvoice,
+      remarks,
+      voucherStatus,
+      contactNumber,
+    ]
+  );
+
+  useDebouncedStoreSave('Supplier Payment Draft', serializedPaymentDraft, () => {
+    if (!editingPaymentId) {
+      saveFormDraftJson(
+        FORM_DRAFT_STORAGE_KEYS.PAYMENT_FORM,
+        serializedPaymentDraft
+      );
+    }
+  });
 
   // Quick add supplier inline modal
   const [isAddingNewSupplier, setIsAddingNewSupplier] = useState<boolean>(false);
@@ -282,6 +353,7 @@ export const PaymentFormView: React.FC = () => {
     }
 
     // Reset form for next entry (do not advance sequence count when editing an existing voucher)
+    clearFormDraft(FORM_DRAFT_STORAGE_KEYS.PAYMENT_FORM);
     setCreditAmount('');
     setRemarks('');
     setRefPurchaseInvoice('');
@@ -296,6 +368,7 @@ export const PaymentFormView: React.FC = () => {
   };
 
   const handleClearForm = () => {
+    clearFormDraft(FORM_DRAFT_STORAGE_KEYS.PAYMENT_FORM);
     setCreditAmount('');
     setRemarks('');
     setRefPurchaseInvoice('');

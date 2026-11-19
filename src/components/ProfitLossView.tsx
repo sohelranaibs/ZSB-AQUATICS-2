@@ -29,6 +29,7 @@ import {
   saveFormDraftJson,
 } from '../utils/formDraftStorage.ts';
 import { DailyProfitLossSection } from './DailyProfitLossSection.tsx';
+import { FlightProfitabilityFxSection } from './FlightProfitabilityFxSection.tsx';
 import { SupplierCreditRecord } from '../types/index.ts';
 import {
   ComposedChart,
@@ -496,6 +497,9 @@ export const ProfitLossView: React.FC = () => {
         openPrintModal={openPrintModal}
         setActiveTab={setActiveTab}
       />
+
+      {/* Flight-by-Flight Net Profitability & RMB FX Gain/Loss Tracker */}
+      <FlightProfitabilityFxSection />
 
       {/* Month-over-Month Visual Trends Chart: Export Revenue vs. Supplier Payment Outflows */}
       <section

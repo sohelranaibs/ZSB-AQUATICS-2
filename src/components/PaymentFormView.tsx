@@ -714,7 +714,7 @@ export const PaymentFormView: React.FC = () => {
               <div className="lg:col-span-6">
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 font-mono font-bold text-slate-400 text-lg sm:text-xl">
-                    TK
+                    {currency}
                   </span>
                   <input
                     ref={creditInputRef}

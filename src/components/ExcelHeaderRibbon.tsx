@@ -22,8 +22,10 @@ import {
   Minimize2,
   PanelLeft,
   User,
+  CloudOff,
 } from 'lucide-react';
 import { GlobalSearchBar } from './GlobalSearchBar.tsx';
+import { PWAInstallButton } from './PWAInstallButton.tsx';
 import { DisplayMode, ZOOM_PRESETS } from '../utils/displayViewport.ts';
 import { buildWorkbookSheets } from './ThemeSidebarNav.tsx';
 
@@ -43,6 +45,7 @@ interface ExcelHeaderRibbonProps {
   isSidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
   onOpenMobileDrawer?: () => void;
+  onOpenSyncQueueModal?: () => void;
 }
 
 interface HeaderSyncControlsProps {
@@ -343,6 +346,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
   isSidebarCollapsed = false,
   onToggleSidebar,
   onOpenMobileDrawer,
+  onOpenSyncQueueModal,
 }) => {
   const {
     activeTab,
@@ -359,6 +363,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
     toggleLiveSync,
     currentUser,
     auditLogs,
+    offlineSyncQueue,
   } = useApp();
 
   const totalRecordsCount = computeTotalPersistedRecords({
@@ -493,6 +498,21 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
             toggleLiveSync={toggleLiveSync}
             forceSyncNow={forceSyncNow}
           />
+
+          <PWAInstallButton />
+
+          {offlineSyncQueue.length > 0 && onOpenSyncQueueModal && (
+            <button
+              type="button"
+              data-testid="ribbon-bg-sync-queue-btn"
+              onClick={onOpenSyncQueueModal}
+              className="flex items-center space-x-1.5 px-3 py-1 text-[11px] font-bold text-black rounded-full shadow-2xs transition whitespace-nowrap shrink-0 cursor-pointer"
+              title="Inspect queued offline actions waiting for Service Worker Background Sync"
+            >
+              <CloudOff className="w-3.5 h-3.5" />
+              <span>BG SYNC ({offlineSyncQueue.length})</span>
+            </button>
+          )}
 
           <button
             type="button"

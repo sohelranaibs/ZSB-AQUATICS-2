@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import { ActiveTab } from '../types/index.ts';
+import { canUserAccessTab, resolveCanonicalTeamRole } from '../utils/rbacPermissions.ts';
 import {
   ChevronRight,
   ChevronLeft,
@@ -203,7 +204,17 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
   isMobileDrawerOpen = false,
   onCloseMobileDrawer,
 }) => {
-  const { activeTab, setActiveTab, companyProfile, logout } = useApp();
+  const { activeTab, setActiveTab, companyProfile, currentUser, logout } = useApp();
+
+  const visibleSheets = useMemo(
+    () => sheets.filter((s) => canUserAccessTab(currentUser, s.id)),
+    [sheets, currentUser]
+  );
+
+  const canonicalRole = useMemo(
+    () => resolveCanonicalTeamRole(currentUser),
+    [currentUser]
+  );
 
   const handleSelectSheet = (id: ActiveTab) => {
     setActiveTab(id);
@@ -246,7 +257,7 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
           </div>
 
           <div className="flex-1 w-full space-y-1.5 py-1 overflow-y-auto">
-            {sheets.map((s) => {
+            {visibleSheets.map((s) => {
               const isActive = activeTab === s.id;
               return (
                 <button
@@ -326,7 +337,7 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
         aria-label="Workbook Sheets Menu"
         className="flex-1 overflow-y-auto py-2.5 px-3 space-y-2"
       >
-        {sheets.map((s) => {
+        {visibleSheets.map((s) => {
           const isActive = activeTab === s.id;
           return (
             <button
@@ -367,8 +378,17 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
         })}
       </nav>
 
-      {/* Bottom Logout Row */}
+      {/* Bottom Role Clearance & Logout Row */}
       <div className="border-t border-white/10 shrink-0">
+        <div
+          data-testid="sidebar-role-clearance"
+          className="px-4 py-1.5 flex items-center justify-between text-[10px] font-mono text-slate-300 border-b border-white/10"
+        >
+          <span>Role</span>
+          <span className="text-amber-300 font-bold uppercase tracking-wide truncate max-w-[130px]">
+            {canonicalRole}
+          </span>
+        </div>
         <div className="px-4 py-1.5 flex items-center justify-between text-[11px] font-mono text-slate-300 border-b border-white/10">
           <span>Exchange Rate</span>
           <span className="text-sky-200 font-bold tabular-nums">
@@ -446,7 +466,7 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
             </div>
 
             <nav aria-label="Mobile Workbook Sheets Menu" className="flex-1 overflow-y-auto py-2.5 px-3 space-y-2">
-              {sheets.map((s) => {
+              {visibleSheets.map((s) => {
                 const isActive = activeTab === s.id;
                 return (
                   <button

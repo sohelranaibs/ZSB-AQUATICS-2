@@ -41,6 +41,7 @@ import {
   ChevronDown,
   ChevronUp,
   Calculator,
+  Paperclip,
 } from 'lucide-react';
 import {
   toggleSort,
@@ -67,7 +68,19 @@ import {
   analyzePurchasePaymentReconciliation,
   buildSmartSyncReconciliationPlan,
 } from '../utils/smartDataSync.ts';
-import { buildSupplierRecordHistory } from '../utils/supplierHistory.ts';
+import {
+  buildSupplierRecordHistory,
+  SupplierRecordHistoryRow,
+} from '../utils/supplierHistory.ts';
+import {
+  resolveLedgerRowSource,
+  ResolvedLedgerRowSource,
+  LedgerEditValidationResult,
+  buildPurchaseUpdateFromLedgerEdit,
+  buildPaymentUpdateFromLedgerEdit,
+  buildSupplierCreditUpdateFromLedgerEdit,
+} from '../utils/supplierLedgerEdit.ts';
+import { EditReconciliationRowModal } from './EditReconciliationRowModal.tsx';
 import { formatDateImageStyle } from '../utils/calculations.ts';
 import { exportElementToPdf, exportElementsToCombinedPdf, resolveCompanyLogoSrc } from '../utils/pdfGenerator.ts';
 import { exportSupplierReconciliationLedgerPdf } from '../utils/supplierReconciliationPdf.ts';
@@ -101,6 +114,16 @@ import { DateRangePicker } from './DateRangePicker.tsx';
 import type { PaymentRecord, ExporterStatus } from '../types/index.ts';
 import { emitPaymentSyncTrigger } from '../utils/paymentSync.ts';
 import { matchesPaymentSearch } from '../utils/paymentFilters.ts';
+import {
+  InvoiceAttachmentVaultModal,
+  AttachmentVaultTarget,
+} from './InvoiceAttachmentVaultModal.tsx';
+import {
+  InvoiceAttachmentRecord,
+  countAttachmentsByRecordKey,
+  loadAllInvoiceAttachments,
+} from '../utils/invoiceAttachments.ts';
+import { canUserEditRecords } from '../utils/rbacPermissions.ts';
 
 interface DatabaseViewProps {
   initialType?: 'purchase' | 'packing' | 'payment';
@@ -126,6 +149,8 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     batchDeletePayments,
     batchUpdatePaymentsStatus,
     supplierCredits,
+    updateSupplierCredit,
+    batchDeleteSupplierCredits,
     companyProfile,
     dropdownOptions,
     openPrintModal,
@@ -139,7 +164,20 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     setEditingPurchaseId,
     focusedShipmentInvoice,
     clearFocusedShipment,
+    currentUser,
   } = useApp();
+
+  const canEditDbRecords = useMemo(() => canUserEditRecords(currentUser), [currentUser]);
+  const [allAttachments, setAllAttachments] = useState<InvoiceAttachmentRecord[]>(() =>
+    loadAllInvoiceAttachments()
+  );
+  const [attachmentVaultTarget, setAttachmentVaultTarget] = useState<AttachmentVaultTarget | null>(
+    null
+  );
+  const attachmentCountsByKey = useMemo(
+    () => countAttachmentsByRecordKey(allAttachments),
+    [allAttachments]
+  );
 
   const [activeDbType, setActiveDbType] = useState<'purchase' | 'packing' | 'payment'>(() =>
     focusedShipmentInvoice ? 'packing' : initialType
@@ -478,6 +516,62 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
 
   // Editing payment modal state for maintenance & corrections
   const [editingPaymentRecord, setEditingPaymentRecord] = useState<PaymentRecord | null>(null);
+  const [editingReconciliationRow, setEditingReconciliationRow] =
+    useState<ResolvedLedgerRowSource | null>(null);
+
+  const handleOpenReconciliationRowEdit = (row: SupplierRecordHistoryRow) => {
+    if (!canEditDbRecords) {
+      showToast('Read-only role: You do not have permission to edit ledger entries.');
+      return;
+    }
+    const resolved = resolveLedgerRowSource(
+      row,
+      purchases,
+      payments,
+      supplierCredits || []
+    );
+    if (!resolved) {
+      showToast(`Unable to locate underlying record for ${row.invoiceNumber}.`);
+      return;
+    }
+    setEditingReconciliationRow(resolved);
+  };
+
+  const handleSaveReconciliationRowEdit = (
+    target: ResolvedLedgerRowSource,
+    validated: LedgerEditValidationResult,
+    remarks: string
+  ) => {
+    if (target.recordType === 'PURCHASE_BILL' && target.purchase) {
+      const updates = buildPurchaseUpdateFromLedgerEdit(
+        target.purchase,
+        validated,
+        remarks
+      );
+      updatePurchase(target.purchase.id, updates);
+    } else if (target.recordType === 'PAYMENT_VOUCHER' && target.payment) {
+      const updates = buildPaymentUpdateFromLedgerEdit(
+        target.payment,
+        validated,
+        remarks
+      );
+      updatePayment(target.payment.id, updates);
+    } else if (target.recordType === 'CREDIT_NOTE' && target.creditNote) {
+      const updates = buildSupplierCreditUpdateFromLedgerEdit(
+        target.creditNote,
+        validated,
+        remarks
+      );
+      updateSupplierCredit(target.creditNote.id, updates);
+    }
+    setEditingReconciliationRow(null);
+  };
+
+  const handleOpenFullPurchaseFromLedger = (purchaseId: string) => {
+    setEditingReconciliationRow(null);
+    setEditingPurchaseId(purchaseId);
+    setActiveTab('purchase_form');
+  };
   const [paymentEditForm, setPaymentEditForm] = useState<{
     invoiceNumber: string;
     date: string;
@@ -1177,12 +1271,27 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     const paymentIds = selectedLedgerRowIds
       .filter((id) => id.startsWith('voucher-'))
       .map((id) => id.replace(/^voucher-/, ''));
+    const creditIds = selectedLedgerRowIds
+      .filter((id) => id.startsWith('credit-'))
+      .map((id) => id.replace(/^credit-/, ''));
 
     if (purchaseIds.length > 0) {
       batchUpdatePurchasesStatus(purchaseIds, targetStatus);
     }
     if (paymentIds.length > 0) {
       batchUpdatePaymentsStatus(paymentIds, targetStatus);
+    }
+    if (creditIds.length > 0) {
+      for (const cnId of creditIds) {
+        const cn = (supplierCredits || []).find((c) => c.id === cnId);
+        if (!cn) continue;
+        const markPaid = targetStatus === 'PAID';
+        updateSupplierCredit(cnId, {
+          appliedAmount: markPaid ? cn.amount : 0,
+          remainingAmount: markPaid ? 0 : cn.amount,
+          status: markPaid ? 'APPLIED' : 'AVAILABLE',
+        });
+      }
     }
     showToast(
       `Updated status to ${targetStatus} for ${selectedLedgerRowIds.length} selected reconciliation ledger row(s).`
@@ -1200,12 +1309,18 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     const paymentIds = selectedLedgerRowIds
       .filter((id) => id.startsWith('voucher-'))
       .map((id) => id.replace(/^voucher-/, ''));
+    const creditIds = selectedLedgerRowIds
+      .filter((id) => id.startsWith('credit-'))
+      .map((id) => id.replace(/^credit-/, ''));
 
     if (purchaseIds.length > 0) {
       batchDeletePurchases(purchaseIds);
     }
     if (paymentIds.length > 0) {
       batchDeletePayments(paymentIds);
+    }
+    if (creditIds.length > 0) {
+      batchDeleteSupplierCredits(creditIds);
     }
     setSelectedLedgerRowIds([]);
   };
@@ -1895,17 +2010,18 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                       </th>
                       <th className="px-2 py-2 border-r border-[#3B5572] w-12 text-center">SL #</th>
                       <th className="px-3 py-2 border-r border-[#3B5572] w-32 text-center">DATE</th>
-                      <th className="px-3 py-2 border-r border-[#3B5572] min-w-[160px]">SUPLIER NAME</th>
+                      <th className="px-3 py-2 border-r border-[#3B5572] min-w-[160px]">SUPPLIER NAME</th>
                       <th className="px-3 py-2 border-r border-[#3B5572] text-right w-36">DEBIT AMOUNT</th>
                       <th className="px-3 py-2 border-r border-[#3B5572] text-right w-36">CREDIT AMOUNT</th>
                       <th className="px-3 py-2 border-r border-[#3B5572] text-right w-40 bg-[#1F3349]">BALANCE</th>
-                      <th className="px-2.5 py-2 text-center w-24">STATUS</th>
+                      <th className="px-2.5 py-2 border-r border-[#3B5572] text-center w-24">STATUS</th>
+                      <th className="px-2.5 py-2 text-center w-24">EDIT</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     {syncSupplierLedgerRows.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="px-4 py-8 text-center text-slate-400 italic bg-slate-50 font-sans">
+                        <td colSpan={9} className="px-4 py-8 text-center text-slate-400 italic bg-slate-50 font-sans">
                           No purchase bills or supplier payment vouchers found for the selected supplier.
                         </td>
                       </tr>
@@ -1955,8 +2071,26 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             <td className="px-3 py-2 border-r border-slate-200 text-right font-black text-slate-950 bg-blue-50/40 whitespace-nowrap">
                               {formatCurrency(row.balance, '')}
                             </td>
-                            <td className="px-2 py-2 text-center whitespace-nowrap font-sans">
+                            <td className="px-2 py-2 border-r border-slate-200 text-center whitespace-nowrap font-sans">
                               {renderStatusBadge(row.status, `reconciliation-status-${row.id}`)}
+                            </td>
+                            <td className="px-2 py-2 text-center whitespace-nowrap font-sans">
+                              <button
+                                type="button"
+                                data-testid={`edit-reconciliation-row-${row.id}`}
+                                aria-label={`Edit reconciliation row ${row.invoiceNumber} ${row.supplierName}`}
+                                disabled={!canEditDbRecords}
+                                onClick={() => handleOpenReconciliationRowEdit(row)}
+                                title={
+                                  canEditDbRecords
+                                    ? `Edit ${row.invoiceNumber} (${row.supplierName})`
+                                    : 'Read-only role: editing disabled'
+                                }
+                                className="inline-flex items-center justify-center gap-1 px-2.5 py-1 rounded-md border border-slate-300 bg-amber-50 hover:bg-amber-100 disabled:opacity-40 disabled:cursor-not-allowed text-slate-900 text-[10px] font-black uppercase tracking-wide transition cursor-pointer"
+                              >
+                                <Edit2 className="w-3 h-3 text-amber-700 shrink-0" />
+                                <span>EDIT</span>
+                              </button>
                             </td>
                           </tr>
                         );
@@ -1978,6 +2112,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         <td className="px-3 py-2 border-r border-slate-300 text-right font-black text-blue-900 bg-blue-100/70">
                           {formatCurrency(syncSupplierLedgerTotals.netEndingBalance, companyProfile.currency)}
                         </td>
+                        <td className="bg-slate-100 border-r border-slate-300"></td>
                         <td className="bg-slate-100"></td>
                       </tr>
                     </tfoot>
@@ -2870,6 +3005,28 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                               <span>EDIT</span>
                             </button>
                             <button
+                              type="button"
+                              data-testid={`vault-purchase-btn-${p.id}`}
+                              onClick={() =>
+                                setAttachmentVaultTarget({
+                                  module: 'purchase',
+                                  recordId: p.id,
+                                  invoiceNumber: p.invoiceNumber,
+                                  subtitle: `${p.description || 'Supplier'} · ${p.date}`,
+                                })
+                              }
+                              className="px-1.5 py-0.5 text-[10px] font-bold bg-teal-100 hover:bg-teal-200 text-black rounded transition flex items-center space-x-0.5 cursor-pointer"
+                              title="Open Receipt & Challan Proof Vault"
+                            >
+                              <Paperclip className="w-2.5 h-2.5 text-black" />
+                              <span>
+                                PROOF
+                                {attachmentCountsByKey[`purchase:${p.id}`]
+                                  ? ` (${attachmentCountsByKey[`purchase:${p.id}`]})`
+                                  : ''}
+                              </span>
+                            </button>
+                            <button
                               onClick={() =>
                                 openPrintModal({
                                   type: 'purchase',
@@ -3244,6 +3401,28 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             >
                               <Edit2 className="w-2.5 h-2.5 text-black" />
                               <span>EDIT</span>
+                            </button>
+                            <button
+                              type="button"
+                              data-testid={`vault-packing-btn-${pkg.id}`}
+                              onClick={() =>
+                                setAttachmentVaultTarget({
+                                  module: 'packing',
+                                  recordId: pkg.id,
+                                  invoiceNumber: pkg.invoiceNumber,
+                                  subtitle: `${pkg.shippingMark || 'Buyer'} · ${pkg.flight || pkg.destination || pkg.packingDate}`,
+                                })
+                              }
+                              className="px-1.5 py-0.5 text-[10px] font-bold bg-white text-black border border-slate-300 rounded transition flex items-center space-x-0.5 cursor-pointer"
+                              title="Open AWB, Quarantine & Packing Proof Vault"
+                            >
+                              <Paperclip className="w-2.5 h-2.5 text-black" />
+                              <span>
+                                PROOF
+                                {attachmentCountsByKey[`packing:${pkg.id}`]
+                                  ? ` (${attachmentCountsByKey[`packing:${pkg.id}`]})`
+                                  : ''}
+                              </span>
                             </button>
                             <button
                               onClick={() =>
@@ -3742,6 +3921,28 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                               >
                                 <Edit2 className="w-2.5 h-2.5" />
                                 <span>EDIT</span>
+                              </button>
+                              <button
+                                type="button"
+                                data-testid={`vault-payment-btn-${pm.id}`}
+                                onClick={() =>
+                                  setAttachmentVaultTarget({
+                                    module: 'payment',
+                                    recordId: pm.id,
+                                    invoiceNumber: pm.invoiceNumber,
+                                    subtitle: `${pm.description || pm.shippingMark || 'Voucher'} · ${pm.date}`,
+                                  })
+                                }
+                                className="px-1.5 py-0.5 text-[10px] font-bold bg-teal-100 hover:bg-teal-200 text-black rounded transition flex items-center space-x-0.5 cursor-pointer"
+                                title="Open WeChat / Bank Receipt Proof Vault"
+                              >
+                                <Paperclip className="w-2.5 h-2.5 text-black" />
+                                <span>
+                                  PROOF
+                                  {attachmentCountsByKey[`payment:${pm.id}`]
+                                    ? ` (${attachmentCountsByKey[`payment:${pm.id}`]})`
+                                    : ''}
+                                </span>
                               </button>
                               <button
                                 onClick={() =>
@@ -4328,6 +4529,26 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
           </div>
         </div>
       )}
+
+      {/* Edit Supplier Account Reconciliation Ledger Row Modal */}
+      <EditReconciliationRowModal
+        target={editingReconciliationRow}
+        suppliers={dropdownOptions.suppliers}
+        currency={companyProfile.currency}
+        onClose={() => setEditingReconciliationRow(null)}
+        onSave={handleSaveReconciliationRowEdit}
+        onOpenFullPurchaseForm={handleOpenFullPurchaseFromLedger}
+      />
+
+      {/* Per-Invoice Receipt, AWB & Payment Proof Attachment Vault Modal */}
+      <InvoiceAttachmentVaultModal
+        target={attachmentVaultTarget}
+        allAttachments={allAttachments}
+        onChangeAttachments={setAllAttachments}
+        onClose={() => setAttachmentVaultTarget(null)}
+        canEdit={canEditDbRecords}
+        onNotify={showToast}
+      />
     </div>
   );
 };

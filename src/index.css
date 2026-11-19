@@ -38,6 +38,7 @@
     background-color: #fbbf24;
     background-image: linear-gradient(180deg, #ffba55 0%, #f7941d 52%, #e67b08 100%);
     color: #000000;
+    text-transform: uppercase;
     padding: 0.35rem 0.85rem;
     border-radius: 9999px;
   }
@@ -76,6 +77,7 @@
   background-color: #fbbf24 !important;
   background-image: linear-gradient(180deg, #ffba55 0%, #f7941d 52%, #e67b08 100%) !important;
   color: #000000 !important;
+  text-transform: uppercase !important;
   border: 1.5px solid #f7a638 !important;
   border-radius: 9999px !important;
   font-weight: 700;
@@ -102,6 +104,7 @@ button:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))
   background-color: #fbbf24 !important;
   background-image: linear-gradient(180deg, #ffba55 0%, #f7941d 52%, #e67b08 100%) !important;
   color: #000000 !important;
+  text-transform: uppercase !important;
   border: 1.5px solid #f7a638 !important;
   border-radius: 9999px !important;
   text-shadow: none !important;
@@ -146,6 +149,7 @@ button:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))
 [type="reset"]:not(:where(:has(img))) *:not(svg):not(path):not(circle):not(rect):not(line):not(polyline):not(polygon):not(ellipse) {
   color: #000000 !important;
   text-shadow: none !important;
+  text-transform: uppercase !important;
 }
 
 button:not(:has(img)).zsb-golden-brand,
@@ -315,6 +319,7 @@ button[data-testid^="db-cell-trigger-"] {
   box-shadow: none !important;
   color: inherit !important;
   text-shadow: none !important;
+  text-transform: none !important;
   padding: 0.125rem !important;
 }
 
@@ -764,9 +769,9 @@ svg.lucide:is(
 }
 
 /* 5. KPI & Solid Colored Circular/Square Badges keep crisp white icons inside colorful badges */
-html body :is(
-  .bg-gradient-to-br,
-  .bg-gradient-to-r,
+html body :where(
+  .text-white.bg-gradient-to-br,
+  .text-white.bg-gradient-to-r,
   .text-white[class*="bg-[#1D6CE0]"],
   .text-white[class*="bg-[#00B14F]"],
   .text-white[class*="bg-[#7C3AED]"],
@@ -779,8 +784,47 @@ html body :is(
   .text-white.bg-amber-600,
   .text-white.bg-teal-600,
   .text-white.bg-indigo-600
-):not(button):not([type="button"]):not([type="submit"]):not([type="reset"]) svg.lucide.lucide.lucide {
+):where(:not(button, [type="button"], [type="submit"], [type="reset"])) svg.lucide.lucide.lucide {
   color: #ffffff !important;
+}
+
+/* Reclaim crisp jewel-tone icons inside buttons even when the button sits inside a dark gradient modal header */
+html body :is(button, [type="button"], [type="submit"], [type="reset"]) svg.lucide.lucide.lucide.lucide {
+  color: #1d4ed8 !important;
+}
+
+html body :is(button, [type="button"], [type="submit"], [type="reset"]) svg.lucide.lucide.lucide.lucide:is(
+  .lucide-trash-2, .lucide-log-out, .lucide-x, .lucide-alert-circle,
+  .lucide-circle-alert, .lucide-alert-triangle, .lucide-triangle-alert,
+  .lucide-shield-alert, .lucide-minus, .lucide-minus-circle, .lucide-zoom-out
+) {
+  color: #be123c !important;
+}
+
+html body :is(button, [type="button"], [type="submit"], [type="reset"]) svg.lucide.lucide.lucide.lucide:is(
+  .lucide-plus, .lucide-plus-circle, .lucide-save, .lucide-check,
+  .lucide-check-circle, .lucide-check-circle-2, .lucide-circle-check, .lucide-upload
+) {
+  color: #047857 !important;
+}
+
+html body :is(button, [type="button"], [type="submit"], [type="reset"]) svg.lucide.lucide.lucide.lucide:is(
+  .lucide-edit-2, .lucide-edit-3, .lucide-square-pen, .lucide-pen
+) {
+  color: #a21caf !important;
+}
+
+html body :is(button, [type="button"], [type="submit"], [type="reset"]) svg.lucide.lucide.lucide.lucide:is(
+  .lucide-download, .lucide-file-down, .lucide-refresh-cw, .lucide-rotate-ccw, .lucide-copy
+) {
+  color: #0f766e !important;
+}
+
+html body :is(button, [type="button"], [type="submit"], [type="reset"]) svg.lucide.lucide.lucide.lucide:is(
+  .lucide-printer, .lucide-external-link, .lucide-chevron-left, .lucide-chevron-right,
+  .lucide-chevron-up, .lucide-chevron-down
+) {
+  color: #3730a3 !important;
 }
 
 /* Crisp Editorial Brand Wordmark for Screen Headers — Golden & Bold */

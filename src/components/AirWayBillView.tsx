@@ -53,6 +53,7 @@ import {
 } from './PngShareModal.tsx';
 
 const AWB_OVERRIDES_STORAGE_KEY = 'zsb_awb_row_overrides_v2';
+const AWB_CUSTOM_ROWS_STORAGE_KEY = 'zsb_awb_custom_rows_v1';
 
 const formatAwbCellNumber = (val: number) => {
   if (!val || val === 0) return '';
@@ -311,9 +312,20 @@ export const AirWayBillView: React.FC = () => {
     }
   });
 
-  const [customRows, setCustomRows] = useState<AirWayBillRow[]>(() =>
-    createInitialAirWayBillRows(4)
-  );
+  const [customRows, setCustomRows] = useState<AirWayBillRow[]>(() => {
+    try {
+      const saved = localStorage.getItem(AWB_CUSTOM_ROWS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed as AirWayBillRow[];
+        }
+      }
+    } catch {
+      // Fall back to default empty rows if stored draft is corrupted
+    }
+    return createInitialAirWayBillRows(4);
+  });
 
   const [bulkRmbPerBox, setBulkRmbPerBox] = useState<string>('');
   const [bulkRate, setBulkRate] = useState<string>(() =>
@@ -331,6 +343,7 @@ export const AirWayBillView: React.FC = () => {
 
   useDebouncedStoreSave('Flight Return Bill', serializedAwbDraft, () => {
     localStorage.setItem(AWB_OVERRIDES_STORAGE_KEY, JSON.stringify(rowOverrides));
+    localStorage.setItem(AWB_CUSTOM_ROWS_STORAGE_KEY, JSON.stringify(customRows));
   });
 
   // Combine saved Packing List records with any active draft in Packing List Form
@@ -481,7 +494,13 @@ export const AirWayBillView: React.FC = () => {
     setSelectedMonth('all');
     setSelectedShipper('ALL');
     setSelectedFlight('ALL');
-    setCustomRows(createInitialAirWayBillRows(4));
+    const resetRows = createInitialAirWayBillRows(4);
+    setCustomRows(resetRows);
+    try {
+      localStorage.removeItem(AWB_CUSTOM_ROWS_STORAGE_KEY);
+    } catch {
+      // ignore storage errors
+    }
     showToast('Reset Flight Return Bill filters.');
   };
 

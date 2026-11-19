@@ -6,6 +6,7 @@ import {
 } from '../types/index.ts';
 import { DEFAULT_SUPER_ADMIN_PASSWORD } from './superAdminAuth.ts';
 import { toISODateString } from './dateFilters.ts';
+import { DEFAULT_TEAM_MEMBERS } from './administration.ts';
 
 export const ZSB_BANNER_IMAGE_URL =
   '/assets/aistudio/WhatsApp_Image_2026-10-30_at_12.38.58_70038e4b.jpeg';
@@ -70,14 +71,14 @@ export function authenticateUser(
     };
   }
 
-  // Check dynamically registered team administrators
-  let dynamicTeamMembers: any[] = [];
+  // Check dynamically registered team administrators (fallback to DEFAULT_TEAM_MEMBERS on fresh boot)
+  let dynamicTeamMembers: any[] = DEFAULT_TEAM_MEMBERS;
   if (typeof window !== 'undefined') {
     try {
       const raw = localStorage.getItem('zsb_team_members_v1');
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) dynamicTeamMembers = parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) dynamicTeamMembers = parsed;
       }
     } catch {
       // Ignore

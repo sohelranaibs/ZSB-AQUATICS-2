@@ -148,6 +148,23 @@ import {
   updateSyncTelemetry,
   triggerDebouncedAutoSaveIndicator,
 } from './VolatileFeedbackStore.ts';
+import {
+  OfflineSyncAction,
+  applyQueuedActionsToCollections,
+  createOfflineSyncAction,
+} from '../utils/backgroundSyncQueue.ts';
+import {
+  BackgroundSyncStatus,
+  acknowledgeSyncedActions,
+  clearQueuedSyncActions,
+  enqueueOfflineAction,
+  getBackgroundSyncStatus,
+  getPendingSyncActions,
+  registerBackgroundSyncServiceWorker,
+  removeQueuedSyncAction,
+  requestBackgroundSyncFlush,
+  subscribeToBackgroundSyncEvents,
+} from '../utils/backgroundSyncService.ts';
 
 const createEmptyPackingDraftRows = (): PackingItemRow[] =>
   ['1', '2', '3', '4', '5'].map((id) => ({
@@ -354,7 +371,9 @@ interface AppContextType {
       specificCreditId?: string;
     }
   ) => { totalApplied: number; affectedCreditNotes: string[] };
+  updateSupplierCredit: (id: string, record: Partial<SupplierCreditRecord>) => void;
   deleteSupplierCredit: (id: string) => void;
+  batchDeleteSupplierCredits: (ids: string[]) => number;
 
   mortalities: MortalityRecord[];
   addMortality: (record: Omit<MortalityRecord, 'id' | 'createdAt'>) => string;
@@ -460,6 +479,15 @@ interface AppContextType {
   focusedShipmentInvoice: string | null;
   openShipmentDetails: (invoiceNumber: string, shippingMark?: string) => void;
   clearFocusedShipment: () => void;
+
+  // Service Worker Offline Background Sync Queue
+  offlineSyncQueue: OfflineSyncAction[];
+  isFlushingOfflineQueue: boolean;
+  backgroundSyncStatus: BackgroundSyncStatus;
+  lastBackgroundSyncAt: string | null;
+  flushOfflineSyncQueue: (source?: string) => Promise<number>;
+  discardOfflineSyncItem: (actionId: string) => Promise<void>;
+  clearOfflineSyncQueue: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -1146,10 +1174,250 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, []);
 
+  // Service Worker Offline Background Sync Queue State
+  const [offlineSyncQueue, setOfflineSyncQueue] = useState<OfflineSyncAction[]>([]);
+  const [isFlushingOfflineQueue, setIsFlushingOfflineQueue] = useState<boolean>(false);
+  const [lastBackgroundSyncAt, setLastBackgroundSyncAt] = useState<string | null>(null);
+  const [backgroundSyncStatus, setBackgroundSyncStatus] = useState<BackgroundSyncStatus>({
+    supported: typeof window !== 'undefined' && 'serviceWorker' in navigator,
+    swActive: false,
+    syncApiSupported: false,
+    registrationScope: null,
+  });
+
+  const purchasesRef = useRef(purchases);
+  purchasesRef.current = purchases;
+  const packingsRef = useRef(packings);
+  packingsRef.current = packings;
+  const paymentsRef = useRef(payments);
+  paymentsRef.current = payments;
+  const otherCostsRef = useRef(otherCosts);
+  otherCostsRef.current = otherCosts;
+  const mortalitiesRef = useRef(mortalities);
+  mortalitiesRef.current = mortalities;
+  const currentUserRef = useRef(currentUser);
+  currentUserRef.current = currentUser;
+  const isFlushingOfflineQueueRef = useRef(false);
+
+  const isClientOffline = () =>
+    typeof navigator !== 'undefined' && navigator.onLine === false;
+
+  const queueOfflineDataAction = (action: OfflineSyncAction) => {
+    setOfflineSyncQueue((prev) => {
+      if (prev.some((item) => item.id === action.id)) return prev;
+      return [...prev, action];
+    });
+    void enqueueOfflineAction(action).then((updatedItems) => {
+      setOfflineSyncQueue(updatedItems);
+    });
+  };
+
+  const applyOfflineSyncBatchToLocalStorage = useCallback(
+    async (items: OfflineSyncAction[], source: string = 'sw-sync'): Promise<number> => {
+      if (!Array.isArray(items) || items.length === 0) return 0;
+      if (isClientOffline()) return 0;
+      if (isFlushingOfflineQueueRef.current) return 0;
+
+      isFlushingOfflineQueueRef.current = true;
+      setIsFlushingOfflineQueue(true);
+
+      try {
+        const result = applyQueuedActionsToCollections(
+          {
+            purchases: purchasesRef.current,
+            packings: packingsRef.current,
+            payments: paymentsRef.current,
+            otherCosts: otherCostsRef.current,
+            mortalities: mortalitiesRef.current,
+          },
+          items
+        );
+
+        if (result.appliedCount === 0) {
+          return 0;
+        }
+
+        // Atomically push synced collections into localStorage + IndexedDB + React state
+        if (result.countsByEntity.purchase > 0) {
+          localStorage.setItem(
+            STORAGE_KEYS.PURCHASES,
+            JSON.stringify(result.collections.purchases)
+          );
+          void indexedStorageDriver.saveCollection(
+            DB_STORE_NAMES.PURCHASES,
+            result.collections.purchases
+          );
+          purchasesRef.current = result.collections.purchases;
+          setPurchases(result.collections.purchases);
+        }
+
+        if (result.countsByEntity.packing > 0) {
+          localStorage.setItem(
+            STORAGE_KEYS.PACKINGS,
+            JSON.stringify(result.collections.packings)
+          );
+          void indexedStorageDriver.saveCollection(
+            DB_STORE_NAMES.PACKINGS,
+            result.collections.packings
+          );
+          packingsRef.current = result.collections.packings;
+          setPackings(result.collections.packings);
+        }
+
+        if (result.countsByEntity.payment > 0) {
+          localStorage.setItem(
+            STORAGE_KEYS.PAYMENTS,
+            JSON.stringify(result.collections.payments)
+          );
+          void indexedStorageDriver.saveCollection(
+            DB_STORE_NAMES.PAYMENTS,
+            result.collections.payments
+          );
+          paymentsRef.current = result.collections.payments;
+          setPayments(result.collections.payments);
+        }
+
+        if (result.countsByEntity.other_cost > 0) {
+          localStorage.setItem(
+            STORAGE_KEYS.OTHER_COSTS,
+            JSON.stringify(result.collections.otherCosts)
+          );
+          void indexedStorageDriver.saveCollection(
+            DB_STORE_NAMES.OTHER_COSTS,
+            result.collections.otherCosts
+          );
+          otherCostsRef.current = result.collections.otherCosts;
+          setOtherCosts(result.collections.otherCosts);
+        }
+
+        if (result.countsByEntity.mortality > 0) {
+          localStorage.setItem(
+            STORAGE_KEYS.MORTALITIES,
+            JSON.stringify(result.collections.mortalities)
+          );
+          mortalitiesRef.current = result.collections.mortalities;
+          setMortalities(result.collections.mortalities);
+        }
+
+        const remaining = await acknowledgeSyncedActions(result.appliedIds);
+        setOfflineSyncQueue(remaining);
+
+        const nowIso = new Date().toISOString();
+        setLastBackgroundSyncAt(nowIso);
+        localStorage.setItem(STORAGE_KEYS.LAST_BACKUP_AT, nowIso);
+        updateSyncTelemetry({
+          syncStatus: 'synced',
+          lastSyncedAt: nowIso,
+          lastBackupAt: nowIso,
+          lastSyncedEntity: `Background Sync (${result.appliedCount})`,
+          hasUnsyncedChanges: false,
+        });
+
+        setAuditLogs((prev) => [
+          createAuditLogEntry({
+            action: 'UPDATE',
+            module: 'Database',
+            entityId: `BG-SYNC-${result.appliedCount}`,
+            summary: `Service Worker Background Sync pushed ${result.appliedCount} offline data ${
+              result.appliedCount === 1 ? 'action' : 'actions'
+            } to local storage`,
+            details: `Trigger: ${source} · Purchases: ${result.countsByEntity.purchase}, Packings: ${result.countsByEntity.packing}, Payments: ${result.countsByEntity.payment}, Costs: ${result.countsByEntity.other_cost}, Mortality: ${result.countsByEntity.mortality}`,
+            actor: currentUserRef.current
+              ? `${currentUserRef.current.displayName} (${currentUserRef.current.role})`
+              : 'Service Worker Background Sync',
+          }),
+          ...prev,
+        ]);
+
+        publishToastMessage(
+          `Background Sync pushed ${result.appliedCount} queued offline ${
+            result.appliedCount === 1 ? 'action' : 'actions'
+          } to local storage!`
+        );
+
+        return result.appliedCount;
+      } finally {
+        isFlushingOfflineQueueRef.current = false;
+        setIsFlushingOfflineQueue(false);
+      }
+    },
+    []
+  );
+
+  const flushOfflineSyncQueue = useCallback(
+    async (source: string = 'manual-trigger'): Promise<number> => {
+      if (isClientOffline()) return 0;
+      const items = await requestBackgroundSyncFlush(source);
+      if (items.length === 0) {
+        setOfflineSyncQueue([]);
+        return 0;
+      }
+      return applyOfflineSyncBatchToLocalStorage(items, source);
+    },
+    [applyOfflineSyncBatchToLocalStorage]
+  );
+
+  const discardOfflineSyncItem = useCallback(async (actionId: string) => {
+    const remaining = await removeQueuedSyncAction(actionId);
+    setOfflineSyncQueue(remaining);
+    publishToastMessage('Removed queued offline action from Background Sync.');
+  }, []);
+
+  const clearOfflineSyncQueue = useCallback(async () => {
+    await clearQueuedSyncActions();
+    setOfflineSyncQueue([]);
+    publishToastMessage('Cleared all pending offline actions from Background Sync queue.');
+  }, []);
+
+  // Register dedicated Background Sync Service Worker & hydrate queue on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let active = true;
+
+    const initWorkerAndQueue = async () => {
+      await registerBackgroundSyncServiceWorker();
+      const status = await getBackgroundSyncStatus();
+      if (active) {
+        setBackgroundSyncStatus(status);
+      }
+      const pending = await getPendingSyncActions();
+      if (!active) return;
+      setOfflineSyncQueue(pending);
+
+      if (pending.length > 0 && navigator.onLine !== false) {
+        await applyOfflineSyncBatchToLocalStorage(pending, 'boot-reconnect');
+      }
+    };
+
+    void initWorkerAndQueue();
+
+    const unsubscribe = subscribeToBackgroundSyncEvents((event) => {
+      if (!active) return;
+      if (event.type === 'BG_SYNC_QUEUE_UPDATED') {
+        setOfflineSyncQueue(event.items);
+      } else if (event.type === 'BG_SYNC_FLUSH_BATCH') {
+        if (navigator.onLine !== false && event.items.length > 0) {
+          void applyOfflineSyncBatchToLocalStorage(
+            event.items,
+            event.source || 'sw-sync-event'
+          );
+        }
+      }
+    });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [applyOfflineSyncBatchToLocalStorage]);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const handleNetworkChange = () => {
       updateSyncTelemetry({ isSlowConnection: evaluateNavigatorSlowConnection() });
+      if (navigator.onLine !== false) {
+        void flushOfflineSyncQueue('connectivity-restored');
+      }
     };
     window.addEventListener('online', handleNetworkChange);
     window.addEventListener('offline', handleNetworkChange);
@@ -1162,7 +1430,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       window.removeEventListener('offline', handleNetworkChange);
       conn?.removeEventListener?.('change', handleNetworkChange);
     };
-  }, []);
+  }, [flushOfflineSyncQueue]);
 
   const recordCompletedBackupTimestamp = (isoTimestamp: string) => {
     updateSyncTelemetry({
@@ -1993,6 +2261,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id,
       createdAt: new Date().toISOString(),
     };
+
+    if (isClientOffline()) {
+      queueOfflineDataAction(
+        createOfflineSyncAction({
+          entity: 'purchase',
+          operation: 'create',
+          recordId: id,
+          label: newRecord.invoiceNumber,
+          summary: `${newRecord.description || 'Supplier'} · ${companyProfile.currency} ${newRecord.totalAmount.toLocaleString()}`,
+          payload: newRecord,
+        })
+      );
+      showToast(
+        `Offline: Purchase ${newRecord.invoiceNumber} queued in Service Worker Background Sync — will push to local storage when online.`
+      );
+      return id;
+    }
+
     setPurchases((prev) => [newRecord, ...prev]);
     emitPaymentSyncTrigger({
       category: 'supplier',
@@ -2016,6 +2302,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updatePurchase = (id: string, record: Partial<PurchaseRecord>) => {
     const target = purchases.find((p) => p.id === id);
+
+    if (isClientOffline()) {
+      const label = record.invoiceNumber || target?.invoiceNumber || id;
+      queueOfflineDataAction(
+        createOfflineSyncAction({
+          entity: 'purchase',
+          operation: 'update',
+          recordId: id,
+          label,
+          summary: `Update ${record.description || target?.description || 'Purchase'} · ${companyProfile.currency} ${(record.totalAmount ?? target?.totalAmount ?? 0).toLocaleString()}`,
+          payload: record,
+        })
+      );
+      showToast(
+        `Offline: Update to ${label} queued in Service Worker Background Sync.`
+      );
+      return;
+    }
+
     setPurchases((prev) => prev.map((p) => (p.id === id ? { ...p, ...record } : p)));
     emitPaymentSyncTrigger({
       category: 'supplier',
@@ -2185,6 +2490,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id,
       createdAt: new Date().toISOString(),
     };
+
+    if (isClientOffline()) {
+      queueOfflineDataAction(
+        createOfflineSyncAction({
+          entity: 'packing',
+          operation: 'create',
+          recordId: id,
+          label: newRecord.invoiceNumber,
+          summary: `${newRecord.shippingMark || 'Buyer'} · ${newRecord.totalWeight} KG · RMB ${newRecord.totalAmount.toLocaleString()}`,
+          payload: newRecord,
+        })
+      );
+      showToast(
+        `Offline: Packing list ${newRecord.invoiceNumber} queued in Service Worker Background Sync — will push to local storage when online.`
+      );
+      return id;
+    }
+
     setPackings((prev) => [newRecord, ...prev]);
     addAuditLog({
       action: 'CREATE',
@@ -2199,6 +2522,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updatePacking = (id: string, record: Partial<PackingRecord>, silent: boolean = false) => {
     const target = packings.find((p) => p.id === id);
+
+    if (isClientOffline()) {
+      const label = record.invoiceNumber || target?.invoiceNumber || id;
+      queueOfflineDataAction(
+        createOfflineSyncAction({
+          entity: 'packing',
+          operation: 'update',
+          recordId: id,
+          label,
+          summary: `Update ${record.shippingMark || target?.shippingMark || 'Packing'} · RMB ${(record.totalAmount ?? target?.totalAmount ?? 0).toLocaleString()}`,
+          payload: record,
+        })
+      );
+      if (!silent) {
+        showToast(`Offline: Update to ${label} queued in Service Worker Background Sync.`);
+      }
+      return;
+    }
+
     setPackings((prev) => prev.map((p) => (p.id === id ? { ...p, ...record } : p)));
     if (!silent) {
       addAuditLog({
@@ -2364,6 +2706,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id,
       createdAt: new Date().toISOString(),
     };
+
+    if (isClientOffline()) {
+      queueOfflineDataAction(
+        createOfflineSyncAction({
+          entity: 'payment',
+          operation: 'create',
+          recordId: id,
+          label: newRecord.invoiceNumber,
+          summary: `${newRecord.description || 'Voucher'} · Paid ${companyProfile.currency} ${newRecord.paidAmount.toLocaleString()}`,
+          payload: newRecord,
+        })
+      );
+      showToast(
+        `Offline: Payment voucher ${newRecord.invoiceNumber} queued in Service Worker Background Sync.`
+      );
+      return id;
+    }
+
     setPayments((prev) => [newRecord, ...prev]);
     emitPaymentSyncTrigger({
       category: newRecord.paymentCategory === 'exporter' ? 'exporter' : 'supplier',
@@ -2387,6 +2747,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updatePayment = (id: string, record: Partial<PaymentRecord>) => {
     const target = payments.find((p) => p.id === id);
+
+    if (isClientOffline()) {
+      const label = record.invoiceNumber || target?.invoiceNumber || id;
+      queueOfflineDataAction(
+        createOfflineSyncAction({
+          entity: 'payment',
+          operation: 'update',
+          recordId: id,
+          label,
+          summary: `Update ${record.description || target?.description || 'Voucher'}`,
+          payload: record,
+        })
+      );
+      showToast(`Offline: Update to ${label} queued in Service Worker Background Sync.`);
+      return;
+    }
+
     setPayments((prev) => prev.map((p) => (p.id === id ? { ...p, ...record } : p)));
     emitPaymentSyncTrigger({
       category:
@@ -2552,6 +2929,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id,
       createdAt: new Date().toISOString(),
     };
+
+    if (isClientOffline()) {
+      queueOfflineDataAction(
+        createOfflineSyncAction({
+          entity: 'other_cost',
+          operation: 'create',
+          recordId: id,
+          label: newRecord.category,
+          summary: `${newRecord.description || 'Operating Cost'} · ${companyProfile.currency} ${newRecord.amount.toLocaleString()}`,
+          payload: newRecord,
+        })
+      );
+      showToast(
+        `Offline: Operating cost "${newRecord.category}" queued in Service Worker Background Sync.`
+      );
+      return id;
+    }
+
     setOtherCosts((prev) => [newRecord, ...prev]);
     addAuditLog({
       action: 'CREATE',
@@ -3509,6 +3904,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
+  const updateSupplierCredit = (
+    id: string,
+    record: Partial<SupplierCreditRecord>
+  ) => {
+    const target = supplierCredits.find((cn) => cn.id === id);
+    setSupplierCredits((prev) =>
+      prev.map((cn) => (cn.id === id ? { ...cn, ...record } : cn))
+    );
+    addAuditLog({
+      action: 'UPDATE',
+      module: 'SupplierCredit',
+      entityId: record.creditNoteNumber || target?.creditNoteNumber || id,
+      summary: `Edited supplier credit note ${record.creditNoteNumber || target?.creditNoteNumber || id}`,
+      details: `Supplier: ${record.supplierName || target?.supplierName || '-'} · Amount: ${companyProfile.currency} ${(record.amount ?? target?.amount ?? 0).toLocaleString()}`,
+    });
+    showToast(
+      `Supplier Credit Note ${record.creditNoteNumber || target?.creditNoteNumber || ''} updated.`
+    );
+  };
+
   const deleteSupplierCredit = (id: string) => {
     const target = supplierCredits.find((cn) => cn.id === id);
     requestSuperAdminSingleDelete(
@@ -3536,6 +3951,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  const batchDeleteSupplierCredits = (ids: string[]): number => {
+    if (!ids || ids.length === 0) return 0;
+    const { remaining, deleted, deletedCount } = filterRecordsAfterBatchDelete(
+      supplierCredits,
+      ids
+    );
+    if (deletedCount === 0) return 0;
+
+    setSupplierCredits(remaining);
+    addAuditLog({
+      action: 'DELETE',
+      module: 'SupplierCredit',
+      entityId: `BATCH-CN-DEL-${deletedCount}`,
+      summary: `Batch deleted ${deletedCount} supplier credit note(s)`,
+      details: `Credit Notes: ${deleted.map((d) => d.creditNoteNumber).slice(0, 6).join(', ')}`,
+    });
+    showToast(`Deleted ${deletedCount} selected supplier credit note(s) from database.`);
+    return deletedCount;
+  };
+
   const addMortality = (record: Omit<MortalityRecord, 'id' | 'createdAt'>): string => {
     const newId = generateRecordId('mort');
     const newRecord: MortalityRecord = {
@@ -3543,6 +3978,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: newId,
       createdAt: new Date().toISOString(),
     };
+
+    if (isClientOffline()) {
+      queueOfflineDataAction(
+        createOfflineSyncAction({
+          entity: 'mortality',
+          operation: 'create',
+          recordId: newId,
+          label: newRecord.species,
+          summary: `${newRecord.quantityKg} KG · ${newRecord.cause || 'Mortality Log'}`,
+          payload: newRecord,
+        })
+      );
+      showToast(
+        `Offline: Mortality log (${newRecord.quantityKg} KG ${newRecord.species}) queued in Service Worker Background Sync.`
+      );
+      return newId;
+    }
+
     setMortalities((prev) => [newRecord, ...prev]);
     addAuditLog({
       action: 'CREATE',
@@ -4428,7 +4881,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addSupplierCredit,
       applySupplierCredit,
       applySupplierCreditsForPayment,
+      updateSupplierCredit,
       deleteSupplierCredit,
+      batchDeleteSupplierCredits,
       mortalities,
       addMortality,
       updateMortality,
@@ -4491,6 +4946,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       focusedShipmentInvoice,
       openShipmentDetails,
       clearFocusedShipment,
+      offlineSyncQueue,
+      isFlushingOfflineQueue,
+      backgroundSyncStatus,
+      lastBackgroundSyncAt,
+      flushOfflineSyncQueue,
+      discardOfflineSyncItem,
+      clearOfflineSyncQueue,
     }),
     [
       isAuthenticated,
@@ -4530,6 +4992,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       snapshotModalOpen,
       isLiveSyncEnabled,
       focusedShipmentInvoice,
+      offlineSyncQueue,
+      isFlushingOfflineQueue,
+      backgroundSyncStatus,
+      lastBackgroundSyncAt,
+      flushOfflineSyncQueue,
+      discardOfflineSyncItem,
+      clearOfflineSyncQueue,
     ]
   );
 

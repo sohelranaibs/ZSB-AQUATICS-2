@@ -42,6 +42,7 @@ import {
   TrendingUp,
   TrendingDown,
 } from 'lucide-react';
+import { BuyerReceivablesAgingCard } from './BuyerReceivablesAgingCard.tsx';
 
 export const SearchReportsView: React.FC = () => {
   const {
@@ -379,6 +380,9 @@ export const SearchReportsView: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Chinese Importer / Shipping Mark Receivables Aging & Bilingual Statement Center */}
+      <BuyerReceivablesAgingCard />
 
       {/* Global Date Range Picker Box */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">

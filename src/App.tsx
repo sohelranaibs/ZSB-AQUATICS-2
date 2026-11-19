@@ -34,7 +34,6 @@ import {
   ORDERED_WORKBOOK_TABS,
   resolveGlobalKeyboardShortcut,
   isEditableElement,
-  getAdjacentWorkbookTab,
   dispatchViewShortcutAction,
 } from './utils/keyboardShortcuts.ts';
 import { ActiveTab } from './types/index.ts';
@@ -72,6 +71,13 @@ import {
   runWhenDocumentReady,
 } from './utils/clientRuntimeGuard.ts';
 import { GlobalTableScrollController } from './components/GlobalTableScrollController.tsx';
+import { OfflineIndicator } from './components/PWAInstallButton.tsx';
+import { OfflineSyncQueueModal } from './components/OfflineSyncQueueModal.tsx';
+import {
+  canUserAccessTab,
+  getFallbackTabForUser,
+  resolveCanonicalTeamRole,
+} from './utils/rbacPermissions.ts';
 
 const GlobalToastBanner: React.FC = React.memo(() => {
   const toastMessage = useToastMessage();
@@ -113,9 +119,13 @@ const MainContent: React.FC = () => {
     packings,
     payments,
     auditLogs,
+    currentUser,
+    offlineSyncQueue,
+    isFlushingOfflineQueue,
   } = useApp();
 
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+  const [syncQueueModalOpen, setSyncQueueModalOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
 
@@ -146,9 +156,17 @@ const MainContent: React.FC = () => {
         packingsCount: packings.length,
         paymentsCount: payments.length,
         auditLogsCount: auditLogs.length,
-      }),
-    [purchases.length, packings.length, payments.length, auditLogs.length]
+      }).filter((sheet) => canUserAccessTab(currentUser, sheet.id)),
+    [purchases.length, packings.length, payments.length, auditLogs.length, currentUser]
   );
+
+  // Enforce RBAC if current user lands on or switches into an unauthorized tab
+  useEffect(() => {
+    if (!canUserAccessTab(currentUser, activeTab)) {
+      const fallback = getFallbackTabForUser(currentUser);
+      setActiveTab(fallback);
+    }
+  }, [currentUser, activeTab, setActiveTab]);
 
   // Display Mode, Zoom In/Out & Full Screen Workspace State
   const [displayPrefs, setDisplayPrefs] = useState(() => loadDisplayPreferences());
@@ -378,25 +396,38 @@ const MainContent: React.FC = () => {
           return;
         }
         case 'NEXT_TAB': {
-          const nextTab = getAdjacentWorkbookTab(activeTab, 'next');
-          setActiveTab(nextTab);
-          const info = ORDERED_WORKBOOK_TABS.find((t) => t.id === nextTab);
-          if (info) {
-            showToast(`Switched to Sheet #${info.number}: ${info.label} (Alt+→)`);
+          const allowedIds = workbookSheets.map((s) => s.id);
+          if (allowedIds.length > 0) {
+            const idx = allowedIds.indexOf(activeTab);
+            const nextTab = allowedIds[(idx + 1) % allowedIds.length];
+            setActiveTab(nextTab);
+            const info = ORDERED_WORKBOOK_TABS.find((t) => t.id === nextTab);
+            if (info) {
+              showToast(`Switched to Sheet #${info.number}: ${info.label} (Alt+→)`);
+            }
           }
           return;
         }
         case 'PREV_TAB': {
-          const prevTab = getAdjacentWorkbookTab(activeTab, 'prev');
-          setActiveTab(prevTab);
-          const info = ORDERED_WORKBOOK_TABS.find((t) => t.id === prevTab);
-          if (info) {
-            showToast(`Switched to Sheet #${info.number}: ${info.label} (Alt+←)`);
+          const allowedIds = workbookSheets.map((s) => s.id);
+          if (allowedIds.length > 0) {
+            const idx = allowedIds.indexOf(activeTab);
+            const prevTab = allowedIds[(idx - 1 + allowedIds.length) % allowedIds.length];
+            setActiveTab(prevTab);
+            const info = ORDERED_WORKBOOK_TABS.find((t) => t.id === prevTab);
+            if (info) {
+              showToast(`Switched to Sheet #${info.number}: ${info.label} (Alt+←)`);
+            }
           }
           return;
         }
         case 'JUMP_TO_TAB': {
           if (targetTab) {
+            if (!canUserAccessTab(currentUser, targetTab)) {
+              const roleName = resolveCanonicalTeamRole(currentUser);
+              showToast(`Access restricted: ${roleName} cannot open this sheet.`);
+              return;
+            }
             setActiveTab(targetTab);
             const info = ORDERED_WORKBOOK_TABS.find((t) => t.id === targetTab);
             if (info) {
@@ -415,6 +446,7 @@ const MainContent: React.FC = () => {
       closeSnapshotModal,
       closeSuperAdminClearModal,
       createSnapshot,
+      currentUser,
       dataCenterModal.isOpen,
       exportCurrentViewToPdf,
       getDatasetForTab,
@@ -429,6 +461,7 @@ const MainContent: React.FC = () => {
       pendingSingleDelete,
       cancelSingleDelete,
       triggerManualSync,
+      workbookSheets,
     ]
   );
 
@@ -853,6 +886,7 @@ const MainContent: React.FC = () => {
           isSidebarCollapsed={isSidebarCollapsed}
           onToggleSidebar={handleToggleSidebar}
           onOpenMobileDrawer={handleOpenMobileDrawer}
+          onOpenSyncQueueModal={() => setSyncQueueModalOpen(true)}
         />
 
         {/* Toast Notification Banner */}
@@ -933,33 +967,37 @@ const MainContent: React.FC = () => {
             }}
             className="w-full origin-top-left transition-none"
           >
-            {activeTab === 'dashboard' && <DashboardView />}
-            {activeTab === 'purchase_form' && <PurchaseFormView />}
-            {activeTab === 'packing_form' && <PackingListView />}
-            {activeTab === 'air_way_bill' && <AirWayBillView />}
-            {activeTab === 'payment_form' && <PaymentFormView />}
-            {activeTab === 'exporter_payment_form' && <ExporterPaymentFormView />}
-            {activeTab === 'exporter_payment_slip' && <ExporterPaymentSlipView />}
-            {activeTab === 'profit_loss' && <ProfitLossView />}
-            {activeTab === 'total_balance' && <TotalBalanceView />}
-            {(activeTab === 'purchase_db' ||
-              activeTab === 'packing_db' ||
-              activeTab === 'payment_db') && (
-              <DatabaseView
-                initialType={
-                  activeTab === 'packing_db'
-                    ? 'packing'
-                    : activeTab === 'payment_db'
-                    ? 'payment'
-                    : 'purchase'
-                }
-              />
+            {canUserAccessTab(currentUser, activeTab) && (
+              <>
+                {activeTab === 'dashboard' && <DashboardView />}
+                {activeTab === 'purchase_form' && <PurchaseFormView />}
+                {activeTab === 'packing_form' && <PackingListView />}
+                {activeTab === 'air_way_bill' && <AirWayBillView />}
+                {activeTab === 'payment_form' && <PaymentFormView />}
+                {activeTab === 'exporter_payment_form' && <ExporterPaymentFormView />}
+                {activeTab === 'exporter_payment_slip' && <ExporterPaymentSlipView />}
+                {activeTab === 'profit_loss' && <ProfitLossView />}
+                {activeTab === 'total_balance' && <TotalBalanceView />}
+                {(activeTab === 'purchase_db' ||
+                  activeTab === 'packing_db' ||
+                  activeTab === 'payment_db') && (
+                  <DatabaseView
+                    initialType={
+                      activeTab === 'packing_db'
+                        ? 'packing'
+                        : activeTab === 'payment_db'
+                        ? 'payment'
+                        : 'purchase'
+                    }
+                  />
+                )}
+                {activeTab === 'search_reports' && <SearchReportsView />}
+                {activeTab === 'audit_logs' && <AuditLogsView />}
+                {activeTab === 'settings' && <SettingsView />}
+                {activeTab === 'administration' && <AdministrationView />}
+                {activeTab === 'forget_password' && <ForgetPasswordView />}
+              </>
             )}
-            {activeTab === 'search_reports' && <SearchReportsView />}
-            {activeTab === 'audit_logs' && <AuditLogsView />}
-            {activeTab === 'settings' && <SettingsView />}
-            {activeTab === 'administration' && <AdministrationView />}
-            {activeTab === 'forget_password' && <ForgetPasswordView />}
           </main>
         </div>
       </div>
@@ -1094,6 +1132,19 @@ const MainContent: React.FC = () => {
         isOpen={shortcutsModalOpen}
         onClose={handleCloseShortcutsModal}
         onExecuteShortcut={executeShortcutAction}
+      />
+
+      {/* Service Worker Background Sync Queue Inspection Modal */}
+      <OfflineSyncQueueModal
+        isOpen={syncQueueModalOpen}
+        onClose={() => setSyncQueueModalOpen(false)}
+      />
+
+      {/* Offline Status Banner for PWA & Background Sync Mode */}
+      <OfflineIndicator
+        pendingQueueCount={offlineSyncQueue.length}
+        isSyncingQueue={isFlushingOfflineQueue}
+        onOpenQueueModal={() => setSyncQueueModalOpen(true)}
       />
     </div>
   );

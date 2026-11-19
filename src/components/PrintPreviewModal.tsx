@@ -142,7 +142,7 @@ export const PrintPreviewModal: React.FC = () => {
 
   const resolvedLogoSrc = resolveCompanyLogoSrc(companyProfile.logoUrl);
 
-  const handleDirectSavePdf = async () => {
+  const handleDirectSavePdf = async (allowFallback = true) => {
     setIsSavingPdf(true);
     const filename = getCleanFilename('pdf');
     try {
@@ -157,9 +157,11 @@ export const PrintPreviewModal: React.FC = () => {
 
       if (success) {
         showToast(`PDF downloaded: ${filename}`);
-      } else {
+      } else if (allowFallback) {
         showToast('Direct PDF conversion failed, opening print dialogue...');
-        handleBrowserPrint();
+        handleBrowserPrint(false);
+      } else {
+        showToast('Unable to generate PDF or open print dialog. Please try Ctrl+P.');
       }
     } catch (e) {
       console.error(e);
@@ -187,17 +189,23 @@ export const PrintPreviewModal: React.FC = () => {
     }
   };
 
-  const handleBrowserPrint = () => {
+  const handleBrowserPrint = (allowFallback = true) => {
     try {
       const opened = openPrintableDocumentWindow('printable-document', title);
       if (opened) {
         showToast('Print document window opened! Press Ctrl+P or click Print Now.');
+      } else if (allowFallback) {
+        handleDirectSavePdf(false);
       } else {
-        handleDirectSavePdf();
+        showToast('Print popup blocked by browser. Please allow popups or press Ctrl+P.');
       }
     } catch (err) {
       console.warn('Print error:', err);
-      handleDirectSavePdf();
+      if (allowFallback) {
+        handleDirectSavePdf(false);
+      } else {
+        showToast('Print dialog failed. Please try Ctrl+P.');
+      }
     }
   };
 
@@ -303,7 +311,7 @@ export const PrintPreviewModal: React.FC = () => {
           <div className="flex flex-wrap items-center gap-2">
             {/* Direct Save as PDF Button */}
             <button
-              onClick={handleDirectSavePdf}
+              onClick={() => handleDirectSavePdf()}
               disabled={isSavingPdf || isSavingPng}
               className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-[#00897b] hover:bg-[#00796b] text-white rounded text-xs font-bold shadow transition cursor-pointer disabled:opacity-50"
               title="Download high-resolution PDF file directly"
@@ -356,7 +364,7 @@ export const PrintPreviewModal: React.FC = () => {
 
             {/* Print Document Button */}
             <button
-              onClick={handleBrowserPrint}
+              onClick={() => handleBrowserPrint()}
               className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#1c2a33] hover:bg-[#152028] text-white rounded border border-[#334b59] text-xs font-bold shadow transition cursor-pointer"
               title="Open browser print dialogue"
             >

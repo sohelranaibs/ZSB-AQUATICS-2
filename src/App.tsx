@@ -23,6 +23,7 @@ import { AuditLogsView } from './components/AuditLogsView.tsx';
 import { SettingsView } from './components/SettingsView.tsx';
 import { AdministrationView } from './components/AdministrationView.tsx';
 import { ForgetPasswordView } from './components/ForgetPasswordView.tsx';
+import { DailyExpenseView } from './components/DailyExpenseView.tsx';
 import { LandingLoginView } from './components/LandingLoginView.tsx';
 import { PrintPreviewModal } from './components/PrintPreviewModal.tsx';
 import { QuickEntryModal } from './components/QuickEntryModal.tsx';
@@ -115,9 +116,11 @@ const MainContent: React.FC = () => {
     triggerManualSync,
     createSnapshot,
     exportCurrentViewToPdf,
+    startPrintAllActiveSheets,
     purchases,
     packings,
     payments,
+    otherCosts,
     auditLogs,
     currentUser,
     offlineSyncQueue,
@@ -156,8 +159,9 @@ const MainContent: React.FC = () => {
         packingsCount: packings.length,
         paymentsCount: payments.length,
         auditLogsCount: auditLogs.length,
+        otherCostsCount: otherCosts.length,
       }).filter((sheet) => canUserAccessTab(currentUser, sheet.id)),
-    [purchases.length, packings.length, payments.length, auditLogs.length, currentUser]
+    [purchases.length, packings.length, payments.length, auditLogs.length, otherCosts.length, currentUser]
   );
 
   // Enforce RBAC if current user lands on or switches into an unauthorized tab
@@ -299,7 +303,7 @@ const MainContent: React.FC = () => {
     if (tab === 'payment_form' || tab === 'exporter_payment_form' || tab === 'payment_db') {
       return 'payment' as const;
     }
-    if (tab === 'profit_loss') {
+    if (tab === 'profit_loss' || tab === 'daily_expense') {
       return 'other_cost' as const;
     }
     return 'purchase' as const;
@@ -377,6 +381,10 @@ const MainContent: React.FC = () => {
           }
           return;
         }
+        case 'PRINT_ALL_ACTIVE_SHEETS': {
+          startPrintAllActiveSheets();
+          return;
+        }
         case 'ADD_FORM_ROW': {
           const handled = dispatchViewShortcutAction('ADD_FORM_ROW');
           if (!handled) {
@@ -449,6 +457,7 @@ const MainContent: React.FC = () => {
       currentUser,
       dataCenterModal.isOpen,
       exportCurrentViewToPdf,
+      startPrintAllActiveSheets,
       getDatasetForTab,
       openDataCenterModal,
       openSnapshotModal,
@@ -978,6 +987,7 @@ const MainContent: React.FC = () => {
                 {activeTab === 'exporter_payment_slip' && <ExporterPaymentSlipView />}
                 {activeTab === 'profit_loss' && <ProfitLossView />}
                 {activeTab === 'total_balance' && <TotalBalanceView />}
+                {activeTab === 'daily_expense' && <DailyExpenseView />}
                 {(activeTab === 'purchase_db' ||
                   activeTab === 'packing_db' ||
                   activeTab === 'payment_db') && (

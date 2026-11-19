@@ -12,10 +12,6 @@ import {
   SupplierPerformanceMetric,
 } from '../utils/supplierPerformance.ts';
 import {
-  SUPPLIER_CREDIT_REASONS,
-  calculateSupplierCreditSummary,
-} from '../utils/supplierCredits.ts';
-import {
   calculateDailyProfitLossReport,
   buildProfitLossFiscalSummaryReportPayload,
 } from '../utils/dailyProfitLoss.ts';
@@ -30,7 +26,6 @@ import {
 } from '../utils/formDraftStorage.ts';
 import { DailyProfitLossSection } from './DailyProfitLossSection.tsx';
 import { FlightProfitabilityFxSection } from './FlightProfitabilityFxSection.tsx';
-import { SupplierCreditRecord } from '../types/index.ts';
 import {
   ComposedChart,
   AreaChart,
@@ -60,8 +55,6 @@ import {
   Award,
   ArrowUpRight,
   ArrowDownRight,
-  BadgePercent,
-  CheckCircle2,
 } from 'lucide-react';
 
 export const ProfitLossView: React.FC = () => {
@@ -73,10 +66,6 @@ export const ProfitLossView: React.FC = () => {
     otherCosts,
     addOtherCost,
     deleteOtherCost,
-    supplierCredits,
-    addSupplierCredit,
-    applySupplierCredit,
-    deleteSupplierCredit,
     dropdownOptions,
     openPrintModal,
     setActiveTab,
@@ -118,30 +107,6 @@ export const ProfitLossView: React.FC = () => {
   const [supplierWindow, setSupplierWindow] = useState<SupplierPerformanceWindow>('6m');
   const [supplierChartMode, setSupplierChartMode] = useState<'value' | 'volume'>('value');
 
-  // Supplier Credit Tracking Module State
-  const [creditFilter, setCreditFilter] = useState<'all' | 'open' | 'applied'>('all');
-  const [creditSupplier, setCreditSupplier] = useState<string>(
-    () =>
-      initialProfitLossDraft?.creditSupplier ||
-      dropdownOptions.suppliers[0] ||
-      'ABDULLAH VAI'
-  );
-  const [creditAmount, setCreditAmount] = useState<string>(
-    () => initialProfitLossDraft?.creditAmount || ''
-  );
-  const [creditReason, setCreditReason] = useState<string>(
-    () => initialProfitLossDraft?.creditReason || SUPPLIER_CREDIT_REASONS[0]
-  );
-  const [creditRefInvoice, setCreditRefInvoice] = useState<string>(
-    () => initialProfitLossDraft?.creditRefInvoice || ''
-  );
-  const [creditDate, setCreditDate] = useState<string>(
-    () => initialProfitLossDraft?.creditDate || new Date().toISOString().slice(0, 10)
-  );
-  const [creditRemarks, setCreditRemarks] = useState<string>(
-    () => initialProfitLossDraft?.creditRemarks || ''
-  );
-
   const serializedProfitLossDraft = useMemo(
     () =>
       JSON.stringify({
@@ -150,12 +115,6 @@ export const ProfitLossView: React.FC = () => {
         newAmount,
         newDesc,
         newRef,
-        creditSupplier,
-        creditAmount,
-        creditReason,
-        creditRefInvoice,
-        creditDate,
-        creditRemarks,
       }),
     [
       newCategory,
@@ -163,12 +122,6 @@ export const ProfitLossView: React.FC = () => {
       newAmount,
       newDesc,
       newRef,
-      creditSupplier,
-      creditAmount,
-      creditReason,
-      creditRefInvoice,
-      creditDate,
-      creditRemarks,
     ]
   );
 
@@ -205,62 +158,6 @@ export const ProfitLossView: React.FC = () => {
       }),
     [purchases, supplierWindow]
   );
-
-  const creditSummary = useMemo(
-    () => calculateSupplierCreditSummary(supplierCredits, purchases),
-    [supplierCredits, purchases]
-  );
-
-  const filteredCredits = useMemo(() => {
-    const list = [...supplierCredits].sort((a, b) => {
-      if (a.remainingAmount > 0 && b.remainingAmount === 0) return -1;
-      if (a.remainingAmount === 0 && b.remainingAmount > 0) return 1;
-      return (b.date || '').localeCompare(a.date || '');
-    });
-    if (creditFilter === 'open') {
-      return list.filter((cn) => cn.remainingAmount > 0);
-    }
-    if (creditFilter === 'applied') {
-      return list.filter((cn) => cn.status === 'APPLIED');
-    }
-    return list;
-  }, [supplierCredits, creditFilter]);
-
-  const handleAddSupplierCredit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const amt = parseFloat(creditAmount);
-    if (!creditSupplier.trim()) {
-      showToast('Please select a supplier name.');
-      return;
-    }
-    if (!amt || amt <= 0) {
-      showToast('Please enter a valid positive credit note amount.');
-      return;
-    }
-
-    addSupplierCredit({
-      date: creditDate,
-      supplierName: creditSupplier.trim(),
-      amount: amt,
-      reason: creditReason,
-      refPurchaseInvoice: creditRefInvoice.trim() || undefined,
-      remarks: creditRemarks.trim() || undefined,
-    });
-
-    setCreditAmount('');
-    setCreditRefInvoice('');
-    setCreditRemarks('');
-  };
-
-  const handleQuickApplyCreditInPL = (cn: SupplierCreditRecord) => {
-    if (cn.remainingAmount <= 0) return;
-    applySupplierCredit(cn.id, {
-      amount: cn.remainingAmount,
-      date: new Date().toISOString().slice(0, 10),
-      targetPurchaseInvoice: cn.refPurchaseInvoice,
-      notes: 'Applied against supplier purchase balance from P&L Credit Ledger',
-    });
-  };
 
   const handleAddCost = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1523,441 +1420,6 @@ export const ProfitLossView: React.FC = () => {
         )}
       </section>
 
-      {/* Supplier Credit Tracking & Rebate Ledger Module */}
-      <section
-        aria-label="Supplier Credit Tracking & Purchase Rebate Ledger"
-        data-testid="pl-supplier-credit-section"
-        className="bg-white rounded-xl shadow border border-slate-200 overflow-hidden"
-      >
-        {/* Module Header Bar */}
-        <div className="bg-[#273E56] text-white px-5 py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-[#1d2c35]">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <BadgePercent className="w-4 h-4 text-[#5eead4] shrink-0" />
-            <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-white whitespace-nowrap">
-              Supplier Credit Tracking &amp; Purchase Rebates
-            </h2>
-            <span className="text-slate-400 shrink-0" aria-hidden="true">
-              ·
-            </span>
-            <span className="text-xs text-slate-300 font-mono tabular-nums whitespace-nowrap shrink-0">
-              {creditSummary.totalCreditsCount} Credit Notes ({creditSummary.openCreditsCount} Open)
-            </span>
-          </div>
-
-          <div className="flex flex-wrap lg:flex-nowrap items-center gap-2 shrink-0">
-            {/* Credit Status Filter */}
-            <div
-              role="group"
-              aria-label="Supplier Credit Status Filter"
-              className="flex items-center gap-1 bg-[#1c2a33] p-1 rounded-lg border border-white/15 shrink-0"
-            >
-              <button
-                type="button"
-                data-testid="pl-credit-filter-all"
-                onClick={() => setCreditFilter('all')}
-                className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0 ${
-                  creditFilter === 'all'
-                    ? 'bg-[#00897b] text-white font-bold'
-                    : 'text-slate-200 hover:text-white'
-                }`}
-              >
-                All Credits ({creditSummary.totalCreditsCount})
-              </button>
-              <button
-                type="button"
-                data-testid="pl-credit-filter-open"
-                onClick={() => setCreditFilter('open')}
-                className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0 ${
-                  creditFilter === 'open'
-                    ? 'bg-[#1877d2] text-white font-bold'
-                    : 'text-slate-200 hover:text-white'
-                }`}
-              >
-                Available ({creditSummary.openCreditsCount})
-              </button>
-              <button
-                type="button"
-                data-testid="pl-credit-filter-applied"
-                onClick={() => setCreditFilter('applied')}
-                className={`px-2.5 py-1 rounded-md text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0 ${
-                  creditFilter === 'applied'
-                    ? 'bg-[#1877d2] text-white font-bold'
-                    : 'text-slate-200 hover:text-white'
-                }`}
-              >
-                Fully Applied ({creditSummary.appliedCreditsCount})
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('payment_form')}
-              className="px-2.5 py-1.5 rounded-lg bg-[#00897b] hover:bg-[#00796b] text-white text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0 inline-flex items-center gap-1"
-            >
-              <span>Apply in Supplier Payment</span>
-              <ArrowUpRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Supplier Credit KPI Strip */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-200 bg-slate-50/90 border-b border-slate-200">
-          {/* Total Credit Notes Issued */}
-          <div className="px-4 py-3">
-            <div className="text-xs font-medium text-slate-500">
-              Total Credit Notes Issued
-            </div>
-            <div
-              data-testid="pl-credit-total-issued"
-              className="text-sm sm:text-base font-extrabold text-slate-900 font-mono tabular-nums mt-0.5"
-            >
-              {formatCurrency(creditSummary.totalIssuedAmount, companyProfile.currency)}
-            </div>
-            <div className="text-[11px] text-slate-500 font-mono tabular-nums mt-0.5">
-              Across {creditSummary.bySupplier.length} Suppliers · {creditSummary.totalCreditsCount} Notes
-            </div>
-          </div>
-
-          {/* Credit Applied Against Payments */}
-          <div className="px-4 py-3">
-            <div className="text-xs font-medium text-slate-500">
-              Credits Applied to Payments
-            </div>
-            <div
-              data-testid="pl-credit-total-applied"
-              className="text-sm sm:text-base font-extrabold text-emerald-700 font-mono tabular-nums mt-0.5"
-            >
-              {formatCurrency(creditSummary.totalAppliedAmount, companyProfile.currency)}
-            </div>
-            <div className="text-[11px] text-slate-500 font-mono tabular-nums mt-0.5">
-              {creditSummary.appliedCreditsCount} Fully Settled Notes
-            </div>
-          </div>
-
-          {/* Available Unapplied Credit Balance */}
-          <div className="px-4 py-3">
-            <div className="text-xs font-medium text-slate-500">
-              Available Credit Balance
-            </div>
-            <div
-              data-testid="pl-credit-total-available"
-              className="text-sm sm:text-base font-extrabold text-teal-800 font-mono tabular-nums mt-0.5"
-            >
-              {formatCurrency(creditSummary.totalAvailableAmount, companyProfile.currency)}
-            </div>
-            <div className="text-[11px] text-slate-500 font-mono tabular-nums mt-0.5">
-              {creditSummary.openCreditsCount} Open Credit Notes Ready
-            </div>
-          </div>
-
-          {/* Net Purchasing Cost After Credits */}
-          <div className="px-4 py-3">
-            <div className="text-xs font-medium text-slate-500">
-              Net Purchasing After Credits
-            </div>
-            <div
-              data-testid="pl-credit-net-purchasing"
-              className="text-sm sm:text-base font-extrabold text-blue-800 font-mono tabular-nums mt-0.5"
-            >
-              {formatCurrency(
-                creditSummary.netPurchasingAfterIssuedCredits,
-                companyProfile.currency
-              )}
-            </div>
-            <div className="text-[11px] text-slate-500 font-mono tabular-nums mt-0.5">
-              Gross Purchasing: {formatCurrency(creditSummary.grossPurchasingCost, companyProfile.currency)}
-            </div>
-          </div>
-        </div>
-
-        {/* Main Split: Credit Notes Ledger Table (7 Cols) + Record New Credit Note Form (5 Cols) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-200">
-          {/* Left: Credit Notes Ledger Table */}
-          <div className="lg:col-span-7 flex flex-col justify-between">
-            <div>
-              <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                  Supplier Credit Notes &amp; Application Ledger
-                </span>
-                <span className="text-[11px] font-mono text-slate-500">
-                  Showing {filteredCredits.length} of {supplierCredits.length} Notes
-                </span>
-              </div>
-
-              <div className="p-2.5">
-                <div className="overflow-x-auto border-2 border-slate-200 rounded-lg bg-white">
-                <table className="w-full text-xs" data-testid="pl-credit-ledger-table">
-                  <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-bold border-b border-slate-200 whitespace-nowrap">
-                    <tr>
-                      <th className="py-2 px-2 text-center w-12">SL #</th>
-                      <th className="py-2 px-2.5 text-left">Credit Note &amp; Supplier</th>
-                      <th className="py-2 px-2 text-left">Reason &amp; Ref</th>
-                      <th className="py-2 px-2 text-right">Issued / Applied</th>
-                      <th className="py-2 px-2 text-right">Available</th>
-                      <th className="py-2 px-2.5 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200/80 font-mono tabular-nums">
-                    {filteredCredits.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="py-8 text-center text-slate-500 font-sans">
-                          No supplier credit notes match the selected filter.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredCredits.map((cn, idx) => {
-                        const isAvailable = cn.remainingAmount > 0;
-                        return (
-                          <tr
-                            key={cn.id}
-                            data-testid={`pl-credit-row-${cn.creditNoteNumber}`}
-                            className="hover:bg-slate-50/80 transition"
-                          >
-                            <td className="py-2.5 px-2 text-center whitespace-nowrap">
-                              <span className="zsb-sl-badge">{String(idx + 1).padStart(2, '0')}</span>
-                            </td>
-                            <td className="py-2.5 px-2.5 font-sans whitespace-nowrap">
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-mono font-extrabold text-teal-900 whitespace-nowrap">
-                                  {cn.creditNoteNumber}
-                                </span>
-                                <span
-                                  className={`text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded whitespace-nowrap shrink-0 ${
-                                    cn.status === 'AVAILABLE'
-                                      ? 'bg-teal-100 text-teal-900'
-                                      : cn.status === 'PARTIAL'
-                                      ? 'bg-amber-100 text-amber-900'
-                                      : 'bg-slate-200 text-slate-700'
-                                  }`}
-                                >
-                                  {cn.status}
-                                </span>
-                              </div>
-                              <div className="font-bold text-slate-900 mt-0.5 truncate max-w-[140px]">
-                                {cn.supplierName}
-                              </div>
-                              <div className="text-[10px] text-slate-500 font-mono">
-                                {formatDate(cn.date)}
-                              </div>
-                            </td>
-
-                            <td className="py-2.5 px-2 font-sans">
-                              <div className="font-semibold text-slate-800 truncate max-w-[165px]">
-                                {cn.reason}
-                              </div>
-                              {cn.refPurchaseInvoice && (
-                                <div className="text-[10px] text-slate-500 font-mono whitespace-nowrap">
-                                  Ref Bill: {cn.refPurchaseInvoice}
-                                </div>
-                              )}
-                              {cn.remarks && (
-                                <div className="text-[10px] text-slate-500 truncate max-w-[165px]">
-                                  {cn.remarks}
-                                </div>
-                              )}
-                            </td>
-
-                            <td className="py-2.5 px-2 text-right whitespace-nowrap">
-                              <div className="font-bold text-slate-900">
-                                {formatCurrency(cn.amount, companyProfile.currency)}
-                              </div>
-                              <div className="text-[10px] text-emerald-700 font-semibold">
-                                App: {formatCurrency(cn.appliedAmount, companyProfile.currency)}
-                              </div>
-                            </td>
-
-                            <td className="py-2.5 px-2 text-right whitespace-nowrap">
-                              <div
-                                className={`font-extrabold ${
-                                  isAvailable ? 'text-teal-800' : 'text-slate-400'
-                                }`}
-                              >
-                                {formatCurrency(cn.remainingAmount, companyProfile.currency)}
-                              </div>
-                            </td>
-
-                            <td className="py-2.5 px-2.5 text-right font-sans whitespace-nowrap">
-                              <div className="inline-flex items-center justify-end gap-1">
-                                {isAvailable ? (
-                                  <button
-                                    type="button"
-                                    data-testid={`pl-apply-credit-btn-${cn.creditNoteNumber}`}
-                                    onClick={() => handleQuickApplyCreditInPL(cn)}
-                                    className="px-2 py-1 bg-teal-700 hover:bg-teal-800 text-white rounded font-bold text-[11px] shadow-2xs transition cursor-pointer whitespace-nowrap"
-                                  >
-                                    Apply Credit
-                                  </button>
-                                ) : (
-                                  <span className="inline-flex items-center gap-0.5 text-[11px] font-bold text-emerald-700">
-                                    <CheckCircle2 className="w-3.5 h-3.5" />
-                                    <span>Applied</span>
-                                  </span>
-                                )}
-                                <button
-                                  type="button"
-                                  aria-label={`Delete credit note ${cn.creditNoteNumber}`}
-                                  onClick={() => deleteSupplierCredit(cn.id)}
-                                  className="text-slate-400 hover:text-rose-600 p-1 rounded cursor-pointer"
-                                  title="Delete credit note"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-                </div>
-              </div>
-            </div>
-
-            <div className="px-4 py-2.5 bg-slate-100/80 border-t border-slate-200 flex items-center justify-between text-xs">
-              <span className="text-slate-600">
-                Open credits can be applied directly here or inside Sheet #05 (Supplier Payment).
-              </span>
-              <button
-                type="button"
-                onClick={() => setActiveTab('payment_form')}
-                className="text-teal-700 hover:text-teal-900 font-semibold inline-flex items-center gap-0.5 cursor-pointer whitespace-nowrap"
-              >
-                <span>Open Supplier Payment</span>
-                <ArrowUpRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Right: Record Supplier Credit Note Form */}
-          <div className="lg:col-span-5 p-4 bg-slate-50/40">
-            <div className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-              <Plus className="w-4 h-4 text-teal-700" />
-              <span>Record New Supplier Credit Note</span>
-            </div>
-
-            <form
-              onSubmit={handleAddSupplierCredit}
-              data-testid="pl-record-credit-form"
-              className="space-y-2.5 text-xs"
-            >
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">
-                    Supplier Name <span className="text-rose-600">*</span>
-                  </label>
-                  <select
-                    aria-label="Supplier Credit Supplier Name"
-                    data-testid="pl-credit-supplier-select"
-                    value={creditSupplier}
-                    onChange={(e) => setCreditSupplier(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 font-bold text-slate-800"
-                  >
-                    {dropdownOptions.suppliers.map((sup) => (
-                      <option key={sup} value={sup}>
-                        {sup}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">
-                    Credit Note Date
-                  </label>
-                  <input
-                    type="date"
-                    aria-label="Supplier Credit Date"
-                    data-testid="pl-credit-date-input"
-                    value={creditDate}
-                    onChange={(e) => setCreditDate(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 font-mono text-slate-800"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">
-                    Credit Amount ({companyProfile.currency}) <span className="text-rose-600">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    step="0.01"
-                    required
-                    aria-label="Supplier Credit Amount"
-                    data-testid="pl-credit-amount-input"
-                    placeholder="e.g. 7500"
-                    value={creditAmount}
-                    onChange={(e) => setCreditAmount(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 font-mono font-bold text-slate-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-semibold text-slate-700 block mb-1">
-                    Ref Purchase Invoice
-                  </label>
-                  <input
-                    type="text"
-                    aria-label="Supplier Credit Reference Purchase Invoice"
-                    data-testid="pl-credit-ref-input"
-                    placeholder="e.g. PUR-2026-0001"
-                    value={creditRefInvoice}
-                    onChange={(e) => setCreditRefInvoice(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 font-mono text-slate-800"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">
-                  Credit Reason / Adjustment Category
-                </label>
-                <select
-                  aria-label="Supplier Credit Reason"
-                  data-testid="pl-credit-reason-select"
-                  value={creditReason}
-                  onChange={(e) => setCreditReason(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 font-medium text-slate-800"
-                >
-                  {SUPPLIER_CREDIT_REASONS.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">
-                  Remarks / Claim Particulars
-                </label>
-                <input
-                  type="text"
-                  aria-label="Supplier Credit Remarks"
-                  data-testid="pl-credit-remarks-input"
-                  placeholder="Weight shortage, mortality claim, or rebate note..."
-                  value={creditRemarks}
-                  onChange={(e) => setCreditRemarks(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-slate-800"
-                />
-              </div>
-
-              <button
-                type="submit"
-                data-testid="pl-save-credit-btn"
-                className="w-full bg-teal-700 hover:bg-teal-800 text-white py-2 rounded font-bold text-xs uppercase shadow transition flex items-center justify-center space-x-1.5 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Save Supplier Credit Note</span>
-              </button>
-            </form>
-          </div>
-        </div>
-      </section>
-
       {/* Grid: Financial Statement & Add Other Costing */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left: Financial Statement Table (7 Cols) */}
@@ -1985,15 +1447,6 @@ export const ProfitLossView: React.FC = () => {
                   </td>
                   <td className="py-2.5 px-3 text-right font-mono text-rose-700">
                     - {formatCurrency(summary.totalPurchasing, companyProfile.currency)}
-                  </td>
-                </tr>
-                <tr className="bg-teal-50/60 text-teal-950">
-                  <td className="py-2 px-3 font-semibold">
-                    Supplier Credit Notes &amp; Purchase Rebates (Issued / Applied)
-                  </td>
-                  <td className="py-2 px-3 text-right font-mono font-bold text-teal-800">
-                    {formatCurrency(creditSummary.totalIssuedAmount, companyProfile.currency)} (Applied:{' '}
-                    {formatCurrency(creditSummary.totalAppliedAmount, companyProfile.currency)})
                   </td>
                 </tr>
                 <tr className="bg-amber-50/60 font-bold border-y-2 border-amber-300">

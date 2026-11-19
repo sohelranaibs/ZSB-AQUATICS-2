@@ -23,6 +23,7 @@ import {
   PanelLeft,
   User,
   CloudOff,
+  Printer,
 } from 'lucide-react';
 import { GlobalSearchBar } from './GlobalSearchBar.tsx';
 import { PWAInstallButton } from './PWAInstallButton.tsx';
@@ -364,6 +365,8 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
     currentUser,
     auditLogs,
     offlineSyncQueue,
+    startPrintAllActiveSheets,
+    printAllSequence,
   } = useApp();
 
   const totalRecordsCount = computeTotalPersistedRecords({
@@ -395,6 +398,8 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
         return '=Total_Export_Value - Total_Purchases - Total_Other_Costing = NET_PROFIT';
       case 'total_balance':
         return '=SUM(PARTNER_DEPOSIT_SHARES) + SUM(EXPORT_&_OTHER_INCOME) - SUM(ALL_COSTING) [TOTAL BALANCE]';
+      case 'daily_expense':
+        return `=SUMIFS(DAILY_EXPENSE!E:E, DATE, Selected_Date) | Synced to Loss & Profit & Total Balance [ENTRIES: ${otherCosts.length}]`;
       case 'audit_logs':
         return `=COUNTIF(AUDIT_TRAIL!A:G, "ENTRY | EDIT | DELETE") [TOTAL_LOGGED: ${auditLogs.length}]`;
       case 'administration':
@@ -406,7 +411,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
       default:
         return '=VLOOKUP(Invoice_Number, MASTER_DATABASE, 2, FALSE)';
     }
-  }, [activeTab, auditLogs.length]);
+  }, [activeTab, auditLogs.length, otherCosts.length]);
 
   const workbookSheets = useMemo(
     () =>
@@ -416,8 +421,9 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
         packingsCount: packings.length,
         paymentsCount: payments.length,
         auditLogsCount: auditLogs.length,
+        otherCostsCount: otherCosts.length,
       }),
-    [sheets, purchases.length, packings.length, payments.length, auditLogs.length]
+    [sheets, purchases.length, packings.length, payments.length, auditLogs.length, otherCosts.length]
   );
 
   const activeSheetMeta = workbookSheets.find((s) => s.id === activeTab) || workbookSheets[0];
@@ -464,16 +470,31 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
           </button>
         </div>
 
-        <span className="px-2 py-0.5 rounded bg-[#1D6CE0] text-white text-[10px] font-mono font-bold border border-white/20 shrink-0">
-          #{activeSheetMeta?.num} {activeSheetMeta?.shortLabel}
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            data-testid="mobile-print-all-active-sheets-btn"
+            aria-label="Print All Active Sheets"
+            onClick={() => startPrintAllActiveSheets()}
+            disabled={printAllSequence.isActive}
+            title="Sequentially trigger print preview for every visible workbook sheet"
+            className="flex items-center space-x-1 px-2 py-1 text-[10px] font-bold rounded-full shadow-2xs transition whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-60"
+          >
+            <Printer className="w-3 h-3 shrink-0" />
+            <span>Print All</span>
+          </button>
+
+          <span className="px-2 py-0.5 rounded bg-[#1D6CE0] text-white text-[10px] font-mono font-bold border border-white/20 shrink-0">
+            #{activeSheetMeta?.num} {activeSheetMeta?.shortLabel}
+          </span>
+        </div>
       </div>
 
       {/* Top Control Header Bar (Deep Navy #273E56: Left Sidebar Toggle + Search | Right Sync + Snapshots + User) */}
       {!isFullScreen && (
-      <div className="bg-[#273E56] px-3 sm:px-4 py-2 flex flex-wrap lg:flex-nowrap items-center justify-between gap-2 sm:gap-3">
+      <div className="bg-[#273E56] px-3 sm:px-4 py-2 flex flex-wrap xl:flex-nowrap items-center justify-between gap-2 sm:gap-3">
         {/* Left: Sidebar Toggle + Global Cross-Database Search Bar */}
-        <div className="flex items-center gap-2 sm:gap-2.5 flex-1 min-w-[180px] max-w-xs xl:max-w-sm">
+        <div className="flex items-center gap-2 sm:gap-2.5 flex-1 min-w-[180px] max-w-xs 2xl:max-w-sm">
           {onToggleSidebar && (
             <button
               type="button"
@@ -485,7 +506,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
               <PanelLeft className="w-4 h-4" />
             </button>
           )}
-          <div className="flex-1 min-w-[150px]">
+          <div className="flex-1 min-w-0">
             <GlobalSearchBar />
           </div>
         </div>
@@ -513,6 +534,20 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
               <span>BG SYNC ({offlineSyncQueue.length})</span>
             </button>
           )}
+
+          <button
+            type="button"
+            data-testid="print-all-active-sheets-btn"
+            aria-label="Print All Active Sheets"
+            onClick={() => startPrintAllActiveSheets()}
+            disabled={printAllSequence.isActive}
+            className="flex items-center space-x-1.5 px-2.5 py-1 text-[11px] font-bold rounded-full shadow-2xs transition whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-60"
+            title="Sequentially trigger print preview for every visible workbook sheet in the current session (Shortcut: Alt+P)"
+          >
+            <Printer className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden lg:inline">Print All Sheets</span>
+            <span className="lg:hidden">Print All</span>
+          </button>
 
           <button
             type="button"

@@ -34,7 +34,7 @@
     @apply antialiased font-sans selection:bg-blue-100 selection:text-slate-950;
   }
 
-  button {
+  button:not([data-testid^="calendar-day-"]):not([data-testid^="db-cell-trigger-"]) {
     background-color: #fbbf24;
     background-image: linear-gradient(180deg, #ffba55 0%, #f7941d 52%, #e67b08 100%);
     color: #000000;
@@ -97,8 +97,8 @@
   color: #000000 !important;
 }
 
-button:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))),
-[type="button"]:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))),
+button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [role="switch"], :has(img))),
+[type="button"]:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [role="switch"], :has(img))),
 [type="submit"]:not(:where(:has(img))),
 [type="reset"]:not(:where(:has(img))) {
   background-color: #fbbf24 !important;
@@ -116,8 +116,8 @@ button:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))
   overflow: visible !important;
 }
 
-button:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))):hover:not(:disabled),
-[type="button"]:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))):hover:not(:disabled),
+button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [role="switch"], :has(img))):hover:not(:disabled),
+[type="button"]:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [role="switch"], :has(img))):hover:not(:disabled),
 [type="submit"]:not(:where(:has(img))):hover:not(:disabled),
 [type="reset"]:not(:where(:has(img))):hover:not(:disabled) {
   background-color: #f59e0b !important;
@@ -132,8 +132,8 @@ button:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))
   filter: none !important;
 }
 
-button:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))):disabled,
-[type="button"]:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))):disabled,
+button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [role="switch"], :has(img))):disabled,
+[type="button"]:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [role="switch"], :has(img))):disabled,
 [type="submit"]:not(:where(:has(img))):disabled,
 [type="reset"]:not(:where(:has(img))):disabled {
   background-color: #fbbf24 !important;
@@ -143,8 +143,8 @@ button:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))
   opacity: 0.75 !important;
 }
 
-button:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))) *:not(svg):not(path):not(circle):not(rect):not(line):not(polyline):not(polygon):not(ellipse),
-[type="button"]:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))) *:not(svg):not(path):not(circle):not(rect):not(line):not(polyline):not(polygon):not(ellipse),
+button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [role="switch"], :has(img))) *:not(svg):not(path):not(circle):not(rect):not(line):not(polyline):not(polygon):not(ellipse),
+[type="button"]:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [role="switch"], :has(img))) *:not(svg):not(path):not(circle):not(rect):not(line):not(polyline):not(polygon):not(ellipse),
 [type="submit"]:not(:where(:has(img))) *:not(svg):not(path):not(circle):not(rect):not(line):not(polyline):not(polygon):not(ellipse),
 [type="reset"]:not(:where(:has(img))) *:not(svg):not(path):not(circle):not(rect):not(line):not(polyline):not(polygon):not(ellipse) {
   color: #000000 !important;
@@ -161,7 +161,7 @@ button:not(:has(img)) .zsb-golden-brand-light,
   color: #000000 !important;
 }
 
-button:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))) :is(span, kbd, div) {
+button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [role="switch"], :has(img))) :is(span, kbd, div) {
   background-color: transparent !important;
   background-image: none !important;
 }
@@ -202,8 +202,8 @@ button[role="switch"][aria-checked="false"] > span {
 
 /* Protruding 3D Concave Silver-White Circular Icon Medallion (primary icon inside labeled buttons) */
 :is(
-  button:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], .zsb-help-icon-btn, .zsb-clear-icon-btn, :has(img))),
-  [type="button"]:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], .zsb-help-icon-btn, .zsb-clear-icon-btn, :has(img))),
+  button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [role="switch"], .zsb-help-icon-btn, .zsb-clear-icon-btn, :has(img))),
+  [type="button"]:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [role="switch"], .zsb-help-icon-btn, .zsb-clear-icon-btn, :has(img))),
   [type="submit"],
   [type="reset"]
 ) svg.lucide:first-of-type {
@@ -227,8 +227,8 @@ button[role="switch"][aria-checked="false"] > span {
 
 /* Trailing secondary chevrons/icons inside multi-icon buttons stay crisp black & unboxed */
 html body :is(
-  button:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img))),
-  [type="button"]:not(:where([data-testid^="db-cell-trigger-"], [role="switch"], :has(img)))
+  button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [role="switch"], :has(img))),
+  [type="button"]:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [role="switch"], :has(img)))
 ) svg.lucide.lucide.lucide:not(:first-of-type) {
   order: 99 !important;
   background: transparent !important;
@@ -406,12 +406,12 @@ button.zsb-help-icon-btn svg {
 }
 
 /* Clicked / Active / Pressed State for ALL Buttons -> Distinct Pressed Depth + Bright Rim + Crisp Black Text */
-button:not([data-testid^="db-cell-trigger-"]):not([role="switch"]):not(:has(> img))[data-zsb-clicked="true"]:not(:disabled),
-button:not([data-testid^="db-cell-trigger-"]):not([role="switch"]):not(:has(> img))[aria-pressed="true"]:not(:disabled),
-button:not([data-testid^="db-cell-trigger-"]):not([role="switch"]):not(:has(> img)):active:not(:disabled),
-[type="button"]:not([data-testid^="db-cell-trigger-"]):not([role="switch"]):not(:has(> img))[data-zsb-clicked="true"]:not(:disabled),
-[type="button"]:not([data-testid^="db-cell-trigger-"]):not([role="switch"]):not(:has(> img))[aria-pressed="true"]:not(:disabled),
-[type="button"]:not([data-testid^="db-cell-trigger-"]):not([role="switch"]):not(:has(> img)):active:not(:disabled),
+button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not(:has(> img))[data-zsb-clicked="true"]:not(:disabled),
+button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not(:has(> img))[aria-pressed="true"]:not(:disabled),
+button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not(:has(> img)):active:not(:disabled),
+[type="button"]:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not(:has(> img))[data-zsb-clicked="true"]:not(:disabled),
+[type="button"]:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not(:has(> img))[aria-pressed="true"]:not(:disabled),
+[type="button"]:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not(:has(> img)):active:not(:disabled),
 [type="submit"][data-zsb-clicked="true"]:not(:disabled),
 [type="submit"]:active:not(:disabled),
 [type="reset"][data-zsb-clicked="true"]:not(:disabled),
@@ -429,7 +429,7 @@ button:not([data-testid^="db-cell-trigger-"]):not([role="switch"]):not(:has(> im
   filter: none !important;
 }
 
-button:not([data-testid^="db-cell-trigger-"]):not([role="switch"])[aria-current="page"]:not(:disabled) {
+button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"])[aria-current="page"]:not(:disabled) {
   background-color: #f59e0b !important;
   background-image: linear-gradient(180deg, #ffbe5c 0%, #f58a12 52%, #dc6e04 100%) !important;
   color: #000000 !important;
@@ -440,13 +440,13 @@ button:not([data-testid^="db-cell-trigger-"]):not([role="switch"])[aria-current=
     0 4px 12px rgba(15, 23, 42, 0.35) !important;
 }
 
-button:not([data-testid^="db-cell-trigger-"]):not([role="switch"])[data-zsb-clicked="true"]:not(:disabled) *:not(svg):not(svg *),
-button:not([data-testid^="db-cell-trigger-"]):not([role="switch"])[aria-pressed="true"]:not(:disabled) *:not(svg):not(svg *),
-button:not([data-testid^="db-cell-trigger-"]):not([role="switch"])[aria-current="page"]:not(:disabled) *:not(svg):not(svg *),
-button:not([data-testid^="db-cell-trigger-"]):not([role="switch"]):active:not(:disabled) *:not(svg):not(svg *),
-[type="button"]:not([data-testid^="db-cell-trigger-"]):not([role="switch"])[data-zsb-clicked="true"]:not(:disabled) *:not(svg):not(svg *),
-[type="button"]:not([data-testid^="db-cell-trigger-"]):not([role="switch"])[aria-pressed="true"]:not(:disabled) *:not(svg):not(svg *),
-[type="button"]:not([data-testid^="db-cell-trigger-"]):not([role="switch"]):active:not(:disabled) *:not(svg):not(svg *),
+button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"])[data-zsb-clicked="true"]:not(:disabled) *:not(svg):not(svg *),
+button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"])[aria-pressed="true"]:not(:disabled) *:not(svg):not(svg *),
+button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"])[aria-current="page"]:not(:disabled) *:not(svg):not(svg *),
+button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):active:not(:disabled) *:not(svg):not(svg *),
+[type="button"]:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"])[data-zsb-clicked="true"]:not(:disabled) *:not(svg):not(svg *),
+[type="button"]:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"])[aria-pressed="true"]:not(:disabled) *:not(svg):not(svg *),
+[type="button"]:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):active:not(:disabled) *:not(svg):not(svg *),
 [type="submit"][data-zsb-clicked="true"]:not(:disabled) *:not(svg):not(svg *),
 [type="submit"]:active:not(:disabled) *:not(svg):not(svg *),
 [type="reset"][data-zsb-clicked="true"]:not(:disabled) *:not(svg):not(svg *),

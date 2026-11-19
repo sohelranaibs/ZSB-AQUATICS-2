@@ -67,9 +67,9 @@ ABDULLAH VAI, 2026-10-21, 65000, 0, PAID, 3000, PKG-2026-0001
 UZZAL VAI, 2026-10-21, 49500, 0, REPORT, 2500, PKG-2026-0002
 NAPAL VAI, 2026-10-21, 30000, 0, PAID, 1800, PKG-2026-0003`,
 
-  other_cost: `Date, Category, Amount, Description, RefInvoice
-2026-10-21, AIR FREIGHT / CARGO BILL, 18500, Airport cargo handling & ice boxes, PKG-2026-0001
-2026-10-22, LABOUR & PACKING, 6500, Night shift packing crew, PKG-2026-0002`,
+  other_cost: `Date, Category, Amount, Description, PaymentMethod, PaidBy, RefInvoice
+2026-10-21, Office Tea & Pantry, 1850, Client tea and evening snacks, Cash, Office Cashier, VCH-2026-0001
+2026-10-22, Staff Conveyance & Fuel, 650, Bike fuel for airport runner, Petty Cash, Karim, VCH-2026-0002`,
 };
 
 export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
@@ -621,7 +621,7 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                         : 'text-slate-600 hover:text-slate-900'
                     }`}
                   >
-                    Expenses ({otherCosts.length})
+                    Daily Expense ({otherCosts.length})
                   </button>
                   <button
                     type="button"
@@ -1085,7 +1085,16 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                                 {rec.returnRMB ? `| ¥${rec.returnRMB}` : ''}
                               </span>
                             )}
-                            {singleDatasetKey === 'other_cost' && <span>{rec.description}</span>}
+                            {singleDatasetKey === 'other_cost' && (
+                              <span>
+                                {rec.description}
+                                {(rec.paymentMethod || rec.paidBy) && (
+                                  <span className="text-slate-400">
+                                    {' '}· {[rec.paymentMethod || 'Cash', rec.paidBy].filter(Boolean).join(' · ')}
+                                  </span>
+                                )}
+                              </span>
+                            )}
                             {rec.rawValues && Object.keys(rec.rawValues).length > 0 && (
                               <div className="mt-1 flex flex-wrap gap-1">
                                 {Object.entries(rec.rawValues).map(([k, v]) => (
@@ -1279,13 +1288,13 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <span className="text-[11px] font-bold uppercase text-amber-700">
-                      Sheet 07 · Expenses &amp; Monthly Rollup
+                      Sheet 18 · Daily Expense &amp; Monthly Rollup
                     </span>
                     <h4 className="text-sm font-extrabold text-slate-900 mt-0.5">
-                      Operating Costs &amp; Monthly Summary
+                      Daily Expense (.XLSX) &amp; Monthly Summary
                     </h4>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Cargo/operating expenses ({otherCosts.length}) and monthly trade profit summary.
+                      Daily company expenses ({otherCosts.length}) and monthly trade profit summary.
                     </p>
                   </div>
                   <span className="font-mono text-xs font-bold bg-amber-50 text-amber-900 px-2.5 py-1 rounded border border-amber-200 whitespace-nowrap shrink-0">
@@ -1296,11 +1305,12 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
                 <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
                   <button
                     type="button"
+                    data-testid="export-other-costs-xlsx-btn"
                     onClick={() => handleExportDataset('other_cost', 'xlsx')}
                     className="flex-1 inline-flex items-center justify-center space-x-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold transition cursor-pointer"
                   >
                     <FileSpreadsheet className="w-3.5 h-3.5" />
-                    <span>Costs (.XLSX)</span>
+                    <span>Daily Expense (.XLSX)</span>
                   </button>
                   <button
                     type="button"

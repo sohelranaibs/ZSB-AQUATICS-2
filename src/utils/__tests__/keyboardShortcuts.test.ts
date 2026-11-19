@@ -51,6 +51,16 @@ test('resolveGlobalKeyboardShortcut resolves Ctrl+P and Cmd+P to PRINT_ACTIVE_VI
   assert.equal(ctrlP.action, 'PRINT_ACTIVE_VIEW');
   assert.equal(ctrlP.preventDefault, true);
   assert.equal(ctrlP.shortcutLabel, 'Ctrl+P');
+
+  const altP = resolveGlobalKeyboardShortcut({
+    key: 'p',
+    altKey: true,
+    isEditableTarget: false,
+  });
+  assert.ok(altP);
+  assert.equal(altP.action, 'PRINT_ALL_ACTIVE_SHEETS');
+  assert.equal(altP.preventDefault, true);
+  assert.equal(altP.shortcutLabel, 'Alt+P');
 });
 
 test('resolveGlobalKeyboardShortcut resolves Ctrl+E to OPEN_EXCEL_MODAL', () => {
@@ -157,10 +167,11 @@ test('resolveGlobalKeyboardShortcut resolves Alt+ArrowRight, Alt+ArrowLeft, and 
   assert.equal(esc.action, 'CLOSE_ACTIVE_MODAL');
 });
 
-test('getAdjacentWorkbookTab cycles forward and backward across all 17 sheets', () => {
+test('getAdjacentWorkbookTab cycles forward and backward across all 18 sheets', () => {
   assert.equal(getAdjacentWorkbookTab('dashboard', 'next'), 'purchase_form');
-  assert.equal(getAdjacentWorkbookTab('dashboard', 'prev'), 'total_balance');
-  assert.equal(getAdjacentWorkbookTab('total_balance', 'next'), 'dashboard');
+  assert.equal(getAdjacentWorkbookTab('dashboard', 'prev'), 'daily_expense');
+  assert.equal(getAdjacentWorkbookTab('total_balance', 'next'), 'daily_expense');
+  assert.equal(getAdjacentWorkbookTab('daily_expense', 'next'), 'dashboard');
 });
 
 test('getWorkbookTabByNumber maps 1..9 and 0 (10) accurately', () => {

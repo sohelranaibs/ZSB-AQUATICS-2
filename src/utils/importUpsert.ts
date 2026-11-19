@@ -129,6 +129,8 @@ function otherCostContentSignature(
     category: stableNormalizeString(rec.category),
     amount: Number(rec.amount) || 0,
     description: String(rec.description || '').trim(),
+    paymentMethod: String(rec.paymentMethod || '').trim(),
+    paidBy: String(rec.paidBy || '').trim(),
     refInvoice: String(rec.refInvoice || '').trim(),
     calculationPending: Boolean(rec.calculationPending),
     pendingFields: [...(rec.pendingFields || [])].sort(),

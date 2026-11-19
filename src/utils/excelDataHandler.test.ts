@@ -446,5 +446,47 @@ test('Excel Payment import preserves ShippingMark, InvoiceNumber, negatives, tex
   assert.equal(pm.rawValues?.returnRMB, 'TBD');
 });
 
+test('Daily Expense (other_cost) Excel import/export preserves paymentMethod, paidBy, particulars, and DAILY EXPENSE sheet tab', () => {
+  const dailyRecords: OtherCostRecord[] = [
+    {
+      id: 'cost-daily-1',
+      date: '2026-11-19',
+      category: 'Office Tea, Snacks & Pantry',
+      amount: 1450,
+      description: 'Client tea, coffee & evening snacks',
+      paymentMethod: 'bKash / Nagad',
+      paidBy: 'Md. Sohel Rana',
+      refInvoice: 'VCH-2026-1119',
+      createdAt: '2026-11-19T08:00:00Z',
+    },
+  ];
+
+  const xlsxBuf = generateSingleSheetWorkbookBuffer('other_cost', dailyRecords);
+  const parsed = parseExcelOrCsvBuffer(xlsxBuf, 'other_cost', 0);
+  assert.equal(parsed.success, true);
+  assert.equal(parsed.records.length, 1);
+  assert.equal(parsed.records[0].paymentMethod, 'bKash / Nagad');
+  assert.equal(parsed.records[0].paidBy, 'Md. Sohel Rana');
+  assert.equal(parsed.records[0].refInvoice, 'VCH-2026-1119');
+  assert.equal(parsed.records[0].amount, 1450);
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['Expense Date', 'Expense Category', 'Amount (TK)', 'Particulars', 'Payment Method', 'Paid By', 'Voucher No'],
+    ['2026-11-19', 'Staff Conveyance & Fuel', 2200, 'Bike fuel for airport runner', 'Petty Cash', 'Karim', 'SLP-88'],
+  ]);
+  XLSX.utils.book_append_sheet(wb, ws, 'DAILY EXPENSE');
+  const customBuf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+  const customRes = parseExcelOrCsvBuffer(customBuf, 'other_cost', 0);
+  assert.equal(customRes.success, true);
+  assert.equal(customRes.records.length, 1);
+  assert.equal(customRes.records[0].category, 'Staff Conveyance & Fuel');
+  assert.equal(customRes.records[0].description, 'Bike fuel for airport runner');
+  assert.equal(customRes.records[0].paymentMethod, 'Petty Cash');
+  assert.equal(customRes.records[0].paidBy, 'Karim');
+  assert.equal(customRes.records[0].refInvoice, 'SLP-88');
+  assert.equal(customRes.records[0].amount, 2200);
+});
+
 
 

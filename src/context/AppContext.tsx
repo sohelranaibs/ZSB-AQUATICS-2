@@ -165,6 +165,20 @@ import {
   requestBackgroundSyncFlush,
   subscribeToBackgroundSyncEvents,
 } from '../utils/backgroundSyncService.ts';
+import {
+  PrintAllSequenceState,
+  advancePrintAllSequence,
+  buildWorkbookSheets,
+  createIdlePrintAllState,
+  jumpPrintAllSequence,
+  markPrintAllStepTriggered,
+  resolvePrintableActiveSheets,
+  setPrintAllAutoPlay,
+  startPrintAllSequence,
+  stepBackPrintAllSequence,
+  stopPrintAllSequence,
+} from '../utils/printAllSheets.ts';
+import { canUserAccessTab } from '../utils/rbacPermissions.ts';
 
 const createEmptyPackingDraftRows = (): PackingItemRow[] =>
   ['1', '2', '3', '4', '5'].map((id) => ({
@@ -294,6 +308,7 @@ interface AppContextType {
 
   otherCosts: OtherCostRecord[];
   addOtherCost: (record: Omit<OtherCostRecord, 'id' | 'createdAt'>) => string;
+  updateOtherCost: (id: string, record: Partial<OtherCostRecord>) => void;
   deleteOtherCost: (id: string) => void;
   bulkImportOtherCosts: (
     records: Omit<OtherCostRecord, 'id' | 'createdAt'>[],
@@ -385,7 +400,7 @@ interface AppContextType {
   updateBusinessDocument: (id: string, record: Partial<BusinessDocumentRecord>) => void;
   deleteBusinessDocument: (id: string) => void;
 
-  // Print & PDF modal state + Global View PDF Export
+  // Print & PDF modal state + Global View PDF Export + Print All Active Sheets Sequence
   printModalData: PrintModalData;
   openPrintModal: (modal: Omit<PrintModalData, 'isOpen'>) => void;
   closePrintModal: () => void;
@@ -393,6 +408,17 @@ interface AppContextType {
   isExportingGlobalPdf: boolean;
   lastExportedPdfFilename: string | null;
   exportCurrentViewToPdf: (options?: { openPreviewOnly?: boolean }) => Promise<boolean>;
+  printAllSequence: PrintAllSequenceState;
+  startPrintAllActiveSheets: (options?: { autoPlay?: boolean; autoDelayMs?: number }) => void;
+  nextPrintAllSheet: () => void;
+  prevPrintAllSheet: () => void;
+  jumpToPrintAllSheet: (index: number) => void;
+  togglePrintAllAutoPlay: (autoPlay?: boolean) => void;
+  stopPrintAllActiveSheets: (options?: {
+    restoreOriginTab?: boolean;
+    closeModal?: boolean;
+    reason?: 'stopped' | 'completed';
+  }) => void;
 
   // Excel & CSV Import/Export Data Center modal state + Private Import Draft
   dataCenterModal: DataCenterModalConfig;
@@ -634,6 +660,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         'exporter_payment_slip',
         'profit_loss',
         'total_balance',
+        'daily_expense',
         'purchase_db',
         'packing_db',
         'payment_db',
@@ -2058,6 +2085,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         actor: `${currentUser.displayName} (${currentUser.role})`,
       });
     }
+    setPendingPrintAllTarget(null);
+    setPrintAllSequence(createIdlePrintAllState());
+    setPrintModalData((prev) => ({ ...prev, isOpen: false }));
     setCurrentUser(null);
     try {
       sessionStorage.removeItem(STORAGE_KEYS.AUTH_USER);
@@ -2955,8 +2985,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       summary: `Recorded operating expense "${newRecord.category}" (${newRecord.description || 'General Cost'})`,
       details: `Amount: ${companyProfile.currency} ${newRecord.amount.toLocaleString()}`,
     });
-    showToast(`Expense recorded in Profit & Loss.`);
+    showToast(`Expense recorded (${newRecord.category}).`);
     return id;
+  };
+
+  const updateOtherCost = (id: string, patch: Partial<OtherCostRecord>) => {
+    const existing = otherCosts.find((c) => c.id === id);
+    if (!existing) return;
+
+    const updatedRecord: OtherCostRecord = {
+      ...existing,
+      ...patch,
+      id: existing.id,
+      createdAt: existing.createdAt,
+    };
+
+    if (isClientOffline()) {
+      queueOfflineDataAction(
+        createOfflineSyncAction({
+          entity: 'other_cost',
+          operation: 'update',
+          recordId: id,
+          label: updatedRecord.category,
+          summary: `Edit: ${updatedRecord.description || 'Daily Expense'} · ${companyProfile.currency} ${(updatedRecord.amount ?? 0).toLocaleString()}`,
+          payload: patch,
+        })
+      );
+      showToast(
+        `Offline: Expense edit "${updatedRecord.category}" queued in Service Worker Background Sync.`
+      );
+      return;
+    }
+
+    setOtherCosts((prev) => prev.map((c) => (c.id === id ? updatedRecord : c)));
+    addAuditLog({
+      action: 'UPDATE',
+      module: 'OtherCost',
+      entityId: id,
+      summary: `Updated company expense "${updatedRecord.category}" (${updatedRecord.description || 'General Cost'})`,
+      details: `Date: ${updatedRecord.date} · Amount: ${companyProfile.currency} ${(updatedRecord.amount ?? 0).toLocaleString()}`,
+    });
+    showToast(`Daily expense updated (${updatedRecord.category}).`);
   };
 
   const deleteOtherCost = (id: string) => {
@@ -4112,6 +4181,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [globalExportReportSnapshot, setGlobalExportReportSnapshot] =
     useState<GlobalViewTableReport | null>(null);
 
+  // Sequential Print All Active Sheets state & pending DOM-settled trigger
+  const [printAllSequence, setPrintAllSequence] = useState<PrintAllSequenceState>(() =>
+    createIdlePrintAllState()
+  );
+  const [pendingPrintAllTarget, setPendingPrintAllTarget] = useState<{
+    stepIndex: number;
+    tabId: ActiveTab;
+  } | null>(null);
+  const printAllSequenceRef = useRef(printAllSequence);
+  printAllSequenceRef.current = printAllSequence;
+
+  const latestReportInputsRef = useRef({
+    companyProfile,
+    purchases,
+    packings,
+    payments,
+    otherCosts,
+    partnerDeposits,
+    partnerWithdrawals,
+    profitDistributions,
+    balanceIncomes,
+    supplierCredits,
+    packingDraft,
+    dropdownOptions,
+  });
+  latestReportInputsRef.current = {
+    companyProfile,
+    purchases,
+    packings,
+    payments,
+    otherCosts,
+    partnerDeposits,
+    partnerWithdrawals,
+    profitDistributions,
+    balanceIncomes,
+    supplierCredits,
+    packingDraft,
+    dropdownOptions,
+  };
+
   const openPrintModal = useCallback((modal: Omit<PrintModalData, 'isOpen'>) => {
     setPrintModalData({
       ...modal,
@@ -4119,9 +4228,258 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, []);
 
+  const stopPrintAllActiveSheets = useCallback(
+    (options?: {
+      restoreOriginTab?: boolean;
+      closeModal?: boolean;
+      reason?: 'stopped' | 'completed';
+    }) => {
+      const prevSeq = printAllSequenceRef.current;
+      setPendingPrintAllTarget(null);
+      setPrintAllSequence(stopPrintAllSequence(prevSeq));
+
+      if (options?.closeModal !== false) {
+        setPrintModalData((prev) => ({ ...prev, isOpen: false }));
+      }
+
+      if (
+        options?.restoreOriginTab !== false &&
+        prevSeq.originTab &&
+        canUserAccessTab(currentUserRef.current, prevSeq.originTab)
+      ) {
+        setActiveTab(prevSeq.originTab);
+      }
+
+      if (prevSeq.isActive) {
+        const triggered = prevSeq.triggeredSheetIds.length;
+        const total = prevSeq.queue.length;
+        if (options?.reason === 'completed' || prevSeq.completedAll) {
+          showToast(`Print All Active Sheets completed (${triggered}/${total} sheets previewed).`);
+        } else {
+          showToast(
+            `Print All sequence stopped after previewing ${triggered} of ${total} active sheet(s).`
+          );
+        }
+      }
+    },
+    []
+  );
+
   const closePrintModal = useCallback(() => {
+    if (printAllSequenceRef.current.isActive) {
+      stopPrintAllActiveSheets({
+        closeModal: true,
+        restoreOriginTab: true,
+        reason: printAllSequenceRef.current.completedAll ? 'completed' : 'stopped',
+      });
+      return;
+    }
     setPrintModalData((prev) => ({ ...prev, isOpen: false }));
+  }, [stopPrintAllActiveSheets]);
+
+  const openPreviewModalForSettledTab = useCallback(
+    (targetTab: ActiveTab) => {
+      const inputs = latestReportInputsRef.current;
+      const mainEl =
+        typeof document !== 'undefined'
+          ? (document.querySelector('main') as HTMLElement | null)
+          : null;
+      const extractedDomTables = extractLiveDomTablesFromContainer(mainEl);
+
+      const freshReport = buildGlobalViewTableReport({
+        activeTab: targetTab,
+        companyProfile: inputs.companyProfile,
+        purchases: inputs.purchases,
+        packings: inputs.packings,
+        payments: inputs.payments,
+        otherCosts: inputs.otherCosts,
+        partnerDeposits: inputs.partnerDeposits,
+        partnerWithdrawals: inputs.partnerWithdrawals,
+        profitDistributions: inputs.profitDistributions,
+        balanceIncomes: inputs.balanceIncomes,
+        supplierCredits: inputs.supplierCredits,
+        packingDraft: inputs.packingDraft,
+        dropdownOptions: inputs.dropdownOptions,
+        domTables: extractedDomTables,
+      });
+
+      if (targetTab === 'exporter_payment_slip' && freshReport.exporterSlipPayload) {
+        openPrintModal({
+          type: 'exporter_payment_slip',
+          title: freshReport.documentTitle,
+          data: freshReport.exporterSlipPayload,
+          items: freshReport.exporterSlipPayload.rows,
+        });
+      } else {
+        openPrintModal({
+          type: 'global_view_table',
+          title: freshReport.documentTitle,
+          data: freshReport,
+        });
+      }
+    },
+    [openPrintModal]
+  );
+
+  const startPrintAllActiveSheets = useCallback(
+    (options?: { autoPlay?: boolean; autoDelayMs?: number }) => {
+      const allSheets = buildWorkbookSheets({
+        purchasesCount: purchasesRef.current.length,
+        packingsCount: packingsRef.current.length,
+        paymentsCount: paymentsRef.current.length,
+        auditLogsCount: auditLogs.length,
+      });
+      const visibleSheets = resolvePrintableActiveSheets(allSheets, (tabId) =>
+        canUserAccessTab(currentUserRef.current, tabId)
+      );
+
+      if (visibleSheets.length === 0) {
+        showToast('No visible workbook sheets are available to preview in this session.');
+        return;
+      }
+
+      const nextSequence = startPrintAllSequence(visibleSheets, activeTab, options);
+      setPrintAllSequence(nextSequence);
+      const firstSheet = nextSequence.queue[0];
+      setPendingPrintAllTarget({ stepIndex: 0, tabId: firstSheet.id });
+      setActiveTab(firstSheet.id);
+      showToast(
+        `Starting Print All Active Sheets (${visibleSheets.length} visible sheet${
+          visibleSheets.length === 1 ? '' : 's'
+        } in session)...`
+      );
+    },
+    [activeTab, auditLogs.length]
+  );
+
+  const nextPrintAllSheet = useCallback(() => {
+    const currentSeq = printAllSequenceRef.current;
+    if (!currentSeq.isActive) return;
+
+    const { nextState, reachedEnd } = advancePrintAllSequence(currentSeq);
+    if (reachedEnd) {
+      stopPrintAllActiveSheets({
+        closeModal: true,
+        restoreOriginTab: true,
+        reason: 'completed',
+      });
+      return;
+    }
+
+    const nextSheet = nextState.queue[nextState.currentIndex];
+    setPrintAllSequence(nextState);
+    setPendingPrintAllTarget({
+      stepIndex: nextState.currentIndex,
+      tabId: nextSheet.id,
+    });
+    setActiveTab(nextSheet.id);
+  }, [stopPrintAllActiveSheets]);
+
+  const prevPrintAllSheet = useCallback(() => {
+    const currentSeq = printAllSequenceRef.current;
+    if (!currentSeq.isActive || currentSeq.currentIndex <= 0) return;
+
+    const prevState = stepBackPrintAllSequence(currentSeq);
+    const prevSheet = prevState.queue[prevState.currentIndex];
+    setPrintAllSequence(prevState);
+    setPendingPrintAllTarget({
+      stepIndex: prevState.currentIndex,
+      tabId: prevSheet.id,
+    });
+    setActiveTab(prevSheet.id);
   }, []);
+
+  const jumpToPrintAllSheet = useCallback((targetIndex: number) => {
+    const currentSeq = printAllSequenceRef.current;
+    if (!currentSeq.isActive) return;
+
+    const nextState = jumpPrintAllSequence(currentSeq, targetIndex);
+    const targetSheet = nextState.queue[nextState.currentIndex];
+    if (!targetSheet) return;
+    setPrintAllSequence(nextState);
+    setPendingPrintAllTarget({
+      stepIndex: nextState.currentIndex,
+      tabId: targetSheet.id,
+    });
+    setActiveTab(targetSheet.id);
+  }, []);
+
+  const togglePrintAllAutoPlay = useCallback((explicitAutoPlay?: boolean) => {
+    setPrintAllSequence((prev) => {
+      if (!prev.isActive) return prev;
+      const desired =
+        typeof explicitAutoPlay === 'boolean' ? explicitAutoPlay : !prev.isAutoPlaying;
+      return setPrintAllAutoPlay(prev, desired);
+    });
+  }, []);
+
+  // Trigger print preview for the target active sheet once React renders <main> for activeTab
+  useEffect(() => {
+    if (!pendingPrintAllTarget) return;
+    if (activeTab !== pendingPrintAllTarget.tabId) return;
+
+    let cancelled = false;
+    let raf1 = 0;
+    let raf2 = 0;
+    const { stepIndex, tabId } = pendingPrintAllTarget;
+
+    raf1 = window.requestAnimationFrame(() => {
+      raf2 = window.requestAnimationFrame(() => {
+        if (cancelled) return;
+        openPreviewModalForSettledTab(tabId);
+        setPrintAllSequence((prev) => markPrintAllStepTriggered(prev, stepIndex));
+        setPendingPrintAllTarget(null);
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(raf1);
+      window.cancelAnimationFrame(raf2);
+    };
+  }, [activeTab, openPreviewModalForSettledTab, pendingPrintAllTarget]);
+
+  // Sequential Auto-Advance timer when Auto-Play is active during Print All Active Sheets
+  useEffect(() => {
+    if (
+      !printAllSequence.isActive ||
+      !printAllSequence.isAutoPlaying ||
+      !printModalData.isOpen ||
+      pendingPrintAllTarget !== null
+    ) {
+      return;
+    }
+
+    const isAtFinalSheet =
+      printAllSequence.currentIndex >= printAllSequence.queue.length - 1;
+
+    if (isAtFinalSheet) {
+      setPrintAllSequence((prev) =>
+        prev.isActive
+          ? { ...prev, isAutoPlaying: false, completedAll: true }
+          : prev
+      );
+      showToast(
+        `Sequential preview complete: all ${printAllSequence.queue.length} visible sheets triggered.`
+      );
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      nextPrintAllSheet();
+    }, printAllSequence.autoDelayMs);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    printAllSequence.isActive,
+    printAllSequence.isAutoPlaying,
+    printAllSequence.currentIndex,
+    printAllSequence.queue.length,
+    printAllSequence.autoDelayMs,
+    printModalData.isOpen,
+    pendingPrintAllTarget,
+    nextPrintAllSheet,
+  ]);
 
   const exportCurrentViewToPdf = async (options?: {
     openPreviewOnly?: boolean;
@@ -4849,6 +5207,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setEditingPaymentId,
       otherCosts,
       addOtherCost,
+      updateOtherCost,
       deleteOtherCost,
       bulkImportOtherCosts,
       partnerDeposits,
@@ -4899,6 +5258,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isExportingGlobalPdf,
       lastExportedPdfFilename,
       exportCurrentViewToPdf,
+      printAllSequence,
+      startPrintAllActiveSheets,
+      nextPrintAllSheet,
+      prevPrintAllSheet,
+      jumpToPrintAllSheet,
+      togglePrintAllAutoPlay,
+      stopPrintAllActiveSheets,
       dataCenterModal,
       openDataCenterModal,
       closeDataCenterModal,
@@ -4980,6 +5346,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       mortalities,
       businessDocuments,
       printModalData,
+      printAllSequence,
       globalExportReportSnapshot,
       isExportingGlobalPdf,
       lastExportedPdfFilename,

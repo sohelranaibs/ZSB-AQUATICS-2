@@ -55,7 +55,7 @@ export default defineConfig(() => {
           ],
         },
         workbox: {
-          maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+          maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
           runtimeCaching: [
             {
@@ -94,6 +94,23 @@ export default defineConfig(() => {
         },
       }),
     ],
+    build: {
+      sourcemap: false,
+      target: 'es2022',
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return undefined;
+            if (id.includes('/jspdf/') || id.includes('/html2canvas/')) return 'vendor-pdf';
+            if (id.includes('/xlsx/')) return 'vendor-xlsx';
+            if (id.includes('/recharts/') || id.includes('/d3-')) return 'vendor-charts';
+            if (id.includes('/lucide-react/')) return 'vendor-icons';
+            if (id.includes('/react/') || id.includes('/react-dom/')) return 'vendor-react';
+            return undefined;
+          },
+        },
+      },
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

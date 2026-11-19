@@ -420,7 +420,7 @@ export function searchAllRecords(
         amountFormatted: formatAmount(cost.amount, 'TK'),
         details: [`Expense: ${cost.category}`],
         matchedFields: matches,
-        targetTab: 'profit_loss',
+        targetTab: 'daily_expense',
         rawRecord: cost,
         score: bestScore,
       });

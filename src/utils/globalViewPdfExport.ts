@@ -37,6 +37,7 @@ import {
   calculateTotalBalanceSummary,
   buildTotalBalanceLedgerEntries,
 } from './totalBalance.ts';
+import { calculateDailyExpenseSummary } from './dailyExpense.ts';
 
 export interface GlobalTableColumn {
   key: string;
@@ -234,6 +235,13 @@ const TAB_METADATA: Record<
     documentBadge: 'FORGET PASSWORD — EMAIL CONFIRMATION & CREDENTIAL RECOVERY',
     sheetReference: 'AUTH_RESET',
     slug: 'FORGET_PASSWORD_REPORT',
+  },
+  daily_expense: {
+    viewLabel: 'DAILY EXPENSE',
+    documentTitle: 'DAILY EXPENSE — Company Operating & Petty Cash Expense Ledger',
+    documentBadge: 'DAILY EXPENSE — COMPANY OPERATING & PETTY CASH EXPENSE LEDGER',
+    sheetReference: 'DAILY_EXP',
+    slug: 'DAILY_EXPENSE_LEDGER',
   },
 };
 
@@ -1202,29 +1210,33 @@ export function buildGlobalViewTableReport(
       });
 
       stateSections = [
-        {
-          id: 'partner-share-summary',
-          title: 'Partner Capital & Equity Share Breakdown',
-          subtitle: `Net Partner Capital: ${formatCurrency(tbSummary.netPartnerCapital, currency)} (Deposits: ${formatCurrency(tbSummary.totalPartnerDeposit, currency)} − Withdrawals: ${formatCurrency(tbSummary.totalPartnerWithdrawal, currency)})`,
-          columns: [
-            { key: 'sl', label: 'SL', align: 'center' },
-            { key: 'partnerName', label: 'PARTNER NAME', align: 'left' },
-            { key: 'depositCount', label: 'DEPOSITS', align: 'center' },
-            { key: 'sharePercent', label: 'EQUITY %', align: 'right' },
-            { key: 'totalDeposited', label: `DEPOSITED (${currency})`, align: 'right' },
-            { key: 'totalWithdrawn', label: `WITHDRAWN (${currency})`, align: 'right' },
-            { key: 'netContribution', label: `NET EQUITY (${currency})`, align: 'right' },
-          ],
-          rows: tbSummary.partnerShares.map((p, idx) => ({
-            sl: idx + 1,
-            partnerName: p.partnerName,
-            depositCount: p.depositCount,
-            sharePercent: `${p.sharePercent.toFixed(2)}%`,
-            totalDeposited: formatCurrency(p.totalDeposited, ''),
-            totalWithdrawn: formatCurrency(p.totalWithdrawn, ''),
-            netContribution: formatCurrency(p.netContribution, ''),
-          })),
-        },
+        ...(tbSummary.partnerShares.length > 0
+          ? [
+              {
+                id: 'partner-share-summary',
+                title: 'Partner Capital & Equity Share Breakdown',
+                subtitle: `Net Partner Capital: ${formatCurrency(tbSummary.netPartnerCapital, currency)} (Deposits: ${formatCurrency(tbSummary.totalPartnerDeposit, currency)} − Withdrawals: ${formatCurrency(tbSummary.totalPartnerWithdrawal, currency)})`,
+                columns: [
+                  { key: 'sl', label: 'SL', align: 'center' as const },
+                  { key: 'partnerName', label: 'PARTNER NAME', align: 'left' as const },
+                  { key: 'depositCount', label: 'DEPOSITS', align: 'center' as const },
+                  { key: 'sharePercent', label: 'EQUITY %', align: 'right' as const },
+                  { key: 'totalDeposited', label: `DEPOSITED (${currency})`, align: 'right' as const },
+                  { key: 'totalWithdrawn', label: `WITHDRAWN (${currency})`, align: 'right' as const },
+                  { key: 'netContribution', label: `NET EQUITY (${currency})`, align: 'right' as const },
+                ],
+                rows: tbSummary.partnerShares.map((p, idx) => ({
+                  sl: idx + 1,
+                  partnerName: p.partnerName,
+                  depositCount: p.depositCount,
+                  sharePercent: `${p.sharePercent.toFixed(2)}%`,
+                  totalDeposited: formatCurrency(p.totalDeposited, ''),
+                  totalWithdrawn: formatCurrency(p.totalWithdrawn, ''),
+                  netContribution: formatCurrency(p.netContribution, ''),
+                })),
+              },
+            ]
+          : []),
         {
           id: 'total-balance-ledger',
           title: 'Total Balance Statement (Deposits + Income - Costing & Profit Payouts)',
@@ -1248,6 +1260,119 @@ export function buildGlobalViewTableReport(
             running: formatCurrency(row.runningBalance, ''),
           })),
         },
+      ];
+      break;
+    }
+
+    case 'daily_expense': {
+      const expenseSummary = calculateDailyExpenseSummary(otherCosts, {
+        todayDate: generatedDate,
+        selectedDate: generatedDate,
+        selectedMonth: generatedDate.slice(0, 7),
+        scope: 'all',
+        filterCategory: 'ALL',
+        searchQuery: '',
+      });
+
+      metadataGrid = [
+        {
+          label: 'TODAY EXPENSES',
+          value: `${formatCurrency(expenseSummary.todayTotal, currency)} (${expenseSummary.todayCount})`,
+        },
+        {
+          label: 'MONTH-TO-DATE',
+          value: `${formatCurrency(expenseSummary.selectedMonthTotal, currency)} (${expenseSummary.selectedMonthCount})`,
+        },
+        {
+          label: 'ALL-TIME RECORDED',
+          value: `${formatCurrency(expenseSummary.allTimeTotal, currency)} (${expenseSummary.allTimeCount})`,
+        },
+        {
+          label: 'TOP CATEGORY',
+          value: expenseSummary.topCategory
+            ? `${expenseSummary.topCategory.category} (${formatCurrency(expenseSummary.topCategory.totalAmount, currency)})`
+            : 'None',
+        },
+      ];
+
+      stateSections = [
+        {
+          id: 'daily-expense-ledger',
+          title: 'DAILY EXPENSE — Company Expense Ledger',
+          subtitle: `${expenseSummary.filteredCount} Expense Entry / Entries`,
+          columns: [
+            { key: 'sl', label: 'SL', align: 'center' },
+            { key: 'date', label: 'DATE', align: 'center' },
+            { key: 'category', label: 'EXPENSE CATEGORY', align: 'left' },
+            { key: 'description', label: 'PARTICULARS', align: 'left' },
+            { key: 'paymentMethod', label: 'METHOD', align: 'center' },
+            { key: 'paidBy', label: 'PAID BY', align: 'left' },
+            { key: 'refInvoice', label: 'REF NO', align: 'left' },
+            { key: 'amount', label: `AMOUNT (${currency})`, align: 'right' },
+          ],
+          rows:
+            expenseSummary.filteredExpenses.length > 0
+              ? expenseSummary.filteredExpenses.map((c, idx) => ({
+                  sl: idx + 1,
+                  date: formatDate(c.date),
+                  category: c.category,
+                  description: c.description || '-',
+                  paymentMethod: c.paymentMethod || 'Cash',
+                  paidBy: c.paidBy || '-',
+                  refInvoice: c.refInvoice || '-',
+                  amount: formatCurrency(c.amount, ''),
+                }))
+              : [
+                  {
+                    sl: '—',
+                    date: formatDate(generatedDate),
+                    category: 'No Daily Expenses Recorded',
+                    description: 'Record company expenses inside Sheet #18 DAILY EXPENSE',
+                    paymentMethod: '-',
+                    paidBy: '-',
+                    refInvoice: '-',
+                    amount: formatCurrency(0, ''),
+                  },
+                ],
+          footerRows: [
+            {
+              cells: [
+                {
+                  value: `GRAND TOTAL (${expenseSummary.filteredCount} ENTRIES)`,
+                  colSpan: 7,
+                  align: 'right',
+                },
+                {
+                  value: formatCurrency(expenseSummary.filteredTotal, currency),
+                  align: 'right',
+                  tone: 'rose',
+                },
+              ],
+            },
+          ],
+        },
+        ...(expenseSummary.categoryBreakdown.length > 0
+          ? [
+              {
+                id: 'daily-expense-category-breakdown',
+                title: 'Daily Expense Breakdown by Category',
+                columns: [
+                  { key: 'sl', label: 'SL', align: 'center' as const },
+                  { key: 'category', label: 'EXPENSE CATEGORY', align: 'left' as const },
+                  { key: 'count', label: 'ENTRIES', align: 'center' as const },
+                  { key: 'totalAmount', label: `TOTAL (${currency})`, align: 'right' as const },
+                  { key: 'sharePercent', label: 'SHARE %', align: 'right' as const },
+                ],
+                rows: expenseSummary.categoryBreakdown.map((cat, idx) => ({
+                  sl: idx + 1,
+                  category: cat.category,
+                  count: cat.count,
+                  totalAmount: formatCurrency(cat.totalAmount, ''),
+                  sharePercent: `${cat.sharePercent}%`,
+                })),
+              },
+            ]
+          : []),
       ];
       break;
     }
@@ -1368,6 +1493,140 @@ export function buildGlobalViewTableReport(
             { key: 'values', label: 'CONFIGURED VALUES', align: 'left' },
           ],
           rows: configRows,
+        },
+      ];
+      break;
+    }
+
+    case 'air_way_bill': {
+      const flightRows = allPackings.map((rec, idx) => {
+        const boxes = Number(rec.totalBox) || 0;
+        const rate = Number(rec.rmbRate) > 0 ? Number(rec.rmbRate) : rmbRate;
+        const rmbPerBox = boxes > 0 ? Math.round(((Number(rec.totalAmount) || 0) / boxes) * 100) / 100 : 0;
+        const totalRmb = Number(rec.totalAmount) || 0;
+        const bdtAmount = calculatePackingTotalAmountBDT(totalRmb, rate);
+        return {
+          sl: idx + 1,
+          date: formatDate(rec.packingDate),
+          shipper: rec.shipper || companyProfile.companyName,
+          flight: rec.flight || '-',
+          totalBox: boxes,
+          rmbPerBox: formatRMB(rmbPerBox),
+          totalRmb: formatRMB(totalRmb),
+          bdtAmount: formatCurrency(bdtAmount, ''),
+        };
+      });
+      stateSections = [
+        {
+          id: 'flight-return-bill-fallback',
+          title: 'FLIGHT RETURN BILL — Consignment Air Waybill Register',
+          subtitle: `${flightRows.length} Consignment Shipment(s)`,
+          columns: [
+            { key: 'sl', label: 'SL', align: 'center' },
+            { key: 'date', label: 'DATE', align: 'center' },
+            { key: 'shipper', label: 'SHIPPER', align: 'left' },
+            { key: 'flight', label: 'FLIGHT / AWB', align: 'left' },
+            { key: 'totalBox', label: 'TOTAL BOX', align: 'center' },
+            { key: 'rmbPerBox', label: 'RMB / BOX', align: 'right' },
+            { key: 'totalRmb', label: 'TOTAL RMB', align: 'right' },
+            { key: 'bdtAmount', label: `BDT AMOUNT (${currency})`, align: 'right' },
+          ],
+          rows: flightRows,
+        },
+      ];
+      break;
+    }
+
+    case 'audit_logs': {
+      stateSections = [
+        {
+          id: 'audit-logs-summary',
+          title: 'System Audit Trail — Workbook Integrity Summary',
+          subtitle: `Active Session Audit Snapshot (${generatedDate})`,
+          columns: [
+            { key: 'sl', label: 'SL', align: 'center' },
+            { key: 'module', label: 'LEDGER MODULE', align: 'left' },
+            { key: 'recordCount', label: 'TRACKED RECORDS', align: 'center' },
+            { key: 'integrityStatus', label: 'AUDIT STATUS', align: 'center' },
+          ],
+          rows: [
+            { sl: 1, module: 'Purchase Challans & Bills', recordCount: purchases.length, integrityStatus: 'VERIFIED' },
+            { sl: 2, module: 'Export Air Packing Manifests', recordCount: allPackings.length, integrityStatus: 'VERIFIED' },
+            { sl: 3, module: 'Supplier & Exporter Payments', recordCount: payments.length, integrityStatus: 'VERIFIED' },
+            { sl: 4, module: 'Operating Cost Vouchers', recordCount: otherCosts.length, integrityStatus: 'VERIFIED' },
+          ],
+        },
+      ];
+      break;
+    }
+
+    case 'administration': {
+      const partners = buildPartnerDirectory(companyProfile, []);
+      stateSections = [
+        {
+          id: 'administration-governance-summary',
+          title: 'Accounts & Administration — Company Governance & Partners Roster',
+          subtitle: `Managing Partner: ${companyProfile.managingPartner || '-'}`,
+          columns: [
+            { key: 'sl', label: 'SL', align: 'center' },
+            { key: 'governanceItem', label: 'GOVERNANCE ENTITY', align: 'left' },
+            { key: 'designation', label: 'ROLE / CLEARANCE', align: 'left' },
+            { key: 'status', label: 'STATUS', align: 'center' },
+          ],
+          rows: [
+            {
+              sl: 1,
+              governanceItem: companyProfile.companyName,
+              designation: 'Registered Export Entity',
+              status: 'ACTIVE',
+            },
+            ...partners.map((partnerName, idx) => ({
+              sl: idx + 2,
+              governanceItem: partnerName,
+              designation:
+                partnerName === companyProfile.managingPartner
+                  ? 'Managing Partner'
+                  : 'Authorized Partner',
+              status: 'VERIFIED',
+            })),
+          ],
+        },
+      ];
+      break;
+    }
+
+    case 'forget_password': {
+      stateSections = [
+        {
+          id: 'forget-password-recovery-sheet',
+          title: 'FORGET PASSWORD — Credential Recovery & Verification Channels',
+          subtitle: `Security Contact: ${companyProfile.email || 'zsbaquatics@gmail.com'}`,
+          columns: [
+            { key: 'sl', label: 'STEP', align: 'center' },
+            { key: 'stage', label: 'RECOVERY STAGE', align: 'left' },
+            { key: 'protocol', label: 'VERIFICATION PROTOCOL', align: 'left' },
+            { key: 'status', label: 'POLICY', align: 'center' },
+          ],
+          rows: [
+            {
+              sl: 1,
+              stage: 'Account Lookup',
+              protocol: 'Registered Username or Corporate Email Matching',
+              status: 'ENABLED',
+            },
+            {
+              sl: 2,
+              stage: 'Email Confirmation',
+              protocol: 'One-Time Verification Token & Confirmation Code Dispatch',
+              status: 'REQUIRED',
+            },
+            {
+              sl: 3,
+              stage: 'Password Reset',
+              protocol: 'Dual Confirmation Password Update & Team Ledger Sync',
+              status: 'PROTECTED',
+            },
+          ],
         },
       ];
       break;

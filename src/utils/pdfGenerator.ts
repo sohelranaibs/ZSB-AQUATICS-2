@@ -112,7 +112,6 @@ export function resolveCompanyLogoSrc(logoUrl?: string): string {
   const raw =
     logoUrl &&
     (logoUrl.startsWith('data:image/') ||
-      logoUrl.includes('Gemini_Generated_Image_x7u4nx') ||
       logoUrl.includes('Image_20260915140835'))
       ? logoUrl
       : COMPANY_LOGO_URL;

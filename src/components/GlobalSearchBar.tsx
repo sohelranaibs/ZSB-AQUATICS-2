@@ -199,7 +199,7 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
   ];
 
   return (
-    <div ref={containerRef} className={`relative flex-1 max-w-lg min-w-[200px] ${className}`}>
+    <div ref={containerRef} className={`relative flex-1 w-full min-w-0 max-w-lg ${className}`}>
       {/* Search Input Box */}
       <div className="relative flex items-center">
         <div className="absolute left-3 pointer-events-none text-slate-400 flex items-center">

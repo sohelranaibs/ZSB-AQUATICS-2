@@ -29,6 +29,7 @@ export const ALL_ACTIVE_TABS: ActiveTab[] = [
   'administration',
   'forget_password',
   'total_balance',
+  'daily_expense',
 ];
 
 const ROLE_POLICIES: Record<TeamRole, RoleAccessPolicy> = {
@@ -53,6 +54,7 @@ const ROLE_POLICIES: Record<TeamRole, RoleAccessPolicy> = {
       'exporter_payment_slip',
       'profit_loss',
       'total_balance',
+      'daily_expense',
       'purchase_db',
       'packing_db',
       'payment_db',
@@ -75,6 +77,7 @@ const ROLE_POLICIES: Record<TeamRole, RoleAccessPolicy> = {
       'payment_form',
       'exporter_payment_slip',
       'profit_loss',
+      'daily_expense',
       'purchase_db',
       'packing_db',
       'payment_db',

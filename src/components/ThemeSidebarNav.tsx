@@ -3,6 +3,12 @@ import { useApp } from '../context/AppContext.tsx';
 import { ActiveTab } from '../types/index.ts';
 import { canUserAccessTab, resolveCanonicalTeamRole } from '../utils/rbacPermissions.ts';
 import {
+  buildWorkbookSheets,
+  WorkbookSheetNavItem,
+} from '../utils/printAllSheets.ts';
+export { buildWorkbookSheets };
+export type { WorkbookSheetNavItem };
+import {
   ChevronRight,
   ChevronLeft,
   LogOut,
@@ -23,131 +29,8 @@ import {
   Lock,
   KeyRound,
   Scale,
+  ReceiptText,
 } from 'lucide-react';
-
-export interface WorkbookSheetNavItem {
-  id: ActiveTab;
-  num: string;
-  label: string;
-  shortLabel: string;
-  badge?: string | number;
-}
-
-export function buildWorkbookSheets(counts: {
-  purchasesCount: number;
-  packingsCount: number;
-  paymentsCount: number;
-  auditLogsCount: number;
-}): WorkbookSheetNavItem[] {
-  return [
-    {
-      id: 'dashboard',
-      num: '01',
-      label: 'Executive Overview',
-      shortLabel: 'Dashboard',
-    },
-    {
-      id: 'purchase_form',
-      num: '02',
-      label: 'Purchase Challan / Bill',
-      shortLabel: 'Purchase Form',
-    },
-    {
-      id: 'packing_form',
-      num: '03',
-      label: 'Export Packing List',
-      shortLabel: 'Packing List',
-    },
-    {
-      id: 'exporter_payment_form',
-      num: '04',
-      label: 'Exporter Payment Form',
-      shortLabel: 'Exporter Payment',
-    },
-    {
-      id: 'payment_form',
-      num: '05',
-      label: 'Supplier Payment Form',
-      shortLabel: 'Supplier Payment',
-    },
-    {
-      id: 'air_way_bill',
-      num: '06',
-      label: 'FLIGHT RETURN BILL',
-      shortLabel: 'Flight Return Bill',
-    },
-    {
-      id: 'exporter_payment_slip',
-      num: '07',
-      label: 'Exporter Payment Slip 付款单',
-      shortLabel: 'Payment Slip 付款单',
-    },
-    {
-      id: 'profit_loss',
-      num: '08',
-      label: 'Loss & Profit Analysis',
-      shortLabel: 'Loss & Profit',
-    },
-    {
-      id: 'purchase_db',
-      num: '09',
-      label: 'Purchase Database',
-      shortLabel: 'Purchase DB',
-      badge: counts.purchasesCount,
-    },
-    {
-      id: 'packing_db',
-      num: '10',
-      label: 'Packing List Database',
-      shortLabel: 'Packing DB',
-      badge: counts.packingsCount,
-    },
-    {
-      id: 'payment_db',
-      num: '11',
-      label: 'Payment Vouchers DB',
-      shortLabel: 'Payment DB',
-      badge: counts.paymentsCount,
-    },
-    {
-      id: 'search_reports',
-      num: '12',
-      label: 'Search & Audit Reports',
-      shortLabel: 'Search & Reports',
-    },
-    {
-      id: 'settings',
-      num: '13',
-      label: 'Settings & Config',
-      shortLabel: 'Settings',
-    },
-    {
-      id: 'audit_logs',
-      num: '14',
-      label: 'System Audit Logs',
-      shortLabel: 'Audit Logs',
-      badge: counts.auditLogsCount,
-    },
-    {
-      id: 'administration',
-      num: '15',
-      label: 'Administration (Super Admin)',
-      shortLabel: 'Admin Control',
-    },
-    {
-      id: 'forget_password',
-      num: '16',
-      label: 'FORGET PASSWORD',
-      shortLabel: 'FORGET PASSWORD',
-    },
-    {
-      id: 'total_balance',
-      num: '17',
-      label: 'TOTAL BALANCE',
-      shortLabel: 'TOTAL BALANCE',
-    },
-  ];
-}
 
 function renderSheetIcon(id: ActiveTab, isActive: boolean) {
   const cls = `w-4 h-4 shrink-0 ${isActive ? 'text-amber-400' : 'text-slate-200 group-hover:text-white'}`;
@@ -170,6 +53,8 @@ function renderSheetIcon(id: ActiveTab, isActive: boolean) {
       return <TrendingUp className={cls} />;
     case 'total_balance':
       return <Scale className={cls} />;
+    case 'daily_expense':
+      return <ReceiptText className={cls} />;
     case 'purchase_db':
       return <Database className={cls} />;
     case 'packing_db':

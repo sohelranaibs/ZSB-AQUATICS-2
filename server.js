@@ -378,21 +378,31 @@ async function startServer() {
   const distPath = path.resolve(__dirname, "dist");
   const indexPath = path.resolve(distPath, "index.html");
   const httpServer = http.createServer(app);
+  let servedByVite = false;
   if (!isProd) {
-    const { createServer: createViteServer } = await import("vite");
-    const isHmrDisabled = process.env.DISABLE_HMR === "true";
-    const vite = await createViteServer({
-      server: {
-        middlewareMode: true,
-        allowedHosts: true,
-        port: PORT,
-        ws: { server: httpServer },
-        hmr: isHmrDisabled ? false : { server: httpServer }
-      },
-      appType: "spa"
-    });
-    app.use(vite.middlewares);
-  } else if (fs.existsSync(distPath)) {
+    try {
+      const { createServer: createViteServer } = await import("vite");
+      const isHmrDisabled = process.env.DISABLE_HMR === "true";
+      const vite = await createViteServer({
+        server: {
+          middlewareMode: true,
+          allowedHosts: true,
+          port: PORT,
+          ws: { server: httpServer },
+          hmr: isHmrDisabled ? false : { server: httpServer }
+        },
+        appType: "spa"
+      });
+      app.use(vite.middlewares);
+      servedByVite = true;
+    } catch (viteErr) {
+      if (!fs.existsSync(indexPath)) {
+        throw viteErr;
+      }
+      console.warn("Vite dev server unavailable; falling back to static dist/ bundle.");
+    }
+  }
+  if (!servedByVite && fs.existsSync(distPath)) {
     app.use(
       express.static(distPath, {
         maxAge: "1d",
@@ -402,7 +412,7 @@ async function startServer() {
     app.get("*", (_req, res) => {
       res.sendFile(indexPath);
     });
-  } else {
+  } else if (!servedByVite) {
     app.get("*", (_req, res) => {
       res.status(200).send(`
         <!doctype html>

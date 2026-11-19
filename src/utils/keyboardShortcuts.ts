@@ -3,6 +3,7 @@ import { ActiveTab } from '../types/index.ts';
 export type ShortcutActionId =
   | 'SAVE_ACTIVE_VIEW'
   | 'PRINT_ACTIVE_VIEW'
+  | 'PRINT_ALL_ACTIVE_SHEETS'
   | 'ADD_FORM_ROW'
   | 'RESET_FORM'
   | 'OPEN_EXCEL_MODAL'
@@ -67,6 +68,7 @@ export const ORDERED_WORKBOOK_TABS: { id: ActiveTab; label: string; number: numb
   { id: 'administration', label: 'Administration', number: 15 },
   { id: 'forget_password', label: 'FORGET PASSWORD', number: 16 },
   { id: 'total_balance', label: 'TOTAL BALANCE', number: 17 },
+  { id: 'daily_expense', label: 'DAILY EXPENSE', number: 18 },
 ];
 
 export const GLOBAL_SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
@@ -87,6 +89,15 @@ export const GLOBAL_SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
     label: 'Print / PDF Preview',
     description:
       'Opens the official print & PDF download preview for the active voucher, payment slip, or table report.',
+  },
+  {
+    id: 'print-all-active-sheets',
+    action: 'PRINT_ALL_ACTIVE_SHEETS',
+    category: 'File, Save & Print',
+    keys: ['Alt', 'P'],
+    label: 'Print All Active Sheets',
+    description:
+      'Sequentially opens the print preview for every visible workbook sheet in the current session.',
   },
   {
     id: 'open-snapshot-modal',
@@ -424,6 +435,16 @@ export function resolveGlobalKeyboardShortcut(
       preventDefault: true,
       description: 'Reset active form fields',
       shortcutLabel: 'Alt+R',
+    };
+  }
+
+  // 9b. Alt + P -> Sequentially trigger print preview for all active visible sheets
+  if (hasAlt && !hasPrimaryMod && !hasShift && (lowerKey === 'p' || code === 'KeyP')) {
+    return {
+      action: 'PRINT_ALL_ACTIVE_SHEETS',
+      preventDefault: true,
+      description: 'Sequentially preview all active workbook sheets',
+      shortcutLabel: 'Alt+P',
     };
   }
 

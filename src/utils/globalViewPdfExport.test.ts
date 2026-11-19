@@ -71,20 +71,26 @@ test('convertExtractedDomTablesToSections strips action columns and empty templa
   assert.equal(sections[0].rows[0].col_2, 'PUR-2026-0001');
 });
 
-test('buildGlobalViewTableReport builds valid structured table reports for all 12 ActiveTab views', () => {
+test('buildGlobalViewTableReport builds valid structured table reports for all 18 ActiveTab views', () => {
   const allTabs: ActiveTab[] = [
     'dashboard',
     'purchase_form',
     'packing_form',
-    'payment_form',
     'exporter_payment_form',
+    'payment_form',
+    'air_way_bill',
     'exporter_payment_slip',
     'profit_loss',
+    'total_balance',
+    'daily_expense',
     'purchase_db',
     'packing_db',
     'payment_db',
     'search_reports',
     'settings',
+    'audit_logs',
+    'administration',
+    'forget_password',
   ];
 
   for (const tab of allTabs) {

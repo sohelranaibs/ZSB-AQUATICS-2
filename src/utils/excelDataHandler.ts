@@ -73,6 +73,8 @@ export function generateOtherCostsCSV(records: OtherCostRecord[]): string {
     'Category',
     'Amount (BDT)',
     'Description',
+    'Payment Method',
+    'Paid By',
     'Reference Invoice',
   ];
 
@@ -81,6 +83,8 @@ export function generateOtherCostsCSV(records: OtherCostRecord[]): string {
     c.category || '',
     c.amount || 0,
     c.description || '',
+    c.paymentMethod || 'Cash',
+    c.paidBy || '',
     c.refInvoice || '',
   ]);
 
@@ -187,6 +191,8 @@ export function otherCostsToSheetRows(records: OtherCostRecord[]): Record<string
     Category: c.category || '',
     'Amount (BDT)': c.amount || 0,
     Description: c.description || '',
+    'Payment Method': c.paymentMethod || 'Cash',
+    'Paid By': c.paidBy || '',
     'Reference Invoice': c.refInvoice || '',
   }));
 }
@@ -330,7 +336,7 @@ export function getTemplateHeaders(type: DatasetKey): string[] {
       'Remarks',
     ];
   }
-  return ['Date', 'Category', 'Amount', 'Description', 'RefInvoice'];
+  return ['Date', 'Category', 'Amount', 'Description', 'PaymentMethod', 'PaidBy', 'RefInvoice'];
 }
 
 export function getSampleTemplateRows(type: DatasetKey): Record<string, any>[] {
@@ -438,10 +444,12 @@ export function getSampleTemplateRows(type: DatasetKey): Record<string, any>[] {
   return [
     {
       Date: '2026-10-21',
-      Category: 'AIR FREIGHT / CARGO BILL',
-      Amount: 18500,
-      Description: 'Airport cargo handling & ice packing',
-      RefInvoice: 'PKG-2026-0101',
+      Category: 'Office Tea, Snacks & Pantry',
+      Amount: 1850,
+      Description: 'Office tea, guest snacks & utility supplies',
+      PaymentMethod: 'Cash',
+      PaidBy: 'Office Cashier',
+      RefInvoice: 'VCH-2026-0101',
     },
   ];
 }
@@ -1304,10 +1312,16 @@ export function parseOtherCostsFromRowObjects(
   }
 
   populatedRows.forEach((row) => {
-    const catRaw = getFieldByAliases(row, ['Category', 'Cost Category', 'Expense Category', 'Type']);
+    const catRaw = getFieldByAliases(row, [
+      'Category',
+      'Cost Category',
+      'Expense Category',
+      'Expense Head',
+      'Type',
+    ]);
     const category = hasPresentImportText(catRaw) ? String(catRaw).trim() : '';
     const amountCheck = inspectNumericImportCell(
-      getFieldByAliases(row, ['Amount', 'Amount (BDT)', 'Cost', 'Total'])
+      getFieldByAliases(row, ['Amount', 'Amount (BDT)', 'Amount (TK)', 'BDT', 'TK', 'Cost', 'Total'])
     );
 
     const pendingFields: string[] = [];
@@ -1318,14 +1332,50 @@ export function parseOtherCostsFromRowObjects(
     }
     if (category.startsWith('=')) rawValues.category = category;
 
-    const date = normalizeDateString(getFieldByAliases(row, ['Date', 'Expense Date']));
-    const descRaw = getFieldByAliases(row, ['Description', 'Details', 'Remarks', 'Notes']);
+    const date = normalizeDateString(getFieldByAliases(row, ['Date', 'Expense Date', 'Tarikh']));
+    const descRaw = getFieldByAliases(row, [
+      'Description',
+      'Particulars',
+      'Particulars / Expense Details',
+      'Expense Details',
+      'Details',
+      'Remarks',
+      'Notes',
+    ]);
     const description = hasPresentImportText(descRaw)
       ? String(descRaw).trim()
       : category || 'Operating Expense';
     if (description.startsWith('=')) rawValues.description = description;
 
-    const refRaw = getFieldByAliases(row, ['Reference Invoice', 'RefInvoice', 'Ref', 'Invoice No']);
+    const methodRaw = getFieldByAliases(row, [
+      'Payment Method',
+      'PaymentMethod',
+      'Method',
+      'Paid Via',
+      'Mode',
+    ]);
+    const paymentMethod = hasPresentImportText(methodRaw) ? String(methodRaw).trim() : '';
+    if (paymentMethod.startsWith('=')) rawValues.paymentMethod = paymentMethod;
+
+    const paidByRaw = getFieldByAliases(row, [
+      'Paid By',
+      'PaidBy',
+      'Paid By / Receiver',
+      'Receiver',
+      'Staff',
+    ]);
+    const paidBy = hasPresentImportText(paidByRaw) ? String(paidByRaw).trim() : '';
+    if (paidBy.startsWith('=')) rawValues.paidBy = paidBy;
+
+    const refRaw = getFieldByAliases(row, [
+      'Reference Invoice',
+      'RefInvoice',
+      'Voucher No',
+      'Voucher / Slip No',
+      'Slip No',
+      'Ref',
+      'Invoice No',
+    ]);
     const refInvoice = hasPresentImportText(refRaw) ? String(refRaw).trim() : '';
     if (date.startsWith('=')) rawValues.date = date;
     if (refInvoice.startsWith('=')) rawValues.refInvoice = refInvoice;
@@ -1335,6 +1385,8 @@ export function parseOtherCostsFromRowObjects(
       category: category || 'OTHER COSTING',
       amount: amountCheck.numericValue,
       description,
+      paymentMethod: paymentMethod || undefined,
+      paidBy: paidBy || undefined,
       refInvoice: refInvoice || undefined,
       calculationPending: pendingFields.length > 0,
       pendingFields: pendingFields.length > 0 ? pendingFields : undefined,
@@ -1406,7 +1458,19 @@ export function parseSmartTextData(
     const hasHeaderRow =
       hasExportedHeaders ||
       firstRowNormalized.some((h) =>
-        ['date', 'category', 'amount', 'supplier', 'shippingmark', 'party'].includes(h)
+        [
+          'date',
+          'expensedate',
+          'category',
+          'expensecategory',
+          'amount',
+          'amounttk',
+          'particulars',
+          'paymentmethod',
+          'supplier',
+          'shippingmark',
+          'party',
+        ].includes(h)
       );
 
     const headers = hasHeaderRow ? firstRowCells : getTemplateHeaders(type);
@@ -1478,7 +1542,7 @@ export function parseExcelOrCsvBuffer(
       if (targetType === 'purchase' && n.includes('purchase')) return true;
       if (targetType === 'packing' && (n.includes('packing') || n.includes('export'))) return true;
       if (targetType === 'payment' && n.includes('payment')) return true;
-      if (targetType === 'other_cost' && (n.includes('cost') || n.includes('expense'))) return true;
+      if (targetType === 'other_cost' && (n.includes('cost') || n.includes('expense') || n.includes('daily'))) return true;
       return false;
     }) || wb.SheetNames[0];
 
@@ -1506,8 +1570,13 @@ export function parseExcelOrCsvBuffer(
     'partysupplier',
     'paymentvoucherno',
     'category',
+    'expensecategory',
+    'expensedate',
     'amount',
     'amountbdt',
+    'amounttk',
+    'particulars',
+    'paymentmethod',
   ];
   const isHeaderMapped = firstRowKeys.some((k) => recognizableHeaders.includes(k));
 
@@ -1555,7 +1624,7 @@ export function parseMasterWorkbookBuffer(
       result.packings = parsePackingsFromRowObjects(rowObjects, counts.packings || 0);
     } else if (n.includes('payment') || n.includes('voucher')) {
       result.payments = parsePaymentsFromRowObjects(rowObjects, counts.payments || 0);
-    } else if (n.includes('cost') || n.includes('expense')) {
+    } else if (n.includes('cost') || n.includes('expense') || n.includes('daily')) {
       result.otherCosts = parseOtherCostsFromRowObjects(rowObjects);
     }
   }

@@ -25,7 +25,13 @@ import {
   Loader2,
   FileDown,
   ImageDown,
+  Play,
+  Pause,
+  ChevronLeft,
+  ChevronRight,
+  Layers,
 } from 'lucide-react';
+import { getPrintAllSequenceProgress } from '../utils/printAllSheets.ts';
 import {
   GlobalViewTablePrintBody,
   GlobalOffscreenPrintHost,
@@ -49,6 +55,12 @@ export const PrintPreviewModal: React.FC = () => {
     showToast,
     globalViewReport,
     isExportingGlobalPdf,
+    printAllSequence,
+    nextPrintAllSheet,
+    prevPrintAllSheet,
+    jumpToPrintAllSheet,
+    togglePrintAllAutoPlay,
+    stopPrintAllActiveSheets,
   } = useApp();
   const [isSavingPdf, setIsSavingPdf] = useState(false);
   const [isSavingPng, setIsSavingPng] = useState(false);
@@ -56,6 +68,8 @@ export const PrintPreviewModal: React.FC = () => {
   const [printCurrentPageOnly, setPrintCurrentPageOnly] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
+
+  const sequenceProgress = getPrintAllSequenceProgress(printAllSequence);
 
   if (!printModalData.isOpen) {
     if (isExportingGlobalPdf && globalViewReport) {
@@ -143,6 +157,9 @@ export const PrintPreviewModal: React.FC = () => {
   const resolvedLogoSrc = resolveCompanyLogoSrc(companyProfile.logoUrl);
 
   const handleDirectSavePdf = async (allowFallback = true) => {
+    if (printAllSequence.isAutoPlaying) {
+      togglePrintAllAutoPlay(false);
+    }
     setIsSavingPdf(true);
     const filename = getCleanFilename('pdf');
     try {
@@ -172,6 +189,9 @@ export const PrintPreviewModal: React.FC = () => {
   };
 
   const handleDirectSavePng = async () => {
+    if (printAllSequence.isAutoPlaying) {
+      togglePrintAllAutoPlay(false);
+    }
     setIsSavingPng(true);
     const filename = getCleanFilename('png');
     try {
@@ -190,6 +210,9 @@ export const PrintPreviewModal: React.FC = () => {
   };
 
   const handleBrowserPrint = (allowFallback = true) => {
+    if (printAllSequence.isAutoPlaying) {
+      togglePrintAllAutoPlay(false);
+    }
     try {
       const opened = openPrintableDocumentWindow('printable-document', title);
       if (opened) {
@@ -353,7 +376,12 @@ export const PrintPreviewModal: React.FC = () => {
             <button
               type="button"
               data-testid="print-share-wechat-btn"
-              onClick={() => setIsShareModalOpen(true)}
+              onClick={() => {
+                if (printAllSequence.isAutoPlaying) {
+                  togglePrintAllAutoPlay(false);
+                }
+                setIsShareModalOpen(true);
+              }}
               disabled={isSavingPng || isSavingPdf}
               className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#07C160] hover:bg-[#06a853] text-white rounded text-xs font-bold shadow transition cursor-pointer disabled:opacity-50"
               title="Share .PNG image via WeChat (微信)"
@@ -382,6 +410,147 @@ export const PrintPreviewModal: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* Sequential Print All Active Sheets Bar (Visible only during batch Print All sequence, hidden in print) */}
+        {printAllSequence.isActive && sequenceProgress.currentSheet && (
+          <div
+            data-testid="print-all-sequence-bar"
+            className="bg-[#1E3247] text-white px-4 py-2.5 border-b border-white/15 print:hidden space-y-2"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2.5">
+              <div className="flex flex-wrap items-center gap-2 min-w-0">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-400/20 border border-amber-300/40 text-amber-200 text-xs font-mono font-bold">
+                  <Layers className="w-3.5 h-3.5 shrink-0" />
+                  <span data-testid="print-all-progress-badge">
+                    Sheet {sequenceProgress.currentStep} of {sequenceProgress.totalSteps}
+                  </span>
+                </div>
+
+                <div className="text-xs font-semibold text-white truncate max-w-xs sm:max-w-md">
+                  <span className="font-mono text-sky-300 mr-1.5">
+                    #{sequenceProgress.currentSheet.num}
+                  </span>
+                  <span>{sequenceProgress.currentSheet.label}</span>
+                </div>
+
+                <span
+                  data-testid="print-all-status-pill"
+                  className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
+                    printAllSequence.completedAll && sequenceProgress.isLast
+                      ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-200'
+                      : printAllSequence.isAutoPlaying
+                      ? 'bg-sky-500/20 border-sky-400/50 text-sky-200'
+                      : 'bg-slate-600/40 border-white/20 text-slate-200'
+                  }`}
+                >
+                  {printAllSequence.completedAll && sequenceProgress.isLast
+                    ? `Completed (${sequenceProgress.triggeredCount}/${sequenceProgress.totalSteps})`
+                    : printAllSequence.isAutoPlaying
+                    ? `Auto-Advancing (${sequenceProgress.triggeredCount}/${sequenceProgress.totalSteps})`
+                    : `Paused (${sequenceProgress.triggeredCount}/${sequenceProgress.totalSteps})`}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                <select
+                  aria-label="Jump to Active Sheet in Print All Sequence"
+                  data-testid="print-all-sheet-jump-select"
+                  value={printAllSequence.currentIndex}
+                  onChange={(e) => jumpToPrintAllSheet(Number(e.target.value))}
+                  className="bg-white text-slate-900 border border-[#CBD8E6] rounded-md px-2 py-1 text-[11px] font-mono font-bold focus:outline-none focus:border-[#1D6CE0] cursor-pointer max-w-[190px]"
+                >
+                  {printAllSequence.queue.map((sheetItem, idx) => (
+                    <option key={sheetItem.id} value={idx}>
+                      #{sheetItem.num} {sheetItem.shortLabel || sheetItem.label}
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  data-testid="print-all-prev-btn"
+                  aria-label="Previous Active Sheet"
+                  onClick={prevPrintAllSheet}
+                  disabled={!sequenceProgress.canStepBack}
+                  className="flex items-center space-x-1 px-2.5 py-1 text-[11px] font-bold rounded-full shadow-2xs transition cursor-pointer disabled:opacity-45"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>Prev</span>
+                </button>
+
+                {!sequenceProgress.isLast && (
+                  <button
+                    type="button"
+                    data-testid="print-all-autoplay-toggle-btn"
+                    aria-label={
+                      printAllSequence.isAutoPlaying
+                        ? 'Pause Sequential Print Preview'
+                        : 'Resume Sequential Print Preview'
+                    }
+                    onClick={() => togglePrintAllAutoPlay()}
+                    className="flex items-center space-x-1 px-2.5 py-1 text-[11px] font-bold rounded-full shadow-2xs transition cursor-pointer"
+                  >
+                    {printAllSequence.isAutoPlaying ? (
+                      <>
+                        <Pause className="w-3.5 h-3.5" />
+                        <span>Pause</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-3.5 h-3.5" />
+                        <span>Auto-Play</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  data-testid="print-all-next-btn"
+                  aria-label={
+                    sequenceProgress.isLast
+                      ? 'Finish Print All Active Sheets'
+                      : 'Next Active Sheet'
+                  }
+                  onClick={nextPrintAllSheet}
+                  className="flex items-center space-x-1 px-3 py-1 text-[11px] font-bold rounded-full shadow-2xs transition cursor-pointer"
+                >
+                  <span>{sequenceProgress.isLast ? 'Finish & Close' : 'Next Sheet'}</span>
+                  {sequenceProgress.isLast ? (
+                    <CheckCircle className="w-3.5 h-3.5" />
+                  ) : (
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  data-testid="print-all-stop-btn"
+                  aria-label="Stop Print All Sequence"
+                  onClick={() =>
+                    stopPrintAllActiveSheets({
+                      closeModal: true,
+                      restoreOriginTab: true,
+                      reason: printAllSequence.completedAll ? 'completed' : 'stopped',
+                    })
+                  }
+                  className="flex items-center space-x-1 px-2.5 py-1 text-[11px] font-bold rounded-full shadow-2xs transition cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Stop</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="w-full h-1.5 bg-slate-800/80 rounded-full overflow-hidden">
+              <div
+                data-testid="print-all-progress-bar"
+                className="h-full bg-amber-400 transition-all duration-300"
+                style={{ width: `${sequenceProgress.percentComplete}%` }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Preview Paper Desk Workspace */}
         <div className="bg-slate-200/95 p-3 sm:p-6 overflow-y-auto flex justify-center items-start flex-1 min-h-0 print:p-0 print:bg-white">

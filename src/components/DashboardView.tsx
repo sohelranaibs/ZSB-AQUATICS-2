@@ -23,6 +23,10 @@ import {
 } from '../utils/inventoryStock.ts';
 import { calculateTotalBalanceSummary } from '../utils/totalBalance.ts';
 import {
+  calculateDailyExpenseSummary,
+  getTodayLocalIsoDate,
+} from '../utils/dailyExpense.ts';
+import {
   ArrowRight,
   ArrowUpRight,
   TrendingUp,
@@ -68,6 +72,7 @@ import { DailyFinancialSummaryWidget } from './DailyFinancialSummaryWidget.tsx';
 import { QuickFinancialPulseSidebar } from './QuickFinancialPulseSidebar.tsx';
 import { DashboardAlertsWidget } from './DashboardAlertsWidget.tsx';
 import { DashboardQuickSummaryWidget } from './DashboardQuickSummaryWidget.tsx';
+import { DashboardCalendarWidget } from './DashboardCalendarWidget.tsx';
 
 export const DashboardView: React.FC = () => {
   const {
@@ -202,6 +207,20 @@ export const DashboardView: React.FC = () => {
   const totalBoxes = consignmentSummary.totalBoxes;
   const totalPaymentsMade = payments.reduce((acc, p) => acc + (Number(p.paidAmount) || 0), 0);
   const totalRmbSettled = calculateForeignRmbRemittanceValue(packings);
+
+  const todayIso = getTodayLocalIsoDate();
+  const dailyExpenseSummary = useMemo(
+    () =>
+      calculateDailyExpenseSummary(otherCosts, {
+        todayDate: todayIso,
+        selectedDate: todayIso,
+        selectedMonth: todayIso.slice(0, 7),
+        scope: 'all',
+        filterCategory: 'ALL',
+        searchQuery: '',
+      }),
+    [otherCosts, todayIso]
+  );
 
   const totalBalanceSummary = useMemo(
     () =>
@@ -624,6 +643,14 @@ export const DashboardView: React.FC = () => {
             </button>
             <button
               type="button"
+              data-testid="dashboard-hero-daily-expense-btn"
+              onClick={() => setActiveTab('daily_expense')}
+              className="px-2.5 py-1.5 rounded-lg bg-[#1E3247] hover:bg-white/15 text-slate-100 border border-white/15 text-[11px] font-semibold transition cursor-pointer whitespace-nowrap shrink-0"
+            >
+              + Daily Expense
+            </button>
+            <button
+              type="button"
               data-testid="dashboard-download-summary-csv-btn"
               onClick={handleDownloadSummaryCsv}
               className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-[#0D9488] hover:bg-[#0F766E] text-white border border-white/15 rounded-lg text-[11px] font-bold shadow-xs transition cursor-pointer whitespace-nowrap shrink-0"
@@ -712,6 +739,18 @@ export const DashboardView: React.FC = () => {
           />
         </div>
       </div>
+
+      {/* Interactive Operations & Ledger Calendar */}
+      <DashboardCalendarWidget
+        purchases={purchases}
+        packings={packings}
+        payments={payments}
+        otherCosts={otherCosts}
+        mortalities={mortalities}
+        upcomingRecurringPayments={upcomingRecurringPayments}
+        currency={companyProfile.currency || 'BDT'}
+        onNavigateTab={setActiveTab}
+      />
 
       {/* Unified Operational & Financial Alerts Widget */}
       <DashboardAlertsWidget totalBalance={totalBalanceSummary.totalBalance} />
@@ -1708,7 +1747,7 @@ export const DashboardView: React.FC = () => {
                 </h2>
               </div>
               <span className="text-xs text-slate-500 font-mono tabular-nums">
-                Sheets 02 – 17
+                Sheets 02 – 18
               </span>
             </div>
 
@@ -1859,6 +1898,30 @@ export const DashboardView: React.FC = () => {
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
                     Partner deposit shares + income added &minus; all costing deductions.
+                  </p>
+                </div>
+              </button>
+
+              {/* Sheet 18: DAILY EXPENSE */}
+              <button
+                type="button"
+                data-testid="dashboard-sheet-daily-expense-btn"
+                onClick={() => setActiveTab('daily_expense')}
+                className="group text-left p-4 rounded-xl border border-slate-200 hover:border-amber-600/70 bg-white hover:bg-amber-50/25 transition cursor-pointer flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between text-xs text-slate-500 font-mono">
+                    <span>Sheet 18 · Company Expense</span>
+                    <span className="text-amber-800 font-semibold">
+                      Today: {formatCurrency(dailyExpenseSummary.todayTotal, companyProfile.currency)}
+                    </span>
+                  </div>
+                  <div className="text-sm font-bold text-slate-900 group-hover:text-amber-900 mt-1 flex items-center justify-between">
+                    <span>DAILY EXPENSE</span>
+                    <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-amber-700 group-hover:translate-x-0.5 transition-transform shrink-0" />
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Log daily office, utilities, petty cash &amp; company operating expenses ({dailyExpenseSummary.allTimeCount} entries).
                   </p>
                 </div>
               </button>
@@ -2043,6 +2106,32 @@ export const DashboardView: React.FC = () => {
                     className="text-sky-700 hover:text-sky-900 font-semibold inline-flex items-center gap-0.5 mt-0.5 cursor-pointer"
                   >
                     <span>Open TOTAL BALANCE</span>
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Row 4c: DAILY EXPENSE */}
+              <div className="p-4 hover:bg-slate-50/70 transition flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-bold text-slate-900 text-sm">
+                    DAILY EXPENSE (Sheet 18)
+                  </div>
+                  <div className="text-slate-500 font-mono tabular-nums mt-0.5">
+                    {dailyExpenseSummary.allTimeCount} Entries · Month: {formatCurrency(dailyExpenseSummary.selectedMonthTotal, companyProfile.currency)}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="font-mono tabular-nums font-bold text-rose-700 text-sm">
+                    {formatCurrency(dailyExpenseSummary.allTimeTotal, companyProfile.currency)}
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="dashboard-open-daily-expense-btn"
+                    onClick={() => setActiveTab('daily_expense')}
+                    className="text-amber-700 hover:text-amber-900 font-semibold inline-flex items-center gap-0.5 mt-0.5 cursor-pointer"
+                  >
+                    <span>Open DAILY EXPENSE</span>
                     <ArrowUpRight className="w-3.5 h-3.5" />
                   </button>
                 </div>

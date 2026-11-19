@@ -204,6 +204,8 @@ export interface OtherCostRecord {
   category: string;
   amount: number;
   description: string;
+  paymentMethod?: string;
+  paidBy?: string;
   refInvoice?: string;
   recurringExpenseId?: string;
   recurringYearMonth?: string;
@@ -471,6 +473,7 @@ export type ActiveTab =
   | 'exporter_payment_slip'
   | 'profit_loss'
   | 'total_balance'
+  | 'daily_expense'
   | 'purchase_db'
   | 'packing_db'
   | 'payment_db'

@@ -820,8 +820,17 @@ export const PrintPreviewModal: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Row 2: Flight Destination, Destination */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }} className="grid grid-cols-2 gap-3">
+                {/* Row 2: Flight Destination, Destination, and optional Documents Holder */}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: data.documentsHolder
+                      ? 'repeat(3, minmax(0, 1fr))'
+                      : 'repeat(2, minmax(0, 1fr))',
+                    gap: '12px',
+                  }}
+                  className={data.documentsHolder ? 'grid grid-cols-3 gap-3' : 'grid grid-cols-2 gap-3'}
+                >
                   <div className="bg-slate-100 p-2.5 rounded border border-slate-300">
                     <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block mb-0.5">FLIGHT DESTINATION:</span>
                     <span className="font-black text-slate-950 text-2xl tracking-wide block">{data.flight || '-'}</span>
@@ -830,20 +839,26 @@ export const PrintPreviewModal: React.FC = () => {
                     <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block mb-0.5">DESTINATION:</span>
                     <span className="font-black text-slate-950 text-2xl tracking-wide block">{data.destination || '-'}</span>
                   </div>
+                  {data.documentsHolder && (
+                    <div className="bg-slate-100 p-2.5 rounded border border-slate-300">
+                      <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block mb-0.5">DOCUMENTS HOLDER:</span>
+                      <span className="font-black text-slate-950 text-xl tracking-wide block truncate">{data.documentsHolder}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
               <table className="w-full text-xs border border-slate-300 border-collapse" style={{ tableLayout: 'fixed', width: '100%' }}>
                 <colgroup>
                   <col style={{ width: '6%' }} />
-                  <col style={{ width: '20%' }} />
+                  <col style={{ width: '18%' }} />
                   <col style={{ width: '8%' }} />
                   <col style={{ width: '10%' }} />
                   <col style={{ width: '12%' }} />
                   <col style={{ width: '13%' }} />
                   <col style={{ width: '7%' }} />
                   <col style={{ width: '11%' }} />
-                  <col style={{ width: '13%' }} />
+                  <col style={{ width: '15%' }} />
                 </colgroup>
                 <thead>
                   <tr className="bg-slate-100 text-slate-800 uppercase font-bold text-[10px] border-b border-slate-300">
@@ -927,10 +942,10 @@ export const PrintPreviewModal: React.FC = () => {
                           .toFixed(2)}{' '}
                         KG
                       </td>
-                      <td colSpan={2} className="p-2 text-right uppercase">
-                        PAGE SUBTOTAL:
+                      <td colSpan={2} className="p-2 text-right uppercase whitespace-nowrap">
+                        SUBTOTAL:
                       </td>
-                      <td className="p-2 text-right font-mono font-bold text-blue-950">
+                      <td className="p-2 text-right font-mono font-bold text-blue-950 whitespace-nowrap tabular-nums">
                         {formatCurrency(
                           displayPackingItems.reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0),
                           'RMB'
@@ -939,14 +954,14 @@ export const PrintPreviewModal: React.FC = () => {
                     </tr>
                   )}
                   <tr className="bg-slate-100 font-bold border-t-2 border-slate-400">
-                    <td colSpan={2} className="p-2 text-right uppercase">
+                    <td colSpan={2} className="p-2 text-right uppercase whitespace-nowrap">
                       {printCurrentPageOnly ? 'GRAND TOTAL:' : 'TOTALS:'}
                     </td>
-                    <td className="p-2 text-center font-mono text-slate-900">{data.totalBox} Boxes</td>
+                    <td className="p-2 text-center font-mono text-slate-900 whitespace-nowrap tabular-nums">{data.totalBox} Boxes</td>
                     <td colSpan={2}></td>
-                    <td className="p-2 text-right font-mono text-teal-800 font-black">{data.totalWeight} KG</td>
-                    <td colSpan={2} className="p-2 text-right uppercase">TOTAL INVOICE VALUE:</td>
-                    <td className="p-2 text-right font-mono font-black text-slate-900">
+                    <td className="p-2 text-right font-mono text-teal-800 font-black whitespace-nowrap tabular-nums">{data.totalWeight} KG</td>
+                    <td colSpan={2} className="p-2 text-right uppercase whitespace-nowrap">TOTAL VALUE:</td>
+                    <td className="p-2 text-right font-mono font-black text-slate-900 whitespace-nowrap tabular-nums">
                       {formatCurrency(data.totalAmount, 'RMB')}
                     </td>
                   </tr>

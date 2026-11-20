@@ -1165,23 +1165,41 @@ export function openPrintableDocumentWindow(
 </body>
 </html>`;
 
-  const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
-  const blobUrl = URL.createObjectURL(blob);
-
-  // Try opening standalone window
-  const printWindow = window.open(blobUrl, '_blank');
-  if (!printWindow || printWindow.closed || typeof printWindow.closed === 'undefined') {
-    // If popup was blocked by browser, create link and trigger click
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    document.body.appendChild(link);
-    link.click();
-    setTimeout(() => {
-      document.body.removeChild(link);
-    }, 500);
+  // Print using an isolated hidden iframe so printing works cleanly inside sandboxed iframes without window.open popups
+  const existingFrame = document.getElementById('zsb-hidden-print-frame');
+  if (existingFrame && existingFrame.parentNode) {
+    existingFrame.parentNode.removeChild(existingFrame);
   }
+
+  const iframe = document.createElement('iframe');
+  iframe.id = 'zsb-hidden-print-frame';
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  iframe.style.visibility = 'hidden';
+  iframe.srcdoc = htmlContent;
+  document.body.appendChild(iframe);
+
+  const cleanupFrame = () => {
+    setTimeout(() => {
+      if (iframe.parentNode) {
+        iframe.parentNode.removeChild(iframe);
+      }
+    }, 1500);
+  };
+
+  iframe.addEventListener('load', () => {
+    try {
+      iframe.contentWindow?.addEventListener('afterprint', cleanupFrame, { once: true });
+    } catch {
+      // ignore cross-context listener errors
+    }
+    setTimeout(cleanupFrame, 15000);
+  });
 
   return true;
 }

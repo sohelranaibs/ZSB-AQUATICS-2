@@ -272,10 +272,10 @@ const PackingItemTableRow: React.FC<PackingItemTableRowProps> = memo(
       prevRateResetTokenRef.current = reportWeightResetToken;
       const isFocused =
         typeof document !== 'undefined' && document.activeElement === rateInputRef.current;
-      if (resetChanged || !isFocused) {
+      if (resetChanged || (!isFocused && (!isFilled || row.rate > 0))) {
         setRateDraft(row.rate > 0 ? String(row.rate) : '');
       }
-    }, [row.rate, reportWeightResetToken]);
+    }, [row.rate, isFilled, reportWeightResetToken]);
 
     const handleItemChange = useCallback(
       (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -500,9 +500,11 @@ const PackingItemTableRow: React.FC<PackingItemTableRowProps> = memo(
         <td className="p-1 text-center">
           <button
             type="button"
+            data-testid={`packing-row-${rowIndex + 1}-clear`}
+            aria-label={`Clear Row ${rowIndex + 1}`}
             onClick={handleClearClick}
             disabled={!isFilled}
-            title="Clear row"
+            title={`Clear Row ${rowIndex + 1}`}
             className={`p-1.5 rounded transition ${
               isFilled
                 ? 'text-slate-500 hover:text-rose-600 hover:bg-rose-50 cursor-pointer'
@@ -2542,8 +2544,17 @@ export const PackingListView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Row 2: Flight Destination, Destination */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }} className="grid grid-cols-2 gap-3">
+              {/* Row 2: Flight Destination, Destination, and optional Documents Holder */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: documentsHolder
+                    ? 'repeat(3, minmax(0, 1fr))'
+                    : 'repeat(2, minmax(0, 1fr))',
+                  gap: '12px',
+                }}
+                className={documentsHolder ? 'grid grid-cols-3 gap-3' : 'grid grid-cols-2 gap-3'}
+              >
                 <div className="bg-slate-100 p-2.5 rounded border border-slate-300">
                   <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block mb-0.5">FLIGHT DESTINATION:</span>
                   <span className="font-black text-slate-950 text-2xl tracking-wide block">{flight || '-'}</span>
@@ -2552,20 +2563,26 @@ export const PackingListView: React.FC = () => {
                   <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block mb-0.5">DESTINATION:</span>
                   <span className="font-black text-slate-950 text-2xl tracking-wide block">{destination || '-'}</span>
                 </div>
+                {documentsHolder && (
+                  <div className="bg-slate-100 p-2.5 rounded border border-slate-300">
+                    <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider block mb-0.5">DOCUMENTS HOLDER:</span>
+                    <span className="font-black text-slate-950 text-xl tracking-wide block truncate">{documentsHolder}</span>
+                  </div>
+                )}
               </div>
             </div>
 
             <table className="w-full text-xs border border-slate-300 border-collapse" style={{ tableLayout: 'fixed', width: '100%' }}>
               <colgroup>
                 <col style={{ width: '6%' }} />
-                <col style={{ width: '20%' }} />
+                <col style={{ width: '18%' }} />
                 <col style={{ width: '8%' }} />
                 <col style={{ width: '10%' }} />
                 <col style={{ width: '12%' }} />
                 <col style={{ width: '13%' }} />
                 <col style={{ width: '7%' }} />
                 <col style={{ width: '11%' }} />
-                <col style={{ width: '13%' }} />
+                <col style={{ width: '15%' }} />
               </colgroup>
               <thead>
                 <tr className="bg-slate-100 text-slate-800 uppercase font-bold text-[10px] border-b border-slate-300">
@@ -2622,12 +2639,12 @@ export const PackingListView: React.FC = () => {
               </tbody>
               <tfoot>
                 <tr className="bg-slate-100 font-bold border-t-2 border-slate-400">
-                  <td colSpan={2} className="p-2 text-right uppercase">TOTALS:</td>
-                  <td className="p-2 text-center font-mono text-slate-900">{totalBox} Boxes</td>
+                  <td colSpan={2} className="p-2 text-right uppercase whitespace-nowrap">TOTALS:</td>
+                  <td className="p-2 text-center font-mono text-slate-900 whitespace-nowrap tabular-nums">{totalBox} Boxes</td>
                   <td colSpan={2}></td>
-                  <td className="p-2 text-right font-mono text-teal-800 font-black">{totalWeight} KG</td>
-                  <td colSpan={2} className="p-2 text-right uppercase">TOTAL INVOICE VALUE:</td>
-                  <td className="p-2 text-right font-mono font-black text-slate-900">
+                  <td className="p-2 text-right font-mono text-teal-800 font-black whitespace-nowrap tabular-nums">{totalWeight} KG</td>
+                  <td colSpan={2} className="p-2 text-right uppercase whitespace-nowrap">TOTAL VALUE:</td>
+                  <td className="p-2 text-right font-mono font-black text-slate-900 whitespace-nowrap tabular-nums">
                     {formatCurrency(totalAmount, 'RMB')}
                   </td>
                 </tr>

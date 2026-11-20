@@ -94,7 +94,7 @@ export const BanglaPanjikaCalendar: React.FC = () => {
     <section
       aria-label="Bangla Panjika Calendar"
       data-testid="bangla-panjika-calendar"
-      className="bg-white rounded-xl shadow-xs border border-[#CBD8E6] overflow-hidden"
+      className="scroll-mt-24 bg-white rounded-xl shadow-xs border border-[#CBD8E6] overflow-hidden"
       style={{ fontFamily: '"Noto Sans Bengali", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}
     >
       {/* Top Interactive Navigation Strip matching Dashboard chrome */}

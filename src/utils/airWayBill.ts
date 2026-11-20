@@ -11,24 +11,31 @@ export interface AirWayBillRow {
   destination?: string;
   date: string;
   shipper: string;
+  documentsHolder?: string;
   flight: string;
   totalBox: number;
   rmbPerBox: number;
   totalRmb: number; // totalBox * rmbPerBox
-  rate: number; // BDT exchange rate per RMB
+  rate: number; // BDT exchange rate per RMB (supports negative, -0, +0, positive)
+  rateSpecified?: boolean; // true when user explicitly entered a rate (including 0, -0, +0)
   bdtAmount: number; // totalRmb * rate
   isDraft?: boolean;
   isCustom?: boolean;
 }
 
 export interface AirWayBillRowOverride {
+  documentsHolder?: string;
   rmbPerBox?: number;
   rate?: number;
+  rateSpecified?: boolean;
 }
 
 export interface AirWayBillFilterOptions {
   yearMonth?: string; // 'all' or 'YYYY-MM'
+  fromDate?: string; // 'YYYY-MM-DD' inclusive lower bound
+  toDate?: string; // 'YYYY-MM-DD' inclusive upper bound
   shipper?: string; // 'ALL' or specific shipper
+  documentsHolder?: string; // 'ALL' or specific documents holder
   flight?: string; // 'ALL' or specific flight
   defaultRmbPerBox?: number;
   defaultRate?: number;
@@ -44,26 +51,58 @@ export interface AirWayBillTotals {
 export interface AirWayBillLookupOptions {
   months: string[];
   shippers: string[];
+  documentsHolders: string[];
   flights: string[];
 }
 
+export function normalizeSignedZero(val: number): number {
+  return Object.is(val, -0) || val === 0 ? 0 : val;
+}
+
+export function isValidSignedDecimalDraft(raw: string): boolean {
+  return /^[+-]?(\d+\.?\d*|\.\d*)?$/.test(raw.trim());
+}
+
+export function parseSignedNumber(raw: string | number | undefined | null): number {
+  if (typeof raw === 'number') {
+    return Number.isFinite(raw) ? normalizeSignedZero(raw) : 0;
+  }
+  const trimmed = String(raw ?? '').trim().replace(/,/g, '');
+  if (
+    trimmed === '' ||
+    trimmed === '+' ||
+    trimmed === '-' ||
+    trimmed === '.' ||
+    trimmed === '+.' ||
+    trimmed === '-.'
+  ) {
+    return 0;
+  }
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? normalizeSignedZero(parsed) : 0;
+}
+
 function round2(val: number): number {
-  return Math.round((Number(val) || 0) * 100) / 100;
+  const num = Number(val);
+  if (!Number.isFinite(num)) return 0;
+  const rounded = Math.round(num * 100) / 100;
+  return normalizeSignedZero(rounded);
 }
 
 /**
  * Calculates Air Way Bill Row values:
  * TOTAL RMB = TOTAL BOX * RMB/PER BOX
  * BDT AMOUNT = TOTAL RMB * RATE
+ * Supports positive, negative, -0, and +0 values seamlessly.
  */
 export function calculateAirWayBillRow(
   totalBox: number,
   rmbPerBox: number,
   rate: number
 ): { totalRmb: number; bdtAmount: number } {
-  const boxes = Number(totalBox) || 0;
-  const rmbBox = Number(rmbPerBox) || 0;
-  const exRate = Number(rate) || 0;
+  const boxes = parseSignedNumber(totalBox);
+  const rmbBox = parseSignedNumber(rmbPerBox);
+  const exRate = parseSignedNumber(rate);
 
   const totalRmb = round2(boxes * rmbBox);
   const bdtAmount = round2(totalRmb * exRate);
@@ -83,6 +122,7 @@ export function extractAirWayBillFilterOptions(
   const safePackings = Array.isArray(packings) ? packings : [];
   const monthSet = new Set<string>();
   const shipperSet = new Set<string>();
+  const documentsHolderSet = new Set<string>();
   const flightSet = new Set<string>();
 
   for (const pkg of safePackings) {
@@ -94,6 +134,10 @@ export function extractAirWayBillFilterOptions(
     if (rawShipper) {
       shipperSet.add(rawShipper);
     }
+    const rawDocumentsHolder = (pkg.documentsHolder || '').trim();
+    if (rawDocumentsHolder) {
+      documentsHolderSet.add(rawDocumentsHolder);
+    }
     const rawFlight = (pkg.flight || '').trim();
     if (rawFlight) {
       flightSet.add(rawFlight);
@@ -103,6 +147,7 @@ export function extractAirWayBillFilterOptions(
   return {
     months: Array.from(monthSet).sort((a, b) => b.localeCompare(a)),
     shippers: Array.from(shipperSet).sort((a, b) => a.localeCompare(b)),
+    documentsHolders: Array.from(documentsHolderSet).sort((a, b) => a.localeCompare(b)),
     flights: Array.from(flightSet).sort((a, b) => a.localeCompare(b)),
   };
 }
@@ -119,7 +164,10 @@ export function buildAirWayBillRows(
 ): AirWayBillRow[] {
   const {
     yearMonth = 'all',
+    fromDate = '',
+    toDate = '',
     shipper = 'ALL',
+    documentsHolder = 'ALL',
     flight = 'ALL',
     defaultRmbPerBox = 0,
     defaultRate = 0,
@@ -127,12 +175,22 @@ export function buildAirWayBillRows(
 
   const safePackings = Array.isArray(packings) ? packings : [];
   const normMonth = (yearMonth || 'all').trim().toLowerCase();
+  const normFromDate = (fromDate || '').trim().slice(0, 10);
+  const normToDate = (toDate || '').trim().slice(0, 10);
   const normShipper = (shipper || 'ALL').trim().toLowerCase();
+  const normDocumentsHolder = (documentsHolder || 'ALL').trim().toLowerCase();
   const normFlight = (flight || 'ALL').trim().toLowerCase();
 
   const matched = safePackings.filter((pkg) => {
     const pkgDate = (pkg.packingDate || '').trim();
+    const pkgIsoDate = pkgDate.slice(0, 10);
     if (normMonth !== 'all' && normMonth !== '' && pkgDate.slice(0, 7).toLowerCase() !== normMonth) {
+      return false;
+    }
+    if (normFromDate && (!pkgIsoDate || pkgIsoDate < normFromDate)) {
+      return false;
+    }
+    if (normToDate && (!pkgIsoDate || pkgIsoDate > normToDate)) {
       return false;
     }
     if (
@@ -141,6 +199,19 @@ export function buildAirWayBillRows(
       (pkg.shipper || '').trim().toLowerCase() !== normShipper
     ) {
       return false;
+    }
+    if (
+      normDocumentsHolder !== 'all' &&
+      normDocumentsHolder !== ''
+    ) {
+      const overrideHolder = overrides[pkg.id]?.documentsHolder;
+      const effectiveHolder =
+        overrideHolder !== undefined
+          ? overrideHolder.trim()
+          : (pkg.documentsHolder || '').trim() || (pkg.shipper || '').trim();
+      if (effectiveHolder.toLowerCase() !== normDocumentsHolder) {
+        return false;
+      }
     }
     if (
       normFlight !== 'all' &&
@@ -168,23 +239,38 @@ export function buildAirWayBillRows(
 
     const resolvedRmbPerBox =
       rowOverride.rmbPerBox !== undefined
-        ? Number(rowOverride.rmbPerBox) || 0
+        ? parseSignedNumber(rowOverride.rmbPerBox)
         : pkg.awbRmbPerBox !== undefined
-        ? Number(pkg.awbRmbPerBox) || 0
-        : Number(defaultRmbPerBox) || 0;
+        ? parseSignedNumber(pkg.awbRmbPerBox)
+        : parseSignedNumber(defaultRmbPerBox);
+
+    const hasExplicitRate =
+      rowOverride.rateSpecified !== undefined
+        ? rowOverride.rateSpecified
+        : rowOverride.rate !== undefined ||
+          pkg.awbRate !== undefined ||
+          (pkg.rmbRate !== undefined && pkg.rmbRate !== null && parseSignedNumber(pkg.rmbRate) !== 0) ||
+          parseSignedNumber(defaultRate) !== 0;
 
     const resolvedRate =
       rowOverride.rate !== undefined
-        ? Number(rowOverride.rate) || 0
+        ? parseSignedNumber(rowOverride.rate)
         : pkg.awbRate !== undefined
-        ? Number(pkg.awbRate) || 0
-        : Number(pkg.rmbRate) > 0
-        ? Number(pkg.rmbRate)
-        : Number(defaultRate) || 0;
+        ? parseSignedNumber(pkg.awbRate)
+        : pkg.rmbRate !== undefined && pkg.rmbRate !== null && parseSignedNumber(pkg.rmbRate) !== 0
+        ? parseSignedNumber(pkg.rmbRate)
+        : parseSignedNumber(defaultRate);
 
     const rmbPerBox = round2(resolvedRmbPerBox);
     const rate = round2(resolvedRate);
     const { totalRmb, bdtAmount } = calculateAirWayBillRow(totalBox, rmbPerBox, rate);
+
+    const pkgShipper = (pkg.shipper || '').trim();
+    const pkgDocumentsHolder = (pkg.documentsHolder || '').trim();
+    const resolvedDocumentsHolder =
+      rowOverride.documentsHolder !== undefined
+        ? rowOverride.documentsHolder.trim()
+        : pkgDocumentsHolder || pkgShipper;
 
     return {
       id: pkg.id,
@@ -193,12 +279,14 @@ export function buildAirWayBillRows(
       shippingMark: pkg.shippingMark,
       destination: pkg.destination,
       date: (pkg.packingDate || '').trim(),
-      shipper: (pkg.shipper || '').trim(),
+      shipper: pkgShipper,
+      documentsHolder: resolvedDocumentsHolder,
       flight: (pkg.flight || '').trim(),
       totalBox,
       rmbPerBox,
       totalRmb,
       rate,
+      rateSpecified: hasExplicitRate,
       bdtAmount,
       isDraft: pkg.id === 'draft-packing-manifest',
     };
@@ -212,9 +300,11 @@ export function createEmptyAirWayBillRow(
   id: string,
   defaults: Partial<AirWayBillRow> = {}
 ): AirWayBillRow {
-  const totalBox = Number(defaults.totalBox) || 0;
-  const rmbPerBox = Number(defaults.rmbPerBox) || 0;
-  const rate = Number(defaults.rate) || 0;
+  const totalBox = parseSignedNumber(defaults.totalBox);
+  const rmbPerBox = parseSignedNumber(defaults.rmbPerBox);
+  const rate = parseSignedNumber(defaults.rate);
+  const rateSpecified =
+    defaults.rateSpecified !== undefined ? defaults.rateSpecified : defaults.rate !== undefined;
   const { totalRmb, bdtAmount } = calculateAirWayBillRow(totalBox, rmbPerBox, rate);
 
   return {
@@ -222,11 +312,13 @@ export function createEmptyAirWayBillRow(
     isCustom: true,
     date: defaults.date ?? '',
     shipper: defaults.shipper ?? '',
+    documentsHolder: defaults.documentsHolder ?? '',
     flight: defaults.flight ?? '',
     totalBox,
     rmbPerBox,
     totalRmb,
     rate,
+    rateSpecified,
     bdtAmount,
   };
 }
@@ -253,12 +345,14 @@ export function isAirWayBillRowPopulated(
   return (
     (row.date || '').trim() !== '' ||
     (row.shipper || '').trim() !== '' ||
+    (row.documentsHolder || '').trim() !== '' ||
     (row.flight || '').trim() !== '' ||
-    (Number(row.totalBox) || 0) > 0 ||
-    (Number(row.rmbPerBox) || 0) > 0 ||
-    (Number(row.totalRmb) || 0) > 0 ||
-    (Number(row.rate) || 0) > 0 ||
-    (Number(row.bdtAmount) || 0) > 0
+    parseSignedNumber(row.totalBox) !== 0 ||
+    parseSignedNumber(row.rmbPerBox) !== 0 ||
+    parseSignedNumber(row.totalRmb) !== 0 ||
+    parseSignedNumber(row.rate) !== 0 ||
+    Boolean(row.rateSpecified) ||
+    parseSignedNumber(row.bdtAmount) !== 0
   );
 }
 
@@ -272,9 +366,19 @@ export function mergeAirWayBillRows(
   customRows: AirWayBillRow[],
   filters: AirWayBillFilterOptions = {}
 ): AirWayBillRow[] {
-  const { yearMonth = 'all', shipper = 'ALL', flight = 'ALL' } = filters;
+  const {
+    yearMonth = 'all',
+    fromDate = '',
+    toDate = '',
+    shipper = 'ALL',
+    documentsHolder = 'ALL',
+    flight = 'ALL',
+  } = filters;
   const normMonth = (yearMonth || 'all').trim().toLowerCase();
+  const normFromDate = (fromDate || '').trim().slice(0, 10);
+  const normToDate = (toDate || '').trim().slice(0, 10);
   const normShipper = (shipper || 'ALL').trim().toLowerCase();
+  const normDocumentsHolder = (documentsHolder || 'ALL').trim().toLowerCase();
   const normFlight = (flight || 'ALL').trim().toLowerCase();
 
   const matchingCustomRows = customRows
@@ -282,12 +386,33 @@ export function mergeAirWayBillRows(
       if (!isAirWayBillRowPopulated(row)) {
         return true;
       }
-      const rDate = (row.date || '').trim().toLowerCase();
-      if (normMonth !== 'all' && normMonth !== '' && rDate !== '' && rDate.slice(0, 7) !== normMonth) {
+      const rDate = (row.date || '').trim();
+      const rIsoDate = rDate.slice(0, 10);
+      if (
+        normMonth !== 'all' &&
+        normMonth !== '' &&
+        rDate !== '' &&
+        rDate.slice(0, 7).toLowerCase() !== normMonth
+      ) {
+        return false;
+      }
+      if (normFromDate && rIsoDate !== '' && rIsoDate < normFromDate) {
+        return false;
+      }
+      if (normToDate && rIsoDate !== '' && rIsoDate > normToDate) {
         return false;
       }
       const rShipper = (row.shipper || '').trim().toLowerCase();
       if (normShipper !== 'all' && normShipper !== '' && rShipper !== '' && rShipper !== normShipper) {
+        return false;
+      }
+      const rDocumentsHolder = (row.documentsHolder || '').trim().toLowerCase();
+      if (
+        normDocumentsHolder !== 'all' &&
+        normDocumentsHolder !== '' &&
+        rDocumentsHolder !== '' &&
+        rDocumentsHolder !== normDocumentsHolder
+      ) {
         return false;
       }
       const rFlight = (row.flight || '').trim().toLowerCase();
@@ -386,10 +511,16 @@ export function formatAirWayBillExportFilename(
   yearMonth: string = 'all',
   shipper: string = 'ALL',
   extension: 'pdf' | 'png' = 'pdf',
-  referenceDateStr?: string
+  referenceDateStr?: string,
+  fromDate?: string,
+  toDate?: string
 ): string {
-  const cleanMonth =
-    yearMonth && yearMonth !== 'all'
+  const cleanFrom = (fromDate || '').trim().replace(/[^0-9-]/g, '');
+  const cleanTo = (toDate || '').trim().replace(/[^0-9-]/g, '');
+  const cleanPeriod =
+    cleanFrom || cleanTo
+      ? `${cleanFrom || 'START'}_to_${cleanTo || 'END'}`
+      : yearMonth && yearMonth !== 'all'
       ? yearMonth.trim().replace(/[^a-zA-Z0-9_-]/g, '-')
       : referenceDateStr ?? new Date().toISOString().slice(0, 7);
   const cleanShipper =
@@ -397,5 +528,5 @@ export function formatAirWayBillExportFilename(
       ? shipper.trim().replace(/[^a-zA-Z0-9_-]/g, '_')
       : 'ALL_SHIPPERS';
   const ext = extension.toLowerCase() === 'png' ? 'png' : 'pdf';
-  return `ZSB_AQUATICS_Flight_Return_Bill_${cleanMonth}_${cleanShipper}.${ext}`;
+  return `ZSB_AQUATICS_Flight_Return_Bill_${cleanPeriod}_${cleanShipper}.${ext}`;
 }

@@ -73,6 +73,7 @@ import { QuickFinancialPulseSidebar } from './QuickFinancialPulseSidebar.tsx';
 import { DashboardAlertsWidget } from './DashboardAlertsWidget.tsx';
 import { DashboardQuickSummaryWidget } from './DashboardQuickSummaryWidget.tsx';
 import { DashboardCalendarWidget } from './DashboardCalendarWidget.tsx';
+import { BanglaPanjikaCalendar } from './BanglaPanjikaCalendar.tsx';
 
 export const DashboardView: React.FC = () => {
   const {
@@ -751,6 +752,9 @@ export const DashboardView: React.FC = () => {
         currency={companyProfile.currency || 'BDT'}
         onNavigateTab={setActiveTab}
       />
+
+      {/* Traditional Bangla Panjika Calendar (Tithi, Nakshatra, Hijri, Gregorian & Festivals) */}
+      <BanglaPanjikaCalendar />
 
       {/* Unified Operational & Financial Alerts Widget */}
       <DashboardAlertsWidget totalBalance={totalBalanceSummary.totalBalance} />

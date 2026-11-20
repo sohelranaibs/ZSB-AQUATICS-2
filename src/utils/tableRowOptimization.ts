@@ -10,7 +10,11 @@ import {
   calculatePaymentRow,
   calculateExporterSlipRowAmount,
 } from './calculations.ts';
-import { AirWayBillRow, calculateAirWayBillRow } from './airWayBill.ts';
+import {
+  AirWayBillRow,
+  calculateAirWayBillRow,
+  parseSignedNumber,
+} from './airWayBill.ts';
 
 /**
  * Value equality check for PurchaseItemRow data fields rendered in PurchaseItemTableRow.
@@ -88,11 +92,13 @@ export function isAirWayBillRowDataEqual(
     prev.packingId === next.packingId &&
     prev.date === next.date &&
     prev.shipper === next.shipper &&
+    (prev.documentsHolder || '') === (next.documentsHolder || '') &&
     prev.flight === next.flight &&
     prev.totalBox === next.totalBox &&
     prev.rmbPerBox === next.rmbPerBox &&
     prev.totalRmb === next.totalRmb &&
     prev.rate === next.rate &&
+    Boolean(prev.rateSpecified) === Boolean(next.rateSpecified) &&
     prev.bdtAmount === next.bdtAmount
   );
 }
@@ -168,7 +174,6 @@ export function updatePackingRowById(
   let changed = false;
   const next = prev.map((row) => {
     if (row.id !== id) return row;
-    if (row[field] === value) return row;
 
     const updated: PackingItemRow = { ...row, [field]: value };
     const b = field === 'box' ? Number(value) || 0 : row.box;
@@ -230,18 +235,33 @@ export function updateCustomExporterPaymentRowById(
 export function updateCustomAirWayBillRowById(
   prev: AirWayBillRow[],
   id: string,
-  field: 'rmbPerBox' | 'rate' | 'date' | 'shipper' | 'flight' | 'totalBox',
+  field: 'rmbPerBox' | 'rate' | 'date' | 'shipper' | 'documentsHolder' | 'flight' | 'totalBox',
   rawValue: string
 ): AirWayBillRow[] {
   let changed = false;
   const next = prev.map((row) => {
     if (row.id !== id) return row;
     const updated: AirWayBillRow = { ...row };
-    if (field === 'date' || field === 'shipper' || field === 'flight') {
+    if (
+      field === 'date' ||
+      field === 'shipper' ||
+      field === 'documentsHolder' ||
+      field === 'flight'
+    ) {
       updated[field] = rawValue;
+    } else if (field === 'rate') {
+      const trimmed = rawValue.trim();
+      const isEmptyOrSignOnly =
+        trimmed === '' ||
+        trimmed === '+' ||
+        trimmed === '-' ||
+        trimmed === '.' ||
+        trimmed === '+.' ||
+        trimmed === '-.';
+      updated.rate = parseSignedNumber(rawValue);
+      updated.rateSpecified = !isEmptyOrSignOnly;
     } else {
-      const numVal = rawValue === '' ? 0 : parseFloat(rawValue) || 0;
-      updated[field] = numVal;
+      updated[field] = parseSignedNumber(rawValue);
     }
     const computed = calculateAirWayBillRow(
       updated.totalBox,

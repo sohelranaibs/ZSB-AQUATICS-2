@@ -106,6 +106,7 @@ test('sanitizePackingFormDraft recalculates row totalWeight and amount and detec
       flight: 'MU-2036',
       destination: 'PVG SHANGHAI',
       shipper: 'Z S B AQUATICS',
+      documentsHolder: 'SHISHIR MAMA',
       paymentStatus: 'UNPAID',
       remarks: 'Fragile live eels',
       customRmbAmount: '4500',
@@ -133,10 +134,28 @@ test('sanitizePackingFormDraft recalculates row totalWeight and amount and detec
   );
   assert.ok(loaded);
   assert.equal(loaded.shippingMark, 'ZSB-SHANGHAI-88');
+  assert.equal(loaded.documentsHolder, 'SHISHIR MAMA');
   assert.equal(loaded.customRmbAmount, '4500');
   assert.equal(loaded.rows[0].totalWeight, 210);
   assert.equal(loaded.rows[0].amount, 7350); // 10 boxes * 21 reportWeight * 35 rate
   assert.equal(hasMeaningfulPackingDraft(loaded), true);
+
+  const holderOnly = sanitizePackingFormDraft({
+    invoiceNumber: 'PKG-2026-043',
+    packingDate: '2026-03-28',
+    shippingMark: '',
+    flight: '',
+    destination: '',
+    shipper: '',
+    documentsHolder: 'CUSTOM DOCS AGENT',
+    paymentStatus: 'UNPAID',
+    remarks: '',
+    customRmbAmount: '',
+    rows: [],
+  });
+  assert.ok(holderOnly);
+  assert.equal(holderOnly.documentsHolder, 'CUSTOM DOCS AGENT');
+  assert.equal(hasMeaningfulPackingDraft(holderOnly), true);
 });
 
 test('sanitizePaymentFormDraft and sanitizeExporterPaymentFormDraft preserve unsaved fields', () => {

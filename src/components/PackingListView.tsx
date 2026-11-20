@@ -114,9 +114,9 @@ const ReportWeightCellInput: React.FC<ReportWeightCellInputProps> = memo(
       (e: React.ChangeEvent<HTMLInputElement>) => {
         const raw = e.target.value;
         setLocalDraft(raw);
-        onScheduleDraft(rowId, raw);
+        onCommitImmediate(rowId, raw);
       },
-      [onScheduleDraft, rowId]
+      [onCommitImmediate, rowId]
     );
 
     const handleDraftBlur = useCallback(
@@ -261,6 +261,22 @@ const PackingItemTableRow: React.FC<PackingItemTableRowProps> = memo(
       isReportWeightActive ||
       row.rate !== 0;
 
+    const rateInputRef = useRef<HTMLInputElement>(null);
+    const prevRateResetTokenRef = useRef<number>(reportWeightResetToken);
+    const [rateDraft, setRateDraft] = useState<string>(() =>
+      row.rate > 0 ? String(row.rate) : ''
+    );
+
+    useEffect(() => {
+      const resetChanged = prevRateResetTokenRef.current !== reportWeightResetToken;
+      prevRateResetTokenRef.current = reportWeightResetToken;
+      const isFocused =
+        typeof document !== 'undefined' && document.activeElement === rateInputRef.current;
+      if (resetChanged || !isFocused) {
+        setRateDraft(row.rate > 0 ? String(row.rate) : '');
+      }
+    }, [row.rate, reportWeightResetToken]);
+
     const handleItemChange = useCallback(
       (e: React.ChangeEvent<HTMLSelectElement>) => {
         onRowChange(row.id, 'item', e.target.value);
@@ -291,7 +307,22 @@ const PackingItemTableRow: React.FC<PackingItemTableRowProps> = memo(
 
     const handleRateChange = useCallback(
       (e: React.ChangeEvent<HTMLInputElement>) => {
-        onRowChange(row.id, 'rate', parseFloat(e.target.value) || 0);
+        const raw = e.target.value;
+        if (!/^\d*\.?\d*$/.test(raw.trim())) return;
+        setRateDraft(raw);
+        const parsed = raw.trim() === '' || raw.trim() === '.' ? 0 : parseFloat(raw);
+        onRowChange(row.id, 'rate', Number.isFinite(parsed) && parsed > 0 ? parsed : 0);
+      },
+      [onRowChange, row.id]
+    );
+
+    const handleRateBlur = useCallback(
+      (e: React.FocusEvent<HTMLInputElement>) => {
+        const raw = e.target.value.trim();
+        const parsed = raw === '' || raw === '.' ? 0 : parseFloat(raw);
+        const safeRate = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+        onRowChange(row.id, 'rate', safeRate);
+        setRateDraft(safeRate > 0 ? String(safeRate) : raw === '0' ? '0' : '');
       },
       [onRowChange, row.id]
     );
@@ -436,16 +467,18 @@ const PackingItemTableRow: React.FC<PackingItemTableRowProps> = memo(
           </select>
         </td>
 
-        {/* Rate Input */}
+        {/* Rate Input (Real-time calculation on every keystroke) */}
         <td className="p-1.5 border-r border-slate-200">
           <input
+            ref={rateInputRef}
             aria-label={`Row ${rowIndex + 1} Rate`}
+            data-testid={`packing-row-${rowIndex + 1}-rate`}
             aria-invalid={hasRateError}
-            type="number"
-            min="0"
-            step="0.01"
-            value={row.rate || ''}
+            type="text"
+            inputMode="decimal"
+            value={rateDraft}
             onChange={handleRateChange}
+            onBlur={handleRateBlur}
             className={`w-full bg-white border rounded-md px-2 py-1.5 text-right font-mono tabular-nums text-slate-800 focus:outline-none focus:ring-2 ${
               hasRateError
                 ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
@@ -532,6 +565,9 @@ export const PackingListView: React.FC = () => {
   const [shipper, setShipper] = useState<string>(
     () => initialPackingDraft?.shipper || ''
   );
+  const [documentsHolder, setDocumentsHolder] = useState<string>(
+    () => initialPackingDraft?.documentsHolder || ''
+  );
   const [paymentStatus, setPaymentStatus] = useState<'PAID' | 'UNPAID'>(
     () => initialPackingDraft?.paymentStatus || 'UNPAID'
   );
@@ -544,7 +580,16 @@ export const PackingListView: React.FC = () => {
 
   const [rows, setRows] = useState<PackingItemRow[]>(() => {
     if (initialPackingDraft && initialPackingDraft.rows.length > 0) {
-      const hydrated = [...initialPackingDraft.rows];
+      const hydrated: PackingItemRow[] = initialPackingDraft.rows.map((it) => {
+        const reportWeightVal = Number(it.reportWeight) || 0;
+        const calcs = calculatePackingRow(it.box, it.weight, it.rate, reportWeightVal);
+        return {
+          ...it,
+          reportWeight: reportWeightVal,
+          totalWeight: calcs.totalWeight,
+          amount: calcs.amount,
+        };
+      });
       while (hydrated.length < 5) {
         hydrated.push(createEmptyPackingRow(String(hydrated.length + 1)));
       }
@@ -570,6 +615,7 @@ export const PackingListView: React.FC = () => {
         flight,
         destination,
         shipper,
+        documentsHolder,
         paymentStatus,
         remarks,
         rows,
@@ -581,6 +627,7 @@ export const PackingListView: React.FC = () => {
       flight,
       destination,
       shipper,
+      documentsHolder,
       paymentStatus,
       remarks,
       rows,
@@ -601,6 +648,7 @@ export const PackingListView: React.FC = () => {
         flight,
         destination,
         shipper,
+        documentsHolder,
         paymentStatus,
         remarks,
         rows,
@@ -799,6 +847,16 @@ export const PackingListView: React.FC = () => {
     [dropdownOptions.shippers]
   );
 
+  const documentsHolderOptionElements = useMemo(
+    () =>
+      (dropdownOptions.documentsHolders || []).map((dh) => (
+        <option key={dh} value={dh}>
+          {dh}
+        </option>
+      )),
+    [dropdownOptions.documentsHolders]
+  );
+
   const savedManifestOptionElements = useMemo(
     () =>
       packings.map((p) => (
@@ -823,6 +881,7 @@ export const PackingListView: React.FC = () => {
     setFlight(found.flight);
     setDestination(found.destination);
     setShipper(found.shipper);
+    setDocumentsHolder(found.documentsHolder || '');
     setPaymentStatus(found.paymentStatus === 'PAID' ? 'PAID' : 'UNPAID');
     setRemarks(found.remarks || '');
 
@@ -922,6 +981,7 @@ export const PackingListView: React.FC = () => {
     setFlight('');
     setDestination('');
     setShipper('');
+    setDocumentsHolder('');
     setRemarks('');
     setPaymentStatus('UNPAID');
     setPackingDate(new Date().toISOString().slice(0, 10));
@@ -1024,6 +1084,7 @@ export const PackingListView: React.FC = () => {
         flight,
         destination,
         shipper,
+        documentsHolder,
         packingDate,
         fromDate: packingDate,
         toDate: packingDate,
@@ -1079,6 +1140,7 @@ export const PackingListView: React.FC = () => {
       flight,
       destination,
       shipper,
+      documentsHolder,
       packingDate,
       fromDate: packingDate,
       toDate: packingDate,
@@ -1148,6 +1210,7 @@ export const PackingListView: React.FC = () => {
         flight,
         destination,
         shipper,
+        documentsHolder,
         packingDate,
         fromDate: packingDate,
         toDate: packingDate,
@@ -1212,15 +1275,29 @@ export const PackingListView: React.FC = () => {
   };
 
   const handleAddCustomOption = () => {
-    if (!addingCategory || !newOptionValue.trim()) return;
+    const trimmed = newOptionValue.trim();
+    if (!addingCategory || !trimmed) return;
     const cat = addingCategory as any;
-    addDropdownItem(cat, newOptionValue.trim());
-    if (addingCategory === 'shippingMarks') setShippingMark(newOptionValue.trim());
-    if (addingCategory === 'flights') setFlight(newOptionValue.trim());
-    if (addingCategory === 'destinations') setDestination(newOptionValue.trim());
-    if (addingCategory === 'shippers') setShipper(newOptionValue.trim());
+    addDropdownItem(cat, trimmed);
+    if (addingCategory === 'shippingMarks') setShippingMark(trimmed);
+    if (addingCategory === 'flights') setFlight(trimmed);
+    if (addingCategory === 'destinations') setDestination(trimmed);
+    if (addingCategory === 'shippers') setShipper(trimmed);
+    if (addingCategory === 'documentsHolders') setDocumentsHolder(trimmed);
     setNewOptionValue('');
     setAddingCategory(null);
+  };
+
+  const addingCategoryLabelMap: Record<string, string> = {
+    shippingMarks: 'Shipping Mark',
+    flights: 'Flight',
+    destinations: 'Destination',
+    shippers: 'Shipper',
+    documentsHolders: 'Documents Holder',
+    exportItems: 'Export Item',
+    boxes: 'Box Count',
+    weights: 'Weight',
+    units: 'Unit',
   };
 
   return (
@@ -1396,170 +1473,207 @@ export const PackingListView: React.FC = () => {
             {/* Redesigned Shipment Metadata Strip (Without From Date and To Date) */}
             <div className="p-4 bg-amber-50/40 border-b border-slate-200 space-y-3">
               <div
-                className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 text-xs"
+                className="space-y-3 text-xs"
                 data-testid="packing-metadata-grid"
               >
-                {/* 1. Packing / Invoice No */}
-                <div>
-                  <label
-                    htmlFor="packing-invoice-no"
-                    className="font-bold text-slate-700 uppercase block mb-1 whitespace-nowrap"
-                  >
-                    PACKING NO. <span className="text-rose-600">*</span>
-                  </label>
-                  <input
-                    id="packing-invoice-no"
-                    type="text"
-                    aria-invalid={
-                      validationAttempted && Boolean(validation.fieldErrors.invoiceNumber)
-                    }
-                    value={invoiceNumber}
-                    onChange={(e) => setInvoiceNumber(e.target.value)}
-                    className={`w-full bg-white border rounded-lg px-2.5 py-2 font-mono font-bold text-blue-950 focus:outline-none focus:ring-2 ${
-                      validationAttempted && validation.fieldErrors.invoiceNumber
-                        ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
-                        : 'border-slate-300 focus:ring-amber-500'
-                    }`}
-                  />
-                </div>
-
-                {/* 2. Packing Date */}
-                <div>
-                  <label
-                    htmlFor="packing-date-input"
-                    className="font-bold text-slate-700 uppercase block mb-1 whitespace-nowrap"
-                  >
-                    PACKING DATE <span className="text-rose-600">*</span>
-                  </label>
-                  <input
-                    id="packing-date-input"
-                    type="date"
-                    aria-invalid={
-                      validationAttempted && Boolean(validation.fieldErrors.packingDate)
-                    }
-                    value={packingDate}
-                    onChange={(e) => setPackingDate(e.target.value)}
-                    className={`w-full bg-white border rounded-lg px-2.5 py-2 text-slate-800 font-mono font-semibold focus:outline-none focus:ring-2 ${
-                      validationAttempted && validation.fieldErrors.packingDate
-                        ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
-                        : 'border-slate-300 focus:ring-amber-500'
-                    }`}
-                  />
-                </div>
-
-                {/* 3. Shipping Mark */}
-                <div>
-                  <div className="flex items-center justify-between gap-1 mb-1">
+                {/* Row 1: Packing No, Packing Date, Shipping Mark, Flight */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1.3fr_0.95fr] gap-3 items-end">
+                  {/* 1. Packing / Invoice No */}
+                  <div>
                     <label
-                      htmlFor="packing-shipping-mark"
-                      className="font-bold text-slate-700 uppercase whitespace-nowrap"
+                      htmlFor="packing-invoice-no"
+                      className="font-bold text-slate-700 uppercase block mb-1 whitespace-nowrap"
                     >
-                      SHIPPING MARK <span className="text-rose-600">*</span>
+                      PACKING NO. <span className="text-rose-600">*</span>
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => setAddingCategory('shippingMarks')}
-                      className="text-[10px] text-blue-700 hover:text-blue-900 font-bold underline cursor-pointer whitespace-nowrap"
-                    >
-                      + Add
-                    </button>
+                    <input
+                      id="packing-invoice-no"
+                      type="text"
+                      aria-invalid={
+                        validationAttempted && Boolean(validation.fieldErrors.invoiceNumber)
+                      }
+                      value={invoiceNumber}
+                      onChange={(e) => setInvoiceNumber(e.target.value)}
+                      className={`w-full bg-white border rounded-lg px-2.5 py-2 font-mono font-bold text-blue-950 focus:outline-none focus:ring-2 ${
+                        validationAttempted && validation.fieldErrors.invoiceNumber
+                          ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
+                          : 'border-slate-300 focus:ring-amber-500'
+                      }`}
+                    />
                   </div>
-                  <select
-                    id="packing-shipping-mark"
-                    aria-invalid={
-                      validationAttempted && Boolean(validation.fieldErrors.shippingMark)
-                    }
-                    value={shippingMark}
-                    onChange={(e) => setShippingMark(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 font-bold text-blue-950 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  >
-                    <option value="">-- Select Shipping Mark --</option>
-                    {shippingMarkOptionElements}
-                  </select>
+
+                  {/* 2. Packing Date */}
+                  <div>
+                    <label
+                      htmlFor="packing-date-input"
+                      className="font-bold text-slate-700 uppercase block mb-1 whitespace-nowrap"
+                    >
+                      PACKING DATE <span className="text-rose-600">*</span>
+                    </label>
+                    <input
+                      id="packing-date-input"
+                      type="date"
+                      aria-invalid={
+                        validationAttempted && Boolean(validation.fieldErrors.packingDate)
+                      }
+                      value={packingDate}
+                      onChange={(e) => setPackingDate(e.target.value)}
+                      className={`w-full bg-white border rounded-lg px-2.5 py-2 text-slate-800 font-mono font-semibold focus:outline-none focus:ring-2 ${
+                        validationAttempted && validation.fieldErrors.packingDate
+                          ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
+                          : 'border-slate-300 focus:ring-amber-500'
+                      }`}
+                    />
+                  </div>
+
+                  {/* 3. Shipping Mark */}
+                  <div>
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <label
+                        htmlFor="packing-shipping-mark"
+                        className="font-bold text-slate-700 uppercase whitespace-nowrap"
+                      >
+                        SHIPPING MARK <span className="text-rose-600">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setAddingCategory('shippingMarks')}
+                        className="text-[10px] text-blue-700 hover:text-blue-900 font-bold underline cursor-pointer whitespace-nowrap"
+                      >
+                        + Add
+                      </button>
+                    </div>
+                    <select
+                      id="packing-shipping-mark"
+                      aria-invalid={
+                        validationAttempted && Boolean(validation.fieldErrors.shippingMark)
+                      }
+                      value={shippingMark}
+                      onChange={(e) => setShippingMark(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 font-bold text-blue-950 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    >
+                      <option value="">-- Select Shipping Mark --</option>
+                      {shippingMarkOptionElements}
+                    </select>
+                  </div>
+
+                  {/* 4. Flight */}
+                  <div>
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <label
+                        htmlFor="packing-flight-select"
+                        className="font-bold text-slate-700 uppercase whitespace-nowrap"
+                      >
+                        FLIGHT <span className="text-rose-600">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setAddingCategory('flights')}
+                        className="text-[10px] text-blue-700 hover:text-blue-900 font-bold underline cursor-pointer whitespace-nowrap"
+                      >
+                        + Add
+                      </button>
+                    </div>
+                    <select
+                      id="packing-flight-select"
+                      value={flight}
+                      onChange={(e) => setFlight(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    >
+                      <option value="">-- Select Flight --</option>
+                      {flightOptionElements}
+                    </select>
+                  </div>
                 </div>
 
-                {/* 4. Flight */}
-                <div>
-                  <div className="flex items-center justify-between gap-1 mb-1">
-                    <label
-                      htmlFor="packing-flight-select"
-                      className="font-bold text-slate-700 uppercase whitespace-nowrap"
+                {/* Row 2: Destination, Shipper, Documents Holder */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                  {/* 5. Destination */}
+                  <div>
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <label
+                        htmlFor="packing-destination-select"
+                        className="font-bold text-slate-700 uppercase whitespace-nowrap"
+                      >
+                        DESTINATION <span className="text-rose-600">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setAddingCategory('destinations')}
+                        className="text-[10px] text-blue-700 hover:text-blue-900 font-bold underline cursor-pointer whitespace-nowrap"
+                      >
+                        + Add
+                      </button>
+                    </div>
+                    <select
+                      id="packing-destination-select"
+                      value={destination}
+                      onChange={(e) => setDestination(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
                     >
-                      FLIGHT <span className="text-rose-600">*</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setAddingCategory('flights')}
-                      className="text-[10px] text-blue-700 hover:text-blue-900 font-bold underline cursor-pointer whitespace-nowrap"
-                    >
-                      + Add
-                    </button>
+                      <option value="">-- Select Destination --</option>
+                      {destinationOptionElements}
+                    </select>
                   </div>
-                  <select
-                    id="packing-flight-select"
-                    value={flight}
-                    onChange={(e) => setFlight(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  >
-                    <option value="">-- Select Flight --</option>
-                    {flightOptionElements}
-                  </select>
-                </div>
 
-                {/* 5. Destination */}
-                <div>
-                  <div className="flex items-center justify-between gap-1 mb-1">
-                    <label
-                      htmlFor="packing-destination-select"
-                      className="font-bold text-slate-700 uppercase whitespace-nowrap"
+                  {/* 6. Shipper */}
+                  <div>
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <label
+                        htmlFor="packing-shipper-select"
+                        className="font-bold text-slate-700 uppercase whitespace-nowrap"
+                      >
+                        SHIPPER <span className="text-rose-600">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setAddingCategory('shippers')}
+                        className="text-[10px] text-blue-700 hover:text-blue-900 font-bold underline cursor-pointer whitespace-nowrap"
+                      >
+                        + Add
+                      </button>
+                    </div>
+                    <select
+                      id="packing-shipper-select"
+                      value={shipper}
+                      onChange={(e) => setShipper(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
                     >
-                      DESTINATION <span className="text-rose-600">*</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setAddingCategory('destinations')}
-                      className="text-[10px] text-blue-700 hover:text-blue-900 font-bold underline cursor-pointer whitespace-nowrap"
-                    >
-                      + Add
-                    </button>
+                      <option value="">-- Select Shipper --</option>
+                      {shipperOptionElements}
+                    </select>
                   </div>
-                  <select
-                    id="packing-destination-select"
-                    value={destination}
-                    onChange={(e) => setDestination(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  >
-                    <option value="">-- Select Destination --</option>
-                    {destinationOptionElements}
-                  </select>
-                </div>
 
-                {/* 6. Shipper */}
-                <div>
-                  <div className="flex items-center justify-between gap-1 mb-1">
-                    <label
-                      htmlFor="packing-shipper-select"
-                      className="font-bold text-slate-700 uppercase whitespace-nowrap"
+                  {/* 7. Documents Holder */}
+                  <div>
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <label
+                        htmlFor="packing-documents-holder-select"
+                        className="font-bold text-slate-700 uppercase whitespace-nowrap"
+                      >
+                        DOCUMENTS HOLDER
+                      </label>
+                      <button
+                        type="button"
+                        data-testid="packing-add-documents-holder-btn"
+                        aria-label="Add new Documents Holder"
+                        onClick={() => setAddingCategory('documentsHolders')}
+                        className="text-[10px] text-blue-700 hover:text-blue-900 font-bold underline cursor-pointer whitespace-nowrap"
+                      >
+                        + Add
+                      </button>
+                    </div>
+                    <select
+                      id="packing-documents-holder-select"
+                      data-testid="packing-documents-holder-select"
+                      value={documentsHolder}
+                      onChange={(e) => setDocumentsHolder(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
                     >
-                      SHIPPER <span className="text-rose-600">*</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setAddingCategory('shippers')}
-                      className="text-[10px] text-blue-700 hover:text-blue-900 font-bold underline cursor-pointer whitespace-nowrap"
-                    >
-                      + Add
-                    </button>
+                      <option value="">-- Select Documents Holder --</option>
+                      {documentsHolderOptionElements}
+                    </select>
                   </div>
-                  <select
-                    id="packing-shipper-select"
-                    value={shipper}
-                    onChange={(e) => setShipper(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  >
-                    <option value="">-- Select Shipper --</option>
-                    {shipperOptionElements}
-                  </select>
                 </div>
               </div>
 
@@ -1611,19 +1725,35 @@ export const PackingListView: React.FC = () => {
 
             {/* Quick Add Inline Bar */}
             {addingCategory && (
-              <div className="p-3 bg-blue-50 border-b border-blue-200 flex flex-wrap items-center gap-2 text-xs">
+              <div
+                data-testid="packing-quick-add-bar"
+                className="p-3 bg-blue-50 border-b border-blue-200 flex flex-wrap items-center gap-2 text-xs"
+              >
                 <span className="font-bold text-blue-950 uppercase">
-                  Add to {addingCategory}:
+                  Add to {addingCategoryLabelMap[addingCategory] || addingCategory}:
                 </span>
                 <input
                   type="text"
+                  autoFocus
+                  data-testid="packing-quick-add-input"
+                  aria-label={`New ${addingCategoryLabelMap[addingCategory] || addingCategory} name`}
                   placeholder="Enter new preset value..."
                   value={newOptionValue}
                   onChange={(e) => setNewOptionValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddCustomOption();
+                    } else if (e.key === 'Escape') {
+                      setAddingCategory(null);
+                      setNewOptionValue('');
+                    }
+                  }}
                   className="bg-white border border-blue-300 rounded-md px-2.5 py-1.5 text-slate-800 font-medium flex-1 min-w-[180px] max-w-xs"
                 />
                 <button
                   type="button"
+                  data-testid="packing-quick-add-save-btn"
                   onClick={handleAddCustomOption}
                   className="px-3 py-1.5 bg-blue-600 text-white rounded-md font-bold hover:bg-blue-700 cursor-pointer"
                 >
@@ -2578,6 +2708,7 @@ export const PackingListView: React.FC = () => {
             flight,
             destination,
             shipper,
+            documentsHolder,
             totalBox,
             totalWeight,
             totalAmount,

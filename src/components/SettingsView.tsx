@@ -109,6 +109,7 @@ export const SettingsView: React.FC = () => {
     flights: 'Flight Numbers / Airline Codes',
     destinations: 'Destinations (Guangzhou, Shanghai, etc.)',
     shippers: 'Shipper Agencies',
+    documentsHolders: 'Documents Holders',
     exportItems: 'Export Items (2F, 3F, XXL, etc.)',
     boxes: 'Box Counts (1-9+)',
     weights: 'Weights (16-2 KG)',

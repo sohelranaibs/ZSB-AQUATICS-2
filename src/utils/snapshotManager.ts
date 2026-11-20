@@ -305,6 +305,7 @@ function sanitizePackingRecords(raw: unknown[], warnings: string[]): PackingReco
       flight: String(r.flight ?? ''),
       destination: String(r.destination ?? ''),
       shipper: String(r.shipper ?? ''),
+      documentsHolder: r.documentsHolder ? String(r.documentsHolder) : '',
       packingDate,
       fromDate: typeof r.fromDate === 'string' ? r.fromDate : packingDate,
       toDate: typeof r.toDate === 'string' ? r.toDate : packingDate,

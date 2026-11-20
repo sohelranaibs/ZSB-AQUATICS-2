@@ -172,6 +172,7 @@ export interface PackingFormDraftData {
   flight: string;
   destination: string;
   shipper: string;
+  documentsHolder: string;
   paymentStatus: 'PAID' | 'UNPAID';
   remarks: string;
   customRmbAmount: string;
@@ -214,6 +215,7 @@ export function sanitizePackingFormDraft(
     flight: toSafeString(raw.flight, ''),
     destination: toSafeString(raw.destination, ''),
     shipper: toSafeString(raw.shipper, ''),
+    documentsHolder: toSafeString(raw.documentsHolder, ''),
     paymentStatus,
     remarks: toSafeString(raw.remarks, ''),
     customRmbAmount: toSafeString(raw.customRmbAmount, ''),
@@ -230,6 +232,7 @@ export function hasMeaningfulPackingDraft(
     draft.flight.trim() !== '' ||
     draft.destination.trim() !== '' ||
     draft.shipper.trim() !== '' ||
+    (draft.documentsHolder || '').trim() !== '' ||
     draft.remarks.trim() !== '' ||
     draft.customRmbAmount.trim() !== '' ||
     draft.paymentStatus === 'PAID'

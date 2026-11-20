@@ -25,6 +25,7 @@ export interface DropdownOptions {
   flights: string[];
   destinations: string[];
   shippers: string[];
+  documentsHolders: string[];
   exportItems: string[];
   boxes: string[];
   weights: string[];
@@ -84,6 +85,7 @@ export interface PackingRecord {
   flight: string;
   destination: string;
   shipper: string;
+  documentsHolder?: string;
   packingDate: string;
   fromDate: string;
   toDate: string;
@@ -119,6 +121,7 @@ export interface PackingFormDraft {
   flight: string;
   destination: string;
   shipper: string;
+  documentsHolder?: string;
   paymentStatus: ExporterStatus;
   customRmbAmount: string;
   remarks: string;

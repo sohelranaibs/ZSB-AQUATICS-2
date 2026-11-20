@@ -973,14 +973,14 @@ export const PrintPreviewModal: React.FC = () => {
                 className="text-[11px] font-sans"
               >
                 <colgroup>
-                  <col style={{ width: '12%' }} />
-                  <col style={{ width: '14%' }} />
-                  <col style={{ width: '11%' }} />
-                  <col style={{ width: '11%' }} />
                   <col style={{ width: '13%' }} />
-                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '22%' }} />
+                  <col style={{ width: '10%' }} />
                   <col style={{ width: '9%' }} />
-                  <col style={{ width: '16%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '15%' }} />
                 </colgroup>
                 <thead>
                   <tr>
@@ -1008,7 +1008,7 @@ export const PrintPreviewModal: React.FC = () => {
                       DATE
                     </th>
                     <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
-                      SHIPPER
+                      DOCUMENTS HOLDER/SHIPPER
                     </th>
                     <th style={{ border: '1.5px solid #000000' }} className="py-1.5 px-1">
                       FLIGHT
@@ -1038,7 +1038,7 @@ export const PrintPreviewModal: React.FC = () => {
                     >
                       <td
                         style={{ border: '1.5px solid #000000', height: '27px' }}
-                        className="py-1 px-1 text-center font-mono font-semibold text-[10.5px] truncate"
+                        className="py-1 px-0.5 text-center font-mono font-semibold text-[10px] whitespace-nowrap"
                       >
                         {row.date ? formatDate(row.date) : ''}
                       </td>
@@ -1046,7 +1046,7 @@ export const PrintPreviewModal: React.FC = () => {
                         style={{ border: '1.5px solid #000000', height: '27px' }}
                         className="py-1 px-1 text-center font-bold text-[10.5px] truncate"
                       >
-                        {row.shipper || ''}
+                        {row.documentsHolder || row.shipper || ''}
                       </td>
                       <td
                         style={{ border: '1.5px solid #000000', height: '27px' }}
@@ -1058,19 +1058,19 @@ export const PrintPreviewModal: React.FC = () => {
                         style={{ border: '1.5px solid #000000', height: '27px' }}
                         className="py-1 px-1 text-center font-mono font-bold text-[10.5px] tabular-nums"
                       >
-                        {row.totalBox > 0 ? row.totalBox : ''}
+                        {row.totalBox !== 0 ? row.totalBox : ''}
                       </td>
                       <td
                         style={{ border: '1.5px solid #000000', height: '27px' }}
                         className="py-1 px-1 text-center font-mono font-bold text-[10.5px] tabular-nums"
                       >
-                        {row.rmbPerBox > 0 ? row.rmbPerBox : ''}
+                        {row.rmbPerBox !== 0 ? row.rmbPerBox : ''}
                       </td>
                       <td
                         style={{ border: '1.5px solid #000000', height: '27px' }}
                         className="py-1 px-1 text-center font-mono font-bold text-[10.5px] tabular-nums"
                       >
-                        {row.totalRmb > 0
+                        {row.totalRmb !== 0
                           ? row.totalRmb.toLocaleString('en-US', {
                               minimumFractionDigits: row.totalRmb % 1 === 0 ? 0 : 2,
                               maximumFractionDigits: 2,
@@ -1081,17 +1081,19 @@ export const PrintPreviewModal: React.FC = () => {
                         style={{ border: '1.5px solid #000000', height: '27px' }}
                         className="py-1 px-1 text-center font-mono font-bold text-[10.5px] tabular-nums"
                       >
-                        {row.rate > 0 ? row.rate : ''}
+                        {row.rate !== 0 || row.rateSpecified ? row.rate : ''}
                       </td>
                       <td
                         style={{ border: '1.5px solid #000000', height: '27px' }}
                         className="py-1 px-1 text-center font-mono font-extrabold text-[10.5px] tabular-nums"
                       >
-                        {row.bdtAmount > 0
+                        {row.bdtAmount !== 0
                           ? row.bdtAmount.toLocaleString('en-US', {
                               minimumFractionDigits: row.bdtAmount % 1 === 0 ? 0 : 2,
                               maximumFractionDigits: 2,
                             })
+                          : row.totalRmb !== 0 && row.rateSpecified
+                          ? '0'
                           : ''}
                       </td>
                     </tr>
@@ -1099,7 +1101,36 @@ export const PrintPreviewModal: React.FC = () => {
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colSpan={4} style={{ border: 'none' }} className="p-1"></td>
+                    <td
+                      colSpan={3}
+                      style={{
+                        backgroundColor: '#bdd7ee',
+                        color: '#000000',
+                        border: '1.5px solid #000000',
+                        height: '29px',
+                      }}
+                      className="py-1 px-2 text-center text-[10.5px] font-extrabold uppercase"
+                    >
+                      TOTAL BOX
+                    </td>
+                    <td
+                      data-testid="print-awb-grand-total-box"
+                      style={{
+                        backgroundColor: '#ffffff',
+                        color: (data.totals?.totalBoxes || 0) < 0 ? '#be123c' : '#000000',
+                        border: '1.5px solid #000000',
+                        height: '29px',
+                      }}
+                      className="py-1 px-1.5 text-center font-mono font-black text-[11px] tabular-nums"
+                    >
+                      {(Object.is(data.totals?.totalBoxes, -0)
+                        ? 0
+                        : data.totals?.totalBoxes || 0
+                      ).toLocaleString('en-US', {
+                        minimumFractionDigits: Number.isInteger(data.totals?.totalBoxes || 0) ? 0 : 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </td>
                     <td
                       colSpan={3}
                       style={{
@@ -1113,15 +1144,19 @@ export const PrintPreviewModal: React.FC = () => {
                       TOTAL AMOUNT (BDT)
                     </td>
                     <td
+                      data-testid="print-awb-grand-total-bdt"
                       style={{
                         backgroundColor: '#ffffff',
-                        color: '#000000',
+                        color: (data.totals?.totalAmountBDT || 0) < 0 ? '#be123c' : '#000000',
                         border: '1.5px solid #000000',
                         height: '29px',
                       }}
                       className="py-1 px-1.5 text-center font-mono font-black text-[11px] tabular-nums"
                     >
-                      {(data.totals?.totalAmountBDT || 0).toLocaleString('en-US', {
+                      {(Object.is(data.totals?.totalAmountBDT, -0)
+                        ? 0
+                        : data.totals?.totalAmountBDT || 0
+                      ).toLocaleString('en-US', {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                       })}

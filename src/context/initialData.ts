@@ -61,6 +61,12 @@ export const initialDropdownOptions: DropdownOptions = {
     'SHOWMIK SHISIR', 'SNR', 'WC', 'WCM', 'OCEAN TRADE', 'ZSB AQUATICS',
     'BANGLA TRADE', 'LIBERTY',
   ],
+  documentsHolders: [
+    'SHISHIR MAMA', 'SAJID INT.', 'RIK INTERNATIONAL', 'RS TRADE', 'RAKIB TRADERS',
+    'MAA ENTERPRISE', 'FAISAL VAI', 'CANCELED', 'OFFLOAD', 'ANJUM',
+    'SHOWMIK SHISIR', 'SNR', 'WC', 'WCM', 'OCEAN TRADE', 'ZSB AQUATICS',
+    'BANGLA TRADE', 'LIBERTY',
+  ],
   exportItems: [
     '2F', '3F', '4F', '5F', '6F', 'M', 'L', 'XL', 'XXL', '3XL', '4XL', 'SM', 'SF',
   ],

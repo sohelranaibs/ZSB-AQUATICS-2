@@ -200,6 +200,7 @@ export const createInitialPackingDraft = (packingCount: number = 0): PackingForm
   flight: '',
   destination: '',
   shipper: '',
+  documentsHolder: '',
   paymentStatus: 'UNPAID',
   customRmbAmount: '',
   remarks: '',
@@ -756,6 +757,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         !parsed.paymentStatuses.includes('UNPAID')
       ) {
         parsed.paymentStatuses = initialDropdownOptions.paymentStatuses;
+      }
+      if (!Array.isArray(parsed.documentsHolders)) {
+        parsed.documentsHolders = initialDropdownOptions.documentsHolders;
       }
       return { ...initialDropdownOptions, ...parsed };
     } catch {
@@ -2235,13 +2239,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const trimmed = item.trim();
     if (!trimmed) return;
     setDropdownOptions((prev) => {
-      if (prev[category].includes(trimmed)) return prev;
+      const current = Array.isArray(prev[category]) ? prev[category] : [];
+      if (current.includes(trimmed)) return prev;
       return {
         ...prev,
-        [category]: [...prev[category], trimmed],
+        [category]: [...current, trimmed],
       };
     });
-    showToast(`Added "${trimmed}" to ${category}.`);
+    const label = category === 'documentsHolders' ? 'Documents Holder' : category;
+    showToast(`Added "${trimmed}" to ${label}.`);
   };
 
   const editDropdownItem = (category: keyof DropdownOptions, oldItem: string, newItem: string) => {
@@ -2249,7 +2255,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!trimmed) return;
     setDropdownOptions((prev) => ({
       ...prev,
-      [category]: prev[category].map((it) => (it === oldItem ? trimmed : it)),
+      [category]: (Array.isArray(prev[category]) ? prev[category] : []).map((it) =>
+        it === oldItem ? trimmed : it
+      ),
     }));
     showToast(`Updated "${oldItem}" to "${trimmed}".`);
   };
@@ -2265,7 +2273,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       () => {
         setDropdownOptions((prev) => ({
           ...prev,
-          [category]: prev[category].filter((it) => it !== item),
+          [category]: (Array.isArray(prev[category]) ? prev[category] : []).filter(
+            (it) => it !== item
+          ),
         }));
         addAuditLog({
           action: 'DELETE',
@@ -4850,9 +4860,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
       if (p.dropdownOptions) {
-        setDropdownOptions(p.dropdownOptions);
+        const mergedDropdowns: DropdownOptions = {
+          ...initialDropdownOptions,
+          ...p.dropdownOptions,
+          documentsHolders: Array.isArray(p.dropdownOptions.documentsHolders)
+            ? p.dropdownOptions.documentsHolders
+            : initialDropdownOptions.documentsHolders,
+        };
+        setDropdownOptions(mergedDropdowns);
         try {
-          localStorage.setItem(STORAGE_KEYS.DROPDOWNS, JSON.stringify(p.dropdownOptions));
+          localStorage.setItem(STORAGE_KEYS.DROPDOWNS, JSON.stringify(mergedDropdowns));
         } catch (e) {
           console.error(e);
         }

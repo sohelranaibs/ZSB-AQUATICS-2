@@ -94,9 +94,28 @@ export function calculatePackingRow(
  * Calculates Packing List Totals
  */
 export function calculatePackingTotals(rows: PackingItemRow[]) {
-  const totalBox = rows.reduce((acc, r) => acc + (Number(r.box) || 0), 0);
-  const totalWeight = rows.reduce((acc, r) => acc + (Number(r.totalWeight) || 0), 0);
-  const totalAmount = rows.reduce((acc, r) => acc + (Number(r.amount) || 0), 0);
+  let totalBox = 0;
+  let totalWeight = 0;
+  let totalAmount = 0;
+
+  for (const r of rows) {
+    const box = Number(r.box) || 0;
+    const weight = Number(r.weight) || 0;
+    const reportWeight = Number(r.reportWeight) || 0;
+    const rate = Number(r.rate) || 0;
+    const hasWeightInput = weight > 0 || reportWeight > 0;
+
+    totalBox += box;
+
+    if (hasWeightInput) {
+      const calcs = calculatePackingRow(box, weight, rate, reportWeight);
+      totalWeight += calcs.totalWeight;
+      totalAmount += calcs.amount;
+    } else {
+      totalWeight += Number(r.totalWeight) || 0;
+      totalAmount += Number(r.amount) || 0;
+    }
+  }
 
   return {
     totalBox,
@@ -662,6 +681,7 @@ export function buildPackingRecordFromDraft(
     flight: (draft.flight || '').trim(),
     destination: (draft.destination || '').trim(),
     shipper: (draft.shipper || '').trim(),
+    documentsHolder: (draft.documentsHolder || '').trim(),
     packingDate,
     fromDate: packingDate,
     toDate: packingDate,

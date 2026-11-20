@@ -41,7 +41,6 @@ import {
   ChevronDown,
   ChevronUp,
   Calculator,
-  Paperclip,
 } from 'lucide-react';
 import {
   toggleSort,
@@ -114,15 +113,6 @@ import { DateRangePicker } from './DateRangePicker.tsx';
 import type { PaymentRecord, ExporterStatus } from '../types/index.ts';
 import { emitPaymentSyncTrigger } from '../utils/paymentSync.ts';
 import { matchesPaymentSearch } from '../utils/paymentFilters.ts';
-import {
-  InvoiceAttachmentVaultModal,
-  AttachmentVaultTarget,
-} from './InvoiceAttachmentVaultModal.tsx';
-import {
-  InvoiceAttachmentRecord,
-  countAttachmentsByRecordKey,
-  loadAllInvoiceAttachments,
-} from '../utils/invoiceAttachments.ts';
 import { canUserEditRecords } from '../utils/rbacPermissions.ts';
 
 interface DatabaseViewProps {
@@ -168,16 +158,6 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   } = useApp();
 
   const canEditDbRecords = useMemo(() => canUserEditRecords(currentUser), [currentUser]);
-  const [allAttachments, setAllAttachments] = useState<InvoiceAttachmentRecord[]>(() =>
-    loadAllInvoiceAttachments()
-  );
-  const [attachmentVaultTarget, setAttachmentVaultTarget] = useState<AttachmentVaultTarget | null>(
-    null
-  );
-  const attachmentCountsByKey = useMemo(
-    () => countAttachmentsByRecordKey(allAttachments),
-    [allAttachments]
-  );
 
   const [activeDbType, setActiveDbType] = useState<'purchase' | 'packing' | 'payment'>(() =>
     focusedShipmentInvoice ? 'packing' : initialType
@@ -971,7 +951,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
         getDate: (p) => p.packingDate || p.fromDate || p.toDate,
         getParty: (p) => p.shippingMark,
         getSearchableText: (p) =>
-          `${p.invoiceNumber} ${p.shippingMark} ${p.destination} ${p.shipper} ${p.flight} ${p.remarks || ''}`,
+          `${p.invoiceNumber} ${p.shippingMark} ${p.destination} ${p.shipper} ${p.documentsHolder || ''} ${p.flight} ${p.remarks || ''}`,
       }),
     [isPackingDbActive, packings]
   );
@@ -3005,28 +2985,6 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                               <span>EDIT</span>
                             </button>
                             <button
-                              type="button"
-                              data-testid={`vault-purchase-btn-${p.id}`}
-                              onClick={() =>
-                                setAttachmentVaultTarget({
-                                  module: 'purchase',
-                                  recordId: p.id,
-                                  invoiceNumber: p.invoiceNumber,
-                                  subtitle: `${p.description || 'Supplier'} · ${p.date}`,
-                                })
-                              }
-                              className="px-1.5 py-0.5 text-[10px] font-bold bg-teal-100 hover:bg-teal-200 text-black rounded transition flex items-center space-x-0.5 cursor-pointer"
-                              title="Open Receipt & Challan Proof Vault"
-                            >
-                              <Paperclip className="w-2.5 h-2.5 text-black" />
-                              <span>
-                                PROOF
-                                {attachmentCountsByKey[`purchase:${p.id}`]
-                                  ? ` (${attachmentCountsByKey[`purchase:${p.id}`]})`
-                                  : ''}
-                              </span>
-                            </button>
-                            <button
                               onClick={() =>
                                 openPrintModal({
                                   type: 'purchase',
@@ -3115,6 +3073,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                     {renderSortableHeader('flight', 'FLIGHT', 'left', 'whitespace-nowrap bg-[#273E56] text-white')}
                     {renderSortableHeader('destination', 'DESTINATION', 'left', 'bg-[#273E56] text-white')}
                     {renderSortableHeader('shipper', 'SHIPPER', 'left', 'bg-[#273E56] text-white')}
+                    <th className="px-2 py-2 text-left whitespace-nowrap bg-[#273E56] text-white">DOCUMENTS HOLDER</th>
                     {renderSortableHeader('items', 'ITEMS', 'left', 'bg-[#273E56] text-white')}
                     {renderSortableHeader('totalBox', 'TOTAL BOX', 'right', 'bg-[#273E56] text-white')}
                     {renderSortableHeader('totalWeight', 'TOTAL WEIGHT', 'right', 'bg-[#273E56] text-white')}
@@ -3128,7 +3087,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 <tbody className="divide-y divide-slate-200 font-medium bg-white text-black">
                   {sortedPackings.length === 0 ? (
                     <tr className="bg-white text-black">
-                      <td colSpan={16} className="p-8 text-center text-black bg-white">
+                      <td colSpan={17} className="p-8 text-center text-black bg-white">
                         No packing list records found.
                       </td>
                     </tr>
@@ -3282,6 +3241,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                           onCommitValid={handleCellCommitValid}
                           onClearDraft={handleCellClearDraft}
                         />
+                        <td className="px-2 py-1.5 font-semibold text-black bg-white whitespace-nowrap">
+                          {pkg.documentsHolder || '-'}
+                        </td>
                         <td
                           className="px-1.5 py-1.5 font-mono text-[11px] text-black bg-white"
                           data-testid={`packing-items-cell-${pkg.id}`}
@@ -3401,28 +3363,6 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             >
                               <Edit2 className="w-2.5 h-2.5 text-black" />
                               <span>EDIT</span>
-                            </button>
-                            <button
-                              type="button"
-                              data-testid={`vault-packing-btn-${pkg.id}`}
-                              onClick={() =>
-                                setAttachmentVaultTarget({
-                                  module: 'packing',
-                                  recordId: pkg.id,
-                                  invoiceNumber: pkg.invoiceNumber,
-                                  subtitle: `${pkg.shippingMark || 'Buyer'} · ${pkg.flight || pkg.destination || pkg.packingDate}`,
-                                })
-                              }
-                              className="px-1.5 py-0.5 text-[10px] font-bold bg-white text-black border border-slate-300 rounded transition flex items-center space-x-0.5 cursor-pointer"
-                              title="Open AWB, Quarantine & Packing Proof Vault"
-                            >
-                              <Paperclip className="w-2.5 h-2.5 text-black" />
-                              <span>
-                                PROOF
-                                {attachmentCountsByKey[`packing:${pkg.id}`]
-                                  ? ` (${attachmentCountsByKey[`packing:${pkg.id}`]})`
-                                  : ''}
-                              </span>
                             </button>
                             <button
                               onClick={() =>
@@ -3921,28 +3861,6 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                               >
                                 <Edit2 className="w-2.5 h-2.5" />
                                 <span>EDIT</span>
-                              </button>
-                              <button
-                                type="button"
-                                data-testid={`vault-payment-btn-${pm.id}`}
-                                onClick={() =>
-                                  setAttachmentVaultTarget({
-                                    module: 'payment',
-                                    recordId: pm.id,
-                                    invoiceNumber: pm.invoiceNumber,
-                                    subtitle: `${pm.description || pm.shippingMark || 'Voucher'} · ${pm.date}`,
-                                  })
-                                }
-                                className="px-1.5 py-0.5 text-[10px] font-bold bg-teal-100 hover:bg-teal-200 text-black rounded transition flex items-center space-x-0.5 cursor-pointer"
-                                title="Open WeChat / Bank Receipt Proof Vault"
-                              >
-                                <Paperclip className="w-2.5 h-2.5 text-black" />
-                                <span>
-                                  PROOF
-                                  {attachmentCountsByKey[`payment:${pm.id}`]
-                                    ? ` (${attachmentCountsByKey[`payment:${pm.id}`]})`
-                                    : ''}
-                                </span>
                               </button>
                               <button
                                 onClick={() =>
@@ -4538,16 +4456,6 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
         onClose={() => setEditingReconciliationRow(null)}
         onSave={handleSaveReconciliationRowEdit}
         onOpenFullPurchaseForm={handleOpenFullPurchaseFromLedger}
-      />
-
-      {/* Per-Invoice Receipt, AWB & Payment Proof Attachment Vault Modal */}
-      <InvoiceAttachmentVaultModal
-        target={attachmentVaultTarget}
-        allAttachments={allAttachments}
-        onChangeAttachments={setAllAttachments}
-        onClose={() => setAttachmentVaultTarget(null)}
-        canEdit={canEditDbRecords}
-        onNotify={showToast}
       />
     </div>
   );

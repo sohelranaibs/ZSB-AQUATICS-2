@@ -146,6 +146,7 @@ export function packingsToSheetRows(records: PackingRecord[]): Record<string, an
       Flight: pkg.flight || '',
       Destination: pkg.destination || '',
       Shipper: pkg.shipper || '',
+      'Documents Holder': pkg.documentsHolder || '',
       Item: firstItem?.item || '2F',
       Box: pkg.totalBox || firstItem?.box || 0,
       'Weight Per Box (KG)': firstItem?.weight || (pkg.totalBox > 0 ? Math.round((pkg.totalWeight / pkg.totalBox) * 100) / 100 : 0),
@@ -926,6 +927,16 @@ export function parsePackingsFromRowObjects(
     const shipperRaw = getFieldByAliases(row, ['Shipper', 'Exporter', 'Agency']);
     const shipper = hasPresentImportText(shipperRaw) ? String(shipperRaw).trim() : '';
 
+    const documentsHolderRaw = getFieldByAliases(row, [
+      'Documents Holder',
+      'Document Holder',
+      'Docs Holder',
+      'documentsHolder',
+    ]);
+    const documentsHolder = hasPresentImportText(documentsHolderRaw)
+      ? String(documentsHolderRaw).trim()
+      : '';
+
     const packingDate = normalizeDateString(
       getFieldByAliases(row, ['Date', 'Packing Date', 'PackingDate', 'From Date'])
     );
@@ -988,6 +999,7 @@ export function parsePackingsFromRowObjects(
     if (flight.startsWith('=')) rawValues.flight = flight;
     if (destination.startsWith('=')) rawValues.destination = destination;
     if (shipper.startsWith('=')) rawValues.shipper = shipper;
+    if (documentsHolder.startsWith('=')) rawValues.documentsHolder = documentsHolder;
 
     const calculationPending = pendingFields.length > 0;
     const box = boxCheck.numericValue;
@@ -1081,6 +1093,7 @@ export function parsePackingsFromRowObjects(
       flight,
       destination,
       shipper,
+      documentsHolder,
       packingDate,
       fromDate: packingDate,
       toDate: packingDate,

@@ -95,6 +95,17 @@ test('updatePackingRowById preserves sibling row references and bails out when u
   assert.equal(updated[0].amount, 5500);
   assert.equal(isPackingRowDataEqual(rows[1], updated[1]), true);
   assert.equal(isPackingRowDataEqual(rows[0], updated[0]), false);
+
+  // Decimal rate and zero rate recalculate immediately
+  const decimalRate = updatePackingRowById(updated, 'p1', 'rate', 45.5);
+  assert.equal(decimalRate[0].amount, 5005); // 110 * 45.5
+  const zeroRate = updatePackingRowById(decimalRate, 'p1', 'rate', 0);
+  assert.equal(zeroRate[0].amount, 0);
+
+  // Report weight immediately updates totalWeight and amount
+  const withReportWeight = updatePackingRowById(decimalRate, 'p1', 'reportWeight', 12.5);
+  assert.equal(withReportWeight[0].totalWeight, 62.5); // 5 * 12.5
+  assert.equal(withReportWeight[0].amount, 2843.75); // 62.5 * 45.5
 });
 
 test('updateCustomExporterPaymentRowById updates balance and bails out when unchanged', () => {
@@ -168,6 +179,24 @@ test('updateCustomAirWayBillRowById computes totals and preserves sibling refere
   assert.equal(updated[0].bdtAmount, 19800);
   assert.equal(isAirWayBillRowDataEqual(rows[1], updated[1]), true);
   assert.equal(isAirWayBillRowDataEqual(rows[0], updated[0]), false);
+
+  const negRate = updateCustomAirWayBillRowById(updated, 'awb-1', 'rate', '-18.9');
+  assert.equal(negRate[0].rate, -18.9);
+  assert.equal(negRate[0].rateSpecified, true);
+  assert.equal(negRate[0].bdtAmount, -22680);
+
+  const negZeroRate = updateCustomAirWayBillRowById(negRate, 'awb-1', 'rate', '-0');
+  assert.equal(Object.is(negZeroRate[0].rate, 0), true);
+  assert.equal(negZeroRate[0].rateSpecified, true);
+  assert.equal(Object.is(negZeroRate[0].bdtAmount, 0), true);
+
+  const posZeroRate = updateCustomAirWayBillRowById(negZeroRate, 'awb-1', 'rate', '+0');
+  assert.equal(Object.is(posZeroRate[0].rate, 0), true);
+  assert.equal(posZeroRate[0].rateSpecified, true);
+  assert.equal(Object.is(posZeroRate[0].bdtAmount, 0), true);
+
+  const holderUpdated = updateCustomAirWayBillRowById(posZeroRate, 'awb-1', 'documentsHolder', 'SAJID INT.');
+  assert.equal(holderUpdated[0].documentsHolder, 'SAJID INT.');
 });
 
 test('updateCustomExporterSlipRowById normalizes uppercase mark/flight and bails out when unchanged', () => {

@@ -99,6 +99,25 @@ test('calculatePackingTotals sums boxes, weights and amounts', () => {
   assert.equal(totals.totalBox, 5);
   assert.equal(totals.totalWeight, 77);
   assert.equal(totals.totalAmount, 18600);
+
+  // Live recalculation uses current box, weight/reportWeight, and rate even if cached amount/totalWeight is stale
+  const updatedRateRows = [
+    { id: '1', item: '2F', box: 5, weight: 16, reportWeight: 12.5, totalWeight: 80, unit: 'KG', rate: 45.5, amount: 0 },
+    { id: '2', item: '3F', box: 3, weight: 10, reportWeight: 0, totalWeight: 30, unit: 'KG', rate: 20, amount: 999999 },
+  ];
+  const liveTotals = calculatePackingTotals(updatedRateRows);
+  assert.equal(liveTotals.totalBox, 8);
+  assert.equal(liveTotals.totalWeight, 92.5); // 5 * 12.5 + 3 * 10
+  assert.equal(liveTotals.totalAmount, 3443.75); // 62.5 * 45.5 + 30 * 20
+
+  // Legacy/imported rows without per-box weight fall back safely to cached totalWeight and amount
+  const legacyRows = [
+    { id: 'legacy-1', item: '2F', box: 4, weight: 0, reportWeight: 0, totalWeight: 64, unit: 'KG', rate: 0, amount: 1600 },
+  ];
+  const legacyTotals = calculatePackingTotals(legacyRows);
+  assert.equal(legacyTotals.totalBox, 4);
+  assert.equal(legacyTotals.totalWeight, 64);
+  assert.equal(legacyTotals.totalAmount, 1600);
 });
 
 test('calculatePackingTotalAmountBDT, calculateCumulativeExportValueBDT, and calculateForeignRmbRemittanceValue calculate Total Value (RMB) and Total Amount (BDT) from Packing DB', () => {

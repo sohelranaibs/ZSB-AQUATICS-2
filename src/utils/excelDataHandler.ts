@@ -556,17 +556,19 @@ function parsePurchaseItemsBreakdown(
   for (let sIdx = 0; sIdx < segments.length; sIdx++) {
     const seg = segments[sIdx];
     const match = seg.match(
-      /^([^:]+):\s*(?:Qty\s*)?([\d.]+)\s*(?:KG\s*)?@\s*([\d.]+)/i
+      /^([^:]+):\s*(?:Qty\s*)?([\d.]+)\s*(?:KG\s*)?@\s*([+-]?[\d.]+)/i
     );
     if (!match) return [];
     const item = match[1].trim() || 'F1';
     const quantity = parseFloat(match[2]) || 1;
-    const rate = parseFloat(match[3]) || 0;
+    const parsedRate = parseFloat(match[3]);
+    const rate = Number.isFinite(parsedRate) && parsedRate !== 0 ? parsedRate : 0;
     parsedItems.push({
       id: `pi-imp-${Date.now()}-${rowIndex}-${sIdx}`,
       item,
       quantity,
       rate,
+      rateSpecified: true,
       totalAmount: calculatePurchaseRowTotal(quantity, rate),
       previousAmount: 0,
       paidAmount: 0,

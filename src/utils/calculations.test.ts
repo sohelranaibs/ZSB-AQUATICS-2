@@ -47,13 +47,17 @@ import {
   generateDetailedMonthlyExportsPurchasesCSV,
 } from './csvExporter.ts';
 
-test('calculatePurchaseRowTotal should multiply quantity and rate correctly', () => {
+test('calculatePurchaseRowTotal should multiply quantity and rate correctly including -0, +0, and negative rates', () => {
   assert.equal(calculatePurchaseRowTotal(10, 150), 1500);
   assert.equal(calculatePurchaseRowTotal(12.5, 200), 2500);
   assert.equal(calculatePurchaseRowTotal(0, 100), 0);
+  assert.equal(calculatePurchaseRowTotal(10, -150), -1500);
+  assert.equal(calculatePurchaseRowTotal(4, -25.5), -102);
+  assert.equal(Object.is(calculatePurchaseRowTotal(10, -0), 0), true);
+  assert.equal(Object.is(calculatePurchaseRowTotal(10, +0), 0), true);
 });
 
-test('calculatePurchaseTotals calculates sum, previous and balance', () => {
+test('calculatePurchaseTotals calculates sum, previous and balance including negative and zero rates', () => {
   const rows = [
     { id: '1', item: 'F1', quantity: 10, rate: 100, totalAmount: 1000, previousAmount: 0, paidAmount: 0, balance: 0 },
     { id: '2', item: 'FF1', quantity: 5, rate: 200, totalAmount: 1000, previousAmount: 0, paidAmount: 0, balance: 0 },
@@ -64,6 +68,16 @@ test('calculatePurchaseTotals calculates sum, previous and balance', () => {
   assert.equal(totals.previousAmount, 500);
   assert.equal(totals.paidAmount, 1500);
   assert.equal(totals.balance, 1000); // 2000 + 500 - 1500 = 1000
+
+  const signedRows = [
+    { id: '1', item: 'F1', quantity: 10, rate: -0, rateSpecified: true, totalAmount: calculatePurchaseRowTotal(10, -0), previousAmount: 0, paidAmount: 0, balance: 0 },
+    { id: '2', item: 'F2', quantity: 10, rate: -150, rateSpecified: true, totalAmount: calculatePurchaseRowTotal(10, -150), previousAmount: 0, paidAmount: 0, balance: 0 },
+    { id: '3', item: 'F3', quantity: 10, rate: 300, rateSpecified: true, totalAmount: calculatePurchaseRowTotal(10, 300), previousAmount: 0, paidAmount: 0, balance: 0 },
+  ];
+  const signedTotals = calculatePurchaseTotals(signedRows, 200, 100);
+  assert.equal(signedTotals.totalQty, 30);
+  assert.equal(signedTotals.totalAmount, 1500); // 0 + (-1500) + 3000
+  assert.equal(signedTotals.balance, 1600); // 1500 + 200 - 100
 });
 
 test('calculatePackingRow calculates total weight = box * weight and amount = total weight * rate', () => {

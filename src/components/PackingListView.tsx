@@ -908,7 +908,7 @@ export const PackingListView: React.FC = () => {
   const handleCancelEdit = () => {
     setEditingPackingId(null);
     resetFormFields();
-    setInvoiceNumber(generateInvoiceNumber('PKG', packings.length + 1));
+    setInvoiceNumber(generateInvoiceNumber('PKG', packings.length));
     showToast('Exited edit mode. Ready for new manifest entry.');
   };
 
@@ -1000,7 +1000,7 @@ export const PackingListView: React.FC = () => {
   const handleClear = () => {
     setEditingPackingId(null);
     resetFormFields();
-    setInvoiceNumber(generateInvoiceNumber('PKG', packings.length + 1));
+    setInvoiceNumber(generateInvoiceNumber('PKG', packings.length));
     showToast('Packing list form cleared and all cells reset.');
   };
 

@@ -113,12 +113,15 @@ export function validatePurchaseForm(
     .map((row, idx) => ({ row, rowNumber: idx + 1 }))
     .filter(
       ({ row }) =>
-        row.item.trim() !== '' || row.quantity !== 0 || row.rate !== 0
+        row.item.trim() !== '' ||
+        row.quantity !== 0 ||
+        row.rate !== 0 ||
+        Boolean(row.rateSpecified)
     );
 
   if (touchedRows.length === 0) {
     const msg =
-      'At least one purchase item row must be filled with Item/Grade, Quantity (> 0), and Rate (> 0).';
+      'At least one purchase item row must be filled with Item/Grade, Quantity (> 0), and a valid Rate (-0, +0, negative, or positive).';
     fieldErrors.rows = msg;
     errors.push(msg);
   } else {
@@ -136,9 +139,11 @@ export function validatePurchaseForm(
         rowIssues.push('enter a valid Quantity (> 0)');
       }
 
-      if (!isValidNumber(row.rate) || row.rate <= 0) {
+      const hasValidRate =
+        isValidNumber(row.rate) && (row.rate !== 0 || Boolean(row.rateSpecified));
+      if (!hasValidRate) {
         rErr.rate = true;
-        rowIssues.push('enter a valid Unit Rate (> 0)');
+        rowIssues.push('enter a valid Unit Rate (-0, +0, negative, or positive)');
       }
 
       if (rowIssues.length > 0) {

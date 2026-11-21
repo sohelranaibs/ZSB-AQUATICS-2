@@ -30,6 +30,7 @@ export function isPurchaseRowDataEqual(
     prev.item === next.item &&
     prev.quantity === next.quantity &&
     prev.rate === next.rate &&
+    Boolean(prev.rateSpecified) === Boolean(next.rateSpecified) &&
     prev.totalAmount === next.totalAmount
   );
 }
@@ -140,13 +141,32 @@ export function updatePurchaseRowById(
   let changed = false;
   const next = prev.map((row) => {
     if (row.id !== id) return row;
-    if (row[field] === value) return row;
 
-    const updated: PurchaseItemRow = { ...row, [field]: value };
-    if (field === 'quantity' || field === 'rate') {
-      const qty = field === 'quantity' ? Number(value) || 0 : row.quantity;
-      const rt = field === 'rate' ? Number(value) || 0 : row.rate;
-      updated.totalAmount = calculatePurchaseRowTotal(qty, rt);
+    const updated: PurchaseItemRow = { ...row };
+    if (field === 'item') {
+      updated.item = String(value);
+    } else if (field === 'quantity') {
+      const qty = Number(value) || 0;
+      updated.quantity = qty;
+      updated.totalAmount = calculatePurchaseRowTotal(qty, updated.rate);
+      updated.balance = updated.totalAmount;
+    } else if (field === 'rate') {
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        const isEmptyOrSignOnly =
+          trimmed === '' ||
+          trimmed === '+' ||
+          trimmed === '-' ||
+          trimmed === '.' ||
+          trimmed === '+.' ||
+          trimmed === '-.';
+        updated.rate = parseSignedNumber(trimmed);
+        updated.rateSpecified = !isEmptyOrSignOnly;
+      } else {
+        updated.rate = parseSignedNumber(value);
+        updated.rateSpecified = true;
+      }
+      updated.totalAmount = calculatePurchaseRowTotal(updated.quantity, updated.rate);
       updated.balance = updated.totalAmount;
     }
 

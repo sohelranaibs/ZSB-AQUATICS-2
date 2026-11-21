@@ -40,6 +40,7 @@ export interface PurchaseItemRow {
   item: string;
   quantity: number;
   rate: number;
+  rateSpecified?: boolean;
   totalAmount: number;
   previousAmount: number;
   paidAmount: number;

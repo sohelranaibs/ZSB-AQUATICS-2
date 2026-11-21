@@ -57,6 +57,28 @@ test('updatePurchaseRowById preserves sibling row references and bails out when 
   assert.equal(updated[0].totalAmount, 7500);
   assert.equal(isPurchaseRowDataEqual(rows[1], updated[1]), true);
   assert.equal(isPurchaseRowDataEqual(rows[0], updated[0]), false);
+
+  // Supports -0, +0, negative, positive, and cleared string drafts
+  const negZero = updatePurchaseRowById(updated, '1', 'rate', '-0');
+  assert.equal(Object.is(negZero[0].rate, 0), true);
+  assert.equal(negZero[0].rateSpecified, true);
+  assert.equal(Object.is(negZero[0].totalAmount, 0), true);
+
+  const posZero = updatePurchaseRowById(updated, '1', 'rate', '+0');
+  assert.equal(Object.is(posZero[0].rate, 0), true);
+  assert.equal(posZero[0].rateSpecified, true);
+  assert.equal(posZero[0].totalAmount, 0);
+
+  const negRate = updatePurchaseRowById(updated, '1', 'rate', '-120.5');
+  assert.equal(negRate[0].rate, -120.5);
+  assert.equal(negRate[0].rateSpecified, true);
+  assert.equal(negRate[0].totalAmount, -1807.5);
+  assert.equal(negRate[0].balance, -1807.5);
+
+  const clearedRate = updatePurchaseRowById(negRate, '1', 'rate', '');
+  assert.equal(clearedRate[0].rate, 0);
+  assert.equal(clearedRate[0].rateSpecified, false);
+  assert.equal(clearedRate[0].totalAmount, 0);
 });
 
 test('updatePackingRowById preserves sibling row references and bails out when unchanged', () => {

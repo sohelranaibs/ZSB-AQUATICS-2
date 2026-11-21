@@ -123,11 +123,13 @@ export function sanitizePurchaseFormDraft(
     .map((r, idx) => {
       const quantity = toSafeNumber(r.quantity, 0);
       const rate = toSafeNumber(r.rate, 0);
+      const rateSpecified = Boolean(r.rateSpecified) || rate !== 0;
       return {
         id: toSafeString(r.id, String(idx + 1)),
         item: toSafeString(r.item, ''),
         quantity,
         rate,
+        rateSpecified,
         totalAmount: calculatePurchaseRowTotal(quantity, rate),
         previousAmount: toSafeNumber(r.previousAmount, 0),
         paidAmount: toSafeNumber(r.paidAmount, 0),
@@ -161,7 +163,11 @@ export function hasMeaningfulPurchaseDraft(
     return true;
   }
   return draft.rows.some(
-    (r) => r.item.trim() !== '' || r.quantity !== 0 || r.rate !== 0
+    (r) =>
+      r.item.trim() !== '' ||
+      r.quantity !== 0 ||
+      r.rate !== 0 ||
+      Boolean(r.rateSpecified)
   );
 }
 

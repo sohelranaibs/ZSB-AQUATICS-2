@@ -99,6 +99,66 @@ describe('validatePurchaseForm', () => {
     assert.equal(result.rowErrors['2']?.item, true);
     assert.equal(result.rowErrors['2']?.rate, true);
   });
+
+  it('accepts negative rates and explicit 0/-0/+0 rates when rateSpecified is true', () => {
+    const result = validatePurchaseForm({
+      invoiceNumber: 'PUR-2026-0007',
+      date: '2026-03-16',
+      supplierName: 'ABDULLAH VAI',
+      overallPreviousAmount: 0,
+      overallPaidAmount: 0,
+      rows: [
+        {
+          id: '1',
+          item: '2F',
+          quantity: 10,
+          rate: -0,
+          rateSpecified: true,
+          totalAmount: 0,
+          previousAmount: 0,
+          paidAmount: 0,
+          balance: 0,
+        },
+        {
+          id: '2',
+          item: '3F',
+          quantity: 5,
+          rate: +0,
+          rateSpecified: true,
+          totalAmount: 0,
+          previousAmount: 0,
+          paidAmount: 0,
+          balance: 0,
+        },
+        {
+          id: '3',
+          item: 'XL',
+          quantity: 10,
+          rate: -150,
+          rateSpecified: true,
+          totalAmount: -1500,
+          previousAmount: 0,
+          paidAmount: 0,
+          balance: -1500,
+        },
+        {
+          id: '4',
+          item: '2XL',
+          quantity: 10,
+          rate: 300,
+          rateSpecified: true,
+          totalAmount: 3000,
+          previousAmount: 0,
+          paidAmount: 0,
+          balance: 3000,
+        },
+      ],
+    });
+
+    assert.equal(result.isValid, true);
+    assert.equal(result.errors.length, 0);
+    assert.equal(result.validItems.length, 4);
+  });
 });
 
 describe('validatePackingForm', () => {

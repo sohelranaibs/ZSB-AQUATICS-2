@@ -733,7 +733,7 @@ export const PrintPreviewModal: React.FC = () => {
                     <th className="p-2 border-r border-slate-300 text-left">ITEM / GRADE</th>
                     <th className="p-2 border-r border-slate-300 text-right w-28">QUANTITY</th>
                     <th className="p-2 border-r border-slate-300 text-right w-32">RATE ({companyProfile.currency})</th>
-                    <th className="p-2 text-right w-36">TOTAL AMOUNT ({companyProfile.currency})</th>
+                    <th className="p-2 text-right w-40">TOTAL AMOUNT ({companyProfile.currency})</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -744,11 +744,11 @@ export const PrintPreviewModal: React.FC = () => {
                           <span className="zsb-sl-badge">{String(i + 1).padStart(2, '0')}</span>
                         </td>
                         <td className="p-2 border-r border-slate-200 font-bold">{row.item}</td>
-                        <td className="p-2 border-r border-slate-200 text-right font-mono tabular-nums">{row.quantity}</td>
-                        <td className="p-2 border-r border-slate-200 text-right font-mono tabular-nums">
+                        <td className="p-2 border-r border-slate-200 text-right font-mono tabular-nums whitespace-nowrap">{row.quantity}</td>
+                        <td className={`p-2 border-r border-slate-200 text-right font-mono tabular-nums whitespace-nowrap ${(Number(row.rate) || 0) < 0 ? 'text-rose-700' : ''}`}>
                           {formatCurrency(row.rate, '')}
                         </td>
-                        <td className="p-2 text-right font-mono font-bold tabular-nums">
+                        <td className={`p-2 text-right font-mono font-bold tabular-nums whitespace-nowrap ${(Number(row.totalAmount) || 0) < 0 ? 'text-rose-700' : ''}`}>
                           {formatCurrency(row.totalAmount, '')}
                         </td>
                       </tr>
@@ -763,28 +763,28 @@ export const PrintPreviewModal: React.FC = () => {
                 </tbody>
                 <tfoot>
                   <tr className="bg-slate-100 font-bold border-t-2 border-slate-400">
-                    <td colSpan={2} className="p-2 text-right uppercase">TOTAL QUANTITY:</td>
-                    <td className="p-2 text-right font-mono tabular-nums text-blue-900 border-r border-slate-300">{data.totalQty}</td>
-                    <td className="p-2 text-right uppercase border-r border-slate-300">CURRENT BILL TOTAL:</td>
-                    <td className="p-2 text-right font-mono tabular-nums font-black text-slate-900">
+                    <td colSpan={2} className="p-2 text-right uppercase whitespace-nowrap">TOTAL QUANTITY:</td>
+                    <td className="p-2 text-right font-mono tabular-nums text-blue-900 border-r border-slate-300 whitespace-nowrap">{data.totalQty}</td>
+                    <td className="p-2 text-right uppercase border-r border-slate-300 whitespace-nowrap">BILL TOTAL:</td>
+                    <td className={`p-2 text-right font-mono tabular-nums font-black whitespace-nowrap ${(Number(data.totalAmount) || 0) < 0 ? 'text-rose-700' : 'text-slate-900'}`}>
                       {formatCurrency(data.totalAmount, companyProfile.currency)}
                     </td>
                   </tr>
                   <tr className="bg-slate-50 font-semibold text-[11px]">
                     <td colSpan={4} className="p-2 text-right text-slate-600 border-r border-slate-200">PREVIOUS BALANCE (BROUGHT FORWARD):</td>
-                    <td className="p-2 text-right font-mono tabular-nums text-slate-800">
+                    <td className="p-2 text-right font-mono tabular-nums text-slate-800 whitespace-nowrap">
                       {formatCurrency(data.previousAmount, companyProfile.currency)}
                     </td>
                   </tr>
                   <tr className="bg-slate-50 font-semibold text-[11px]">
                     <td colSpan={4} className="p-2 text-right text-slate-600 border-r border-slate-200">LESS: PAID AMOUNT (TODAY):</td>
-                    <td className="p-2 text-right font-mono tabular-nums text-emerald-700">
+                    <td className="p-2 text-right font-mono tabular-nums text-emerald-700 whitespace-nowrap">
                       - {formatCurrency(data.paidAmount, companyProfile.currency)}
                     </td>
                   </tr>
                   <tr className="bg-slate-200 font-black text-xs border-t border-slate-400">
                     <td colSpan={4} className="p-2 text-right uppercase text-slate-900 border-r border-slate-300">NET CLOSING BALANCE:</td>
-                    <td className="p-2 text-right font-mono tabular-nums text-rose-700 text-sm">
+                    <td className="p-2 text-right font-mono tabular-nums text-rose-700 text-sm whitespace-nowrap">
                       {formatCurrency(data.balance, companyProfile.currency)}
                     </td>
                   </tr>

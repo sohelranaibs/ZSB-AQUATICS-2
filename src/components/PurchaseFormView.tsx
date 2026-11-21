@@ -14,6 +14,10 @@ import {
   isPurchaseRowDataEqual,
   updatePurchaseRowById,
 } from '../utils/tableRowOptimization.ts';
+import {
+  isValidSignedDecimalDraft,
+  parseSignedNumber,
+} from '../utils/airWayBill.ts';
 import { validatePurchaseForm } from '../utils/validation.ts';
 import { generateRecordId } from '../utils/idGenerator.ts';
 import { useDebouncedStoreSave } from '../hooks/useDebouncedStoreSave.ts';
@@ -58,11 +62,24 @@ const createEmptyPurchaseRow = (id: string): PurchaseItemRow => ({
   item: '',
   quantity: 0,
   rate: 0,
+  rateSpecified: false,
   totalAmount: 0,
   previousAmount: 0,
   paidAmount: 0,
   balance: 0,
 });
+
+const isEmptyOrSignOnlyRateDraft = (raw: string): boolean => {
+  const trimmed = raw.trim();
+  return (
+    trimmed === '' ||
+    trimmed === '+' ||
+    trimmed === '-' ||
+    trimmed === '.' ||
+    trimmed === '+.' ||
+    trimmed === '-.'
+  );
+};
 
 interface PurchaseItemTableRowProps {
   row: PurchaseItemRow;
@@ -72,6 +89,7 @@ interface PurchaseItemTableRowProps {
   hasQuantityError: boolean;
   hasRateError: boolean;
   hasAnyRowError: boolean;
+  rateResetToken: number;
   onRowChange: (
     id: string,
     field: 'item' | 'quantity' | 'rate',
@@ -90,6 +108,7 @@ const arePurchaseItemTableRowPropsEqual = (
   prev.hasQuantityError === next.hasQuantityError &&
   prev.hasRateError === next.hasRateError &&
   prev.hasAnyRowError === next.hasAnyRowError &&
+  prev.rateResetToken === next.rateResetToken &&
   prev.onRowChange === next.onRowChange &&
   prev.onClearRow === next.onClearRow &&
   isPurchaseRowDataEqual(prev.row, next.row);
@@ -103,11 +122,41 @@ const PurchaseItemTableRow: React.FC<PurchaseItemTableRowProps> = memo(
     hasQuantityError,
     hasRateError,
     hasAnyRowError,
+    rateResetToken,
     onRowChange,
     onClearRow,
   }) => {
     const isFilled =
-      row.item.trim() !== '' || row.quantity !== 0 || row.rate !== 0;
+      row.item.trim() !== '' ||
+      row.quantity !== 0 ||
+      row.rate !== 0 ||
+      Boolean(row.rateSpecified);
+
+    const isEditingRateRef = useRef<boolean>(false);
+    const prevRateResetTokenRef = useRef<number>(rateResetToken);
+    const [rateDraft, setRateDraft] = useState<string>(() =>
+      row.rate !== 0 || row.rateSpecified ? String(row.rate) : ''
+    );
+
+    useEffect(() => {
+      const resetChanged = prevRateResetTokenRef.current !== rateResetToken;
+      prevRateResetTokenRef.current = rateResetToken;
+      if (resetChanged || !isEditingRateRef.current) {
+        if (!row.rateSpecified && row.rate === 0) {
+          setRateDraft('');
+        } else if (resetChanged || row.rate !== 0) {
+          setRateDraft(String(row.rate));
+        } else {
+          setRateDraft((prev) => {
+            const trimmed = prev.trim();
+            if (trimmed === '-0' || trimmed === '+0' || trimmed === '0') {
+              return trimmed;
+            }
+            return '0';
+          });
+        }
+      }
+    }, [row.rate, row.rateSpecified, rateResetToken]);
 
     const handleItemChange = useCallback(
       (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -125,10 +174,29 @@ const PurchaseItemTableRow: React.FC<PurchaseItemTableRowProps> = memo(
 
     const handleRateChange = useCallback(
       (e: React.ChangeEvent<HTMLInputElement>) => {
-        onRowChange(row.id, 'rate', parseFloat(e.target.value) || 0);
+        const raw = e.target.value;
+        if (!isValidSignedDecimalDraft(raw)) return;
+        setRateDraft(raw);
+        onRowChange(row.id, 'rate', raw);
       },
       [onRowChange, row.id]
     );
+
+    const handleRateFocus = useCallback(() => {
+      isEditingRateRef.current = true;
+    }, []);
+
+    const handleRateBlur = useCallback(() => {
+      isEditingRateRef.current = false;
+      setRateDraft((prev) => {
+        const trimmed = prev.trim();
+        if (isEmptyOrSignOnlyRateDraft(trimmed)) return '';
+        if (trimmed === '-0' || trimmed === '+0' || trimmed === '0') {
+          return trimmed;
+        }
+        return String(parseSignedNumber(trimmed));
+      });
+    }, []);
 
     const handleClearClick = useCallback(() => {
       onClearRow(row.id);
@@ -192,20 +260,24 @@ const PurchaseItemTableRow: React.FC<PurchaseItemTableRowProps> = memo(
           />
         </td>
 
-        {/* Unit Rate Input */}
+        {/* Unit Rate Input (Supports -0, +0, negative, and positive rates) */}
         <td className="p-1.5 border-r border-slate-200">
           <input
             aria-label={`Row ${rowIndex + 1} Rate`}
             aria-invalid={hasRateError}
-            type="number"
-            min="0"
-            step="0.01"
-            value={row.rate || ''}
+            data-testid={`purchase-row-${rowIndex + 1}-rate`}
+            type="text"
+            inputMode="decimal"
+            value={rateDraft}
             onChange={handleRateChange}
-            className={`w-full bg-white border rounded-md px-2.5 py-1.5 text-right font-mono tabular-nums font-semibold text-slate-900 focus:outline-none focus:ring-2 ${
+            onFocus={handleRateFocus}
+            onBlur={handleRateBlur}
+            className={`w-full bg-white border rounded-md px-2.5 py-1.5 text-right font-mono tabular-nums font-semibold focus:outline-none focus:ring-2 ${
               hasRateError
-                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
-                : 'border-slate-200 focus:ring-blue-500'
+                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 text-rose-900 focus:ring-rose-500'
+                : row.rate < 0
+                ? 'border-slate-200 text-rose-700 focus:ring-blue-500'
+                : 'border-slate-200 text-slate-900 focus:ring-blue-500'
             }`}
             placeholder="0.00"
           />
@@ -214,9 +286,11 @@ const PurchaseItemTableRow: React.FC<PurchaseItemTableRowProps> = memo(
         {/* Row Total Amount (Quantity * Rate) */}
         <td
           data-testid={`purchase-row-${rowIndex + 1}-total`}
-          className="px-3 py-1.5 border-r border-slate-200 bg-amber-50/40 text-right font-mono tabular-nums font-bold text-slate-900 text-xs"
+          className={`px-3 py-1.5 border-r border-slate-200 bg-amber-50/40 text-right font-mono tabular-nums font-bold text-xs ${
+            row.totalAmount < 0 ? 'text-rose-700' : 'text-slate-900'
+          }`}
         >
-          {row.totalAmount > 0
+          {row.totalAmount !== 0
             ? row.totalAmount.toLocaleString('en-US', {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
@@ -228,6 +302,7 @@ const PurchaseItemTableRow: React.FC<PurchaseItemTableRowProps> = memo(
         <td className="p-1.5 text-center">
           <button
             type="button"
+            data-testid={`purchase-row-${rowIndex + 1}-clear`}
             onClick={handleClearClick}
             disabled={!isFilled}
             aria-label={`Clear row ${rowIndex + 1}`}
@@ -291,6 +366,7 @@ export const PurchaseFormView: React.FC = () => {
   );
   const [lastSavedRecord, setLastSavedRecord] = useState<{ id: string; invoiceNumber: string } | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
+  const [rateResetToken, setRateResetToken] = useState<number>(0);
 
   const [rows, setRows] = useState<PurchaseItemRow[]>(() => {
     if (initialPurchaseDraft && initialPurchaseDraft.rows.length > 0) {
@@ -438,9 +514,10 @@ export const PurchaseFormView: React.FC = () => {
         setContactNumber(stats.latestContactNumber);
       }
       if (!editingPurchaseId) {
-        const autoPrev = stats.invoiceCount > 0 ? stats.latestClosingBalance : 0;
+        const autoPrev =
+          stats.invoiceCount > 0 ? Math.max(0, stats.latestClosingBalance) : 0;
         setOverallPreviousAmount(autoPrev);
-        if (stats.invoiceCount > 0 && autoPrev !== 0) {
+        if (stats.invoiceCount > 0 && autoPrev > 0) {
           showToast(
             `Previous balance ${formatCurrency(autoPrev, companyProfile.currency)} auto-filled for ${trimmed}.`
           );
@@ -509,14 +586,16 @@ export const PurchaseFormView: React.FC = () => {
     setOverallPreviousAmount(found.previousAmount || 0);
     setOverallPaidAmount(found.paidAmount || 0);
 
-    const loadedRows = found.items.map((it) => ({
+    const loadedRows: PurchaseItemRow[] = found.items.map((it) => ({
       ...it,
+      rateSpecified: it.rateSpecified ?? true,
       totalAmount: calculatePurchaseRowTotal(it.quantity, it.rate),
     }));
     while (loadedRows.length < 5) {
       loadedRows.push(createEmptyPurchaseRow(generateRecordId('prow')));
     }
     setRows(loadedRows);
+    setRateResetToken((t) => t + 1);
     setValidationAttempted(false);
     showToast(`Loaded purchase invoice ${found.invoiceNumber} for editing.`);
   };
@@ -524,7 +603,7 @@ export const PurchaseFormView: React.FC = () => {
   const handleCancelEdit = () => {
     setEditingPurchaseId(null);
     resetFormFields();
-    setInvoiceNumber(generateInvoiceNumber('PUR', purchases.length + 1));
+    setInvoiceNumber(generateInvoiceNumber('PUR', purchases.length));
     showToast('Exited edit mode. Ready for new purchase entry.');
   };
 
@@ -557,13 +636,14 @@ export const PurchaseFormView: React.FC = () => {
       createEmptyPurchaseRow('4'),
       createEmptyPurchaseRow('5'),
     ]);
+    setRateResetToken((t) => t + 1);
     setValidationAttempted(false);
   };
 
   const handleClear = () => {
     setEditingPurchaseId(null);
     resetFormFields();
-    setInvoiceNumber(generateInvoiceNumber('PUR', purchases.length + 1));
+    setInvoiceNumber(generateInvoiceNumber('PUR', purchases.length));
     showToast('Form cleared and all fillable cells reset.');
   };
 
@@ -580,7 +660,11 @@ export const PurchaseFormView: React.FC = () => {
   const populatedRowCount = useMemo(
     () =>
       rows.filter(
-        (r) => r.item.trim() !== '' || r.quantity !== 0 || r.rate !== 0
+        (r) =>
+          r.item.trim() !== '' ||
+          r.quantity !== 0 ||
+          r.rate !== 0 ||
+          Boolean(r.rateSpecified)
       ).length,
     [rows]
   );
@@ -678,7 +762,11 @@ export const PurchaseFormView: React.FC = () => {
 
   const exportableRows = useMemo(() => {
     const validItems = rows.filter(
-      (r) => r.item.trim() !== '' || r.quantity > 0 || r.rate > 0
+      (r) =>
+        r.item.trim() !== '' ||
+        r.quantity !== 0 ||
+        r.rate !== 0 ||
+        Boolean(r.rateSpecified)
     );
     return validItems.length > 0 ? validItems : rows.slice(0, 5);
   }, [rows]);
@@ -1094,14 +1182,15 @@ export const PurchaseFormView: React.FC = () => {
                     {formatCurrency(supplierStats.latestClosingBalance, companyProfile.currency)}
                   </span>
                 </div>
-                {supplierStats.invoiceCount > 0 && (
+                {supplierStats.invoiceCount > 0 && supplierStats.latestClosingBalance > 0 && (
                   <button
                     type="button"
                     onClick={() => {
-                      setOverallPreviousAmount(supplierStats.latestClosingBalance);
+                      const safePrev = Math.max(0, supplierStats.latestClosingBalance);
+                      setOverallPreviousAmount(safePrev);
                       showToast(
                         `Applied ${description}'s latest closing balance (${formatCurrency(
-                          supplierStats.latestClosingBalance,
+                          safePrev,
                           companyProfile.currency
                         )}) to Previous Amount.`
                       );
@@ -1211,6 +1300,7 @@ export const PurchaseFormView: React.FC = () => {
                         hasQuantityError={Boolean(rowErr?.quantity || highlightFirstEmptyRow)}
                         hasRateError={Boolean(rowErr?.rate || highlightFirstEmptyRow)}
                         hasAnyRowError={Boolean(rowErr || highlightFirstEmptyRow)}
+                        rateResetToken={rateResetToken}
                         onRowChange={handleRowChange}
                         onClearRow={handleClearRow}
                       />
@@ -1247,7 +1337,9 @@ export const PurchaseFormView: React.FC = () => {
                     </td>
                     <td
                       data-testid="purchase-footer-total"
-                      className="px-3 py-2.5 text-right font-mono tabular-nums text-white text-sm font-black border-l border-[#334b59] whitespace-nowrap"
+                      className={`px-3 py-2.5 text-right font-mono tabular-nums text-sm font-black border-l border-[#334b59] whitespace-nowrap ${
+                        totalAmount < 0 ? 'text-rose-300' : 'text-white'
+                      }`}
                     >
                       {totalAmount.toLocaleString('en-US', {
                         minimumFractionDigits: 2,
@@ -1355,7 +1447,9 @@ export const PurchaseFormView: React.FC = () => {
                     </span>
                     <span
                       data-testid="purchase-summary-total"
-                      className="font-mono tabular-nums font-black text-sm text-slate-900"
+                      className={`font-mono tabular-nums font-black text-sm ${
+                        totalAmount < 0 ? 'text-rose-700' : 'text-slate-900'
+                      }`}
                     >
                       {totalAmount.toLocaleString('en-US', {
                         minimumFractionDigits: 2,
@@ -1417,7 +1511,12 @@ export const PurchaseFormView: React.FC = () => {
                         <button
                           type="button"
                           onClick={() =>
-                            setOverallPaidAmount(totalAmount + overallPreviousAmount)
+                            setOverallPaidAmount(
+                              Math.max(
+                                0,
+                                Math.round((totalAmount + overallPreviousAmount) * 100) / 100
+                              )
+                            )
                           }
                           className="text-emerald-800 hover:underline font-semibold cursor-pointer"
                         >
@@ -1943,7 +2042,7 @@ export const PurchaseFormView: React.FC = () => {
                   <th className="p-2 border-r border-slate-300 text-left">ITEM / GRADE</th>
                   <th className="p-2 border-r border-slate-300 text-right w-28">QUANTITY</th>
                   <th className="p-2 border-r border-slate-300 text-right w-32">RATE ({companyProfile.currency})</th>
-                  <th className="p-2 text-right w-36">TOTAL AMOUNT ({companyProfile.currency})</th>
+                  <th className="p-2 text-right w-40">TOTAL AMOUNT ({companyProfile.currency})</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -1953,11 +2052,11 @@ export const PurchaseFormView: React.FC = () => {
                       <span className="zsb-sl-badge">{String(i + 1).padStart(2, '0')}</span>
                     </td>
                     <td className="p-2 border-r border-slate-200 font-bold">{row.item || '-'}</td>
-                    <td className="p-2 border-r border-slate-200 text-right font-mono tabular-nums">{row.quantity || 0}</td>
-                    <td className="p-2 border-r border-slate-200 text-right font-mono tabular-nums">
+                    <td className="p-2 border-r border-slate-200 text-right font-mono tabular-nums whitespace-nowrap">{row.quantity || 0}</td>
+                    <td className={`p-2 border-r border-slate-200 text-right font-mono tabular-nums whitespace-nowrap ${(row.rate || 0) < 0 ? 'text-rose-700' : ''}`}>
                       {formatCurrency(row.rate || 0, '')}
                     </td>
-                    <td className="p-2 text-right font-mono font-bold tabular-nums">
+                    <td className={`p-2 text-right font-mono font-bold tabular-nums whitespace-nowrap ${(row.totalAmount || 0) < 0 ? 'text-rose-700' : ''}`}>
                       {formatCurrency(row.totalAmount || 0, '')}
                     </td>
                   </tr>
@@ -1965,28 +2064,28 @@ export const PurchaseFormView: React.FC = () => {
               </tbody>
               <tfoot>
                 <tr className="bg-slate-100 font-bold border-t-2 border-slate-400">
-                  <td colSpan={2} className="p-2 text-right uppercase">TOTAL QUANTITY:</td>
-                  <td className="p-2 text-right font-mono tabular-nums text-blue-900 border-r border-slate-300">{totalQty}</td>
-                  <td className="p-2 text-right uppercase border-r border-slate-300">CURRENT BILL TOTAL:</td>
-                  <td className="p-2 text-right font-mono tabular-nums font-black text-slate-900">
+                  <td colSpan={2} className="p-2 text-right uppercase whitespace-nowrap">TOTAL QUANTITY:</td>
+                  <td className="p-2 text-right font-mono tabular-nums text-blue-900 border-r border-slate-300 whitespace-nowrap">{totalQty}</td>
+                  <td className="p-2 text-right uppercase border-r border-slate-300 whitespace-nowrap">BILL TOTAL:</td>
+                  <td className={`p-2 text-right font-mono tabular-nums font-black whitespace-nowrap ${totalAmount < 0 ? 'text-rose-700' : 'text-slate-900'}`}>
                     {formatCurrency(totalAmount, companyProfile.currency)}
                   </td>
                 </tr>
                 <tr className="bg-slate-50 font-semibold text-[11px]">
                   <td colSpan={4} className="p-2 text-right text-slate-600 border-r border-slate-200">PREVIOUS BALANCE (BROUGHT FORWARD):</td>
-                  <td className="p-2 text-right font-mono tabular-nums text-slate-800">
+                  <td className="p-2 text-right font-mono tabular-nums text-slate-800 whitespace-nowrap">
                     {formatCurrency(overallPreviousAmount, companyProfile.currency)}
                   </td>
                 </tr>
                 <tr className="bg-slate-50 font-semibold text-[11px]">
                   <td colSpan={4} className="p-2 text-right text-slate-600 border-r border-slate-200">LESS: PAID AMOUNT (TODAY):</td>
-                  <td className="p-2 text-right font-mono tabular-nums text-emerald-700">
+                  <td className="p-2 text-right font-mono tabular-nums text-emerald-700 whitespace-nowrap">
                     - {formatCurrency(overallPaidAmount, companyProfile.currency)}
                   </td>
                 </tr>
                 <tr className="bg-slate-200 font-black text-xs border-t border-slate-400">
                   <td colSpan={4} className="p-2 text-right uppercase text-slate-900 border-r border-slate-300">NET CLOSING BALANCE:</td>
-                  <td className="p-2 text-right font-mono tabular-nums text-rose-700 text-sm">
+                  <td className="p-2 text-right font-mono tabular-nums text-rose-700 text-sm whitespace-nowrap">
                     {formatCurrency(balance, companyProfile.currency)}
                   </td>
                 </tr>

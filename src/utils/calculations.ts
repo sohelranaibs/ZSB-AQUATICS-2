@@ -13,13 +13,17 @@ import {
   ExporterPaymentSlipRow,
 } from '../types/index.ts';
 
+const normalizeZero = (val: number): number =>
+  Object.is(val, -0) || val === 0 ? 0 : val;
+
 /**
  * Calculates Purchase Row Total = Quantity * Rate
+ * Supports negative, -0, +0, zero, and positive rates cleanly.
  */
 export function calculatePurchaseRowTotal(quantity: number, rate: number): number {
   const qty = Number(quantity) || 0;
   const rt = Number(rate) || 0;
-  return Math.round(qty * rt * 100) / 100;
+  return normalizeZero(Math.round(qty * rt * 100) / 100);
 }
 
 /**
@@ -32,16 +36,16 @@ export function calculatePurchaseTotals(
 ) {
   const totalQty = rows.reduce((acc, r) => acc + (Number(r.quantity) || 0), 0);
   const totalAmount = rows.reduce((acc, r) => acc + (Number(r.totalAmount) || 0), 0);
-  const prev = Number(previousAmount) || 0;
-  const paid = Number(paidAmount) || 0;
+  const prev = normalizeZero(Number(previousAmount) || 0);
+  const paid = normalizeZero(Number(paidAmount) || 0);
   const balance = totalAmount + prev - paid;
 
   return {
-    totalQty: Math.round(totalQty * 100) / 100,
-    totalAmount: Math.round(totalAmount * 100) / 100,
+    totalQty: normalizeZero(Math.round(totalQty * 100) / 100),
+    totalAmount: normalizeZero(Math.round(totalAmount * 100) / 100),
     previousAmount: prev,
     paidAmount: paid,
-    balance: Math.round(balance * 100) / 100,
+    balance: normalizeZero(Math.round(balance * 100) / 100),
   };
 }
 
@@ -265,8 +269,12 @@ export function calculateProfitLoss(
  * Format currency with commas and decimals
  */
 export function formatCurrency(amount: number, currency: string = 'TK'): string {
-  const val = Number(amount) || 0;
-  return `${currency} ${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const val = normalizeZero(Number(amount) || 0);
+  const formatted = val.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return currency ? `${currency} ${formatted}` : formatted;
 }
 
 /**

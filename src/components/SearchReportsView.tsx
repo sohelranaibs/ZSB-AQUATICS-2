@@ -43,8 +43,28 @@ import {
   TrendingDown,
 } from 'lucide-react';
 import { BuyerReceivablesAgingCard } from './BuyerReceivablesAgingCard.tsx';
+import { useTableColumnOrder } from '../hooks/useTableColumnOrder.ts';
+import {
+  ColumnReorderToolbar,
+  ColumnDragGrip,
+} from './ColumnReorderToolbar.tsx';
+
+const SEARCH_REPORTS_DEFAULT_COLUMNS = [
+  'date',
+  'type',
+  'referenceNo',
+  'party',
+  'details',
+  'amountBDT',
+  'rmbWeight',
+  'status',
+] as const;
 
 export const SearchReportsView: React.FC = () => {
+  const searchColOrder = useTableColumnOrder(
+    'search_reports',
+    SEARCH_REPORTS_DEFAULT_COLUMNS
+  );
   const {
     companyProfile,
     purchases,
@@ -847,22 +867,75 @@ export const SearchReportsView: React.FC = () => {
           </div>
         ) : (
           <div className="p-3 bg-slate-50/70">
+            <ColumnReorderToolbar
+              tableId="search_reports"
+              isCustomized={searchColOrder.isCustomized}
+              onReset={searchColOrder.resetOrder}
+              className="mb-1.5"
+            />
             <div
               data-testid="search-reports-scroll-box"
               className="overflow-x-auto border-2 border-slate-300 rounded-lg bg-white"
             >
-            <table className="w-full text-left text-xs">
+            <table data-testid="search-reports-table" className="w-full text-left text-xs">
               <thead className="bg-slate-100 text-slate-700 uppercase font-bold text-[10px] border-b">
                 <tr>
                   <th className="p-2.5 w-12 text-center">SL #</th>
-                  <th className="p-2.5">DATE</th>
-                  <th className="p-2.5">TYPE</th>
-                  <th className="p-2.5">REF / INVOICE</th>
-                  <th className="p-2.5">PARTY / ACCOUNT</th>
-                  <th className="p-2.5">DETAILS &amp; NOTES</th>
-                  <th className="p-2.5 text-right">AMOUNT (BDT)</th>
-                  <th className="p-2.5 text-right">RMB / WEIGHT</th>
-                  <th className="p-2.5">STATUS</th>
+                  {searchColOrder.columnOrder.map((colId) => {
+                    const dragClass = searchColOrder.getHeaderDragClassName(colId);
+                    switch (colId) {
+                      case 'date':
+                        return (
+                          <th key="date" {...searchColOrder.getHeaderDragProps('date', 'DATE')} className={`p-2.5 ${dragClass}`}>
+                            <span className="inline-flex items-center gap-1"><ColumnDragGrip /><span>DATE</span></span>
+                          </th>
+                        );
+                      case 'type':
+                        return (
+                          <th key="type" {...searchColOrder.getHeaderDragProps('type', 'TYPE')} className={`p-2.5 ${dragClass}`}>
+                            <span className="inline-flex items-center gap-1"><ColumnDragGrip /><span>TYPE</span></span>
+                          </th>
+                        );
+                      case 'referenceNo':
+                        return (
+                          <th key="referenceNo" {...searchColOrder.getHeaderDragProps('referenceNo', 'REF / INVOICE')} className={`p-2.5 ${dragClass}`}>
+                            <span className="inline-flex items-center gap-1"><ColumnDragGrip /><span>REF / INVOICE</span></span>
+                          </th>
+                        );
+                      case 'party':
+                        return (
+                          <th key="party" {...searchColOrder.getHeaderDragProps('party', 'PARTY / ACCOUNT')} className={`p-2.5 ${dragClass}`}>
+                            <span className="inline-flex items-center gap-1"><ColumnDragGrip /><span>PARTY / ACCOUNT</span></span>
+                          </th>
+                        );
+                      case 'details':
+                        return (
+                          <th key="details" {...searchColOrder.getHeaderDragProps('details', 'DETAILS & NOTES')} className={`p-2.5 ${dragClass}`}>
+                            <span className="inline-flex items-center gap-1"><ColumnDragGrip /><span>DETAILS &amp; NOTES</span></span>
+                          </th>
+                        );
+                      case 'amountBDT':
+                        return (
+                          <th key="amountBDT" {...searchColOrder.getHeaderDragProps('amountBDT', 'AMOUNT (BDT)')} className={`p-2.5 text-right ${dragClass}`}>
+                            <span className="inline-flex items-center justify-end gap-1"><ColumnDragGrip /><span>AMOUNT (BDT)</span></span>
+                          </th>
+                        );
+                      case 'rmbWeight':
+                        return (
+                          <th key="rmbWeight" {...searchColOrder.getHeaderDragProps('rmbWeight', 'RMB / WEIGHT')} className={`p-2.5 text-right ${dragClass}`}>
+                            <span className="inline-flex items-center justify-end gap-1"><ColumnDragGrip /><span>RMB / WEIGHT</span></span>
+                          </th>
+                        );
+                      case 'status':
+                        return (
+                          <th key="status" {...searchColOrder.getHeaderDragProps('status', 'STATUS')} className={`p-2.5 ${dragClass}`}>
+                            <span className="inline-flex items-center gap-1"><ColumnDragGrip /><span>STATUS</span></span>
+                          </th>
+                        );
+                      default:
+                        return null;
+                    }
+                  })}
                   <th className="p-2.5 text-center">ACTION</th>
                 </tr>
               </thead>
@@ -875,98 +948,113 @@ export const SearchReportsView: React.FC = () => {
                         <span className="zsb-sl-badge">{String(idx + 1).padStart(2, '0')}</span>
                       </td>
 
-                      {/* Date */}
-                      <td className="p-2.5 font-mono text-slate-600 whitespace-nowrap">
-                        {formatDate(tx.date)}
-                      </td>
-
-                      {/* Transaction Type Badge */}
-                      <td className="p-2.5 whitespace-nowrap">
-                        {tx.kind === 'purchase' && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                            PURCHASE
-                          </span>
-                        )}
-                        {tx.kind === 'packing' && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-200">
-                            EXPORT CARGO
-                          </span>
-                        )}
-                        {tx.kind === 'payment' && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
-                            PAYMENT
-                          </span>
-                        )}
-                        {tx.kind === 'other_cost' && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                            OTHER COST
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Reference No */}
-                      <td className="p-2.5 font-mono font-bold text-slate-900 whitespace-nowrap">
-                        {tx.referenceNo}
-                      </td>
-
-                      {/* Party */}
-                      <td className="p-2.5 font-bold text-slate-800">
-                        {tx.primaryParty}
-                      </td>
-
-                      {/* Secondary Info */}
-                      <td className="p-2.5 text-slate-600 max-w-xs truncate">
-                        {tx.secondaryInfo}
-                      </td>
-
-                      {/* Amount BDT */}
-                      <td className="p-2.5 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
-                        {formatCurrency(tx.amountBDT, companyProfile.currency)}
-                      </td>
-
-                      {/* RMB / Weight */}
-                      <td className="p-2.5 text-right font-mono text-slate-600 whitespace-nowrap">
-                        {tx.amountRMB !== undefined && tx.amountRMB > 0 ? (
-                          <span className="text-amber-700 font-bold">
-                            ¥{tx.amountRMB.toLocaleString()}{' '}
-                            <span className="text-slate-400 font-normal">
-                              ({tx.weightKG} kg)
-                            </span>
-                          </span>
-                        ) : tx.weightKG !== undefined && tx.weightKG > 0 ? (
-                          <span>{tx.weightKG} kg</span>
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
-                      </td>
-
-                      {/* Status */}
-                      <td className="p-2.5 whitespace-nowrap">
-                        {(() => {
-                          const upperStatus = String(tx.status || '').toUpperCase();
-                          const isUnpaidOrDue =
-                            upperStatus.includes('UNPAID') ||
-                            upperStatus.includes('DUE') ||
-                            upperStatus.includes('NO REPORT');
-                          const isPaid = !isUnpaidOrDue && upperStatus.includes('PAID');
-                          const isReport = !isUnpaidOrDue && upperStatus.includes('REPORT');
-                          return (
-                            <span
-                              className={`px-2 py-0.5 text-[10px] font-bold rounded ${
-                                isPaid
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : isReport
-                                  ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                                  : isUnpaidOrDue
-                                  ? 'bg-rose-100 text-rose-800'
-                                  : 'bg-slate-100 text-slate-700'
-                              }`}
-                            >
-                              {tx.status}
-                            </span>
-                          );
-                        })()}
-                      </td>
+                      {searchColOrder.columnOrder.map((colId) => {
+                        switch (colId) {
+                          case 'date':
+                            return (
+                              <td key="date" className="p-2.5 font-mono text-slate-600 whitespace-nowrap">
+                                {formatDate(tx.date)}
+                              </td>
+                            );
+                          case 'type':
+                            return (
+                              <td key="type" className="p-2.5 whitespace-nowrap">
+                                {tx.kind === 'purchase' && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                                    PURCHASE
+                                  </span>
+                                )}
+                                {tx.kind === 'packing' && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-200">
+                                    EXPORT CARGO
+                                  </span>
+                                )}
+                                {tx.kind === 'payment' && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                                    PAYMENT
+                                  </span>
+                                )}
+                                {tx.kind === 'other_cost' && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                    OTHER COST
+                                  </span>
+                                )}
+                              </td>
+                            );
+                          case 'referenceNo':
+                            return (
+                              <td key="referenceNo" className="p-2.5 font-mono font-bold text-slate-900 whitespace-nowrap">
+                                {tx.referenceNo}
+                              </td>
+                            );
+                          case 'party':
+                            return (
+                              <td key="party" className="p-2.5 font-bold text-slate-800">
+                                {tx.primaryParty}
+                              </td>
+                            );
+                          case 'details':
+                            return (
+                              <td key="details" className="p-2.5 text-slate-600 max-w-xs truncate">
+                                {tx.secondaryInfo}
+                              </td>
+                            );
+                          case 'amountBDT':
+                            return (
+                              <td key="amountBDT" className="p-2.5 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
+                                {formatCurrency(tx.amountBDT, companyProfile.currency)}
+                              </td>
+                            );
+                          case 'rmbWeight':
+                            return (
+                              <td key="rmbWeight" className="p-2.5 text-right font-mono text-slate-600 whitespace-nowrap">
+                                {tx.amountRMB !== undefined && tx.amountRMB > 0 ? (
+                                  <span className="text-amber-700 font-bold">
+                                    ¥{tx.amountRMB.toLocaleString()}{' '}
+                                    <span className="text-slate-400 font-normal">
+                                      ({tx.weightKG} kg)
+                                    </span>
+                                  </span>
+                                ) : tx.weightKG !== undefined && tx.weightKG > 0 ? (
+                                  <span>{tx.weightKG} kg</span>
+                                ) : (
+                                  <span className="text-slate-300">—</span>
+                                )}
+                              </td>
+                            );
+                          case 'status':
+                            return (
+                              <td key="status" className="p-2.5 whitespace-nowrap">
+                                {(() => {
+                                  const upperStatus = String(tx.status || '').toUpperCase();
+                                  const isUnpaidOrDue =
+                                    upperStatus.includes('UNPAID') ||
+                                    upperStatus.includes('DUE') ||
+                                    upperStatus.includes('NO REPORT');
+                                  const isPaid = !isUnpaidOrDue && upperStatus.includes('PAID');
+                                  const isReport = !isUnpaidOrDue && upperStatus.includes('REPORT');
+                                  return (
+                                    <span
+                                      className={`px-2 py-0.5 text-[10px] font-bold rounded ${
+                                        isPaid
+                                          ? 'bg-emerald-100 text-emerald-800'
+                                          : isReport
+                                          ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                          : isUnpaidOrDue
+                                          ? 'bg-rose-100 text-rose-800'
+                                          : 'bg-slate-100 text-slate-700'
+                                      }`}
+                                    >
+                                      {tx.status}
+                                    </span>
+                                  );
+                                })()}
+                              </td>
+                            );
+                          default:
+                            return null;
+                        }
+                      })}
 
                       {/* Action */}
                       <td className="p-2.5 text-center whitespace-nowrap">

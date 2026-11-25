@@ -54,6 +54,11 @@ import {
 } from './initialData.ts';
 import { generateRecordId, deduplicateRecords } from '../utils/idGenerator.ts';
 import {
+  ensurePackingSerialNumbers,
+  getNextPackingSerialNumber,
+  isValidPackingSerialNumber,
+} from '../utils/packingSerialNumber.ts';
+import {
   generateInvoiceNumber,
   calculatePurchaseTotals,
   calculatePackingTotals,
@@ -179,6 +184,17 @@ import {
   stopPrintAllSequence,
 } from '../utils/printAllSheets.ts';
 import { canUserAccessTab } from '../utils/rbacPermissions.ts';
+import {
+  SupplierPortalCredential,
+  SupplierPortalAuthResult,
+  SUPPLIER_PORTAL_CREDENTIALS_STORAGE_KEY,
+  loadSupplierPortalCredentials,
+  validateSupplierPortalPasswordInput,
+  upsertSupplierPortalCredential,
+  toggleSupplierPortalCredentialStatus,
+  removeSupplierPortalCredential,
+  authenticateSupplierPortal,
+} from '../utils/supplierPortal.ts';
 
 const createEmptyPackingDraftRows = (): PackingItemRow[] =>
   ['1', '2', '3', '4', '5'].map((id) => ({
@@ -515,6 +531,20 @@ interface AppContextType {
   flushOfflineSyncQueue: (source?: string) => Promise<number>;
   discardOfflineSyncItem: (actionId: string) => Promise<void>;
   clearOfflineSyncQueue: () => Promise<void>;
+
+  // Supplier Self-Service Ledger Statement & Invoice Portal Credentials
+  supplierPortalCredentials: SupplierPortalCredential[];
+  setSupplierPortalPassword: (
+    supplierName: string,
+    password: string,
+    confirmPassword?: string
+  ) => Promise<{ valid: boolean; error?: string; isUpdate?: boolean }>;
+  toggleSupplierPortalAccess: (credentialId: string) => { valid: boolean; error?: string };
+  deleteSupplierPortalAccess: (credentialId: string) => { valid: boolean; error?: string };
+  verifySupplierPortalLogin: (
+    supplierName: string,
+    password: string
+  ) => Promise<SupplierPortalAuthResult>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -790,9 +820,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [packings, setPackings] = useState<PackingRecord[]>(() => {
     try {
       if (isSeedRequested) {
+        const seededWithSerials = ensurePackingSerialNumbers(samplePackings);
         localStorage.setItem('zsb_db_wipe_all_v12', '1');
-        localStorage.setItem(STORAGE_KEYS.PACKINGS, JSON.stringify(samplePackings));
-        return samplePackings;
+        localStorage.setItem(STORAGE_KEYS.PACKINGS, JSON.stringify(seededWithSerials));
+        return seededWithSerials;
       }
       if (!localStorage.getItem('zsb_db_wipe_all_v12')) {
         localStorage.removeItem(STORAGE_KEYS.PACKINGS);
@@ -801,7 +832,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem(STORAGE_KEYS.PACKINGS);
       if (!saved) return [];
       const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? deduplicateRecords(parsed, 'pkg') : [];
+      return Array.isArray(parsed)
+        ? ensurePackingSerialNumbers(deduplicateRecords(parsed, 'pkg'))
+        : [];
     } catch {
       return [];
     }
@@ -1033,6 +1066,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return DEFAULT_SUPER_ADMIN_PASSWORD;
     }
   });
+
+  const [supplierPortalCredentials, setSupplierPortalCredentials] = useState<
+    SupplierPortalCredential[]
+  >(() =>
+    loadSupplierPortalCredentials(typeof window !== 'undefined' ? window.localStorage : null)
+  );
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        SUPPLIER_PORTAL_CREDENTIALS_STORAGE_KEY,
+        JSON.stringify(supplierPortalCredentials)
+      );
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, [supplierPortalCredentials]);
 
   const [superAdminClearModal, setSuperAdminClearModal] = useState<SuperAdminClearModalConfig>({
     isOpen: false,
@@ -1283,16 +1333,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         if (result.countsByEntity.packing > 0) {
+          const normalizedPackings = ensurePackingSerialNumbers(result.collections.packings);
           localStorage.setItem(
             STORAGE_KEYS.PACKINGS,
-            JSON.stringify(result.collections.packings)
+            JSON.stringify(normalizedPackings)
           );
           void indexedStorageDriver.saveCollection(
             DB_STORE_NAMES.PACKINGS,
-            result.collections.packings
+            normalizedPackings
           );
-          packingsRef.current = result.collections.packings;
-          setPackings(result.collections.packings);
+          packingsRef.current = normalizedPackings;
+          setPackings(normalizedPackings);
         }
 
         if (result.countsByEntity.payment > 0) {
@@ -2525,9 +2576,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Packings CRUD
   const addPacking = (record: Omit<PackingRecord, 'id' | 'createdAt'>) => {
     const id = generateRecordId('pkg');
+    const resolvedSerialNumber = isValidPackingSerialNumber(record.serialNumber)
+      ? record.serialNumber
+      : getNextPackingSerialNumber(packingsRef.current || packings);
     const newRecord: PackingRecord = {
       ...record,
       id,
+      serialNumber: resolvedSerialNumber,
       createdAt: new Date().toISOString(),
     };
 
@@ -2548,7 +2603,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return id;
     }
 
-    setPackings((prev) => [newRecord, ...prev]);
+    setPackings((prev) => {
+      const nextSerial = isValidPackingSerialNumber(record.serialNumber)
+        ? record.serialNumber
+        : getNextPackingSerialNumber(prev);
+      return [{ ...newRecord, serialNumber: nextSerial }, ...prev];
+    });
     addAuditLog({
       action: 'CREATE',
       module: 'Packing',
@@ -2581,7 +2641,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    setPackings((prev) => prev.map((p) => (p.id === id ? { ...p, ...record } : p)));
+    setPackings((prev) =>
+      prev.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              ...record,
+              serialNumber: isValidPackingSerialNumber(record.serialNumber)
+                ? record.serialNumber
+                : p.serialNumber,
+            }
+          : p
+      )
+    );
     if (!silent) {
       addAuditLog({
         action: 'UPDATE',
@@ -2685,11 +2757,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     if (mode === 'replace') {
-      const hydrated: PackingRecord[] = mergedIncoming.map((rec) => ({
-        ...rec,
-        id: generateRecordId('pkg'),
-        createdAt: now,
-      }));
+      const hydrated: PackingRecord[] = ensurePackingSerialNumbers(
+        mergedIncoming.map((rec) => ({
+          ...rec,
+          id: generateRecordId('pkg'),
+          createdAt: now,
+        }))
+      );
       setPackings(hydrated);
       addAuditLog({
         action: 'IMPORT',
@@ -2706,7 +2780,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       generateRecordId,
       now
     );
-    setPackings(upsertResult.records);
+    setPackings(ensurePackingSerialNumbers(upsertResult.records));
 
     addAuditLog({
       action: 'IMPORT',
@@ -4785,7 +4859,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ) => {
     const p = snap.payload;
     const nextPurchases = deduplicateRecords(p.purchases || [], 'pur');
-    const nextPackings = deduplicateRecords(p.packings || [], 'pkg');
+    const nextPackings = ensurePackingSerialNumbers(deduplicateRecords(p.packings || [], 'pkg'));
     const nextPayments = deduplicateRecords(p.payments || [], 'pay');
     const nextOtherCosts = deduplicateRecords(p.otherCosts || [], 'cost');
     const nextDraft = p.packingDraft || createInitialPackingDraft(nextPackings.length);
@@ -5170,6 +5244,129 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
+  const setSupplierPortalPassword = useCallback(
+    async (
+      supplierName: string,
+      password: string,
+      confirmPassword?: string
+    ): Promise<{ valid: boolean; error?: string; isUpdate?: boolean }> => {
+      if (!currentUser || !canUserAccessTab(currentUser, 'settings')) {
+        return {
+          valid: false,
+          error: 'Only authorized administrators can manage supplier portal passwords.',
+        };
+      }
+      const validation = validateSupplierPortalPasswordInput(supplierName, password);
+      if (!validation.valid) {
+        return validation;
+      }
+      if (confirmPassword !== undefined && confirmPassword.trim() !== password.trim()) {
+        return {
+          valid: false,
+          error: 'Password and confirm password do not match.',
+        };
+      }
+
+      const actorName = currentUser.displayName || currentUser.username || 'Admin';
+      const { updatedList, credential, isUpdate } = await upsertSupplierPortalCredential(
+        supplierPortalCredentials,
+        {
+          supplierName,
+          password,
+          updatedBy: actorName,
+          active: true,
+        }
+      );
+
+      setSupplierPortalCredentials(updatedList);
+      addAuditLog({
+        action: isUpdate ? 'UPDATE' : 'CREATE',
+        module: 'Authentication',
+        entityId: credential.supplierName,
+        summary: isUpdate
+          ? `Updated supplier portal password for ${credential.supplierName}`
+          : `Created supplier portal access for ${credential.supplierName}`,
+      });
+      showToast(
+        isUpdate
+          ? `Supplier portal password updated for ${credential.supplierName}.`
+          : `Supplier portal access enabled for ${credential.supplierName}.`
+      );
+      return { valid: true, isUpdate };
+    },
+    [currentUser, supplierPortalCredentials, addAuditLog, showToast]
+  );
+
+  const toggleSupplierPortalAccess = useCallback(
+    (credentialId: string): { valid: boolean; error?: string } => {
+      if (!currentUser || !canUserAccessTab(currentUser, 'settings')) {
+        return {
+          valid: false,
+          error: 'Only authorized administrators can change supplier portal status.',
+        };
+      }
+      const target = supplierPortalCredentials.find((c) => c.id === credentialId);
+      if (!target) {
+        return { valid: false, error: 'Supplier portal account not found.' };
+      }
+      const actorName = currentUser.displayName || currentUser.username || 'Admin';
+      const nextList = toggleSupplierPortalCredentialStatus(
+        supplierPortalCredentials,
+        credentialId,
+        actorName
+      );
+      setSupplierPortalCredentials(nextList);
+      addAuditLog({
+        action: 'UPDATE',
+        module: 'Authentication',
+        entityId: target.supplierName,
+        summary: target.active
+          ? `Disabled supplier portal access for ${target.supplierName}`
+          : `Enabled supplier portal access for ${target.supplierName}`,
+      });
+      showToast(
+        target.active
+          ? `Supplier portal access disabled for ${target.supplierName}.`
+          : `Supplier portal access re-enabled for ${target.supplierName}.`
+      );
+      return { valid: true };
+    },
+    [currentUser, supplierPortalCredentials, addAuditLog, showToast]
+  );
+
+  const deleteSupplierPortalAccess = useCallback(
+    (credentialId: string): { valid: boolean; error?: string } => {
+      if (!currentUser || !canUserAccessTab(currentUser, 'settings')) {
+        return {
+          valid: false,
+          error: 'Only authorized administrators can remove supplier portal access.',
+        };
+      }
+      const target = supplierPortalCredentials.find((c) => c.id === credentialId);
+      if (!target) {
+        return { valid: false, error: 'Supplier portal account not found.' };
+      }
+      const nextList = removeSupplierPortalCredential(supplierPortalCredentials, credentialId);
+      setSupplierPortalCredentials(nextList);
+      addAuditLog({
+        action: 'DELETE',
+        module: 'Authentication',
+        entityId: target.supplierName,
+        summary: `Removed supplier portal credentials for ${target.supplierName}`,
+      });
+      showToast(`Removed supplier portal access for ${target.supplierName}.`);
+      return { valid: true };
+    },
+    [currentUser, supplierPortalCredentials, addAuditLog, showToast]
+  );
+
+  const verifySupplierPortalLogin = useCallback(
+    async (supplierName: string, password: string): Promise<SupplierPortalAuthResult> => {
+      return authenticateSupplierPortal(supplierName, password, supplierPortalCredentials);
+    },
+    [supplierPortalCredentials]
+  );
+
   const contextValue = useMemo<AppContextType>(
     () => ({
       isAuthenticated,
@@ -5336,6 +5533,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       flushOfflineSyncQueue,
       discardOfflineSyncItem,
       clearOfflineSyncQueue,
+      supplierPortalCredentials,
+      setSupplierPortalPassword,
+      toggleSupplierPortalAccess,
+      deleteSupplierPortalAccess,
+      verifySupplierPortalLogin,
     }),
     [
       isAuthenticated,
@@ -5383,6 +5585,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       flushOfflineSyncQueue,
       discardOfflineSyncItem,
       clearOfflineSyncQueue,
+      supplierPortalCredentials,
+      setSupplierPortalPassword,
+      toggleSupplierPortalAccess,
+      deleteSupplierPortalAccess,
+      verifySupplierPortalLogin,
     ]
   );
 

@@ -11,10 +11,7 @@ import {
   ZSB_VIEW_SHORTCUT_EVENT,
   ViewShortcutEventDetail,
 } from '../utils/keyboardShortcuts.ts';
-import {
-  emitPaymentSyncTrigger,
-  ZSB_PAYMENT_ENTRY_CONFIRMED_EVENT,
-} from '../utils/paymentSync.ts';
+import { emitPaymentSyncTrigger } from '../utils/paymentSync.ts';
 import { useDebouncedStoreSave } from '../hooks/useDebouncedStoreSave.ts';
 import {
   FORM_DRAFT_STORAGE_KEYS,
@@ -27,23 +24,17 @@ import {
 import {
   Save,
   Printer,
-  Search,
   Plus,
   RotateCcw,
-  Wallet,
   CheckCircle2,
-  Building2,
   ArrowRight,
   Receipt,
   Clock,
   Sparkles,
-  ExternalLink,
   Edit2,
-  AlertCircle,
   CreditCard,
-  Layers,
 } from 'lucide-react';
-import type { ExporterStatus, PaymentRecord } from '../types/index.ts';
+import type { ExporterStatus } from '../types/index.ts';
 
 export const PaymentFormView: React.FC = () => {
   const {
@@ -54,7 +45,6 @@ export const PaymentFormView: React.FC = () => {
     payments,
     addPayment,
     updatePayment,
-    supplierCredits,
     openPrintModal,
     setActiveTab,
     showToast,
@@ -424,49 +414,6 @@ export const PaymentFormView: React.FC = () => {
 
   return (
     <div className="space-y-5 pb-10">
-      {/* Top Banner & Control Ribbon */}
-      <div className="bg-[#273E56] text-white rounded-xl shadow-sm border-b-2 border-[#00897b] p-4 sm:p-5">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center space-x-3.5">
-            <div className="w-12 h-12 rounded-xl bg-[#1c2a33] border border-[#00897b]/50 flex items-center justify-center shrink-0">
-              <Wallet className="w-6 h-6 text-[#5eead4]" />
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#00897b]/25 text-[#5eead4] border border-[#00897b]/50">
-                  SHEET 05 · FAST ENTRY
-                </span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#1c2a33] text-slate-300 border border-[#334b59]">
-                  {supplierPayments.length} Vouchers in DB
-                </span>
-              </div>
-              <h1 className="text-lg sm:text-xl font-black tracking-tight text-white mt-1 flex flex-wrap items-center gap-2">
-                <span className="text-amber-400 font-black zsb-golden-brand">
-                  {companyProfile.companyName}
-                </span>
-                <span className="text-slate-400">·</span>
-                <span>Supplier Payment Form · Credit Disbursement Entry</span>
-              </h1>
-              <p className="text-xs text-slate-300 mt-0.5">
-                Fast voucher entry for supplier payments. All past records are securely maintained &amp; editable in Payment Database.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => setActiveTab('payment_db')}
-              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-[#00897b] hover:bg-[#00796b] text-white shadow-sm transition flex items-center space-x-1.5 cursor-pointer"
-              title="Open Payment Database to search, filter, and edit any record"
-            >
-              <Search className="w-3.5 h-3.5 text-white" />
-              <span>PAYMENT DATABASE (EDIT / VOID)</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
       {/* Main Payment Entry Card */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200/90 overflow-hidden">
         <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">

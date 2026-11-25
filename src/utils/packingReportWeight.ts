@@ -31,6 +31,7 @@ export function applyReportWeightToRow(
   row: PackingItemRow,
   nextReportWeight: number
 ): PackingItemRow {
+  if (row.locked) return row;
   const sanitized = Number.isFinite(nextReportWeight) && nextReportWeight > 0 ? nextReportWeight : 0;
   const calcs = calculatePackingRow(row.box, row.weight, row.rate, sanitized);
   const currentReportWeight = Number(row.reportWeight) || 0;

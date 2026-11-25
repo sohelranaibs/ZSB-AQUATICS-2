@@ -50,11 +50,13 @@ import {
   getColumnHeaderTitle,
   SortConfig,
 } from '../utils/databaseSorting.ts';
+import { buildPackingSerialNumberMap } from '../utils/packingSerialNumber.ts';
 import { findShipmentByDeepLink } from '../utils/shipmentQrCode.ts';
 import {
   downloadCsvFile,
   generatePurchasesCSV,
-  generatePackingsCSV,
+  generateFilteredPackingLedgerCSV,
+  formatFilteredPackingCsvFilename,
   generatePaymentsCSV,
 } from '../utils/csvExporter.ts';
 import { exportDatasetFile } from '../utils/excelDataHandler.ts';
@@ -113,7 +115,66 @@ import { DateRangePicker } from './DateRangePicker.tsx';
 import type { PaymentRecord, ExporterStatus } from '../types/index.ts';
 import { emitPaymentSyncTrigger } from '../utils/paymentSync.ts';
 import { matchesPaymentSearch } from '../utils/paymentFilters.ts';
+import { matchesPackingShipperOrExporter } from '../utils/packingFilters.ts';
 import { canUserEditRecords } from '../utils/rbacPermissions.ts';
+import {
+  useTableColumnOrder,
+  UseTableColumnOrderResult,
+} from '../hooks/useTableColumnOrder.ts';
+import {
+  ColumnReorderToolbar,
+  ColumnDragGrip,
+} from './ColumnReorderToolbar.tsx';
+
+const RECONCILIATION_DEFAULT_COLUMNS = [
+  'date',
+  'supplierName',
+  'debitAmount',
+  'creditAmount',
+  'balance',
+  'status',
+] as const;
+
+const PURCHASE_DB_DEFAULT_COLUMNS = [
+  'invoiceNumber',
+  'date',
+  'description',
+  'contactNumber',
+  'items',
+  'totalQty',
+  'totalAmount',
+  'paidAmount',
+  'balance',
+  'status',
+] as const;
+
+const PACKING_DB_DEFAULT_COLUMNS = [
+  'invoiceNumber',
+  'date',
+  'shippingMark',
+  'flight',
+  'destination',
+  'shipper',
+  'documentsHolder',
+  'items',
+  'totalBox',
+  'totalWeight',
+  'totalAmount',
+  'rmbRate',
+  'amountBDT',
+  'status',
+] as const;
+
+const PAYMENT_DB_DEFAULT_COLUMNS = [
+  'invoiceNumber',
+  'type',
+  'date',
+  'description',
+  'status',
+  'paidAmount',
+  'balance',
+  'exportRef',
+] as const;
 
 interface DatabaseViewProps {
   initialType?: 'purchase' | 'packing' | 'payment';
@@ -159,6 +220,23 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
 
   const canEditDbRecords = useMemo(() => canUserEditRecords(currentUser), [currentUser]);
 
+  const reconciliationColOrder = useTableColumnOrder(
+    'supplier_reconciliation',
+    RECONCILIATION_DEFAULT_COLUMNS
+  );
+  const purchaseDbColOrder = useTableColumnOrder(
+    'purchase_db',
+    PURCHASE_DB_DEFAULT_COLUMNS
+  );
+  const packingDbColOrder = useTableColumnOrder(
+    'packing_db',
+    PACKING_DB_DEFAULT_COLUMNS
+  );
+  const paymentDbColOrder = useTableColumnOrder(
+    'payment_db',
+    PAYMENT_DB_DEFAULT_COLUMNS
+  );
+
   const [activeDbType, setActiveDbType] = useState<'purchase' | 'packing' | 'payment'>(() =>
     focusedShipmentInvoice ? 'packing' : initialType
   );
@@ -174,6 +252,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   });
   const [lastSyncLog, setLastSyncLog] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>(() => focusedShipmentInvoice || '');
+  const [packingPartySearch, setPackingPartySearch] = useState<string>('');
   const [paymentSearchQuery, setPaymentSearchQuery] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkTargetStatus, setBulkTargetStatus] = useState<ExporterStatus>('PAID');
@@ -1009,6 +1088,9 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
       ) {
         return false;
       }
+      if (!matchesPackingShipperOrExporter(pkg, packingPartySearch)) {
+        return false;
+      }
       return true;
     });
   }, [
@@ -1018,6 +1100,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     validationFilter,
     validationSummary.invalidRecordIds,
     searchTerm,
+    packingPartySearch,
     startDate,
     endDate,
   ]);
@@ -1087,6 +1170,11 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     );
   }, [activeDbType, filteredPurchases, purchaseSort, smartSyncAnalysis.purchaseReconciliations]);
 
+  const packingSerialNumberMap = useMemo(
+    () => buildPackingSerialNumberMap(packings),
+    [packings]
+  );
+
   const sortedPackings = useMemo(() => {
     if (activeDbType !== 'packing') return [];
     return sortPackingRecords(
@@ -1134,7 +1222,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     maxVisibleRows: MAX_VISIBLE_TABLE_ROWS,
     enabled: activeDbType === 'packing',
     includeFooter: true,
-    depsKey: `${activeDbType}|${searchTerm}|${startDate}|${endDate}|${packingSort.column}|${packingSort.direction}|${validationFilter}`,
+    depsKey: `${activeDbType}|${searchTerm}|${packingPartySearch}|${startDate}|${endDate}|${packingSort.column}|${packingSort.direction}|${validationFilter}`,
   });
 
   const {
@@ -1396,10 +1484,22 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
         showToast('No packing records in current filtered view to export.');
         return;
       }
-      const csv = generatePackingsCSV(sortedPackings);
-      const filename = `ZSB_Aquatics_Packing_Lists${dateRangeTag}.csv`;
+      const csv = generateFilteredPackingLedgerCSV(sortedPackings, {
+        serialNumberMap: packingSerialNumberMap,
+        columnOrder: packingDbColOrder.columnOrder,
+      });
+      const filename = formatFilteredPackingCsvFilename({
+        startDate,
+        endDate,
+        partyQuery: packingPartySearch,
+        searchTerm,
+        validationFilter,
+        referenceDate: today,
+      });
       downloadCsvFile(csv, filename);
-      showToast(`Exported ${sortedPackings.length} packing records to Excel CSV (${filename})`);
+      showToast(
+        `Exported ${sortedPackings.length} filtered packing record${sortedPackings.length === 1 ? '' : 's'} to CSV (${filename})`
+      );
     } else {
       if (sortedPayments.length === 0) {
         showToast('No payment records in current filtered view to export.');
@@ -1415,31 +1515,36 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
   const isDateFilterActive = Boolean(startDate || endDate);
 
   /**
-   * Helper to render sortable table column header with accessible ARIA tags and toggle icon
+   * Helper to render sortable (and optionally drag-reorderable) table column header
    */
   const renderSortableHeader = (
     colKey: string,
     label: string,
     align: 'left' | 'center' | 'right' = 'left',
-    extraClasses: string = ''
+    extraClasses: string = '',
+    dragCtx?: UseTableColumnOrderResult<any>
   ) => {
     const isSorted = activeSortConfig.column === colKey;
     const dir = activeSortConfig.direction;
     const alignClass =
       align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left';
+    const dragProps = dragCtx ? dragCtx.getHeaderDragProps(colKey, label) : undefined;
+    const dragClass = dragCtx ? dragCtx.getHeaderDragClassName(colKey) : '';
 
     return (
       <th
+        key={colKey}
         scope="col"
         aria-sort={isSorted ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
         data-testid={`sort-header-${colKey}`}
+        {...dragProps}
         onClick={() => handleHeaderSortClick(colKey)}
         title={`Click to sort by ${label} (${
           isSorted
             ? `currently ${dir}ending, click to sort ${dir === 'asc' ? 'desc' : 'asc'}ending`
             : 'click to sort'
-        })`}
-        className={`px-1.5 py-2 select-none cursor-pointer transition-colors hover:bg-black/25 group ${alignClass} ${extraClasses}`}
+        })${dragCtx ? ' · Drag header to reorder column' : ''}`}
+        className={`px-1.5 py-2 select-none cursor-pointer transition-colors hover:bg-black/25 group ${alignClass} ${extraClasses} ${dragClass}`}
       >
         <div
           className={`inline-flex items-center gap-1 w-full ${
@@ -1450,6 +1555,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               : 'justify-start'
           }`}
         >
+          {dragCtx && <ColumnDragGrip className="w-2.5 h-2.5 opacity-45 group-hover:opacity-90 shrink-0" />}
           <span
             className={`font-bold uppercase tracking-tight whitespace-nowrap transition-colors ${
               isSorted
@@ -1966,6 +2072,12 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                     </span>
                   </div>
                 )}
+                <ColumnReorderToolbar
+                  tableId="supplier_reconciliation"
+                  isCustomized={reconciliationColOrder.isCustomized}
+                  onReset={reconciliationColOrder.resetOrder}
+                  className="mb-1.5"
+                />
                 <div
                   ref={syncLedgerScrollRef}
                   data-testid="supplier-reconciliation-scroll-box"
@@ -1989,12 +2101,91 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         />
                       </th>
                       <th className="px-2 py-2 border-r border-[#3B5572] w-12 text-center">SL #</th>
-                      <th className="px-3 py-2 border-r border-[#3B5572] w-32 text-center">DATE</th>
-                      <th className="px-3 py-2 border-r border-[#3B5572] min-w-[160px]">SUPPLIER NAME</th>
-                      <th className="px-3 py-2 border-r border-[#3B5572] text-right w-36">DEBIT AMOUNT</th>
-                      <th className="px-3 py-2 border-r border-[#3B5572] text-right w-36">CREDIT AMOUNT</th>
-                      <th className="px-3 py-2 border-r border-[#3B5572] text-right w-40 bg-[#1F3349]">BALANCE</th>
-                      <th className="px-2.5 py-2 border-r border-[#3B5572] text-center w-24">STATUS</th>
+                      {reconciliationColOrder.columnOrder.map((colId) => {
+                        const dragClass = reconciliationColOrder.getHeaderDragClassName(colId);
+                        switch (colId) {
+                          case 'date':
+                            return (
+                              <th
+                                key="date"
+                                {...reconciliationColOrder.getHeaderDragProps('date', 'DATE')}
+                                className={`px-3 py-2 border-r border-[#3B5572] w-32 text-center ${dragClass}`}
+                              >
+                                <span className="inline-flex items-center justify-center gap-1">
+                                  <ColumnDragGrip />
+                                  <span>DATE</span>
+                                </span>
+                              </th>
+                            );
+                          case 'supplierName':
+                            return (
+                              <th
+                                key="supplierName"
+                                {...reconciliationColOrder.getHeaderDragProps('supplierName', 'SUPPLIER NAME')}
+                                className={`px-3 py-2 border-r border-[#3B5572] min-w-[160px] ${dragClass}`}
+                              >
+                                <span className="inline-flex items-center gap-1">
+                                  <ColumnDragGrip />
+                                  <span>SUPPLIER NAME</span>
+                                </span>
+                              </th>
+                            );
+                          case 'debitAmount':
+                            return (
+                              <th
+                                key="debitAmount"
+                                {...reconciliationColOrder.getHeaderDragProps('debitAmount', 'DEBIT AMOUNT')}
+                                className={`px-3 py-2 border-r border-[#3B5572] text-right w-36 ${dragClass}`}
+                              >
+                                <span className="inline-flex items-center justify-end gap-1">
+                                  <ColumnDragGrip />
+                                  <span>DEBIT AMOUNT</span>
+                                </span>
+                              </th>
+                            );
+                          case 'creditAmount':
+                            return (
+                              <th
+                                key="creditAmount"
+                                {...reconciliationColOrder.getHeaderDragProps('creditAmount', 'CREDIT AMOUNT')}
+                                className={`px-3 py-2 border-r border-[#3B5572] text-right w-36 ${dragClass}`}
+                              >
+                                <span className="inline-flex items-center justify-end gap-1">
+                                  <ColumnDragGrip />
+                                  <span>CREDIT AMOUNT</span>
+                                </span>
+                              </th>
+                            );
+                          case 'balance':
+                            return (
+                              <th
+                                key="balance"
+                                {...reconciliationColOrder.getHeaderDragProps('balance', 'BALANCE')}
+                                className={`px-3 py-2 border-r border-[#3B5572] text-right w-40 bg-[#1F3349] ${dragClass}`}
+                              >
+                                <span className="inline-flex items-center justify-end gap-1">
+                                  <ColumnDragGrip />
+                                  <span>BALANCE</span>
+                                </span>
+                              </th>
+                            );
+                          case 'status':
+                            return (
+                              <th
+                                key="status"
+                                {...reconciliationColOrder.getHeaderDragProps('status', 'STATUS')}
+                                className={`px-2.5 py-2 border-r border-[#3B5572] text-center w-24 ${dragClass}`}
+                              >
+                                <span className="inline-flex items-center justify-center gap-1">
+                                  <ColumnDragGrip />
+                                  <span>STATUS</span>
+                                </span>
+                              </th>
+                            );
+                          default:
+                            return null;
+                        }
+                      })}
                       <th className="px-2.5 py-2 text-center w-24">EDIT</th>
                     </tr>
                   </thead>
@@ -2036,24 +2227,48 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                                 {String(idx + 1).padStart(2, '0')}
                               </span>
                             </td>
-                            <td className="px-3 py-2 border-r border-slate-200 text-center font-bold text-slate-700 whitespace-nowrap">
-                              {formatDateImageStyle(row.date)}
-                            </td>
-                            <td className="px-3 py-2 border-r border-slate-200 font-sans font-bold text-slate-900 whitespace-nowrap">
-                              {row.supplierName}
-                            </td>
-                            <td className="px-3 py-2 border-r border-slate-200 text-right font-bold text-slate-900 whitespace-nowrap">
-                              {row.debitAmount !== 0 ? formatCurrency(row.debitAmount, '') : ''}
-                            </td>
-                            <td className="px-3 py-2 border-r border-slate-200 text-right font-bold text-slate-900 whitespace-nowrap">
-                              {row.creditAmount !== 0 ? formatCurrency(row.creditAmount, '') : ''}
-                            </td>
-                            <td className="px-3 py-2 border-r border-slate-200 text-right font-black text-slate-950 bg-blue-50/40 whitespace-nowrap">
-                              {formatCurrency(row.balance, '')}
-                            </td>
-                            <td className="px-2 py-2 border-r border-slate-200 text-center whitespace-nowrap font-sans">
-                              {renderStatusBadge(row.status, `reconciliation-status-${row.id}`)}
-                            </td>
+                            {reconciliationColOrder.columnOrder.map((colId) => {
+                              switch (colId) {
+                                case 'date':
+                                  return (
+                                    <td key="date" className="px-3 py-2 border-r border-slate-200 text-center font-bold text-slate-700 whitespace-nowrap">
+                                      {formatDateImageStyle(row.date)}
+                                    </td>
+                                  );
+                                case 'supplierName':
+                                  return (
+                                    <td key="supplierName" className="px-3 py-2 border-r border-slate-200 font-sans font-bold text-slate-900 whitespace-nowrap">
+                                      {row.supplierName}
+                                    </td>
+                                  );
+                                case 'debitAmount':
+                                  return (
+                                    <td key="debitAmount" className="px-3 py-2 border-r border-slate-200 text-right font-bold text-slate-900 whitespace-nowrap">
+                                      {row.debitAmount !== 0 ? formatCurrency(row.debitAmount, '') : ''}
+                                    </td>
+                                  );
+                                case 'creditAmount':
+                                  return (
+                                    <td key="creditAmount" className="px-3 py-2 border-r border-slate-200 text-right font-bold text-slate-900 whitespace-nowrap">
+                                      {row.creditAmount !== 0 ? formatCurrency(row.creditAmount, '') : ''}
+                                    </td>
+                                  );
+                                case 'balance':
+                                  return (
+                                    <td key="balance" className="px-3 py-2 border-r border-slate-200 text-right font-black text-slate-950 bg-blue-50/40 whitespace-nowrap">
+                                      {formatCurrency(row.balance, '')}
+                                    </td>
+                                  );
+                                case 'status':
+                                  return (
+                                    <td key="status" className="px-2 py-2 border-r border-slate-200 text-center whitespace-nowrap font-sans">
+                                      {renderStatusBadge(row.status, `reconciliation-status-${row.id}`)}
+                                    </td>
+                                  );
+                                default:
+                                  return null;
+                              }
+                            })}
                             <td className="px-2 py-2 text-center whitespace-nowrap font-sans">
                               <button
                                 type="button"
@@ -2080,19 +2295,33 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   {syncSupplierLedgerRows.length > 0 && (
                     <tfoot className="sticky bottom-0 z-10 bg-slate-100 font-bold border-t-2 border-slate-400 text-slate-900 text-xs">
                       <tr>
-                        <td colSpan={4} className="px-3 py-2 border-r border-slate-300 uppercase text-right font-sans font-black">
-                          TOTALS ({syncSupplierLedgerRows.length} ENTRIES):
+                        <td colSpan={2} className="px-2 py-2 border-r border-slate-300 uppercase text-center font-sans font-black text-[10px] whitespace-nowrap">
+                          TOTALS ({syncSupplierLedgerRows.length})
                         </td>
-                        <td className="px-3 py-2 border-r border-slate-300 text-right font-black text-slate-950">
-                          {formatCurrency(syncSupplierLedgerTotals.totalDebit, '')}
-                        </td>
-                        <td className="px-3 py-2 border-r border-slate-300 text-right font-black text-emerald-800">
-                          {formatCurrency(syncSupplierLedgerTotals.totalCredit, '')}
-                        </td>
-                        <td className="px-3 py-2 border-r border-slate-300 text-right font-black text-blue-900 bg-blue-100/70">
-                          {formatCurrency(syncSupplierLedgerTotals.netEndingBalance, companyProfile.currency)}
-                        </td>
-                        <td className="bg-slate-100 border-r border-slate-300"></td>
+                        {reconciliationColOrder.columnOrder.map((colId) => {
+                          switch (colId) {
+                            case 'debitAmount':
+                              return (
+                                <td key="debitAmount" className="px-3 py-2 border-r border-slate-300 text-right font-black text-slate-950 whitespace-nowrap">
+                                  {formatCurrency(syncSupplierLedgerTotals.totalDebit, '')}
+                                </td>
+                              );
+                            case 'creditAmount':
+                              return (
+                                <td key="creditAmount" className="px-3 py-2 border-r border-slate-300 text-right font-black text-emerald-800 whitespace-nowrap">
+                                  {formatCurrency(syncSupplierLedgerTotals.totalCredit, '')}
+                                </td>
+                              );
+                            case 'balance':
+                              return (
+                                <td key="balance" className="px-3 py-2 border-r border-slate-300 text-right font-black text-blue-900 bg-blue-100/70 whitespace-nowrap">
+                                  {formatCurrency(syncSupplierLedgerTotals.netEndingBalance, companyProfile.currency)}
+                                </td>
+                              );
+                            default:
+                              return <td key={colId} className="bg-slate-100 border-r border-slate-300"></td>;
+                          }
+                        })}
                         <td className="bg-slate-100"></td>
                       </tr>
                     </tfoot>
@@ -2706,6 +2935,12 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 </span>
               </div>
             )}
+            <ColumnReorderToolbar
+              tableId="purchase_db"
+              isCustomized={purchaseDbColOrder.isCustomized}
+              onReset={purchaseDbColOrder.resetOrder}
+              className="mb-1.5"
+            />
             <div
               ref={purchaseDbScrollRef}
               data-testid="purchase-db-scroll-box"
@@ -2714,7 +2949,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               style={purchaseDbScrollMaxHeight ? { maxHeight: `${purchaseDbScrollMaxHeight}px` } : undefined}
               className="overflow-auto border border-[#CBD8E6] rounded-lg bg-white print:!max-h-none print:!overflow-visible"
             >
-            <table className="w-full text-left text-[11px]">
+            <table data-testid="purchase-db-table" className="w-full text-left text-[11px]">
               <thead className="sticky top-0 z-10 bg-[#273E56] text-white font-bold uppercase text-[10px] tracking-tight border-b border-[#1F3349]">
                 <tr>
                   <th className="px-1.5 py-2 w-7 text-center">
@@ -2731,16 +2966,32 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                     />
                   </th>
                   <th className="px-1.5 py-2 w-10 text-center whitespace-nowrap">SL #</th>
-                  {renderSortableHeader('invoiceNumber', 'INVOICE NO', 'left', 'whitespace-nowrap')}
-                  {renderSortableHeader('date', 'DATE', 'left', 'whitespace-nowrap')}
-                  {renderSortableHeader('description', 'SUPPLIER / DESCRIPTION', 'left')}
-                  {renderSortableHeader('contactNumber', 'CONTACT', 'left', 'whitespace-nowrap')}
-                  {renderSortableHeader('items', 'ITEMS', 'center', 'whitespace-nowrap')}
-                  {renderSortableHeader('totalQty', 'TOTAL QTY', 'right', 'whitespace-nowrap')}
-                  {renderSortableHeader('totalAmount', 'TOTAL AMOUNT', 'right', 'whitespace-nowrap')}
-                  {renderSortableHeader('paidAmount', 'PAID AMOUNT', 'right', 'whitespace-nowrap')}
-                  {renderSortableHeader('balance', 'BALANCE', 'right', 'whitespace-nowrap')}
-                  {renderSortableHeader('status', 'STATUS', 'center', 'whitespace-nowrap')}
+                  {purchaseDbColOrder.columnOrder.map((colId) => {
+                    switch (colId) {
+                      case 'invoiceNumber':
+                        return renderSortableHeader('invoiceNumber', 'INVOICE NO', 'left', 'whitespace-nowrap', purchaseDbColOrder);
+                      case 'date':
+                        return renderSortableHeader('date', 'DATE', 'left', 'whitespace-nowrap', purchaseDbColOrder);
+                      case 'description':
+                        return renderSortableHeader('description', 'SUPPLIER / DESCRIPTION', 'left', '', purchaseDbColOrder);
+                      case 'contactNumber':
+                        return renderSortableHeader('contactNumber', 'CONTACT', 'left', 'whitespace-nowrap', purchaseDbColOrder);
+                      case 'items':
+                        return renderSortableHeader('items', 'ITEMS', 'center', 'whitespace-nowrap', purchaseDbColOrder);
+                      case 'totalQty':
+                        return renderSortableHeader('totalQty', 'TOTAL QTY', 'right', 'whitespace-nowrap', purchaseDbColOrder);
+                      case 'totalAmount':
+                        return renderSortableHeader('totalAmount', 'TOTAL AMOUNT', 'right', 'whitespace-nowrap', purchaseDbColOrder);
+                      case 'paidAmount':
+                        return renderSortableHeader('paidAmount', 'PAID AMOUNT', 'right', 'whitespace-nowrap', purchaseDbColOrder);
+                      case 'balance':
+                        return renderSortableHeader('balance', 'BALANCE', 'right', 'whitespace-nowrap', purchaseDbColOrder);
+                      case 'status':
+                        return renderSortableHeader('status', 'STATUS', 'center', 'whitespace-nowrap', purchaseDbColOrder);
+                      default:
+                        return null;
+                    }
+                  })}
                   <th className="px-1.5 py-2 text-center whitespace-nowrap">ACTIONS</th>
                 </tr>
               </thead>
@@ -2787,190 +3038,234 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             {String(idx + 1).padStart(2, '0')}
                           </span>
                         </td>
-                        <DatabaseValidatedCell
-                          recordId={p.id}
-                          fieldKey="invoiceNumber"
-                          rawValue={p.invoiceNumber}
-                          displayNode={
-                            <div className="flex items-center gap-1">
-                              <span>{p.invoiceNumber}</span>
-                              {p.calculationPending && (
-                                <span
-                                  data-testid={`pending-calc-badge-${p.id}`}
-                                  className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-black uppercase"
-                                >
-                                  Pending Calc
-                                </span>
-                              )}
-                            </div>
+                        {purchaseDbColOrder.columnOrder.map((colId) => {
+                          switch (colId) {
+                            case 'invoiceNumber':
+                              return (
+                                <DatabaseValidatedCell
+                                  key="invoiceNumber"
+                                  recordId={p.id}
+                                  fieldKey="invoiceNumber"
+                                  rawValue={p.invoiceNumber}
+                                  displayNode={
+                                    <div className="flex items-center gap-1">
+                                      <span>{p.invoiceNumber}</span>
+                                      {p.calculationPending && (
+                                        <span
+                                          data-testid={`pending-calc-badge-${p.id}`}
+                                          className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-black uppercase"
+                                        >
+                                          Pending Calc
+                                        </span>
+                                      )}
+                                    </div>
+                                  }
+                                  validation={
+                                    rowValidation.invoiceNumber ||
+                                    validateDatabaseCellValue('purchase', 'invoiceNumber', p.invoiceNumber)
+                                  }
+                                  hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                    rowDrafts,
+                                    'invoiceNumber'
+                                  )}
+                                  className="font-mono font-bold text-blue-900 whitespace-nowrap"
+                                  onDraftChange={handleCellDraftChange}
+                                  onCommitValid={handleCellCommitValid}
+                                  onClearDraft={handleCellClearDraft}
+                                />
+                              );
+                            case 'date':
+                              return (
+                                <DatabaseValidatedCell
+                                  key="date"
+                                  recordId={p.id}
+                                  fieldKey="date"
+                                  rawValue={p.rawValues?.date ?? p.date}
+                                  displayNode={p.rawValues?.date || formatDate(p.date) || '(Blank)'}
+                                  validation={
+                                    rowValidation.date ||
+                                    validateDatabaseCellValue('purchase', 'date', p.date)
+                                  }
+                                  hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                    rowDrafts,
+                                    'date'
+                                  )}
+                                  className="font-mono text-slate-600 whitespace-nowrap"
+                                  onDraftChange={handleCellDraftChange}
+                                  onCommitValid={handleCellCommitValid}
+                                  onClearDraft={handleCellClearDraft}
+                                />
+                              );
+                            case 'description':
+                              return (
+                                <DatabaseValidatedCell
+                                  key="description"
+                                  recordId={p.id}
+                                  fieldKey="description"
+                                  rawValue={p.rawValues?.description ?? p.description}
+                                  displayNode={p.rawValues?.description || p.description || '(Blank)'}
+                                  validation={
+                                    rowValidation.description ||
+                                    validateDatabaseCellValue('purchase', 'description', p.description || '-')
+                                  }
+                                  hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                    rowDrafts,
+                                    'description'
+                                  )}
+                                  className="font-bold text-slate-800"
+                                  onDraftChange={handleCellDraftChange}
+                                  onCommitValid={handleCellCommitValid}
+                                  onClearDraft={handleCellClearDraft}
+                                />
+                              );
+                            case 'contactNumber':
+                              return (
+                                <DatabaseValidatedCell
+                                  key="contactNumber"
+                                  recordId={p.id}
+                                  fieldKey="contactNumber"
+                                  rawValue={p.rawValues?.contactNumber ?? p.contactNumber}
+                                  displayNode={p.rawValues?.contactNumber || p.contactNumber || '-'}
+                                  validation={
+                                    rowValidation.contactNumber ||
+                                    validateDatabaseCellValue('purchase', 'contactNumber', p.contactNumber)
+                                  }
+                                  hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                    rowDrafts,
+                                    'contactNumber'
+                                  )}
+                                  className="font-mono text-slate-600 whitespace-nowrap"
+                                  onDraftChange={handleCellDraftChange}
+                                  onCommitValid={handleCellCommitValid}
+                                  onClearDraft={handleCellClearDraft}
+                                />
+                              );
+                            case 'items':
+                              return (
+                                <td key="items" className="px-1.5 py-1.5 text-center whitespace-nowrap">
+                                  <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold">
+                                    {p.items?.length || 0} Lines
+                                  </span>
+                                </td>
+                              );
+                            case 'totalQty':
+                              return (
+                                <DatabaseValidatedCell
+                                  key="totalQty"
+                                  recordId={p.id}
+                                  fieldKey="totalQty"
+                                  rawValue={p.rawValues?.totalQty ?? p.totalQty}
+                                  displayNode={p.rawValues?.totalQty ? `${p.rawValues.totalQty}` : p.totalQty}
+                                  isPendingCalc={Boolean(p.pendingFields?.includes('totalQty'))}
+                                  align="right"
+                                  validation={
+                                    rowValidation.totalQty ||
+                                    validateDatabaseCellValue('purchase', 'totalQty', p.totalQty)
+                                  }
+                                  hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                    rowDrafts,
+                                    'totalQty'
+                                  )}
+                                  className="font-mono text-slate-700"
+                                  onDraftChange={handleCellDraftChange}
+                                  onCommitValid={handleCellCommitValid}
+                                  onClearDraft={handleCellClearDraft}
+                                />
+                              );
+                            case 'totalAmount':
+                              return (
+                                <DatabaseValidatedCell
+                                  key="totalAmount"
+                                  recordId={p.id}
+                                  fieldKey="totalAmount"
+                                  rawValue={p.rawValues?.totalAmount ?? p.totalAmount}
+                                  displayNode={
+                                    p.rawValues?.totalAmount ||
+                                    (p.calculationPending ? 'Pending Calc' : formatCurrency(p.totalAmount, companyProfile.currency))
+                                  }
+                                  isPendingCalc={Boolean(p.calculationPending)}
+                                  align="right"
+                                  validation={
+                                    rowValidation.totalAmount ||
+                                    validateDatabaseCellValue('purchase', 'totalAmount', p.totalAmount)
+                                  }
+                                  hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                    rowDrafts,
+                                    'totalAmount'
+                                  )}
+                                  className="font-mono font-bold text-slate-900"
+                                  onDraftChange={handleCellDraftChange}
+                                  onCommitValid={handleCellCommitValid}
+                                  onClearDraft={handleCellClearDraft}
+                                />
+                              );
+                            case 'paidAmount':
+                              return (
+                                <DatabaseValidatedCell
+                                  key="paidAmount"
+                                  recordId={p.id}
+                                  fieldKey="paidAmount"
+                                  rawValue={p.rawValues?.paidAmount ?? p.paidAmount}
+                                  displayNode={
+                                    p.rawValues?.paidAmount || formatCurrency(p.paidAmount, companyProfile.currency)
+                                  }
+                                  isPendingCalc={Boolean(p.pendingFields?.includes('paidAmount'))}
+                                  align="right"
+                                  validation={
+                                    rowValidation.paidAmount ||
+                                    validateDatabaseCellValue('purchase', 'paidAmount', p.paidAmount)
+                                  }
+                                  hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                    rowDrafts,
+                                    'paidAmount'
+                                  )}
+                                  className="font-mono font-bold text-emerald-800"
+                                  onDraftChange={handleCellDraftChange}
+                                  onCommitValid={handleCellCommitValid}
+                                  onClearDraft={handleCellClearDraft}
+                                />
+                              );
+                            case 'balance':
+                              return (
+                                <DatabaseValidatedCell
+                                  key="balance"
+                                  recordId={p.id}
+                                  fieldKey="balance"
+                                  rawValue={p.balance}
+                                  displayNode={
+                                    p.calculationPending
+                                      ? 'Pending Calc'
+                                      : formatCurrency(p.balance, companyProfile.currency)
+                                  }
+                                  isPendingCalc={Boolean(p.calculationPending)}
+                                  align="right"
+                                  validation={
+                                    rowValidation.balance ||
+                                    validateDatabaseCellValue('purchase', 'balance', p.balance)
+                                  }
+                                  hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                    rowDrafts,
+                                    'balance'
+                                  )}
+                                  className="font-mono font-bold text-rose-700"
+                                  onDraftChange={handleCellDraftChange}
+                                  onCommitValid={handleCellCommitValid}
+                                  onClearDraft={handleCellClearDraft}
+                                />
+                              );
+                            case 'status':
+                              return (
+                                <td key="status" className="px-1.5 py-1.5 text-center whitespace-nowrap">
+                                  {renderStatusBadge(
+                                    resolvePurchaseRecordStatus(p),
+                                    `purchase-status-badge-${p.id}`
+                                  )}
+                                </td>
+                              );
+                            default:
+                              return null;
                           }
-                          validation={
-                            rowValidation.invoiceNumber ||
-                            validateDatabaseCellValue('purchase', 'invoiceNumber', p.invoiceNumber)
-                          }
-                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                            rowDrafts,
-                            'invoiceNumber'
-                          )}
-                          className="font-mono font-bold text-blue-900 whitespace-nowrap"
-                          onDraftChange={handleCellDraftChange}
-                          onCommitValid={handleCellCommitValid}
-                          onClearDraft={handleCellClearDraft}
-                        />
-                        <DatabaseValidatedCell
-                          recordId={p.id}
-                          fieldKey="date"
-                          rawValue={p.rawValues?.date ?? p.date}
-                          displayNode={p.rawValues?.date || formatDate(p.date) || '(Blank)'}
-                          validation={
-                            rowValidation.date ||
-                            validateDatabaseCellValue('purchase', 'date', p.date)
-                          }
-                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                            rowDrafts,
-                            'date'
-                          )}
-                          className="font-mono text-slate-600 whitespace-nowrap"
-                          onDraftChange={handleCellDraftChange}
-                          onCommitValid={handleCellCommitValid}
-                          onClearDraft={handleCellClearDraft}
-                        />
-                        <DatabaseValidatedCell
-                          recordId={p.id}
-                          fieldKey="description"
-                          rawValue={p.rawValues?.description ?? p.description}
-                          displayNode={p.rawValues?.description || p.description || '(Blank)'}
-                          validation={
-                            rowValidation.description ||
-                            validateDatabaseCellValue('purchase', 'description', p.description || '-')
-                          }
-                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                            rowDrafts,
-                            'description'
-                          )}
-                          className="font-bold text-slate-800"
-                          onDraftChange={handleCellDraftChange}
-                          onCommitValid={handleCellCommitValid}
-                          onClearDraft={handleCellClearDraft}
-                        />
-                        <DatabaseValidatedCell
-                          recordId={p.id}
-                          fieldKey="contactNumber"
-                          rawValue={p.rawValues?.contactNumber ?? p.contactNumber}
-                          displayNode={p.rawValues?.contactNumber || p.contactNumber || '-'}
-                          validation={
-                            rowValidation.contactNumber ||
-                            validateDatabaseCellValue('purchase', 'contactNumber', p.contactNumber)
-                          }
-                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                            rowDrafts,
-                            'contactNumber'
-                          )}
-                          className="font-mono text-slate-600 whitespace-nowrap"
-                          onDraftChange={handleCellDraftChange}
-                          onCommitValid={handleCellCommitValid}
-                          onClearDraft={handleCellClearDraft}
-                        />
-                        <td className="px-1.5 py-1.5 text-center whitespace-nowrap">
-                          <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold">
-                            {p.items?.length || 0} Lines
-                          </span>
-                        </td>
-                        <DatabaseValidatedCell
-                          recordId={p.id}
-                          fieldKey="totalQty"
-                          rawValue={p.rawValues?.totalQty ?? p.totalQty}
-                          displayNode={p.rawValues?.totalQty ? `${p.rawValues.totalQty}` : p.totalQty}
-                          isPendingCalc={Boolean(p.pendingFields?.includes('totalQty'))}
-                          align="right"
-                          validation={
-                            rowValidation.totalQty ||
-                            validateDatabaseCellValue('purchase', 'totalQty', p.totalQty)
-                          }
-                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                            rowDrafts,
-                            'totalQty'
-                          )}
-                          className="font-mono text-slate-700"
-                          onDraftChange={handleCellDraftChange}
-                          onCommitValid={handleCellCommitValid}
-                          onClearDraft={handleCellClearDraft}
-                        />
-                        <DatabaseValidatedCell
-                          recordId={p.id}
-                          fieldKey="totalAmount"
-                          rawValue={p.rawValues?.totalAmount ?? p.totalAmount}
-                          displayNode={
-                            p.rawValues?.totalAmount ||
-                            (p.calculationPending ? 'Pending Calc' : formatCurrency(p.totalAmount, companyProfile.currency))
-                          }
-                          isPendingCalc={Boolean(p.calculationPending)}
-                          align="right"
-                          validation={
-                            rowValidation.totalAmount ||
-                            validateDatabaseCellValue('purchase', 'totalAmount', p.totalAmount)
-                          }
-                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                            rowDrafts,
-                            'totalAmount'
-                          )}
-                          className="font-mono font-bold text-slate-900"
-                          onDraftChange={handleCellDraftChange}
-                          onCommitValid={handleCellCommitValid}
-                          onClearDraft={handleCellClearDraft}
-                        />
-                        <DatabaseValidatedCell
-                          recordId={p.id}
-                          fieldKey="paidAmount"
-                          rawValue={p.rawValues?.paidAmount ?? p.paidAmount}
-                          displayNode={
-                            p.rawValues?.paidAmount || formatCurrency(p.paidAmount, companyProfile.currency)
-                          }
-                          isPendingCalc={Boolean(p.pendingFields?.includes('paidAmount'))}
-                          align="right"
-                          validation={
-                            rowValidation.paidAmount ||
-                            validateDatabaseCellValue('purchase', 'paidAmount', p.paidAmount)
-                          }
-                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                            rowDrafts,
-                            'paidAmount'
-                          )}
-                          className="font-mono font-bold text-emerald-800"
-                          onDraftChange={handleCellDraftChange}
-                          onCommitValid={handleCellCommitValid}
-                          onClearDraft={handleCellClearDraft}
-                        />
-                        <DatabaseValidatedCell
-                          recordId={p.id}
-                          fieldKey="balance"
-                          rawValue={p.balance}
-                          displayNode={
-                            p.calculationPending
-                              ? 'Pending Calc'
-                              : formatCurrency(p.balance, companyProfile.currency)
-                          }
-                          isPendingCalc={Boolean(p.calculationPending)}
-                          align="right"
-                          validation={
-                            rowValidation.balance ||
-                            validateDatabaseCellValue('purchase', 'balance', p.balance)
-                          }
-                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                            rowDrafts,
-                            'balance'
-                          )}
-                          className="font-mono font-bold text-rose-700"
-                          onDraftChange={handleCellDraftChange}
-                          onCommitValid={handleCellCommitValid}
-                          onClearDraft={handleCellClearDraft}
-                        />
-                        <td className="px-1.5 py-1.5 text-center whitespace-nowrap">
-                          {renderStatusBadge(
-                            resolvePurchaseRecordStatus(p),
-                            `purchase-status-badge-${p.id}`
-                          )}
-                        </td>
+                        })}
                         <td className="px-1.5 py-1.5 text-center whitespace-nowrap">
                           <div className="flex items-center justify-center space-x-1">
                             <button
@@ -3023,12 +3318,69 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
 
         {activeDbType === 'packing' && (
           <div>
-            <div className="px-3 py-2 bg-white border-b border-slate-300 flex flex-wrap items-center justify-between gap-2 text-xs text-black">
-              <div className="font-bold text-black">
-                Packing List Ledger — Live BDT Conversion
+            <div className="px-3 py-2.5 bg-white border-b border-slate-300 flex flex-wrap items-center justify-between gap-2.5 text-xs text-black">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="font-bold text-black">
+                  Packing List Ledger — Live BDT Conversion
+                </div>
+                {packingPartySearch.trim() !== '' && (
+                  <span
+                    data-testid="packing-shipper-exporter-count"
+                    className="inline-flex items-center px-2 py-0.5 rounded bg-sky-50 border border-sky-300 text-[11px] font-mono font-bold text-sky-900"
+                  >
+                    {sortedPackings.length} of {packings.length} row{packings.length === 1 ? '' : 's'}
+                  </span>
+                )}
               </div>
-              <div className="font-mono text-[11px] font-semibold text-black bg-white px-2.5 py-0.5 rounded border border-slate-300">
-                Formula: <strong>Total Value (RMB) × RMB Rate = Total Amount (BDT)</strong>
+
+              {/* Real-Time Shipper / Exporter Search Bar */}
+              <div className="flex flex-wrap items-center gap-2.5 flex-1 justify-end min-w-[260px]">
+                <div className="relative flex items-center w-full sm:w-80">
+                  <Search
+                    className="w-3.5 h-3.5 text-[#0D9488] absolute left-2.5 pointer-events-none"
+                    aria-hidden="true"
+                  />
+                  <input
+                    type="text"
+                    data-testid="packing-shipper-exporter-search"
+                    aria-label="Filter Packing List rows in real-time by Shipper or Exporter name"
+                    placeholder="Search by Shipper or Exporter name..."
+                    value={packingPartySearch}
+                    onChange={(e) => setPackingPartySearch(e.target.value)}
+                    className="w-full pl-8 pr-7 py-1.5 text-xs font-semibold text-slate-900 bg-slate-50 border border-slate-300 rounded-lg placeholder:text-slate-400 placeholder:font-normal focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0D9488] focus:border-[#0D9488] transition"
+                  />
+                  {packingPartySearch && (
+                    <button
+                      type="button"
+                      data-testid="packing-shipper-exporter-clear-btn"
+                      aria-label="Clear Shipper or Exporter search"
+                      onClick={() => setPackingPartySearch('')}
+                      className="absolute right-1.5 p-0.5 rounded text-slate-500 hover:text-slate-900 hover:bg-slate-200 transition cursor-pointer"
+                      title="Clear Shipper / Exporter search"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  data-testid="packing-ledger-export-csv-btn"
+                  aria-label={`Export currently filtered Packing List view as CSV (${sortedPackings.length} rows)`}
+                  onClick={handleExportCSV}
+                  disabled={sortedPackings.length === 0}
+                  title={
+                    sortedPackings.length === 0
+                      ? 'No filtered Packing List rows available to export'
+                      : `Download ${sortedPackings.length} filtered Packing List row${sortedPackings.length === 1 ? '' : 's'} as CSV for offline analysis`
+                  }
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0D9488] hover:bg-[#0F766E] disabled:bg-slate-200 disabled:text-slate-500 disabled:border-slate-300 disabled:cursor-not-allowed text-white border border-[#0F766E] text-xs font-bold shadow-xs transition whitespace-nowrap cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                  <span>Export CSV ({sortedPackings.length})</span>
+                </button>
+                <div className="font-mono text-[11px] font-semibold text-black bg-white px-2.5 py-1 rounded border border-slate-300 whitespace-nowrap">
+                  Formula: <strong>Total Value (RMB) × RMB Rate = Total Amount (BDT)</strong>
+                </div>
               </div>
             </div>
             <div className="p-2.5 bg-white">
@@ -3039,6 +3391,12 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   </span>
                 </div>
               )}
+              <ColumnReorderToolbar
+                tableId="packing_db"
+                isCustomized={packingDbColOrder.isCustomized}
+                onReset={packingDbColOrder.resetOrder}
+                className="mb-1.5"
+              />
               <div
                 ref={packingDbScrollRef}
                 data-testid="packing-db-scroll-box"
@@ -3066,21 +3424,88 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                         className="cursor-pointer accent-[#0D9488]"
                       />
                     </th>
-                    <th className="px-1 py-2 w-10 text-center whitespace-nowrap bg-[#273E56] text-white">SL #</th>
-                    {renderSortableHeader('invoiceNumber', 'PACKING NO', 'left', 'whitespace-nowrap bg-[#273E56] text-white')}
-                    {renderSortableHeader('date', 'DATE', 'left', 'whitespace-nowrap bg-[#273E56] text-white')}
-                    {renderSortableHeader('shippingMark', 'SHIPPING MARK', 'left', 'bg-[#273E56] text-white')}
-                    {renderSortableHeader('flight', 'FLIGHT', 'left', 'whitespace-nowrap bg-[#273E56] text-white')}
-                    {renderSortableHeader('destination', 'DESTINATION', 'left', 'bg-[#273E56] text-white')}
-                    {renderSortableHeader('shipper', 'SHIPPER', 'left', 'bg-[#273E56] text-white')}
-                    <th className="px-2 py-2 text-left whitespace-nowrap bg-[#273E56] text-white">DOCUMENTS HOLDER</th>
-                    {renderSortableHeader('items', 'ITEMS', 'left', 'bg-[#273E56] text-white')}
-                    {renderSortableHeader('totalBox', 'TOTAL BOX', 'right', 'bg-[#273E56] text-white')}
-                    {renderSortableHeader('totalWeight', 'TOTAL WEIGHT', 'right', 'bg-[#273E56] text-white')}
-                    {renderSortableHeader('totalAmount', 'TOTAL VALUE', 'right', 'bg-[#273E56] text-white')}
-                    {renderSortableHeader('rmbRate', 'RMB RATE', 'right', 'bg-[#273E56] text-white')}
-                    {renderSortableHeader('amountBDT', 'TOTAL AMOUNT (BDT)', 'right', 'bg-[#273E56] text-white')}
-                    {renderSortableHeader('status', 'STATUS', 'center', 'whitespace-nowrap bg-[#273E56] text-white')}
+                    <th
+                      scope="col"
+                      data-testid="packing-ledger-sno-header"
+                      aria-sort={
+                        activeSortConfig.column === 'serialNumber'
+                          ? activeSortConfig.direction === 'asc'
+                            ? 'ascending'
+                            : 'descending'
+                          : 'none'
+                      }
+                      onClick={() => handleHeaderSortClick('serialNumber')}
+                      title="Persistent auto-incrementing row index (click to sort by S. No.)"
+                      className="px-1.5 py-2 w-14 text-center whitespace-nowrap bg-[#273E56] text-white select-none cursor-pointer hover:bg-black/25 transition-colors group"
+                    >
+                      <div className="inline-flex items-center justify-center gap-1 w-full">
+                        <span
+                          className={`font-bold normal-case tracking-tight whitespace-nowrap transition-colors ${
+                            activeSortConfig.column === 'serialNumber'
+                              ? 'text-amber-200 font-black underline underline-offset-2'
+                              : 'group-hover:text-amber-100'
+                          }`}
+                        >
+                          S. No.
+                        </span>
+                        <span className="inline-flex items-center shrink-0">
+                          {activeSortConfig.column === 'serialNumber' ? (
+                            activeSortConfig.direction === 'asc' ? (
+                              <ArrowUp className="w-3.5 h-3.5 text-amber-300 stroke-[2.8]" />
+                            ) : (
+                              <ArrowDown className="w-3.5 h-3.5 text-amber-300 stroke-[2.8]" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-2.5 h-2.5 opacity-40 group-hover:opacity-90 transition-opacity" />
+                          )}
+                        </span>
+                      </div>
+                    </th>
+                    {packingDbColOrder.columnOrder.map((colId) => {
+                      switch (colId) {
+                        case 'invoiceNumber':
+                          return renderSortableHeader('invoiceNumber', 'PACKING NO', 'left', 'whitespace-nowrap bg-[#273E56] text-white', packingDbColOrder);
+                        case 'date':
+                          return renderSortableHeader('date', 'DATE', 'left', 'whitespace-nowrap bg-[#273E56] text-white', packingDbColOrder);
+                        case 'shippingMark':
+                          return renderSortableHeader('shippingMark', 'SHIPPING MARK', 'left', 'bg-[#273E56] text-white', packingDbColOrder);
+                        case 'flight':
+                          return renderSortableHeader('flight', 'FLIGHT', 'left', 'whitespace-nowrap bg-[#273E56] text-white', packingDbColOrder);
+                        case 'destination':
+                          return renderSortableHeader('destination', 'DESTINATION', 'left', 'bg-[#273E56] text-white', packingDbColOrder);
+                        case 'shipper':
+                          return renderSortableHeader('shipper', 'SHIPPER', 'left', 'bg-[#273E56] text-white', packingDbColOrder);
+                        case 'documentsHolder':
+                          return (
+                            <th
+                              key="documentsHolder"
+                              {...packingDbColOrder.getHeaderDragProps('documentsHolder', 'DOCUMENTS HOLDER')}
+                              className={`px-2 py-2 text-left whitespace-nowrap bg-[#273E56] text-white ${packingDbColOrder.getHeaderDragClassName('documentsHolder')}`}
+                            >
+                              <span className="inline-flex items-center gap-1">
+                                <ColumnDragGrip />
+                                <span>DOCUMENTS HOLDER</span>
+                              </span>
+                            </th>
+                          );
+                        case 'items':
+                          return renderSortableHeader('items', 'ITEMS', 'left', 'bg-[#273E56] text-white', packingDbColOrder);
+                        case 'totalBox':
+                          return renderSortableHeader('totalBox', 'TOTAL BOX', 'right', 'bg-[#273E56] text-white', packingDbColOrder);
+                        case 'totalWeight':
+                          return renderSortableHeader('totalWeight', 'TOTAL WEIGHT', 'right', 'bg-[#273E56] text-white', packingDbColOrder);
+                        case 'totalAmount':
+                          return renderSortableHeader('totalAmount', 'TOTAL VALUE', 'right', 'bg-[#273E56] text-white', packingDbColOrder);
+                        case 'rmbRate':
+                          return renderSortableHeader('rmbRate', 'RMB RATE', 'right', 'bg-[#273E56] text-white', packingDbColOrder);
+                        case 'amountBDT':
+                          return renderSortableHeader('amountBDT', 'TOTAL AMOUNT (BDT)', 'right', 'bg-[#273E56] text-white', packingDbColOrder);
+                        case 'status':
+                          return renderSortableHeader('status', 'STATUS', 'center', 'whitespace-nowrap bg-[#273E56] text-white', packingDbColOrder);
+                        default:
+                          return null;
+                      }
+                    })}
                     <th className="px-1 py-2 text-center whitespace-nowrap bg-[#273E56] text-white">ACTIONS</th>
                   </tr>
                 </thead>
@@ -3088,12 +3513,31 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   {sortedPackings.length === 0 ? (
                     <tr className="bg-white text-black">
                       <td colSpan={17} className="p-8 text-center text-black bg-white">
-                        No packing list records found.
+                        {packingPartySearch.trim() !== '' ? (
+                          <div className="inline-flex flex-col items-center gap-2">
+                            <span>
+                              No Packing List rows match Shipper or Exporter{' '}
+                              <strong>&ldquo;{packingPartySearch.trim()}&rdquo;</strong>.
+                            </span>
+                            <button
+                              type="button"
+                              data-testid="packing-shipper-exporter-empty-reset-btn"
+                              onClick={() => setPackingPartySearch('')}
+                              className="px-3 py-1 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-300 text-xs font-bold text-slate-800 transition cursor-pointer"
+                            >
+                              Clear Filter
+                            </button>
+                          </div>
+                        ) : (
+                          'No packing list records found.'
+                        )}
                       </td>
                     </tr>
                   ) : (
-                    sortedPackings.map((pkg, idx) => {
+                    sortedPackings.map((pkg) => {
                       const isSelected = selectedIds.includes(pkg.id);
+                      const persistentSerialNo =
+                        pkg.serialNumber ?? packingSerialNumberMap.get(pkg.id) ?? 0;
                       const computedAmountBDT = calculatePackingTotalAmountBDT(
                         pkg.totalAmount,
                         pkg.rmbRate
@@ -3116,240 +3560,302 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                             className="cursor-pointer accent-black"
                           />
                         </td>
-                        <td className="px-1 py-1.5 text-center whitespace-nowrap bg-white text-black">
-                          <span className="font-mono font-bold text-black">
-                            {String(idx + 1).padStart(2, '0')}
+                        <td
+                          data-testid={`packing-row-sno-${pkg.id}`}
+                          className="px-1.5 py-1.5 text-center whitespace-nowrap bg-white text-black"
+                        >
+                          <span className="font-mono font-bold tabular-nums text-black">
+                            {persistentSerialNo}
                           </span>
                         </td>
-                        <DatabaseValidatedCell
-                          recordId={pkg.id}
-                          fieldKey="invoiceNumber"
-                          rawValue={pkg.invoiceNumber}
-                          displayNode={
-                            <div className="flex items-center gap-1 text-black">
-                              <span>{pkg.invoiceNumber}</span>
-                              {pkg.calculationPending && (
-                                <span
-                                  data-testid={`pending-calc-badge-${pkg.id}`}
-                                  className="px-1.5 py-0.5 rounded bg-white text-black border border-slate-300 text-[9px] font-black uppercase"
+                        {packingDbColOrder.columnOrder.map((colId) => {
+                          switch (colId) {
+                            case 'invoiceNumber':
+                              return (
+                                <DatabaseValidatedCell
+                                  key="invoiceNumber"
+                                  recordId={pkg.id}
+                                  fieldKey="invoiceNumber"
+                                  rawValue={pkg.invoiceNumber}
+                                  displayNode={
+                                    <div className="flex items-center gap-1 text-black">
+                                      <span>{pkg.invoiceNumber}</span>
+                                      {pkg.calculationPending && (
+                                        <span
+                                          data-testid={`pending-calc-badge-${pkg.id}`}
+                                          className="px-1.5 py-0.5 rounded bg-white text-black border border-slate-300 text-[9px] font-black uppercase"
+                                        >
+                                          Pending Calc
+                                        </span>
+                                      )}
+                                    </div>
+                                  }
+                                  validation={
+                                    rowValidation.invoiceNumber ||
+                                    validateDatabaseCellValue('packing', 'invoiceNumber', pkg.invoiceNumber)
+                                  }
+                                  hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                    rowDrafts,
+                                    'invoiceNumber'
+                                  )}
+                                  className="font-mono font-bold text-black bg-white whitespace-nowrap"
+                                  onDraftChange={handleCellDraftChange}
+                                  onCommitValid={handleCellCommitValid}
+                                  onClearDraft={handleCellClearDraft}
+                                />
+                              );
+                            case 'date':
+                              return (
+                                <DatabaseValidatedCell
+                                  key="date"
+                                  recordId={pkg.id}
+                                  fieldKey="packingDate"
+                                  rawValue={pkg.rawValues?.packingDate ?? pkg.packingDate}
+                                  displayNode={pkg.rawValues?.packingDate || formatDate(pkg.packingDate) || '(Blank)'}
+                                  validation={
+                                    rowValidation.packingDate ||
+                                    validateDatabaseCellValue('packing', 'packingDate', pkg.packingDate)
+                                  }
+                                  hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                    rowDrafts,
+                                    'packingDate'
+                                  )}
+                                  className="font-mono text-black bg-white whitespace-nowrap"
+                                  onDraftChange={handleCellDraftChange}
+                                  onCommitValid={handleCellCommitValid}
+                                  onClearDraft={handleCellClearDraft}
+                                />
+                              );
+                            case 'shippingMark':
+                              return (
+                                <DatabaseValidatedCell
+                                  key="shippingMark"
+                                  recordId={pkg.id}
+                                  fieldKey="shippingMark"
+                                  rawValue={pkg.rawValues?.shippingMark ?? pkg.shippingMark}
+                                  displayNode={pkg.rawValues?.shippingMark || pkg.shippingMark || '(Blank)'}
+                                  validation={
+                                    rowValidation.shippingMark ||
+                                    validateDatabaseCellValue('packing', 'shippingMark', pkg.shippingMark || '-')
+                                  }
+                                  hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                    rowDrafts,
+                                    'shippingMark'
+                                  )}
+                                  className="font-black text-black bg-white"
+                                  onDraftChange={handleCellDraftChange}
+                                  onCommitValid={handleCellCommitValid}
+                                  onClearDraft={handleCellClearDraft}
+                                />
+                              );
+                            case 'flight':
+                              return (
+                                <DatabaseValidatedCell
+                                  key="flight"
+                                  recordId={pkg.id}
+                                  fieldKey="flight"
+                                  rawValue={pkg.rawValues?.flight ?? pkg.flight}
+                                  displayNode={pkg.rawValues?.flight || pkg.flight || '(Blank)'}
+                                  validation={
+                                    rowValidation.flight ||
+                                    validateDatabaseCellValue('packing', 'flight', pkg.flight || '-')
+                                  }
+                                  hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                    rowDrafts,
+                                    'flight'
+                                  )}
+                                  className="font-mono text-black bg-white whitespace-nowrap"
+                                  onDraftChange={handleCellDraftChange}
+                                  onCommitValid={handleCellCommitValid}
+                                  onClearDraft={handleCellClearDraft}
+                                />
+                              );
+                            case 'destination':
+                              return (
+                                <DatabaseValidatedCell
+                                  key="destination"
+                                  recordId={pkg.id}
+                                  fieldKey="destination"
+                                  rawValue={pkg.rawValues?.destination ?? pkg.destination}
+                                  displayNode={pkg.rawValues?.destination || pkg.destination || '(Blank)'}
+                                  validation={
+                                    rowValidation.destination ||
+                                    validateDatabaseCellValue('packing', 'destination', pkg.destination || '-')
+                                  }
+                                  hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                    rowDrafts,
+                                    'destination'
+                                  )}
+                                  className="font-bold text-black bg-white"
+                                  onDraftChange={handleCellDraftChange}
+                                  onCommitValid={handleCellCommitValid}
+                                  onClearDraft={handleCellClearDraft}
+                                />
+                              );
+                            case 'shipper':
+                              return (
+                                <DatabaseValidatedCell
+                                  key="shipper"
+                                  recordId={pkg.id}
+                                  fieldKey="shipper"
+                                  rawValue={pkg.rawValues?.shipper ?? pkg.shipper}
+                                  displayNode={pkg.rawValues?.shipper || pkg.shipper || '(Blank)'}
+                                  validation={
+                                    rowValidation.shipper ||
+                                    validateDatabaseCellValue('packing', 'shipper', pkg.shipper || '-')
+                                  }
+                                  hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                    rowDrafts,
+                                    'shipper'
+                                  )}
+                                  className="font-bold text-black bg-white"
+                                  onDraftChange={handleCellDraftChange}
+                                  onCommitValid={handleCellCommitValid}
+                                  onClearDraft={handleCellClearDraft}
+                                />
+                              );
+                            case 'documentsHolder':
+                              return (
+                                <td key="documentsHolder" className="px-2 py-1.5 font-semibold text-black bg-white whitespace-nowrap">
+                                  {pkg.documentsHolder || '-'}
+                                </td>
+                              );
+                            case 'items':
+                              return (
+                                <td
+                                  key="items"
+                                  className="px-1.5 py-1.5 font-mono text-[11px] text-black bg-white"
+                                  data-testid={`packing-items-cell-${pkg.id}`}
                                 >
-                                  Pending Calc
-                                </span>
-                              )}
-                            </div>
+                                  <div className="flex flex-wrap items-center gap-1 leading-tight text-black">
+                                    <span className="px-1 py-0.5 rounded bg-white text-black border border-slate-300 font-bold text-[10px] whitespace-nowrap">
+                                      {pkg.items?.length || 0} {(pkg.items?.length || 0) === 1 ? 'Item' : 'Items'}
+                                    </span>
+                                    <span className="font-bold text-black">
+                                      {(pkg.items || []).map((it) => it.item).join(', ')}
+                                    </span>
+                                  </div>
+                                </td>
+                              );
+                            case 'totalBox':
+                              return (
+                                <DatabaseValidatedCell
+                                  key="totalBox"
+                                  recordId={pkg.id}
+                                  fieldKey="totalBox"
+                                  rawValue={pkg.rawValues?.totalBox ?? pkg.totalBox}
+                                  displayNode={pkg.rawValues?.totalBox || pkg.totalBox}
+                                  isPendingCalc={Boolean(pkg.pendingFields?.includes('totalBox'))}
+                                  align="right"
+                                  validation={
+                                    rowValidation.totalBox ||
+                                    validateDatabaseCellValue('packing', 'totalBox', pkg.totalBox)
+                                  }
+                                  hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                    rowDrafts,
+                                    'totalBox'
+                                  )}
+                                  className="font-mono text-black bg-white"
+                                  onDraftChange={handleCellDraftChange}
+                                  onCommitValid={handleCellCommitValid}
+                                  onClearDraft={handleCellClearDraft}
+                                />
+                              );
+                            case 'totalWeight':
+                              return (
+                                <DatabaseValidatedCell
+                                  key="totalWeight"
+                                  recordId={pkg.id}
+                                  fieldKey="totalWeight"
+                                  rawValue={pkg.rawValues?.totalWeight ?? pkg.totalWeight}
+                                  displayNode={pkg.rawValues?.totalWeight || `${pkg.totalWeight} KG`}
+                                  isPendingCalc={Boolean(pkg.pendingFields?.includes('totalWeight'))}
+                                  align="right"
+                                  validation={
+                                    rowValidation.totalWeight ||
+                                    validateDatabaseCellValue('packing', 'totalWeight', pkg.totalWeight)
+                                  }
+                                  hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                    rowDrafts,
+                                    'totalWeight'
+                                  )}
+                                  className="font-mono font-bold text-black bg-white"
+                                  onDraftChange={handleCellDraftChange}
+                                  onCommitValid={handleCellCommitValid}
+                                  onClearDraft={handleCellClearDraft}
+                                />
+                              );
+                            case 'totalAmount':
+                              return (
+                                <DatabaseValidatedCell
+                                  key="totalAmount"
+                                  recordId={pkg.id}
+                                  fieldKey="totalAmount"
+                                  rawValue={pkg.rawValues?.totalAmount ?? pkg.totalAmount}
+                                  displayNode={
+                                    pkg.rawValues?.totalAmount ||
+                                    (pkg.calculationPending ? 'Pending Calc' : formatCurrency(pkg.totalAmount, 'RMB'))
+                                  }
+                                  isPendingCalc={Boolean(pkg.calculationPending)}
+                                  align="right"
+                                  validation={
+                                    rowValidation.totalAmount ||
+                                    validateDatabaseCellValue('packing', 'totalAmount', pkg.totalAmount)
+                                  }
+                                  hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                    rowDrafts,
+                                    'totalAmount'
+                                  )}
+                                  className="font-mono font-bold text-black bg-white"
+                                  onDraftChange={handleCellDraftChange}
+                                  onCommitValid={handleCellCommitValid}
+                                  onClearDraft={handleCellClearDraft}
+                                />
+                              );
+                            case 'rmbRate':
+                              return (
+                                <DatabaseValidatedCell
+                                  key="rmbRate"
+                                  recordId={pkg.id}
+                                  fieldKey="rmbRate"
+                                  rawValue={pkg.rmbRate}
+                                  displayNode={pkg.rmbRate ?? ''}
+                                  align="right"
+                                  alwaysShowInput={true}
+                                  inputPlaceholder="0.00"
+                                  validation={
+                                    rowValidation.rmbRate ||
+                                    validateDatabaseCellValue('packing', 'rmbRate', pkg.rmbRate)
+                                  }
+                                  hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                    rowDrafts,
+                                    'rmbRate'
+                                  )}
+                                  className="font-mono font-bold text-black bg-white"
+                                  onDraftChange={handleCellDraftChange}
+                                  onCommitValid={handleCellCommitValid}
+                                  onClearDraft={handleCellClearDraft}
+                                />
+                              );
+                            case 'amountBDT':
+                              return (
+                                <td key="amountBDT" className="px-1.5 py-1.5 text-right font-mono font-black text-black bg-white whitespace-nowrap">
+                                  {formatCurrency(computedAmountBDT, 'BDT')}
+                                </td>
+                              );
+                            case 'status':
+                              return (
+                                <td key="status" className="px-1.5 py-1.5 text-center whitespace-nowrap bg-white text-black">
+                                  {renderStatusBadge(
+                                    resolvePackingRecordStatus(pkg),
+                                    `packing-status-badge-${pkg.id}`
+                                  )}
+                                </td>
+                              );
+                            default:
+                              return null;
                           }
-                          validation={
-                            rowValidation.invoiceNumber ||
-                            validateDatabaseCellValue('packing', 'invoiceNumber', pkg.invoiceNumber)
-                          }
-                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                            rowDrafts,
-                            'invoiceNumber'
-                          )}
-                          className="font-mono font-bold text-black bg-white whitespace-nowrap"
-                          onDraftChange={handleCellDraftChange}
-                          onCommitValid={handleCellCommitValid}
-                          onClearDraft={handleCellClearDraft}
-                        />
-                        <DatabaseValidatedCell
-                          recordId={pkg.id}
-                          fieldKey="packingDate"
-                          rawValue={pkg.rawValues?.packingDate ?? pkg.packingDate}
-                          displayNode={pkg.rawValues?.packingDate || formatDate(pkg.packingDate) || '(Blank)'}
-                          validation={
-                            rowValidation.packingDate ||
-                            validateDatabaseCellValue('packing', 'packingDate', pkg.packingDate)
-                          }
-                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                            rowDrafts,
-                            'packingDate'
-                          )}
-                          className="font-mono text-black bg-white whitespace-nowrap"
-                          onDraftChange={handleCellDraftChange}
-                          onCommitValid={handleCellCommitValid}
-                          onClearDraft={handleCellClearDraft}
-                        />
-                        <DatabaseValidatedCell
-                          recordId={pkg.id}
-                          fieldKey="shippingMark"
-                          rawValue={pkg.rawValues?.shippingMark ?? pkg.shippingMark}
-                          displayNode={pkg.rawValues?.shippingMark || pkg.shippingMark || '(Blank)'}
-                          validation={
-                            rowValidation.shippingMark ||
-                            validateDatabaseCellValue('packing', 'shippingMark', pkg.shippingMark || '-')
-                          }
-                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                            rowDrafts,
-                            'shippingMark'
-                          )}
-                          className="font-black text-black bg-white"
-                          onDraftChange={handleCellDraftChange}
-                          onCommitValid={handleCellCommitValid}
-                          onClearDraft={handleCellClearDraft}
-                        />
-                        <DatabaseValidatedCell
-                          recordId={pkg.id}
-                          fieldKey="flight"
-                          rawValue={pkg.rawValues?.flight ?? pkg.flight}
-                          displayNode={pkg.rawValues?.flight || pkg.flight || '(Blank)'}
-                          validation={
-                            rowValidation.flight ||
-                            validateDatabaseCellValue('packing', 'flight', pkg.flight || '-')
-                          }
-                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                            rowDrafts,
-                            'flight'
-                          )}
-                          className="font-mono text-black bg-white whitespace-nowrap"
-                          onDraftChange={handleCellDraftChange}
-                          onCommitValid={handleCellCommitValid}
-                          onClearDraft={handleCellClearDraft}
-                        />
-                        <DatabaseValidatedCell
-                          recordId={pkg.id}
-                          fieldKey="destination"
-                          rawValue={pkg.rawValues?.destination ?? pkg.destination}
-                          displayNode={pkg.rawValues?.destination || pkg.destination || '(Blank)'}
-                          validation={
-                            rowValidation.destination ||
-                            validateDatabaseCellValue('packing', 'destination', pkg.destination || '-')
-                          }
-                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                            rowDrafts,
-                            'destination'
-                          )}
-                          className="font-bold text-black bg-white"
-                          onDraftChange={handleCellDraftChange}
-                          onCommitValid={handleCellCommitValid}
-                          onClearDraft={handleCellClearDraft}
-                        />
-                        <DatabaseValidatedCell
-                          recordId={pkg.id}
-                          fieldKey="shipper"
-                          rawValue={pkg.rawValues?.shipper ?? pkg.shipper}
-                          displayNode={pkg.rawValues?.shipper || pkg.shipper || '(Blank)'}
-                          validation={
-                            rowValidation.shipper ||
-                            validateDatabaseCellValue('packing', 'shipper', pkg.shipper || '-')
-                          }
-                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                            rowDrafts,
-                            'shipper'
-                          )}
-                          className="font-bold text-black bg-white"
-                          onDraftChange={handleCellDraftChange}
-                          onCommitValid={handleCellCommitValid}
-                          onClearDraft={handleCellClearDraft}
-                        />
-                        <td className="px-2 py-1.5 font-semibold text-black bg-white whitespace-nowrap">
-                          {pkg.documentsHolder || '-'}
-                        </td>
-                        <td
-                          className="px-1.5 py-1.5 font-mono text-[11px] text-black bg-white"
-                          data-testid={`packing-items-cell-${pkg.id}`}
-                        >
-                          <div className="flex flex-wrap items-center gap-1 leading-tight text-black">
-                            <span className="px-1 py-0.5 rounded bg-white text-black border border-slate-300 font-bold text-[10px] whitespace-nowrap">
-                              {pkg.items?.length || 0} {(pkg.items?.length || 0) === 1 ? 'Item' : 'Items'}
-                            </span>
-                            <span className="font-bold text-black">
-                              {(pkg.items || []).map((it) => it.item).join(', ')}
-                            </span>
-                          </div>
-                        </td>
-                        <DatabaseValidatedCell
-                          recordId={pkg.id}
-                          fieldKey="totalBox"
-                          rawValue={pkg.rawValues?.totalBox ?? pkg.totalBox}
-                          displayNode={pkg.rawValues?.totalBox || pkg.totalBox}
-                          isPendingCalc={Boolean(pkg.pendingFields?.includes('totalBox'))}
-                          align="right"
-                          validation={
-                            rowValidation.totalBox ||
-                            validateDatabaseCellValue('packing', 'totalBox', pkg.totalBox)
-                          }
-                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                            rowDrafts,
-                            'totalBox'
-                          )}
-                          className="font-mono text-black bg-white"
-                          onDraftChange={handleCellDraftChange}
-                          onCommitValid={handleCellCommitValid}
-                          onClearDraft={handleCellClearDraft}
-                        />
-                        <DatabaseValidatedCell
-                          recordId={pkg.id}
-                          fieldKey="totalWeight"
-                          rawValue={pkg.rawValues?.totalWeight ?? pkg.totalWeight}
-                          displayNode={pkg.rawValues?.totalWeight || `${pkg.totalWeight} KG`}
-                          isPendingCalc={Boolean(pkg.pendingFields?.includes('totalWeight'))}
-                          align="right"
-                          validation={
-                            rowValidation.totalWeight ||
-                            validateDatabaseCellValue('packing', 'totalWeight', pkg.totalWeight)
-                          }
-                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                            rowDrafts,
-                            'totalWeight'
-                          )}
-                          className="font-mono font-bold text-black bg-white"
-                          onDraftChange={handleCellDraftChange}
-                          onCommitValid={handleCellCommitValid}
-                          onClearDraft={handleCellClearDraft}
-                        />
-                        <DatabaseValidatedCell
-                          recordId={pkg.id}
-                          fieldKey="totalAmount"
-                          rawValue={pkg.rawValues?.totalAmount ?? pkg.totalAmount}
-                          displayNode={
-                            pkg.rawValues?.totalAmount ||
-                            (pkg.calculationPending ? 'Pending Calc' : formatCurrency(pkg.totalAmount, 'RMB'))
-                          }
-                          isPendingCalc={Boolean(pkg.calculationPending)}
-                          align="right"
-                          validation={
-                            rowValidation.totalAmount ||
-                            validateDatabaseCellValue('packing', 'totalAmount', pkg.totalAmount)
-                          }
-                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                            rowDrafts,
-                            'totalAmount'
-                          )}
-                          className="font-mono font-bold text-black bg-white"
-                          onDraftChange={handleCellDraftChange}
-                          onCommitValid={handleCellCommitValid}
-                          onClearDraft={handleCellClearDraft}
-                        />
-                        <DatabaseValidatedCell
-                          recordId={pkg.id}
-                          fieldKey="rmbRate"
-                          rawValue={pkg.rmbRate}
-                          displayNode={pkg.rmbRate ?? ''}
-                          align="right"
-                          alwaysShowInput={true}
-                          inputPlaceholder="0.00"
-                          validation={
-                            rowValidation.rmbRate ||
-                            validateDatabaseCellValue('packing', 'rmbRate', pkg.rmbRate)
-                          }
-                          hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                            rowDrafts,
-                            'rmbRate'
-                          )}
-                          className="font-mono font-bold text-black bg-white"
-                          onDraftChange={handleCellDraftChange}
-                          onCommitValid={handleCellCommitValid}
-                          onClearDraft={handleCellClearDraft}
-                        />
-                        <td className="px-1.5 py-1.5 text-right font-mono font-black text-black bg-white whitespace-nowrap">
-                          {formatCurrency(computedAmountBDT, 'BDT')}
-                        </td>
-                        <td className="px-1.5 py-1.5 text-center whitespace-nowrap bg-white text-black">
-                          {renderStatusBadge(
-                            resolvePackingRecordStatus(pkg),
-                            `packing-status-badge-${pkg.id}`
-                          )}
-                        </td>
+                        })}
                         <td className="px-1.5 py-1.5 text-center whitespace-nowrap bg-white text-black">
                           <div className="flex items-center justify-center space-x-1">
                             <button
@@ -3399,39 +3905,60 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
               {filteredPackings.length > 0 && (
                 <tfoot className="sticky bottom-0 z-10 bg-white text-black">
                   <tr className="bg-white text-black font-black border-t-2 border-slate-300 text-[11px]">
-                    <td colSpan={9} className="px-1.5 py-2 text-right uppercase text-black bg-white">
-                      PACKING DB TOTALS:
+                    <td colSpan={2} className="px-1.5 py-2 text-center uppercase text-black bg-white text-[10px] whitespace-nowrap">
+                      TOTALS
                     </td>
-                    <td className="px-1.5 py-2 text-right font-mono text-black bg-white whitespace-nowrap">
-                      {filteredPackings.reduce((acc, p) => acc + (Number(p.totalBox) || 0), 0)}
-                    </td>
-                    <td className="px-1.5 py-2 text-right font-mono text-black bg-white whitespace-nowrap">
-                      {Math.round(
-                        filteredPackings.reduce((acc, p) => acc + (Number(p.totalWeight) || 0), 0) *
-                          100
-                      ) / 100}{' '}
-                      KG
-                    </td>
-                    <td className="px-1.5 py-2 text-right font-mono text-black bg-white whitespace-nowrap">
-                      {formatCurrency(
-                        filteredPackings.reduce((acc, p) => acc + (Number(p.totalAmount) || 0), 0),
-                        'RMB'
-                      )}
-                    </td>
-                    <td className="px-1.5 py-2 text-right font-mono text-black bg-white text-[10px] whitespace-nowrap">
-                      × RATE =
-                    </td>
-                    <td className="px-1.5 py-2 text-right font-mono text-black bg-white whitespace-nowrap">
-                      {formatCurrency(
-                        filteredPackings.reduce(
-                          (acc, p) =>
-                            acc + calculatePackingTotalAmountBDT(p.totalAmount, p.rmbRate),
-                          0
-                        ),
-                        'BDT'
-                      )}
-                    </td>
-                    <td colSpan={2} className="bg-white text-black"></td>
+                    {packingDbColOrder.columnOrder.map((colId) => {
+                      switch (colId) {
+                        case 'totalBox':
+                          return (
+                            <td key="totalBox" className="px-1.5 py-2 text-right font-mono text-black bg-white whitespace-nowrap">
+                              {filteredPackings.reduce((acc, p) => acc + (Number(p.totalBox) || 0), 0)}
+                            </td>
+                          );
+                        case 'totalWeight':
+                          return (
+                            <td key="totalWeight" className="px-1.5 py-2 text-right font-mono text-black bg-white whitespace-nowrap">
+                              {Math.round(
+                                filteredPackings.reduce((acc, p) => acc + (Number(p.totalWeight) || 0), 0) *
+                                  100
+                              ) / 100}{' '}
+                              KG
+                            </td>
+                          );
+                        case 'totalAmount':
+                          return (
+                            <td key="totalAmount" className="px-1.5 py-2 text-right font-mono text-black bg-white whitespace-nowrap">
+                              {formatCurrency(
+                                filteredPackings.reduce((acc, p) => acc + (Number(p.totalAmount) || 0), 0),
+                                'RMB'
+                              )}
+                            </td>
+                          );
+                        case 'rmbRate':
+                          return (
+                            <td key="rmbRate" className="px-1.5 py-2 text-right font-mono text-black bg-white text-[10px] whitespace-nowrap">
+                              × RATE =
+                            </td>
+                          );
+                        case 'amountBDT':
+                          return (
+                            <td key="amountBDT" className="px-1.5 py-2 text-right font-mono text-black bg-white whitespace-nowrap">
+                              {formatCurrency(
+                                filteredPackings.reduce(
+                                  (acc, p) =>
+                                    acc + calculatePackingTotalAmountBDT(p.totalAmount, p.rmbRate),
+                                  0
+                                ),
+                                'BDT'
+                              )}
+                            </td>
+                          );
+                        default:
+                          return <td key={colId} className="bg-white text-black"></td>;
+                      }
+                    })}
+                    <td className="bg-white text-black"></td>
                   </tr>
                 </tfoot>
               )}
@@ -3571,6 +4098,12 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                   </span>
                 </div>
               )}
+              <ColumnReorderToolbar
+                tableId="payment_db"
+                isCustomized={paymentDbColOrder.isCustomized}
+                onReset={paymentDbColOrder.resetOrder}
+                className="mb-1.5"
+              />
               <div
                 ref={paymentDbScrollRef}
                 data-testid="payment-db-scroll-box"
@@ -3579,7 +4112,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 style={paymentDbScrollMaxHeight ? { maxHeight: `${paymentDbScrollMaxHeight}px` } : undefined}
                 className="overflow-auto border border-slate-200 rounded-lg bg-white print:!max-h-none print:!overflow-visible"
               >
-              <table className="w-full text-left text-[11px]">
+              <table data-testid="payment-db-table" className="w-full text-left text-[11px]">
                 <thead className="sticky top-0 z-10 bg-[#273E56] text-white font-bold uppercase text-[10px] tracking-tight border-b border-[#1F3349]">
                   <tr>
                     <th className="px-1.5 py-2 w-7 text-center">
@@ -3596,14 +4129,28 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                       />
                     </th>
                     <th className="px-1.5 py-2 w-10 text-center whitespace-nowrap">SL #</th>
-                    {renderSortableHeader('invoiceNumber', 'PAYMENT NO', 'left', 'whitespace-nowrap')}
-                    {renderSortableHeader('type', 'TYPE', 'left', 'whitespace-nowrap')}
-                    {renderSortableHeader('date', 'DATE', 'left', 'whitespace-nowrap')}
-                    {renderSortableHeader('description', 'PARTY / MARK', 'left')}
-                    {renderSortableHeader('status', 'STATUS', 'left', 'whitespace-nowrap')}
-                    {renderSortableHeader('paidAmount', 'PAID AMOUNT', 'right', 'whitespace-nowrap')}
-                    {renderSortableHeader('balance', 'BALANCE', 'right', 'whitespace-nowrap')}
-                    {renderSortableHeader('exportRef', 'EXPORT REF', 'left', 'whitespace-nowrap')}
+                    {paymentDbColOrder.columnOrder.map((colId) => {
+                      switch (colId) {
+                        case 'invoiceNumber':
+                          return renderSortableHeader('invoiceNumber', 'PAYMENT NO', 'left', 'whitespace-nowrap', paymentDbColOrder);
+                        case 'type':
+                          return renderSortableHeader('type', 'TYPE', 'left', 'whitespace-nowrap', paymentDbColOrder);
+                        case 'date':
+                          return renderSortableHeader('date', 'DATE', 'left', 'whitespace-nowrap', paymentDbColOrder);
+                        case 'description':
+                          return renderSortableHeader('description', 'PARTY / MARK', 'left', '', paymentDbColOrder);
+                        case 'status':
+                          return renderSortableHeader('status', 'STATUS', 'left', 'whitespace-nowrap', paymentDbColOrder);
+                        case 'paidAmount':
+                          return renderSortableHeader('paidAmount', 'PAID AMOUNT', 'right', 'whitespace-nowrap', paymentDbColOrder);
+                        case 'balance':
+                          return renderSortableHeader('balance', 'BALANCE', 'right', 'whitespace-nowrap', paymentDbColOrder);
+                        case 'exportRef':
+                          return renderSortableHeader('exportRef', 'EXPORT REF', 'left', 'whitespace-nowrap', paymentDbColOrder);
+                        default:
+                          return null;
+                      }
+                    })}
                     <th className="px-1.5 py-2 text-center whitespace-nowrap">ACTIONS</th>
                   </tr>
                 </thead>
@@ -3680,176 +4227,212 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                               {String(idx + 1).padStart(2, '0')}
                             </span>
                           </td>
-                          <DatabaseValidatedCell
-                            recordId={pm.id}
-                            fieldKey="invoiceNumber"
-                            rawValue={pm.invoiceNumber}
-                            displayNode={
-                              <div className="flex items-center gap-1">
-                                <span>{pm.invoiceNumber}</span>
-                                {pm.calculationPending && (
-                                  <span
-                                    data-testid={`pending-calc-badge-${pm.id}`}
-                                    className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-black uppercase"
-                                  >
-                                    Pending Calc
-                                  </span>
-                                )}
-                              </div>
+                          {paymentDbColOrder.columnOrder.map((colId) => {
+                            switch (colId) {
+                              case 'invoiceNumber':
+                                return (
+                                  <DatabaseValidatedCell
+                                    key="invoiceNumber"
+                                    recordId={pm.id}
+                                    fieldKey="invoiceNumber"
+                                    rawValue={pm.invoiceNumber}
+                                    displayNode={
+                                      <div className="flex items-center gap-1">
+                                        <span>{pm.invoiceNumber}</span>
+                                        {pm.calculationPending && (
+                                          <span
+                                            data-testid={`pending-calc-badge-${pm.id}`}
+                                            className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-black uppercase"
+                                          >
+                                            Pending Calc
+                                          </span>
+                                        )}
+                                      </div>
+                                    }
+                                    validation={
+                                      rowValidation.invoiceNumber ||
+                                      validateDatabaseCellValue('payment', 'invoiceNumber', pm.invoiceNumber)
+                                    }
+                                    hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                      rowDrafts,
+                                      'invoiceNumber'
+                                    )}
+                                    className="font-mono font-bold text-purple-900 whitespace-nowrap"
+                                    onDraftChange={handleCellDraftChange}
+                                    onCommitValid={handleCellCommitValid}
+                                    onClearDraft={handleCellClearDraft}
+                                  />
+                                );
+                              case 'type':
+                                return (
+                                  <td key="type" className="px-1.5 py-1.5 whitespace-nowrap">
+                                    <span
+                                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
+                                        category === 'exporter'
+                                          ? 'bg-teal-100 text-teal-900'
+                                          : 'bg-pink-100 text-pink-900'
+                                      }`}
+                                    >
+                                      {category === 'exporter' ? 'EXPORTER' : 'SUPPLIER'}
+                                    </span>
+                                  </td>
+                                );
+                              case 'date':
+                                return (
+                                  <DatabaseValidatedCell
+                                    key="date"
+                                    recordId={pm.id}
+                                    fieldKey="date"
+                                    rawValue={pm.rawValues?.date ?? pm.date}
+                                    displayNode={pm.rawValues?.date || formatDate(pm.date) || '(Blank)'}
+                                    validation={
+                                      rowValidation.date ||
+                                      validateDatabaseCellValue('payment', 'date', pm.date)
+                                    }
+                                    hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                      rowDrafts,
+                                      'date'
+                                    )}
+                                    className="font-mono text-slate-600 whitespace-nowrap"
+                                    onDraftChange={handleCellDraftChange}
+                                    onCommitValid={handleCellCommitValid}
+                                    onClearDraft={handleCellClearDraft}
+                                  />
+                                );
+                              case 'description':
+                                return (
+                                  <DatabaseValidatedCell
+                                    key="description"
+                                    recordId={pm.id}
+                                    fieldKey="description"
+                                    rawValue={pm.rawValues?.description ?? pm.description}
+                                    displayNode={
+                                      <div>
+                                        <span className="font-bold text-slate-800">
+                                          {pm.rawValues?.description || pm.description || '(Blank)'}
+                                        </span>
+                                        {pm.remarks && (
+                                          <span
+                                            className="block text-[10px] text-purple-700 font-normal truncate max-w-[220px]"
+                                            title={pm.remarks}
+                                          >
+                                            💬 {pm.remarks}
+                                          </span>
+                                        )}
+                                      </div>
+                                    }
+                                    validation={
+                                      rowValidation.description ||
+                                      validateDatabaseCellValue('payment', 'description', pm.description || '-')
+                                    }
+                                    hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                      rowDrafts,
+                                      'description'
+                                    )}
+                                    className="font-bold text-slate-800"
+                                    onDraftChange={handleCellDraftChange}
+                                    onCommitValid={handleCellCommitValid}
+                                    onClearDraft={handleCellClearDraft}
+                                  />
+                                );
+                              case 'status':
+                                return (
+                                  <td key="status" className="px-1.5 py-1.5 whitespace-nowrap">
+                                    {renderStatusBadge(
+                                      resolvePaymentRecordStatus(pm),
+                                      `payment-status-badge-${pm.id}`
+                                    )}
+                                  </td>
+                                );
+                              case 'paidAmount':
+                                return (
+                                  <DatabaseValidatedCell
+                                    key="paidAmount"
+                                    recordId={pm.id}
+                                    fieldKey="paidAmount"
+                                    rawValue={pm.rawValues?.paidAmount ?? pm.rawValues?.totalAmount ?? pm.paidAmount}
+                                    displayNode={
+                                      pm.rawValues?.paidAmount ||
+                                      pm.rawValues?.totalAmount ||
+                                      (pm.calculationPending
+                                        ? 'Pending Calc'
+                                        : formatCurrency(pm.paidAmount, companyProfile.currency))
+                                    }
+                                    isPendingCalc={Boolean(pm.calculationPending)}
+                                    align="right"
+                                    validation={
+                                      rowValidation.paidAmount ||
+                                      validateDatabaseCellValue('payment', 'paidAmount', pm.paidAmount)
+                                    }
+                                    hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                      rowDrafts,
+                                      'paidAmount'
+                                    )}
+                                    className="font-mono font-bold text-slate-900"
+                                    onDraftChange={handleCellDraftChange}
+                                    onCommitValid={handleCellCommitValid}
+                                    onClearDraft={handleCellClearDraft}
+                                  />
+                                );
+                              case 'balance':
+                                return (
+                                  <DatabaseValidatedCell
+                                    key="balance"
+                                    recordId={pm.id}
+                                    fieldKey="balance"
+                                    rawValue={pm.rawValues?.balance ?? pm.balance}
+                                    displayNode={
+                                      pm.rawValues?.balance ||
+                                      (pm.calculationPending
+                                        ? 'Pending Calc'
+                                        : formatCurrency(pm.balance, companyProfile.currency))
+                                    }
+                                    isPendingCalc={Boolean(pm.pendingFields?.includes('balance'))}
+                                    align="right"
+                                    validation={
+                                      rowValidation.balance ||
+                                      validateDatabaseCellValue('payment', 'balance', pm.balance)
+                                    }
+                                    hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                      rowDrafts,
+                                      'balance'
+                                    )}
+                                    className="font-mono font-bold text-rose-700"
+                                    onDraftChange={handleCellDraftChange}
+                                    onCommitValid={handleCellCommitValid}
+                                    onClearDraft={handleCellClearDraft}
+                                  />
+                                );
+                              case 'exportRef':
+                                return (
+                                  <DatabaseValidatedCell
+                                    key="exportRef"
+                                    recordId={pm.id}
+                                    fieldKey="exportGoodsRef"
+                                    rawValue={pm.rawValues?.exportGoodsRef ?? pm.exportGoodsRef}
+                                    displayNode={pm.rawValues?.exportGoodsRef || pm.exportGoodsRef || '-'}
+                                    validation={
+                                      rowValidation.exportGoodsRef ||
+                                      validateDatabaseCellValue(
+                                        'payment',
+                                        'exportGoodsRef',
+                                        pm.exportGoodsRef
+                                      )
+                                    }
+                                    hasDraftOverride={Object.prototype.hasOwnProperty.call(
+                                      rowDrafts,
+                                      'exportGoodsRef'
+                                    )}
+                                    className="font-mono text-slate-600 whitespace-nowrap"
+                                    onDraftChange={handleCellDraftChange}
+                                    onCommitValid={handleCellCommitValid}
+                                    onClearDraft={handleCellClearDraft}
+                                  />
+                                );
+                              default:
+                                return null;
                             }
-                            validation={
-                              rowValidation.invoiceNumber ||
-                              validateDatabaseCellValue('payment', 'invoiceNumber', pm.invoiceNumber)
-                            }
-                            hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                              rowDrafts,
-                              'invoiceNumber'
-                            )}
-                            className="font-mono font-bold text-purple-900 whitespace-nowrap"
-                            onDraftChange={handleCellDraftChange}
-                            onCommitValid={handleCellCommitValid}
-                            onClearDraft={handleCellClearDraft}
-                          />
-                          <td className="px-1.5 py-1.5 whitespace-nowrap">
-                            <span
-                              className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
-                                category === 'exporter'
-                                  ? 'bg-teal-100 text-teal-900'
-                                  : 'bg-pink-100 text-pink-900'
-                              }`}
-                            >
-                              {category === 'exporter' ? 'EXPORTER' : 'SUPPLIER'}
-                            </span>
-                          </td>
-                          <DatabaseValidatedCell
-                            recordId={pm.id}
-                            fieldKey="date"
-                            rawValue={pm.rawValues?.date ?? pm.date}
-                            displayNode={pm.rawValues?.date || formatDate(pm.date) || '(Blank)'}
-                            validation={
-                              rowValidation.date ||
-                              validateDatabaseCellValue('payment', 'date', pm.date)
-                            }
-                            hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                              rowDrafts,
-                              'date'
-                            )}
-                            className="font-mono text-slate-600 whitespace-nowrap"
-                            onDraftChange={handleCellDraftChange}
-                            onCommitValid={handleCellCommitValid}
-                            onClearDraft={handleCellClearDraft}
-                          />
-                          <DatabaseValidatedCell
-                            recordId={pm.id}
-                            fieldKey="description"
-                            rawValue={pm.rawValues?.description ?? pm.description}
-                            displayNode={
-                              <div>
-                                <span className="font-bold text-slate-800">
-                                  {pm.rawValues?.description || pm.description || '(Blank)'}
-                                </span>
-                                {pm.remarks && (
-                                  <span
-                                    className="block text-[10px] text-purple-700 font-normal truncate max-w-[220px]"
-                                    title={pm.remarks}
-                                  >
-                                    💬 {pm.remarks}
-                                  </span>
-                                )}
-                              </div>
-                            }
-                            validation={
-                              rowValidation.description ||
-                              validateDatabaseCellValue('payment', 'description', pm.description || '-')
-                            }
-                            hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                              rowDrafts,
-                              'description'
-                            )}
-                            className="font-bold text-slate-800"
-                            onDraftChange={handleCellDraftChange}
-                            onCommitValid={handleCellCommitValid}
-                            onClearDraft={handleCellClearDraft}
-                          />
-                          <td className="px-1.5 py-1.5 whitespace-nowrap">
-                            {renderStatusBadge(
-                              resolvePaymentRecordStatus(pm),
-                              `payment-status-badge-${pm.id}`
-                            )}
-                          </td>
-                          <DatabaseValidatedCell
-                            recordId={pm.id}
-                            fieldKey="paidAmount"
-                            rawValue={pm.rawValues?.paidAmount ?? pm.rawValues?.totalAmount ?? pm.paidAmount}
-                            displayNode={
-                              pm.rawValues?.paidAmount ||
-                              pm.rawValues?.totalAmount ||
-                              (pm.calculationPending
-                                ? 'Pending Calc'
-                                : formatCurrency(pm.paidAmount, companyProfile.currency))
-                            }
-                            isPendingCalc={Boolean(pm.calculationPending)}
-                            align="right"
-                            validation={
-                              rowValidation.paidAmount ||
-                              validateDatabaseCellValue('payment', 'paidAmount', pm.paidAmount)
-                            }
-                            hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                              rowDrafts,
-                              'paidAmount'
-                            )}
-                            className="font-mono font-bold text-slate-900"
-                            onDraftChange={handleCellDraftChange}
-                            onCommitValid={handleCellCommitValid}
-                            onClearDraft={handleCellClearDraft}
-                          />
-                          <DatabaseValidatedCell
-                            recordId={pm.id}
-                            fieldKey="balance"
-                            rawValue={pm.rawValues?.balance ?? pm.balance}
-                            displayNode={
-                              pm.rawValues?.balance ||
-                              (pm.calculationPending
-                                ? 'Pending Calc'
-                                : formatCurrency(pm.balance, companyProfile.currency))
-                            }
-                            isPendingCalc={Boolean(pm.pendingFields?.includes('balance'))}
-                            align="right"
-                            validation={
-                              rowValidation.balance ||
-                              validateDatabaseCellValue('payment', 'balance', pm.balance)
-                            }
-                            hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                              rowDrafts,
-                              'balance'
-                            )}
-                            className="font-mono font-bold text-rose-700"
-                            onDraftChange={handleCellDraftChange}
-                            onCommitValid={handleCellCommitValid}
-                            onClearDraft={handleCellClearDraft}
-                          />
-                          <DatabaseValidatedCell
-                            recordId={pm.id}
-                            fieldKey="exportGoodsRef"
-                            rawValue={pm.rawValues?.exportGoodsRef ?? pm.exportGoodsRef}
-                            displayNode={pm.rawValues?.exportGoodsRef || pm.exportGoodsRef || '-'}
-                            validation={
-                              rowValidation.exportGoodsRef ||
-                              validateDatabaseCellValue(
-                                'payment',
-                                'exportGoodsRef',
-                                pm.exportGoodsRef
-                              )
-                            }
-                            hasDraftOverride={Object.prototype.hasOwnProperty.call(
-                              rowDrafts,
-                              'exportGoodsRef'
-                            )}
-                            className="font-mono text-slate-600 whitespace-nowrap"
-                            onDraftChange={handleCellDraftChange}
-                            onCommitValid={handleCellCommitValid}
-                            onClearDraft={handleCellClearDraft}
-                          />
+                          })}
                           <td className="px-1.5 py-1.5 text-center whitespace-nowrap">
                             <div className="flex items-center justify-center space-x-1">
                               <button

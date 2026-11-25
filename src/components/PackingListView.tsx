@@ -37,6 +37,34 @@ import {
   ViewShortcutEventDetail,
 } from '../utils/keyboardShortcuts.ts';
 import {
+  countLockedRows,
+  countUnlockedPopulatedRows,
+  getRowLockLabel,
+  getRowLockShortTag,
+  hydrateLoadedRowsWithFinalizedLock,
+  isPopulatedPackingRow,
+  lockPopulatedRows,
+  toggleRowLockById,
+  unlockAllRows,
+} from '../utils/rowLock.ts';
+import { useTableColumnOrder } from '../hooks/useTableColumnOrder.ts';
+import {
+  ColumnReorderToolbar,
+  ColumnDragGrip,
+} from './ColumnReorderToolbar.tsx';
+
+const PACKING_FORM_DEFAULT_COLUMNS = [
+  'item',
+  'box',
+  'weight',
+  'reportWeight',
+  'totalWeight',
+  'unit',
+  'rate',
+  'amount',
+] as const;
+type PackingFormColumnId = (typeof PACKING_FORM_DEFAULT_COLUMNS)[number];
+import {
   Save,
   FileText,
   Search,
@@ -56,6 +84,8 @@ import {
   CheckCircle2,
   UploadCloud,
   HelpCircle,
+  Lock,
+  Unlock,
 } from 'lucide-react';
 import {
   PngShareModal,
@@ -67,6 +97,8 @@ interface ReportWeightCellInputProps {
   rowIndex: number;
   committedValue: number;
   hasError: boolean;
+  isLocked: boolean;
+  lockLabel: string;
   resetToken: number;
   onScheduleDraft: (rowId: string, rawValue: string) => void;
   onCommitImmediate: (rowId: string, rawValue: string) => void;
@@ -80,6 +112,8 @@ const areReportWeightCellPropsEqual = (
   prev.rowIndex === next.rowIndex &&
   prev.committedValue === next.committedValue &&
   prev.hasError === next.hasError &&
+  prev.isLocked === next.isLocked &&
+  prev.lockLabel === next.lockLabel &&
   prev.resetToken === next.resetToken &&
   prev.onScheduleDraft === next.onScheduleDraft &&
   prev.onCommitImmediate === next.onCommitImmediate;
@@ -90,6 +124,8 @@ const ReportWeightCellInput: React.FC<ReportWeightCellInputProps> = memo(
     rowIndex,
     committedValue,
     hasError,
+    isLocked,
+    lockLabel,
     resetToken,
     onScheduleDraft,
     onCommitImmediate,
@@ -112,20 +148,22 @@ const ReportWeightCellInput: React.FC<ReportWeightCellInputProps> = memo(
 
     const handleDraftChange = useCallback(
       (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (isLocked) return;
         const raw = e.target.value;
         setLocalDraft(raw);
         onCommitImmediate(rowId, raw);
       },
-      [onCommitImmediate, rowId]
+      [isLocked, onCommitImmediate, rowId]
     );
 
     const handleDraftBlur = useCallback(
       (e: React.FocusEvent<HTMLInputElement>) => {
+        if (isLocked) return;
         const raw = e.target.value;
         onCommitImmediate(rowId, raw);
         setLocalDraft(formatReportWeightDraft(parseReportWeightInput(raw)));
       },
-      [onCommitImmediate, rowId]
+      [isLocked, onCommitImmediate, rowId]
     );
 
     const isDraftActive = parseReportWeightInput(localDraft) > 0;
@@ -140,17 +178,22 @@ const ReportWeightCellInput: React.FC<ReportWeightCellInputProps> = memo(
           aria-label={`Row ${rowIndex + 1} Report Weight (KG)`}
           data-testid={`packing-row-${rowIndex + 1}-report-weight`}
           aria-invalid={hasError}
+          disabled={isLocked}
           value={localDraft}
           onChange={handleDraftChange}
           onBlur={handleDraftBlur}
           placeholder="0.00"
           title={
-            isDraftActive
+            isLocked
+              ? `${lockLabel} — unlock row to edit`
+              : isDraftActive
               ? 'Active: Calculation uses Report Weight (KG)'
               : 'Enter Report Weight (KG) to override Weight (KG)'
           }
           className={`w-full border rounded-md px-2 py-1.5 text-right font-mono tabular-nums focus:outline-none focus:ring-2 transition ${
-            isDraftActive
+            isLocked
+              ? 'bg-slate-100/90 border-slate-200 text-slate-600 cursor-not-allowed'
+              : isDraftActive
               ? 'bg-white border-emerald-500 ring-1 ring-emerald-300 text-emerald-950 font-black focus:ring-emerald-600'
               : hasError
               ? 'bg-white border-rose-400 text-slate-800 focus:ring-rose-500'
@@ -183,6 +226,7 @@ const createEmptyPackingRow = (id: string): PackingItemRow => ({
 interface PackingItemTableRowProps {
   row: PackingItemRow;
   rowIndex: number;
+  columnOrder: readonly PackingFormColumnId[];
   exportItemOptions: React.ReactNode;
   boxPresets: string[];
   boxOptions: React.ReactNode;
@@ -202,6 +246,7 @@ interface PackingItemTableRowProps {
     value: string | number
   ) => void;
   onClearRow: (id: string) => void;
+  onToggleRowLock: (id: string) => void;
   onScheduleReportWeightDraft: (rowId: string, rawValue: string) => void;
   onCommitReportWeightImmediate: (rowId: string, rawValue: string) => void;
 }
@@ -211,6 +256,7 @@ const arePackingItemTableRowPropsEqual = (
   next: PackingItemTableRowProps
 ): boolean =>
   prev.rowIndex === next.rowIndex &&
+  prev.columnOrder === next.columnOrder &&
   prev.exportItemOptions === next.exportItemOptions &&
   prev.boxPresets === next.boxPresets &&
   prev.boxOptions === next.boxOptions &&
@@ -226,6 +272,7 @@ const arePackingItemTableRowPropsEqual = (
   prev.reportWeightResetToken === next.reportWeightResetToken &&
   prev.onRowChange === next.onRowChange &&
   prev.onClearRow === next.onClearRow &&
+  prev.onToggleRowLock === next.onToggleRowLock &&
   prev.onScheduleReportWeightDraft === next.onScheduleReportWeightDraft &&
   prev.onCommitReportWeightImmediate === next.onCommitReportWeightImmediate &&
   isPackingRowDataEqual(prev.row, next.row);
@@ -234,6 +281,7 @@ const PackingItemTableRow: React.FC<PackingItemTableRowProps> = memo(
   ({
     row,
     rowIndex,
+    columnOrder,
     exportItemOptions,
     boxPresets,
     boxOptions,
@@ -249,9 +297,13 @@ const PackingItemTableRow: React.FC<PackingItemTableRowProps> = memo(
     reportWeightResetToken,
     onRowChange,
     onClearRow,
+    onToggleRowLock,
     onScheduleReportWeightDraft,
     onCommitReportWeightImmediate,
   }) => {
+    const isLocked = Boolean(row.locked);
+    const lockLabel = getRowLockLabel(row);
+    const lockShortTag = getRowLockShortTag(row);
     const reportWeightVal = Number(row.reportWeight) || 0;
     const isReportWeightActive = reportWeightVal > 0;
     const isFilled =
@@ -328,14 +380,23 @@ const PackingItemTableRow: React.FC<PackingItemTableRowProps> = memo(
     );
 
     const handleClearClick = useCallback(() => {
+      if (isLocked) return;
       onClearRow(row.id);
-    }, [onClearRow, row.id]);
+    }, [isLocked, onClearRow, row.id]);
+
+    const handleToggleLockClick = useCallback(() => {
+      onToggleRowLock(row.id);
+    }, [onToggleRowLock, row.id]);
 
     return (
       <tr
+        data-testid={`packing-row-${rowIndex + 1}`}
+        data-locked={isLocked ? 'true' : 'false'}
         className={`transition-colors ${
           hasAnyRowError
             ? 'bg-rose-50/60 hover:bg-rose-50'
+            : isLocked
+            ? 'bg-amber-50/55 border-l-[3px] border-l-amber-500'
             : isFilled
             ? 'bg-amber-50/25 hover:bg-amber-50/60'
             : rowIndex % 2 === 0
@@ -343,176 +404,267 @@ const PackingItemTableRow: React.FC<PackingItemTableRowProps> = memo(
             : 'bg-slate-50/50 hover:bg-slate-100/60'
         }`}
       >
-        {/* Row Number */}
-        <td className="px-2 py-1.5 border-r border-slate-200 text-center">
-          <span className="zsb-sl-badge">
-            {String(rowIndex + 1).padStart(2, '0')}
-          </span>
-        </td>
-
-        {/* Item Dropdown */}
-        <td className="p-1.5 border-r border-slate-200">
-          <select
-            aria-label={`Row ${rowIndex + 1} Export Item`}
-            aria-invalid={hasItemError}
-            value={row.item}
-            onChange={handleItemChange}
-            className={`w-full border rounded-md px-2 py-1.5 font-semibold focus:bg-white focus:outline-none focus:ring-2 ${
-              hasItemError
-                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 text-rose-900 focus:ring-rose-500'
-                : row.item
-                ? 'bg-white border-slate-300 text-slate-900 focus:ring-amber-500'
-                : 'bg-slate-50 border-slate-200 text-slate-500 focus:ring-amber-500'
-            }`}
-          >
-            <option value="">-- Select Grade / Size --</option>
-            {exportItemOptions}
-          </select>
-        </td>
-
-        {/* Box Dropdown */}
-        <td className="p-1.5 border-r border-slate-200">
-          <select
-            aria-label={`Row ${rowIndex + 1} Box`}
-            aria-invalid={hasBoxError}
-            value={row.box || ''}
-            onChange={handleBoxChange}
-            className={`w-full bg-white border rounded-md px-2 py-1.5 text-center font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 ${
-              hasBoxError
-                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
-                : 'border-slate-200 focus:ring-amber-500'
-            }`}
-          >
-            <option value="0">-</option>
-            {row.box > 0 && !boxPresets.includes(String(row.box)) && (
-              <option value={row.box}>{row.box}</option>
+        {/* Row Number + Lock Tag */}
+        <td className="px-1 py-1.5 border-r border-slate-200 text-center">
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="zsb-sl-badge">
+              {String(rowIndex + 1).padStart(2, '0')}
+            </span>
+            {isLocked && (
+              <span
+                data-testid={`packing-row-${rowIndex + 1}-lock-tag`}
+                title={lockLabel}
+                className="inline-flex items-center gap-0.5 text-[8px] font-extrabold uppercase tracking-tight text-amber-800 bg-amber-100 border border-amber-300 px-1 rounded leading-tight"
+              >
+                <Lock className="w-2 h-2 shrink-0" aria-hidden="true" />
+                <span>{lockShortTag}</span>
+              </span>
             )}
-            {boxOptions}
-          </select>
+          </div>
         </td>
 
-        {/* Weight Dropdown (Inactive when Report Weight (KG) is active) */}
-        <td
-          className={`p-1.5 border-r border-slate-200 transition-colors ${
-            isReportWeightActive ? 'bg-slate-100/80' : ''
-          }`}
-        >
-          <select
-            aria-label={`Row ${rowIndex + 1} Weight`}
-            data-testid={`packing-row-${rowIndex + 1}-weight-select`}
-            aria-invalid={hasWeightError}
-            disabled={isReportWeightActive}
-            title={
-              isReportWeightActive
-                ? 'Inactive: Report Weight (KG) is active for calculation'
-                : 'Active Weight (KG) per box'
-            }
-            value={row.weight || ''}
-            onChange={handleWeightChange}
-            className={`w-full border rounded-md px-2 py-1.5 text-center font-mono font-bold focus:outline-none focus:ring-2 transition ${
-              isReportWeightActive
-                ? 'bg-slate-100 border-slate-200 text-slate-400 opacity-60 cursor-not-allowed line-through'
-                : hasWeightError
-                ? 'bg-rose-50/40 border-rose-500 ring-1 ring-rose-300 text-slate-800 focus:ring-rose-500'
-                : 'bg-white border-slate-200 text-slate-800 focus:ring-amber-500'
-            }`}
-          >
-            <option value="0">-</option>
-            {row.weight > 0 && !weightPresets.includes(String(row.weight)) && (
-              <option value={row.weight}>{row.weight} KG</option>
-            )}
-            {weightOptions}
-          </select>
-          {isReportWeightActive && (
-            <div className="text-[9px] font-bold text-slate-400 text-center uppercase mt-0.5 tracking-tight">
-              Inactive
-            </div>
-          )}
-        </td>
+        {columnOrder.map((colId) => {
+          switch (colId) {
+            case 'item':
+              return (
+                <td key="item" className="p-1 border-r border-slate-200">
+                  <select
+                    aria-label={`Row ${rowIndex + 1} Export Item`}
+                    aria-invalid={hasItemError}
+                    disabled={isLocked}
+                    title={isLocked ? `${lockLabel} — unlock row to edit` : undefined}
+                    value={row.item}
+                    onChange={handleItemChange}
+                    className={`w-full border rounded-md px-1.5 py-1.5 font-semibold focus:bg-white focus:outline-none focus:ring-2 ${
+                      isLocked
+                        ? 'bg-slate-100/90 border-slate-200 text-slate-600 cursor-not-allowed'
+                        : hasItemError
+                        ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 text-rose-900 focus:ring-rose-500'
+                        : row.item
+                        ? 'bg-white border-slate-300 text-slate-900 focus:ring-amber-500'
+                        : 'bg-slate-50 border-slate-200 text-slate-500 focus:ring-amber-500'
+                    }`}
+                  >
+                    <option value="">-- Select Grade --</option>
+                    {exportItemOptions}
+                  </select>
+                </td>
+              );
+            case 'box':
+              return (
+                <td key="box" className="p-1 border-r border-slate-200">
+                  <select
+                    aria-label={`Row ${rowIndex + 1} Box`}
+                    aria-invalid={hasBoxError}
+                    disabled={isLocked}
+                    title={isLocked ? `${lockLabel} — unlock row to edit` : undefined}
+                    value={row.box || ''}
+                    onChange={handleBoxChange}
+                    className={`w-full border rounded-md px-1 py-1.5 text-center font-mono font-bold focus:outline-none focus:ring-2 ${
+                      isLocked
+                        ? 'bg-slate-100/90 border-slate-200 text-slate-600 cursor-not-allowed'
+                        : hasBoxError
+                        ? 'bg-rose-50/40 border-rose-500 ring-1 ring-rose-300 text-slate-800 focus:ring-rose-500'
+                        : 'bg-white border-slate-200 text-slate-800 focus:ring-amber-500'
+                    }`}
+                  >
+                    <option value="0">-</option>
+                    {row.box > 0 && !boxPresets.includes(String(row.box)) && (
+                      <option value={row.box}>{row.box}</option>
+                    )}
+                    {boxOptions}
+                  </select>
+                </td>
+              );
+            case 'weight':
+              return (
+                <td
+                  key="weight"
+                  className={`p-1 border-r border-slate-200 transition-colors ${
+                    isReportWeightActive || isLocked ? 'bg-slate-100/80' : ''
+                  }`}
+                >
+                  <select
+                    aria-label={`Row ${rowIndex + 1} Weight`}
+                    data-testid={`packing-row-${rowIndex + 1}-weight-select`}
+                    aria-invalid={hasWeightError}
+                    disabled={isLocked || isReportWeightActive}
+                    title={
+                      isLocked
+                        ? `${lockLabel} — unlock row to edit`
+                        : isReportWeightActive
+                        ? 'Inactive: Report Weight (KG) is active for calculation'
+                        : 'Active Weight (KG) per box'
+                    }
+                    value={row.weight || ''}
+                    onChange={handleWeightChange}
+                    className={`w-full border rounded-md px-1 py-1.5 text-center font-mono font-bold text-[11px] focus:outline-none focus:ring-2 transition ${
+                      isReportWeightActive
+                        ? 'bg-slate-100 border-slate-200 text-slate-400 opacity-60 cursor-not-allowed line-through'
+                        : isLocked
+                        ? 'bg-slate-100/90 border-slate-200 text-slate-600 cursor-not-allowed'
+                        : hasWeightError
+                        ? 'bg-rose-50/40 border-rose-500 ring-1 ring-rose-300 text-slate-800 focus:ring-rose-500'
+                        : 'bg-white border-slate-200 text-slate-800 focus:ring-amber-500'
+                    }`}
+                  >
+                    <option value="0">-</option>
+                    {row.weight > 0 && !weightPresets.includes(String(row.weight)) && (
+                      <option value={row.weight}>{row.weight} KG</option>
+                    )}
+                    {weightOptions}
+                  </select>
+                  {isReportWeightActive && (
+                    <div className="text-[9px] font-bold text-slate-400 text-center uppercase mt-0.5 tracking-tight">
+                      Inactive
+                    </div>
+                  )}
+                </td>
+              );
+            case 'reportWeight':
+              return (
+                <td
+                  key="reportWeight"
+                  className={`p-1 border-r border-slate-200 transition-colors ${
+                    isLocked
+                      ? 'bg-amber-50/30'
+                      : isReportWeightActive
+                      ? 'bg-emerald-50/60'
+                      : 'bg-slate-50/30'
+                  }`}
+                >
+                  <ReportWeightCellInput
+                    rowId={row.id}
+                    rowIndex={rowIndex}
+                    committedValue={reportWeightVal}
+                    hasError={hasWeightError}
+                    isLocked={isLocked}
+                    lockLabel={lockLabel}
+                    resetToken={reportWeightResetToken}
+                    onScheduleDraft={onScheduleReportWeightDraft}
+                    onCommitImmediate={onCommitReportWeightImmediate}
+                  />
+                </td>
+              );
+            case 'totalWeight':
+              return (
+                <td
+                  key="totalWeight"
+                  data-testid={`packing-row-${rowIndex + 1}-weight`}
+                  className={`px-1.5 py-1.5 border-r border-slate-200 text-right font-mono font-bold tabular-nums text-teal-800 whitespace-nowrap ${
+                    isLocked ? 'bg-amber-100/40' : 'bg-amber-50/40'
+                  }`}
+                >
+                  {row.totalWeight > 0 ? `${row.totalWeight} KG` : '0'}
+                </td>
+              );
+            case 'unit':
+              return (
+                <td key="unit" className="p-1 border-r border-slate-200">
+                  <select
+                    aria-label={`Row ${rowIndex + 1} Unit`}
+                    disabled={isLocked}
+                    title={isLocked ? `${lockLabel} — unlock row to edit` : undefined}
+                    value={row.unit}
+                    onChange={handleUnitChange}
+                    className={`w-full border rounded-md px-0.5 py-1.5 text-center text-[11px] font-bold ${
+                      isLocked
+                        ? 'bg-slate-100/90 border-slate-200 text-slate-500 cursor-not-allowed'
+                        : 'bg-slate-50 border-slate-200 text-slate-700'
+                    }`}
+                  >
+                    {unitOptions}
+                  </select>
+                </td>
+              );
+            case 'rate':
+              return (
+                <td key="rate" className="p-1 border-r border-slate-200">
+                  <input
+                    ref={rateInputRef}
+                    aria-label={`Row ${rowIndex + 1} Rate`}
+                    data-testid={`packing-row-${rowIndex + 1}-rate`}
+                    aria-invalid={hasRateError}
+                    disabled={isLocked}
+                    title={isLocked ? `${lockLabel} — unlock row to edit` : undefined}
+                    type="text"
+                    inputMode="decimal"
+                    value={rateDraft}
+                    onChange={handleRateChange}
+                    onBlur={handleRateBlur}
+                    className={`w-full border rounded-md px-1.5 py-1.5 text-right font-mono tabular-nums focus:outline-none focus:ring-2 ${
+                      isLocked
+                        ? 'bg-slate-100/90 border-slate-200 text-slate-600 cursor-not-allowed'
+                        : hasRateError
+                        ? 'bg-rose-50/40 border-rose-500 ring-1 ring-rose-300 text-slate-800 focus:ring-rose-500'
+                        : 'bg-white border-slate-200 text-slate-800 focus:ring-amber-500'
+                    }`}
+                    placeholder={paymentStatus === 'UNPAID' ? '0.00' : 'Rate > 0'}
+                  />
+                </td>
+              );
+            case 'amount':
+              return (
+                <td
+                  key="amount"
+                  data-testid={`packing-row-${rowIndex + 1}-total`}
+                  className="px-1.5 py-1.5 border-r border-slate-200 text-right font-mono font-bold tabular-nums text-slate-900 bg-slate-50/40 whitespace-nowrap"
+                >
+                  {row.amount > 0 ? formatCurrency(row.amount, '') : '0.00'}
+                </td>
+              );
+            default:
+              return null;
+          }
+        })}
 
-        {/* Editable Report Weight (KG) Input (Debounced onChange + active override over Weight (KG)) */}
-        <td
-          className={`p-1.5 border-r border-slate-200 transition-colors ${
-            isReportWeightActive ? 'bg-emerald-50/60' : 'bg-slate-50/30'
-          }`}
-        >
-          <ReportWeightCellInput
-            rowId={row.id}
-            rowIndex={rowIndex}
-            committedValue={reportWeightVal}
-            hasError={hasWeightError}
-            resetToken={reportWeightResetToken}
-            onScheduleDraft={onScheduleReportWeightDraft}
-            onCommitImmediate={onCommitReportWeightImmediate}
-          />
-        </td>
-
-        {/* Total Weight (Box * Active Weight) */}
-        <td
-          data-testid={`packing-row-${rowIndex + 1}-weight`}
-          className="p-1.5 border-r border-slate-200 bg-amber-50/40 text-right font-mono font-bold tabular-nums text-teal-800 pr-2.5"
-        >
-          {row.totalWeight > 0 ? `${row.totalWeight} KG` : '0'}
-        </td>
-
-        {/* Unit Dropdown */}
-        <td className="p-1.5 border-r border-slate-200">
-          <select
-            aria-label={`Row ${rowIndex + 1} Unit`}
-            value={row.unit}
-            onChange={handleUnitChange}
-            className="w-full bg-slate-50 border border-slate-200 rounded-md px-1 py-1.5 text-center text-[11px] font-bold text-slate-700"
-          >
-            {unitOptions}
-          </select>
-        </td>
-
-        {/* Rate Input (Real-time calculation on every keystroke) */}
-        <td className="p-1.5 border-r border-slate-200">
-          <input
-            ref={rateInputRef}
-            aria-label={`Row ${rowIndex + 1} Rate`}
-            data-testid={`packing-row-${rowIndex + 1}-rate`}
-            aria-invalid={hasRateError}
-            type="text"
-            inputMode="decimal"
-            value={rateDraft}
-            onChange={handleRateChange}
-            onBlur={handleRateBlur}
-            className={`w-full bg-white border rounded-md px-2 py-1.5 text-right font-mono tabular-nums text-slate-800 focus:outline-none focus:ring-2 ${
-              hasRateError
-                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
-                : 'border-slate-200 focus:ring-amber-500'
-            }`}
-            placeholder={paymentStatus === 'UNPAID' ? '0.00' : 'Rate > 0'}
-          />
-        </td>
-
-        {/* Amount (Total Weight * Rate) */}
-        <td
-          data-testid={`packing-row-${rowIndex + 1}-total`}
-          className="p-1.5 border-r border-slate-200 text-right font-mono font-bold tabular-nums text-slate-900 pr-2.5 bg-slate-50/40"
-        >
-          {row.amount > 0 ? formatCurrency(row.amount, '') : '0.00'}
-        </td>
-
-        {/* Single Row Clear Button */}
-        <td className="p-1 text-center">
-          <button
-            type="button"
-            data-testid={`packing-row-${rowIndex + 1}-clear`}
-            aria-label={`Clear Row ${rowIndex + 1}`}
-            onClick={handleClearClick}
-            disabled={!isFilled}
-            title={`Clear Row ${rowIndex + 1}`}
-            className={`p-1.5 rounded transition ${
-              isFilled
-                ? 'text-slate-500 hover:text-rose-600 hover:bg-rose-50 cursor-pointer'
-                : 'text-slate-300 cursor-not-allowed'
-            }`}
-          >
-            <RotateCcw className="w-3.5 h-3.5 mx-auto" />
-          </button>
+        {/* Row Lock & Clear Buttons */}
+        <td className="px-1 py-1 text-center whitespace-nowrap">
+          <div className="inline-flex items-center justify-center gap-0.5">
+            <button
+              type="button"
+              data-testid={`packing-row-${rowIndex + 1}-lock`}
+              aria-pressed={isLocked}
+              aria-label={isLocked ? `Unlock Row ${rowIndex + 1}` : `Lock Row ${rowIndex + 1}`}
+              onClick={handleToggleLockClick}
+              disabled={!isLocked && !isFilled}
+              title={
+                isLocked
+                  ? `${lockLabel} — Click to unlock for editing`
+                  : isFilled
+                  ? `Lock Row ${rowIndex + 1} to prevent accidental edits`
+                  : 'Enter row data before locking'
+              }
+              className={`p-1 rounded border transition ${
+                isLocked
+                  ? 'bg-amber-100 border-amber-300 text-amber-800 hover:bg-amber-200 cursor-pointer'
+                  : isFilled
+                  ? 'bg-white border-slate-200 text-slate-500 hover:text-amber-700 hover:border-amber-300 hover:bg-amber-50 cursor-pointer'
+                  : 'bg-transparent border-transparent text-slate-300 cursor-not-allowed'
+              }`}
+            >
+              {isLocked ? (
+                <Lock className="w-3.5 h-3.5" aria-hidden="true" />
+              ) : (
+                <Unlock className="w-3.5 h-3.5" aria-hidden="true" />
+              )}
+            </button>
+            <button
+              type="button"
+              data-testid={`packing-row-${rowIndex + 1}-clear`}
+              aria-label={`Clear Row ${rowIndex + 1}`}
+              onClick={handleClearClick}
+              disabled={!isFilled || isLocked}
+              title={isLocked ? 'Unlock row before clearing' : `Clear Row ${rowIndex + 1}`}
+              className={`p-1 rounded transition ${
+                isFilled && !isLocked
+                  ? 'text-slate-500 hover:text-rose-600 hover:bg-rose-50 cursor-pointer'
+                  : 'text-slate-300 cursor-not-allowed'
+              }`}
+            >
+              <RotateCcw className="w-3.5 h-3.5 mx-auto" />
+            </button>
+          </div>
         </td>
       </tr>
     );
@@ -537,6 +689,11 @@ export const PackingListView: React.FC = () => {
     showToast,
     requestSuperAdminSingleDelete,
   } = useApp();
+
+  const packingColOrder = useTableColumnOrder(
+    'packing_form',
+    PACKING_FORM_DEFAULT_COLUMNS
+  );
 
   // Manifest Header Fields (hydrated from localStorage unsaved draft if available)
   const nextInvoiceNo = generateInvoiceNumber('PKG', packings.length);
@@ -861,12 +1018,19 @@ export const PackingListView: React.FC = () => {
 
   const savedManifestOptionElements = useMemo(
     () =>
-      packings.map((p) => (
-        <option key={p.id} value={p.id}>
-          {p.invoiceNumber} — {p.shippingMark} (
-          {p.paymentStatus === 'PAID' ? 'PAID' : 'UNPAID'})
-        </option>
-      )),
+      packings.map((p) => {
+        const lockSuffix = p.exportedAt
+          ? ' [Exported · Locked]'
+          : p.finalizedAt || p.items.some((i) => i.locked)
+          ? ' [Finalized · Locked]'
+          : '';
+        return (
+          <option key={p.id} value={p.id}>
+            {p.invoiceNumber} — {p.shippingMark} (
+            {p.paymentStatus === 'PAID' ? 'PAID' : 'UNPAID'}){lockSuffix}
+          </option>
+        );
+      }),
     [packings]
   );
 
@@ -887,7 +1051,7 @@ export const PackingListView: React.FC = () => {
     setPaymentStatus(found.paymentStatus === 'PAID' ? 'PAID' : 'UNPAID');
     setRemarks(found.remarks || '');
 
-    const loadedRows: PackingItemRow[] = found.items.map((it) => {
+    const normalizedItems: PackingItemRow[] = found.items.map((it) => {
       const reportWeightVal = Number(it.reportWeight) || 0;
       const calcs = calculatePackingRow(it.box, it.weight, it.rate, reportWeightVal);
       return {
@@ -897,12 +1061,26 @@ export const PackingListView: React.FC = () => {
         amount: calcs.amount,
       };
     });
+    const loadedRows: PackingItemRow[] = hydrateLoadedRowsWithFinalizedLock(
+      normalizedItems,
+      {
+        finalizedAt: found.finalizedAt,
+        exportedAt: found.exportedAt,
+        createdAt: found.createdAt,
+        status: found.paymentStatus,
+      }
+    );
     while (loadedRows.length < 5) {
       loadedRows.push(createEmptyPackingRow(generateRecordId('pkgrow')));
     }
     setRows(loadedRows);
     setValidationAttempted(false);
-    showToast(`Loaded manifest ${found.invoiceNumber} for editing.`);
+    const lockedCount = countLockedRows(loadedRows);
+    showToast(
+      lockedCount > 0
+        ? `Loaded ${found.invoiceNumber} — ${lockedCount} finalized/exported row(s) locked against accidental edits.`
+        : `Loaded manifest ${found.invoiceNumber} for editing.`
+    );
   };
 
   const handleCancelEdit = () => {
@@ -937,10 +1115,51 @@ export const PackingListView: React.FC = () => {
     []
   );
 
+  // Toggle row-level lock to protect finalized/exported rows from accidental edits
+  const handleToggleRowLock = useCallback(
+    (id: string) => {
+      const targetRow = rowsRef.current.find((r) => r.id === id);
+      if (!targetRow) return;
+      if (!targetRow.locked && !isPopulatedPackingRow(targetRow)) {
+        showToast('Enter manifest row details before locking this row.');
+        return;
+      }
+      const nextLocked = !targetRow.locked;
+      if (nextLocked) {
+        clearPendingReportWeights(id);
+      }
+      setRows((prev) => toggleRowLockById(prev, id, 'manual'));
+      showToast(
+        nextLocked
+          ? `Row locked${targetRow.item ? ` (${targetRow.item})` : ''} to prevent accidental edits.`
+          : `Row unlocked${targetRow.item ? ` (${targetRow.item})` : ''} for editing.`
+      );
+    },
+    [clearPendingReportWeights, showToast]
+  );
+
+  const handleLockAllPopulated = useCallback(() => {
+    const unlockedCount = countUnlockedPopulatedRows(rowsRef.current, isPopulatedPackingRow);
+    if (unlockedCount === 0) return;
+    setRows((prev) => lockPopulatedRows(prev, isPopulatedPackingRow, 'manual'));
+    showToast(`Locked ${unlockedCount} populated packing row(s) against accidental edits.`);
+  }, [showToast]);
+
+  const handleUnlockAllRows = useCallback(() => {
+    const lockedCount = countLockedRows(rowsRef.current);
+    if (lockedCount === 0) return;
+    setRows((prev) => unlockAllRows(prev));
+    showToast(`Unlocked ${lockedCount} packing row(s) for editing.`);
+  }, [showToast]);
+
   // Clear single row (Requires Super Admin Permission)
   const handleClearRow = useCallback(
     (id: string) => {
       const targetRow = rowsRef.current.find((r) => r.id === id);
+      if (targetRow?.locked) {
+        showToast('This row is locked. Unlock it first before clearing.');
+        return;
+      }
       requestSuperAdminSingleDelete(
         {
           recordType: 'custom_row',
@@ -1052,6 +1271,45 @@ export const PackingListView: React.FC = () => {
     [packings, searchShippingMark, searchDestination]
   );
 
+  const lockedRowCount = useMemo(() => countLockedRows(rows), [rows]);
+  const unlockedPopulatedRowCount = useMemo(
+    () => countUnlockedPopulatedRows(rows, isPopulatedPackingRow),
+    [rows]
+  );
+
+  const markPopulatedRowsAsExported = useCallback(
+    (sourceRows?: PackingItemRow[]) => {
+      const nowIso = new Date().toISOString();
+      const baseRows = sourceRows ?? rowsRef.current;
+      const nextRows = lockPopulatedRows(
+        baseRows,
+        isPopulatedPackingRow,
+        'exported',
+        nowIso
+      );
+      if (nextRows !== rowsRef.current) {
+        setRows(nextRows);
+      }
+      if (editingPackingId) {
+        const existing = packings.find((p) => p.id === editingPackingId);
+        if (existing) {
+          const exportedItems = lockPopulatedRows(
+            existing.items,
+            isPopulatedPackingRow,
+            'exported',
+            nowIso
+          );
+          updatePacking(editingPackingId, {
+            items: exportedItems,
+            exportedAt: nowIso,
+          });
+        }
+      }
+      return nextRows;
+    },
+    [editingPackingId, packings, updatePacking]
+  );
+
   const handleSavePDF = () => {
     const resolvedRows = flushPendingReportWeights();
     const resolvedTotals = calculatePackingTotals(resolvedRows);
@@ -1075,7 +1333,13 @@ export const PackingListView: React.FC = () => {
     }
 
     setValidationAttempted(false);
-    const validItems = check.validItems;
+    const nowIso = new Date().toISOString();
+    const finalizedItems = lockPopulatedRows(
+      check.validItems,
+      isPopulatedPackingRow,
+      'finalized',
+      nowIso
+    );
 
     if (editingPackingId) {
       const existingRec = packings.find((p) => p.id === editingPackingId);
@@ -1090,7 +1354,7 @@ export const PackingListView: React.FC = () => {
         packingDate,
         fromDate: packingDate,
         toDate: packingDate,
-        items: validItems,
+        items: finalizedItems,
         totalBox: resolvedTotals.totalBox,
         totalWeight: resolvedTotals.totalWeight,
         totalAmount: resolvedTotals.totalAmount,
@@ -1103,6 +1367,8 @@ export const PackingListView: React.FC = () => {
         settledAmount: resolvedTotals.totalAmount,
         exporterStatus: paymentStatus,
         remarks,
+        finalizedAt: nowIso,
+        exportedAt: existingRec?.exportedAt,
         paymentDate: paymentStatus === 'PAID' ? packingDate : '',
         paymentStatus,
         billSite: destination,
@@ -1116,14 +1382,14 @@ export const PackingListView: React.FC = () => {
       const updatedRecord = {
         ...updatedFields,
         id: editingPackingId,
-        createdAt: new Date().toISOString(),
+        createdAt: existingRec?.createdAt || nowIso,
       };
 
       openPrintModal({
         type: 'packing',
         title: `Export Packing List (Updated) - ${updatedRecord.invoiceNumber}`,
         data: updatedRecord,
-        items: validItems,
+        items: finalizedItems,
       });
 
       setLastSavedRecord({ id: editingPackingId, invoiceNumber: updatedRecord.invoiceNumber });
@@ -1131,7 +1397,7 @@ export const PackingListView: React.FC = () => {
       resetFormFields();
       setInvoiceNumber(generateInvoiceNumber('PKG', packings.length));
       showToast(
-        `Export packing manifest ${updatedRecord.invoiceNumber} updated successfully! Click "Edit" if you need further adjustments.`
+        `Export packing manifest ${updatedRecord.invoiceNumber} updated and finalized rows locked against accidental edits.`
       );
       return;
     }
@@ -1146,7 +1412,7 @@ export const PackingListView: React.FC = () => {
       packingDate,
       fromDate: packingDate,
       toDate: packingDate,
-      items: validItems,
+      items: finalizedItems,
       totalBox: resolvedTotals.totalBox,
       totalWeight: resolvedTotals.totalWeight,
       totalAmount: resolvedTotals.totalAmount,
@@ -1157,6 +1423,7 @@ export const PackingListView: React.FC = () => {
       settledAmount: resolvedTotals.totalAmount,
       exporterStatus: paymentStatus,
       remarks,
+      finalizedAt: nowIso,
       paymentDate: paymentStatus === 'PAID' ? packingDate : '',
       paymentStatus,
       billSite: destination,
@@ -1169,40 +1436,27 @@ export const PackingListView: React.FC = () => {
       type: 'packing',
       title: `Export Packing List - ${newRecord.invoiceNumber}`,
       data: newRecord,
-      items: validItems,
+      items: finalizedItems,
     });
 
     setInvoiceNumber(generateInvoiceNumber('PKG', packings.length + 1));
     resetFormFields();
     showToast(
-      `Export packing manifest ${newRecord.invoiceNumber} saved successfully. Click "Edit" if you need to update rates later.`
+      `Export packing manifest ${newRecord.invoiceNumber} finalized and saved. Reloading it will keep rows locked by default.`
     );
   };
 
   const exportableRows = useMemo(() => {
-    const validItems = rows.filter(
-      (r) =>
-        r.item.trim() !== '' ||
-        r.box > 0 ||
-        r.weight > 0 ||
-        (Number(r.reportWeight) || 0) > 0 ||
-        r.rate > 0
-    );
+    const validItems = rows.filter(isPopulatedPackingRow);
     return validItems.length > 0 ? validItems : rows.slice(0, 5);
   }, [rows]);
 
   const handlePrintSelected = () => {
     const resolvedRows = flushPendingReportWeights();
-    const resolvedTotals = calculatePackingTotals(resolvedRows);
-    const activeItems = resolvedRows.filter(
-      (r) =>
-        r.item.trim() !== '' ||
-        r.box > 0 ||
-        r.weight > 0 ||
-        (Number(r.reportWeight) || 0) > 0 ||
-        r.rate > 0
-    );
-    const itemsToExport = activeItems.length > 0 ? activeItems : resolvedRows.slice(0, 5);
+    const lockedRows = markPopulatedRowsAsExported(resolvedRows);
+    const resolvedTotals = calculatePackingTotals(lockedRows);
+    const activeItems = lockedRows.filter(isPopulatedPackingRow);
+    const itemsToExport = activeItems.length > 0 ? activeItems : lockedRows.slice(0, 5);
     openPrintModal({
       type: 'packing',
       title: `Export Packing List - ${invoiceNumber}`,
@@ -1304,91 +1558,11 @@ export const PackingListView: React.FC = () => {
 
   return (
     <div className="p-3 sm:p-5 max-w-[1440px] mx-auto space-y-5">
-      {/* Top Banner with Official ZSB Branding */}
-      <div className="bg-[#273E56] text-white px-5 py-3.5 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#00897b]">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
-            <img
-              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
-              alt={companyProfile.companyName}
-              className="w-full h-full object-contain rounded-full"
-            />
-          </div>
-          <div>
-            <div className="flex items-center gap-2.5">
-              <span className="text-xl sm:text-2xl font-black tracking-tight text-amber-400 zsb-golden-brand">
-                {companyProfile.companyName}
-              </span>
-              <span className="text-slate-400 hidden sm:inline">·</span>
-              <span className="text-sm sm:text-base font-semibold text-[#80cbc4] tracking-wide">
-                Export Packing List — Manifest Entry Form
-              </span>
-            </div>
-            <div className="mt-1 inline-flex flex-wrap items-center gap-2 bg-[#1c2a33] border border-[#334b59] px-2.5 py-0.5 rounded text-[11px] font-medium text-slate-200">
-              <span>{companyProfile.address}</span>
-              <span className="text-slate-500">|</span>
-              <span className="font-mono">
-                Mob: {companyProfile.mobiles.join(', ')}
-              </span>
-              <span className="text-slate-500">|</span>
-              <span className="font-mono">
-                EMAIL: {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-200 font-mono tabular-nums">
-          <span>
-            Active Rows: <strong>{populatedRowCount}</strong>/{rows.length}
-          </span>
-          <span aria-hidden="true">·</span>
-          <span className="text-[#5eead4] font-bold">
-            {totalBox} Boxes ({totalWeight.toFixed(2)} KG)
-          </span>
-          <span aria-hidden="true">·</span>
-          <span className="text-white font-bold">
-            {formatCurrency(totalAmount, 'RMB')}
-          </span>
-          <span aria-hidden="true">·</span>
-          <span className="bg-[#00897b]/25 text-[#5eead4] px-2.5 py-0.5 rounded border border-[#00897b]/50 font-bold">
-            Sheet #03
-          </span>
-        </div>
-      </div>
-
       {/* Main Grid: Redesigned Packing List Voucher (Left 9 Cols) + Action & Search Controls (Right 3 Cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* Left: Packing List Data Entry Sheet (9 Cols) */}
         <div className="lg:col-span-9 space-y-4">
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            {/* Sheet Title Header */}
-            <div className="bg-[#273E56] text-white py-3 px-5 flex flex-wrap items-center justify-between gap-3 border-b border-[#1d2c35]">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
-                  <img
-                    src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
-                    alt={companyProfile.companyName}
-                    className="w-full h-full object-contain rounded-full"
-                  />
-                </div>
-                <div>
-                  <div className="text-lg sm:text-xl font-black tracking-tight text-amber-400 zsb-golden-brand">
-                    {companyProfile.companyName}
-                  </div>
-                  <div className="text-xs font-semibold tracking-wider uppercase text-[#80cbc4]">
-                    PACKING LIST DATA ENTRY FORM (AIR FREIGHT EXPORT MANIFEST)
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2.5">
-                <div className="text-right font-mono text-xs text-slate-300 tabular-nums">
-                  <div className="text-[11px] text-[#80cbc4] uppercase">Manifest Ref</div>
-                  <div className="font-bold text-white text-sm">{invoiceNumber}</div>
-                </div>
-              </div>
-            </div>
-
             {/* Edit Mode Active Banner */}
             {editingPackingId && (
               <div className="bg-amber-100 border-b-2 border-amber-300 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -1404,7 +1578,9 @@ export const PackingListView: React.FC = () => {
                     Status: {paymentStatus}
                   </span>
                   <span className="text-amber-800 hidden md:inline">
-                    (Modify status, rates, or items, then click <strong>UPDATE MANIFEST</strong>)
+                    {lockedRowCount > 0
+                      ? `(${lockedRowCount} finalized/exported row${lockedRowCount === 1 ? '' : 's'} locked — unlock a row to modify, then click UPDATE MANIFEST)`
+                      : '(Modify status, rates, or items, then click UPDATE MANIFEST)'}
                   </span>
                 </div>
                 <button
@@ -1775,7 +1951,73 @@ export const PackingListView: React.FC = () => {
             )}
 
             {/* Redesigned Manifest Line-Item Table Grid */}
-            <div className="p-2.5 bg-slate-50/70">
+            <div className="p-2.5 bg-slate-50/70 space-y-2">
+              {/* Compact Row-Level Lock Status & Bulk Controls Strip */}
+              <div
+                data-testid="packing-row-lock-bar"
+                className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+              >
+                <div className="flex items-center gap-2 text-slate-700">
+                  <Lock
+                    className={`w-3.5 h-3.5 shrink-0 ${
+                      lockedRowCount > 0 ? 'text-amber-600' : 'text-slate-400'
+                    }`}
+                    aria-hidden="true"
+                  />
+                  <span
+                    data-testid="packing-locked-count"
+                    className={`font-bold font-mono tabular-nums ${
+                      lockedRowCount > 0 ? 'text-amber-800' : 'text-slate-600'
+                    }`}
+                  >
+                    {lockedRowCount > 0
+                      ? `${lockedRowCount} Locked ${lockedRowCount === 1 ? 'Row' : 'Rows'}`
+                      : 'Row Lock Protection'}
+                  </span>
+                  <span className="text-[11px] text-slate-500 hidden sm:inline">
+                    {lockedRowCount > 0
+                      ? 'Locked rows cannot be edited or cleared until unlocked.'
+                      : 'Finalized and exported rows lock automatically to prevent accidental edits.'}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <ColumnReorderToolbar
+                    tableId="packing_form"
+                    isCustomized={packingColOrder.isCustomized}
+                    onReset={packingColOrder.resetOrder}
+                    compact
+                  />
+                  <button
+                    type="button"
+                    data-testid="packing-lock-all-btn"
+                    onClick={handleLockAllPopulated}
+                    disabled={unlockedPopulatedRowCount === 0}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold border transition whitespace-nowrap ${
+                      unlockedPopulatedRowCount > 0
+                        ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 cursor-pointer'
+                        : 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed'
+                    }`}
+                  >
+                    <Lock className="w-3 h-3 shrink-0" aria-hidden="true" />
+                    <span>Lock All Filled</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="packing-unlock-all-btn"
+                    onClick={handleUnlockAllRows}
+                    disabled={lockedRowCount === 0}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold border transition whitespace-nowrap ${
+                      lockedRowCount > 0
+                        ? 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300 cursor-pointer'
+                        : 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed'
+                    }`}
+                  >
+                    <Unlock className="w-3 h-3 shrink-0" aria-hidden="true" />
+                    <span>Unlock All</span>
+                  </button>
+                </div>
+              </div>
+
               <div
                 data-testid="packing-entry-scroll-box"
                 className="overflow-x-auto border border-slate-200 rounded-lg bg-white"
@@ -1785,110 +2027,207 @@ export const PackingListView: React.FC = () => {
                 data-testid="packing-entry-table"
               >
                 <thead>
-                  <tr className="bg-[#273E56] text-white uppercase text-[10.5px] font-bold tracking-wide border-b border-[#1d2c35]">
-                    <th className="px-1.5 py-2.5 border-r border-[#334b59] w-10 min-w-[40px] text-center">
+                  <tr className="bg-[#273E56] text-white uppercase text-[10px] font-bold tracking-wide border-b border-[#1d2c35]">
+                    <th className="px-1 py-2.5 border-r border-[#334b59] w-12 min-w-[48px] text-center">
                       SL #
                     </th>
-                    <th className="px-2 py-2.5 border-r border-[#334b59] text-left min-w-[126px]">
-                      <div className="flex items-center justify-between gap-1">
-                        <span>ITEM / SIZE</span>
-                        <button
-                          type="button"
-                          onClick={() => setAddingCategory('exportItems')}
-                          className="text-[9px] bg-[#00897b] hover:bg-[#00796b] px-1.5 py-0.5 rounded text-white font-bold cursor-pointer shrink-0"
-                          title="Add new export item"
-                        >
-                          +New
-                        </button>
-                      </div>
+                    {packingColOrder.columnOrder.map((colId) => {
+                      const dragClass = packingColOrder.getHeaderDragClassName(colId);
+                      switch (colId) {
+                        case 'item':
+                          return (
+                            <th
+                              key="item"
+                              {...packingColOrder.getHeaderDragProps('item', 'ITEM / SIZE')}
+                              className={`px-1.5 py-2.5 border-r border-[#334b59] text-left min-w-[104px] ${dragClass}`}
+                            >
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="inline-flex items-center gap-0.5">
+                                  <ColumnDragGrip />
+                                  <span>ITEM / SIZE</span>
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setAddingCategory('exportItems');
+                                  }}
+                                  className="text-[9px] bg-[#00897b] hover:bg-[#00796b] px-1.5 py-0.5 rounded text-white font-bold cursor-pointer shrink-0"
+                                  title="Add new export item"
+                                >
+                                  +New
+                                </button>
+                              </div>
+                            </th>
+                          );
+                        case 'box':
+                          return (
+                            <th
+                              key="box"
+                              {...packingColOrder.getHeaderDragProps('box', 'BOX')}
+                              className={`px-1 py-2.5 border-r border-[#334b59] min-w-[48px] text-center ${dragClass}`}
+                            >
+                              <div className="flex items-center justify-between px-0.5 gap-0.5">
+                                <span className="inline-flex items-center gap-0.5">
+                                  <ColumnDragGrip className="w-2 h-2 opacity-55 shrink-0" />
+                                  <span>BOX</span>
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setAddingCategory('boxes');
+                                  }}
+                                  className="text-[9px] bg-[#00897b] hover:bg-[#00796b] px-1 py-0.5 rounded text-white cursor-pointer shrink-0"
+                                  title="Add box preset"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </th>
+                          );
+                        case 'weight':
+                          return (
+                            <th
+                              key="weight"
+                              {...packingColOrder.getHeaderDragProps('weight', 'WEIGHT')}
+                              className={`px-1 py-2.5 border-r border-[#334b59] min-w-[74px] text-center ${dragClass}`}
+                            >
+                              <div className="flex items-center justify-between px-0.5 gap-0.5">
+                                <span className="inline-flex items-center gap-0.5">
+                                  <ColumnDragGrip className="w-2 h-2 opacity-55 shrink-0" />
+                                  <span>WEIGHT</span>
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setAddingCategory('weights');
+                                  }}
+                                  className="text-[9px] bg-[#00897b] hover:bg-[#00796b] px-1 py-0.5 rounded text-white cursor-pointer shrink-0"
+                                  title="Add weight preset"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </th>
+                          );
+                        case 'reportWeight':
+                          return (
+                            <th
+                              key="reportWeight"
+                              data-testid="packing-col-report-weight"
+                              {...packingColOrder.getHeaderDragProps('reportWeight', 'REPORT WT')}
+                              className={`relative px-1 py-2.5 border-r border-[#334b59] min-w-[80px] text-center ${dragClass}`}
+                            >
+                              <div className="inline-flex items-center justify-center gap-0.5">
+                                <ColumnDragGrip className="w-2 h-2 opacity-55 shrink-0" />
+                                <span>REPORT WT</span>
+                                <span className="relative inline-flex items-center group">
+                                  <button
+                                    type="button"
+                                    data-testid="report-weight-help-btn"
+                                    aria-label="Report Weight (KG) Help"
+                                    aria-describedby="report-weight-tooltip"
+                                    aria-expanded={showReportWeightHelp}
+                                    title="When this field is populated, it overrides the standard weight for final report calculations."
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setShowReportWeightHelp((prev) => !prev);
+                                    }}
+                                    onBlur={() => setShowReportWeightHelp(false)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Escape') setShowReportWeightHelp(false);
+                                    }}
+                                    className="zsb-help-icon-btn inline-flex items-center justify-center rounded-full text-[#80cbc4] hover:text-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-colors cursor-help shrink-0"
+                                  >
+                                    <HelpCircle className="w-3.5 h-3.5" aria-hidden="true" />
+                                  </button>
+                                  <div
+                                    id="report-weight-tooltip"
+                                    role="tooltip"
+                                    data-testid="report-weight-tooltip"
+                                    className={`pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-2 w-60 rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-[11px] font-medium normal-case tracking-normal text-left leading-relaxed text-slate-100 shadow-xl z-30 transition-all duration-150 ${
+                                      showReportWeightHelp
+                                        ? 'opacity-100 visible translate-y-0'
+                                        : 'opacity-0 invisible -translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:visible group-focus-within:translate-y-0'
+                                    }`}
+                                  >
+                                    <span
+                                      aria-hidden="true"
+                                      className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-2.5 h-2.5 rotate-45 bg-slate-900 border-l border-t border-slate-700"
+                                    />
+                                    When this field is populated, it overrides the standard weight for final report calculations.
+                                  </div>
+                                </span>
+                              </div>
+                              <div className="text-[8.5px] font-normal lowercase tracking-normal text-[#80cbc4]">
+                                (kg) override
+                              </div>
+                            </th>
+                          );
+                        case 'totalWeight':
+                          return (
+                            <th
+                              key="totalWeight"
+                              {...packingColOrder.getHeaderDragProps('totalWeight', 'TOTAL WT')}
+                              className={`px-1 py-2.5 border-r border-[#334b59] min-w-[62px] text-right ${dragClass}`}
+                            >
+                              <span className="inline-flex items-center justify-end gap-0.5">
+                                <ColumnDragGrip className="w-2 h-2 opacity-55 shrink-0" />
+                                <span>TOTAL WT</span>
+                              </span>
+                            </th>
+                          );
+                        case 'unit':
+                          return (
+                            <th
+                              key="unit"
+                              {...packingColOrder.getHeaderDragProps('unit', 'UNIT')}
+                              className={`px-1 py-2.5 border-r border-[#334b59] min-w-[54px] text-center ${dragClass}`}
+                            >
+                              <span className="inline-flex items-center justify-center gap-0.5">
+                                <ColumnDragGrip className="w-2 h-2 opacity-55 shrink-0" />
+                                <span>UNIT</span>
+                              </span>
+                            </th>
+                          );
+                        case 'rate':
+                          return (
+                            <th
+                              key="rate"
+                              {...packingColOrder.getHeaderDragProps('rate', 'RATE (RMB)')}
+                              className={`px-1 py-2.5 border-r border-[#334b59] min-w-[66px] text-right ${dragClass}`}
+                            >
+                              <div className="inline-flex items-center justify-end gap-0.5">
+                                <ColumnDragGrip className="w-2 h-2 opacity-55 shrink-0" />
+                                <span>RATE (RMB)</span>
+                              </div>
+                              <div className="text-[8.5px] font-normal lowercase tracking-normal text-[#80cbc4]">
+                                {paymentStatus === 'UNPAID' ? '≥ 0 (Unpaid)' : '> 0 (Req)'}
+                              </div>
+                            </th>
+                          );
+                        case 'amount':
+                          return (
+                            <th
+                              key="amount"
+                              {...packingColOrder.getHeaderDragProps('amount', 'AMOUNT (RMB)')}
+                              className={`px-1 py-2.5 border-r border-[#334b59] min-w-[74px] text-right ${dragClass}`}
+                            >
+                              <span className="inline-flex items-center justify-end gap-0.5">
+                                <ColumnDragGrip className="w-2 h-2 opacity-55 shrink-0" />
+                                <span>AMOUNT (RMB)</span>
+                              </span>
+                            </th>
+                          );
+                        default:
+                          return null;
+                      }
+                    })}
+                    <th className="px-1 py-2.5 w-16 min-w-[68px] text-center whitespace-nowrap">
+                      LOCK / CLR
                     </th>
-                    <th className="px-1 py-2.5 border-r border-[#334b59] min-w-[58px] text-center">
-                      <div className="flex items-center justify-between px-0.5 gap-1">
-                        <span>BOX</span>
-                        <button
-                          type="button"
-                          onClick={() => setAddingCategory('boxes')}
-                          className="text-[9px] bg-[#00897b] hover:bg-[#00796b] px-1 py-0.5 rounded text-white cursor-pointer shrink-0"
-                          title="Add box preset"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </th>
-                    <th className="px-1 py-2.5 border-r border-[#334b59] min-w-[80px] text-center">
-                      <div className="flex items-center justify-between px-0.5 gap-1">
-                        <span>WEIGHT (KG)</span>
-                        <button
-                          type="button"
-                          onClick={() => setAddingCategory('weights')}
-                          className="text-[9px] bg-[#00897b] hover:bg-[#00796b] px-1 py-0.5 rounded text-white cursor-pointer shrink-0"
-                          title="Add weight preset"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </th>
-                    <th
-                      data-testid="packing-col-report-weight"
-                      className="relative px-1.5 py-2.5 border-r border-[#334b59] min-w-[96px] text-center"
-                    >
-                      <div className="inline-flex items-center justify-center gap-1">
-                        <span>REPORT WEIGHT (KG)</span>
-                        <span className="relative inline-flex items-center group">
-                          <button
-                            type="button"
-                            data-testid="report-weight-help-btn"
-                            aria-label="Report Weight (KG) Help"
-                            aria-describedby="report-weight-tooltip"
-                            aria-expanded={showReportWeightHelp}
-                            title="When this field is populated, it overrides the standard weight for final report calculations."
-                            onClick={() => setShowReportWeightHelp((prev) => !prev)}
-                            onBlur={() => setShowReportWeightHelp(false)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Escape') setShowReportWeightHelp(false);
-                            }}
-                            className="zsb-help-icon-btn inline-flex items-center justify-center rounded-full text-[#80cbc4] hover:text-white focus:outline-none focus:ring-2 focus:ring-amber-400 transition-colors cursor-help shrink-0"
-                          >
-                            <HelpCircle className="w-3.5 h-3.5" aria-hidden="true" />
-                          </button>
-                          <div
-                            id="report-weight-tooltip"
-                            role="tooltip"
-                            data-testid="report-weight-tooltip"
-                            className={`pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-2 w-60 rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-[11px] font-medium normal-case tracking-normal text-left leading-relaxed text-slate-100 shadow-xl z-30 transition-all duration-150 ${
-                              showReportWeightHelp
-                                ? 'opacity-100 visible translate-y-0'
-                                : 'opacity-0 invisible -translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:visible group-focus-within:translate-y-0'
-                            }`}
-                          >
-                            <span
-                              aria-hidden="true"
-                              className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-2.5 h-2.5 rotate-45 bg-slate-900 border-l border-t border-slate-700"
-                            />
-                            When this field is populated, it overrides the standard weight for final report calculations.
-                          </div>
-                        </span>
-                      </div>
-                      <div className="text-[9px] font-normal lowercase tracking-normal text-[#80cbc4]">
-                        editable override
-                      </div>
-                    </th>
-                    <th className="px-1.5 py-2.5 border-r border-[#334b59] min-w-[74px] text-right">
-                      TOTAL WEIGHT
-                    </th>
-                    <th className="px-1 py-2.5 border-r border-[#334b59] min-w-[66px] text-center">
-                      UNIT
-                    </th>
-                    <th className="px-1.5 py-2.5 border-r border-[#334b59] min-w-[76px] text-right">
-                      <div>RATE (RMB)</div>
-                      <div className="text-[9px] font-normal lowercase tracking-normal text-[#80cbc4]">
-                        {paymentStatus === 'UNPAID' ? '≥ 0 (Unpaid)' : '> 0 (Required)'}
-                      </div>
-                    </th>
-                    <th className="px-1.5 py-2.5 border-r border-[#334b59] min-w-[88px] text-right">
-                      TOTAL AMOUNT (RMB)
-                    </th>
-                    <th className="px-1 py-2.5 w-10 min-w-[40px] text-center">CLR</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -1905,6 +2244,7 @@ export const PackingListView: React.FC = () => {
                         key={row.id}
                         row={row}
                         rowIndex={idx}
+                        columnOrder={packingColOrder.columnOrder}
                         exportItemOptions={exportItemOptionElements}
                         boxPresets={dropdownOptions.boxes}
                         boxOptions={boxOptionElements}
@@ -1920,6 +2260,7 @@ export const PackingListView: React.FC = () => {
                         reportWeightResetToken={reportWeightResetToken}
                         onRowChange={handleRowChange}
                         onClearRow={handleClearRow}
+                        onToggleRowLock={handleToggleRowLock}
                         onScheduleReportWeightDraft={scheduleReportWeightCommit}
                         onCommitReportWeightImmediate={commitReportWeightForRow}
                       />
@@ -1929,54 +2270,68 @@ export const PackingListView: React.FC = () => {
 
                 {/* Subtotals & Instant Automatic Summation Rows */}
                 <tfoot>
-                  {/* Row 1: Direct Column-Aligned Subtotals */}
+                  {/* Row 1: Direct Column-Aligned Subtotals (Dynamically synced with columnOrder) */}
                   <tr className="bg-[#1c2a33] text-white font-bold border-t-2 border-[#00897b] text-xs">
-                    <td
-                      colSpan={2}
-                      className="px-3 py-2.5 text-right uppercase tracking-wider border-r border-[#334b59]"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-mono font-semibold text-[#5eead4] bg-[#273E56] px-1.5 py-0.5 rounded">
-                          {populatedRowCount} {populatedRowCount === 1 ? 'Item' : 'Items'}
-                        </span>
-                        <span className="font-extrabold">TOTAL QUANTITY:</span>
-                      </div>
+                    <td className="px-1 py-2 text-center border-r border-[#334b59] whitespace-nowrap">
+                      <span className="text-[9.5px] font-mono font-semibold text-[#5eead4] bg-[#273E56] px-1 py-0.5 rounded">
+                        {populatedRowCount} {populatedRowCount === 1 ? 'Row' : 'Rows'}
+                      </span>
                     </td>
-                    <td
-                      data-testid="packing-footer-box"
-                      className="px-2 py-2.5 text-center font-mono tabular-nums text-[#5eead4] text-sm font-black border-r border-[#334b59] bg-[#273E56]/70 whitespace-nowrap"
-                    >
-                      {totalBox} Boxes
-                    </td>
-                    <td
-                      colSpan={2}
-                      className="px-2 py-2.5 text-right uppercase text-[11px] font-bold border-r border-[#334b59] whitespace-nowrap"
-                    >
-                      TOTAL WT:
-                    </td>
-                    <td
-                      data-testid="packing-footer-weight"
-                      className="px-2.5 py-2.5 text-right font-mono tabular-nums text-[#5eead4] text-sm font-black border-r border-[#334b59] bg-[#273E56]/70 whitespace-nowrap"
-                    >
-                      {totalWeight.toLocaleString('en-US', {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}{' '}
-                      KG
-                    </td>
-                    <td
-                      colSpan={2}
-                      className="px-2.5 py-2.5 text-right uppercase text-[11px] font-bold border-r border-[#334b59] whitespace-nowrap"
-                    >
-                      TOTAL VALUE:
-                    </td>
-                    <td
-                      colSpan={2}
-                      data-testid="packing-footer-total"
-                      className="px-2.5 py-2.5 text-right font-mono tabular-nums text-white text-sm font-black pr-3 bg-[#00897b]/30 whitespace-nowrap"
-                    >
-                      {formatCurrency(totalAmount, 'RMB')}
-                    </td>
+                    {packingColOrder.columnOrder.map((colId) => {
+                      switch (colId) {
+                        case 'item':
+                          return (
+                            <td
+                              key="item"
+                              className="px-2 py-2.5 text-right uppercase tracking-wider text-[10px] font-extrabold border-r border-[#334b59] whitespace-nowrap"
+                            >
+                              TOTALS
+                            </td>
+                          );
+                        case 'box':
+                          return (
+                            <td
+                              key="box"
+                              data-testid="packing-footer-box"
+                              className="px-1.5 py-2.5 text-center font-mono tabular-nums text-[#5eead4] text-xs font-black border-r border-[#334b59] bg-[#273E56]/70 whitespace-nowrap"
+                            >
+                              {totalBox} Box
+                            </td>
+                          );
+                        case 'totalWeight':
+                          return (
+                            <td
+                              key="totalWeight"
+                              data-testid="packing-footer-weight"
+                              className="px-1.5 py-2.5 text-right font-mono tabular-nums text-[#5eead4] text-xs font-black border-r border-[#334b59] bg-[#273E56]/70 whitespace-nowrap"
+                            >
+                              {totalWeight.toLocaleString('en-US', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}{' '}
+                              KG
+                            </td>
+                          );
+                        case 'amount':
+                          return (
+                            <td
+                              key="amount"
+                              data-testid="packing-footer-total"
+                              className="px-1.5 py-2.5 text-right font-mono tabular-nums text-white text-xs font-black border-r border-[#334b59] bg-[#00897b]/30 whitespace-nowrap"
+                            >
+                              {formatCurrency(totalAmount, 'RMB')}
+                            </td>
+                          );
+                        default:
+                          return (
+                            <td
+                              key={colId}
+                              className="px-1 py-2.5 border-r border-[#334b59]"
+                            ></td>
+                          );
+                      }
+                    })}
+                    <td className="px-1 py-2.5"></td>
                   </tr>
 
                   {/* Row 2: Prominent Shipment Totals Live Summation Banner */}
@@ -2195,11 +2550,30 @@ export const PackingListView: React.FC = () => {
               </button>
             )}
 
+            {/* PRINT / EXPORT PDF Preview Button (locks exported rows) */}
+            <button
+              type="button"
+              data-testid="packing-print-preview-btn"
+              onClick={handlePrintSelected}
+              className="w-full bg-[#1c2a33] hover:bg-[#152028] text-white py-2.5 px-3 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer whitespace-nowrap"
+              title="Open Print / Save PDF & .PNG Preview (locks exported rows)"
+            >
+              <Printer className="w-4 h-4 shrink-0 text-[#5eead4]" />
+              <span>PRINT / EXPORT PDF</span>
+              <span className="text-[10px] font-mono bg-black/30 px-1.5 py-0.5 rounded text-[#80cbc4]">
+                Ctrl+P
+              </span>
+            </button>
+
             {/* Share via WeChat (.PNG) */}
             <button
               type="button"
               data-testid="packing-share-wechat-btn"
-              onClick={() => setIsShareModalOpen(true)}
+              onClick={() => {
+                const resolvedRows = flushPendingReportWeights();
+                markPopulatedRowsAsExported(resolvedRows);
+                setIsShareModalOpen(true);
+              }}
               className="w-full bg-[#07C160] hover:bg-[#06a853] text-white py-2.5 px-3 rounded-lg font-bold text-xs shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
               title="Share Packing List Manifest .PNG to WeChat (微信)"
             >

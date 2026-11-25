@@ -35,6 +35,8 @@ export interface DropdownOptions {
   costingCategories: string[];
 }
 
+export type RowLockReason = 'manual' | 'finalized' | 'exported';
+
 export interface PurchaseItemRow {
   id: string;
   item: string;
@@ -45,6 +47,9 @@ export interface PurchaseItemRow {
   previousAmount: number;
   paidAmount: number;
   balance: number;
+  locked?: boolean;
+  lockReason?: RowLockReason;
+  lockedAt?: string;
 }
 
 export interface PurchaseRecord {
@@ -61,6 +66,8 @@ export interface PurchaseRecord {
   balance: number;
   status?: ExporterStatus;
   remarks?: string;
+  finalizedAt?: string;
+  exportedAt?: string;
   calculationPending?: boolean;
   pendingFields?: string[];
   rawValues?: Record<string, string>;
@@ -77,10 +84,14 @@ export interface PackingItemRow {
   unit: string;
   rate: number;
   amount: number; // totalWeight * rate
+  locked?: boolean;
+  lockReason?: RowLockReason;
+  lockedAt?: string;
 }
 
 export interface PackingRecord {
   id: string;
+  serialNumber?: number;
   invoiceNumber: string;
   shippingMark: string;
   flight: string;
@@ -109,6 +120,8 @@ export interface PackingRecord {
   paymentDate?: string;
   billSite?: string;
   remarks?: string;
+  finalizedAt?: string;
+  exportedAt?: string;
   calculationPending?: boolean;
   pendingFields?: string[];
   rawValues?: Record<string, string>;

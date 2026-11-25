@@ -97,7 +97,9 @@ export const OfflineIndicator: React.FC<OfflineIndicatorProps> = ({
 }) => {
   const isOnline = useOnlineStatus();
 
-  if (isOnline && pendingQueueCount === 0 && !isSyncingQueue) return null;
+  // Offline Mode status is rendered as a subtle non-blocking alert in the top-right header.
+  // Only show this queue progress toast when online and actively flushing/holding queued items.
+  if (!isOnline || (pendingQueueCount === 0 && !isSyncingQueue)) return null;
 
   return (
     <div

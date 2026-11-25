@@ -33,8 +33,25 @@ import {
   UploadCloud,
   FileSpreadsheet,
 } from 'lucide-react';
+import { useTableColumnOrder } from '../hooks/useTableColumnOrder.ts';
+import {
+  ColumnReorderToolbar,
+  ColumnDragGrip,
+} from './ColumnReorderToolbar.tsx';
+
+const DAILY_EXPENSE_DEFAULT_COLUMNS = [
+  'date',
+  'category',
+  'particulars',
+  'methodPayer',
+  'amount',
+] as const;
 
 export const DailyExpenseView: React.FC = () => {
+  const expenseColOrder = useTableColumnOrder(
+    'daily_expense',
+    DAILY_EXPENSE_DEFAULT_COLUMNS
+  );
   const {
     otherCosts,
     addOtherCost,
@@ -744,6 +761,13 @@ export const DailyExpenseView: React.FC = () => {
               </div>
             </div>
 
+            <ColumnReorderToolbar
+              tableId="daily_expense"
+              isCustomized={expenseColOrder.isCustomized}
+              onReset={expenseColOrder.resetOrder}
+              className="mb-1.5"
+            />
+
             {/* Ledger Table (10 rows visible per viewport, controlled by scroll) */}
             <div
               ref={tableScrollRef}
@@ -770,13 +794,43 @@ export const DailyExpenseView: React.FC = () => {
                 <thead className="sticky top-0 z-10 bg-[#273E56] shadow-2xs">
                   <tr className="bg-[#273E56] text-white text-left">
                     <th className="py-2.5 px-2 font-semibold text-center w-10 bg-[#273E56]">SL</th>
-                    <th className="py-2.5 px-2 font-semibold whitespace-nowrap bg-[#273E56]">DATE</th>
-                    <th className="py-2.5 px-2 font-semibold bg-[#273E56]">CATEGORY</th>
-                    <th className="py-2.5 px-2 font-semibold bg-[#273E56]">PARTICULARS</th>
-                    <th className="py-2.5 px-2 font-semibold bg-[#273E56]">METHOD / PAYER</th>
-                    <th className="py-2.5 px-2 font-semibold text-right whitespace-nowrap bg-[#273E56]">
-                      AMOUNT ({currency})
-                    </th>
+                    {expenseColOrder.columnOrder.map((colId) => {
+                      const dragClass = expenseColOrder.getHeaderDragClassName(colId);
+                      switch (colId) {
+                        case 'date':
+                          return (
+                            <th key="date" {...expenseColOrder.getHeaderDragProps('date', 'DATE')} className={`py-2.5 px-2 font-semibold whitespace-nowrap bg-[#273E56] ${dragClass}`}>
+                              <span className="inline-flex items-center gap-1"><ColumnDragGrip /><span>DATE</span></span>
+                            </th>
+                          );
+                        case 'category':
+                          return (
+                            <th key="category" {...expenseColOrder.getHeaderDragProps('category', 'CATEGORY')} className={`py-2.5 px-2 font-semibold bg-[#273E56] ${dragClass}`}>
+                              <span className="inline-flex items-center gap-1"><ColumnDragGrip /><span>CATEGORY</span></span>
+                            </th>
+                          );
+                        case 'particulars':
+                          return (
+                            <th key="particulars" {...expenseColOrder.getHeaderDragProps('particulars', 'PARTICULARS')} className={`py-2.5 px-2 font-semibold bg-[#273E56] ${dragClass}`}>
+                              <span className="inline-flex items-center gap-1"><ColumnDragGrip /><span>PARTICULARS</span></span>
+                            </th>
+                          );
+                        case 'methodPayer':
+                          return (
+                            <th key="methodPayer" {...expenseColOrder.getHeaderDragProps('methodPayer', 'METHOD / PAYER')} className={`py-2.5 px-2 font-semibold bg-[#273E56] ${dragClass}`}>
+                              <span className="inline-flex items-center gap-1"><ColumnDragGrip /><span>METHOD / PAYER</span></span>
+                            </th>
+                          );
+                        case 'amount':
+                          return (
+                            <th key="amount" {...expenseColOrder.getHeaderDragProps('amount', `AMOUNT (${currency})`)} className={`py-2.5 px-2 font-semibold text-right whitespace-nowrap bg-[#273E56] ${dragClass}`}>
+                              <span className="inline-flex items-center justify-end gap-1"><ColumnDragGrip /><span>AMOUNT ({currency})</span></span>
+                            </th>
+                          );
+                        default:
+                          return null;
+                      }
+                    })}
                     {(canEdit || canDelete) && (
                       <th className="py-2.5 px-2 font-semibold text-center whitespace-nowrap w-24 bg-[#273E56]">
                         ACTIONS
@@ -809,29 +863,50 @@ export const DailyExpenseView: React.FC = () => {
                         <td className="py-2.5 px-2 text-center font-mono tabular-nums text-slate-500">
                           {idx + 1}
                         </td>
-                        <td className="py-2.5 px-2 font-mono tabular-nums text-slate-700 whitespace-nowrap">
-                          {formatDate(cost.date)}
-                        </td>
-                        <td className="py-2.5 px-2 font-semibold text-slate-900">
-                          {cost.category}
-                        </td>
-                        <td className="py-2.5 px-2 text-slate-700">
-                          <div>{cost.description}</div>
-                          {cost.refInvoice && (
-                            <div className="text-[11px] font-mono text-slate-500 mt-0.5">
-                              Ref: {cost.refInvoice}
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-2 text-slate-600">
-                          <span>{cost.paymentMethod || 'Cash'}</span>
-                          {cost.paidBy && (
-                            <span className="text-slate-400"> · {cost.paidBy}</span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-2 text-right font-mono tabular-nums font-bold text-slate-900 whitespace-nowrap">
-                          {formatCurrency(cost.amount, currency)}
-                        </td>
+                        {expenseColOrder.columnOrder.map((colId) => {
+                          switch (colId) {
+                            case 'date':
+                              return (
+                                <td key="date" className="py-2.5 px-2 font-mono tabular-nums text-slate-700 whitespace-nowrap">
+                                  {formatDate(cost.date)}
+                                </td>
+                              );
+                            case 'category':
+                              return (
+                                <td key="category" className="py-2.5 px-2 font-semibold text-slate-900">
+                                  {cost.category}
+                                </td>
+                              );
+                            case 'particulars':
+                              return (
+                                <td key="particulars" className="py-2.5 px-2 text-slate-700">
+                                  <div>{cost.description}</div>
+                                  {cost.refInvoice && (
+                                    <div className="text-[11px] font-mono text-slate-500 mt-0.5">
+                                      Ref: {cost.refInvoice}
+                                    </div>
+                                  )}
+                                </td>
+                              );
+                            case 'methodPayer':
+                              return (
+                                <td key="methodPayer" className="py-2.5 px-2 text-slate-600">
+                                  <span>{cost.paymentMethod || 'Cash'}</span>
+                                  {cost.paidBy && (
+                                    <span className="text-slate-400"> · {cost.paidBy}</span>
+                                  )}
+                                </td>
+                              );
+                            case 'amount':
+                              return (
+                                <td key="amount" className="py-2.5 px-2 text-right font-mono tabular-nums font-bold text-slate-900 whitespace-nowrap">
+                                  {formatCurrency(cost.amount, currency)}
+                                </td>
+                              );
+                            default:
+                              return null;
+                          }
+                        })}
                         {(canEdit || canDelete) && (
                           <td className="py-2.5 px-2 text-center whitespace-nowrap">
                             <div className="inline-flex items-center gap-1.5">
@@ -869,16 +944,31 @@ export const DailyExpenseView: React.FC = () => {
                 {summary.filteredExpenses.length > 0 && (
                   <tfoot className="sticky bottom-0 z-10 bg-slate-100 shadow-[0_-1px_0_0_#cbd5e1]">
                     <tr className="bg-slate-100 border-t-2 border-slate-300 font-bold text-slate-900">
-                      <td colSpan={5} className="py-2.5 px-2 text-right uppercase bg-slate-100">
-                        Grand Total ({summary.filteredCount}{' '}
-                        {summary.filteredCount === 1 ? 'Entry' : 'Entries'})
+                      <td className="py-2.5 px-2 text-center uppercase text-[10px] bg-slate-100 whitespace-nowrap">
+                        TOTAL
                       </td>
-                      <td
-                        data-testid="daily-expense-table-total"
-                        className="py-2.5 px-2 text-right font-mono tabular-nums text-rose-700 whitespace-nowrap bg-slate-100"
-                      >
-                        {formatCurrency(summary.filteredTotal, currency)}
-                      </td>
+                      {expenseColOrder.columnOrder.map((colId) => {
+                        if (colId === 'amount') {
+                          return (
+                            <td
+                              key="amount"
+                              data-testid="daily-expense-table-total"
+                              className="py-2.5 px-2 text-right font-mono tabular-nums text-rose-700 whitespace-nowrap bg-slate-100"
+                            >
+                              {formatCurrency(summary.filteredTotal, currency)}
+                            </td>
+                          );
+                        }
+                        if (colId === 'particulars') {
+                          return (
+                            <td key="particulars" className="py-2.5 px-2 uppercase text-[11px] bg-slate-100">
+                              Grand Total ({summary.filteredCount}{' '}
+                              {summary.filteredCount === 1 ? 'Entry' : 'Entries'})
+                            </td>
+                          );
+                        }
+                        return <td key={colId} className="bg-slate-100" />;
+                      })}
                       {(canEdit || canDelete) && <td className="bg-slate-100" />}
                     </tr>
                   </tfoot>

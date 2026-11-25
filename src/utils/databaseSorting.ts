@@ -158,6 +158,10 @@ export function sortPackingRecords(
     let valB: unknown;
 
     switch (sort.column) {
+      case 'serialNumber':
+        valA = a.serialNumber ?? 0;
+        valB = b.serialNumber ?? 0;
+        break;
       case 'invoiceNumber':
         valA = a.invoiceNumber;
         valB = b.invoiceNumber;
@@ -292,6 +296,7 @@ export function sortPaymentRecords(
  */
 export function getColumnHeaderTitle(column: string): string {
   const titles: Record<string, string> = {
+    serialNumber: 'S. No.',
     invoiceNumber: 'Invoice / Doc No',
     date: 'Date',
     description: 'Supplier / Description',

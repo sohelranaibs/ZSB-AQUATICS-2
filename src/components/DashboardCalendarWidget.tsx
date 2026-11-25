@@ -1,12 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Calendar,
+  Check,
   ChevronLeft,
   ChevronRight,
   Package,
   Plus,
   ReceiptText,
+  Save,
   ShoppingCart,
+  StickyNote,
+  Trash2,
   Wallet,
 } from 'lucide-react';
 import {
@@ -19,6 +23,19 @@ import {
 import { UpcomingRecurringPaymentItem } from '../utils/recurringPayments.ts';
 import { formatCurrency } from '../utils/calculations.ts';
 import { getTodayLocalIsoDate } from '../utils/dailyExpense.ts';
+import {
+  CalendarNotesMap,
+  deleteCalendarNote,
+  formatNotePreview,
+  formatNoteUpdatedTime,
+  formatShortCalendarNoteChip,
+  getNotedDatesInMonth,
+  hasNoteContent,
+  loadCalendarNotesFromStorage,
+  normalizeNoteText,
+  persistCalendarNotesToStorage,
+  upsertCalendarNote,
+} from '../utils/calendarNotes.ts';
 import {
   buildCalendarActivityMap,
   buildMonthCalendarCells,
@@ -94,6 +111,101 @@ export const DashboardCalendarWidget: React.FC<DashboardCalendarWidgetProps> = (
   const todayIso = getTodayLocalIsoDate();
   const [displayedMonth, setDisplayedMonth] = useState<string>(() => todayIso.slice(0, 7));
   const [selectedDate, setSelectedDate] = useState<string>(todayIso);
+  const [notesMap, setNotesMap] = useState<CalendarNotesMap>(() => loadCalendarNotesFromStorage());
+  const [draftNote, setDraftNote] = useState<string>(() => notesMap[todayIso]?.content ?? '');
+  const [justSavedFlag, setJustSavedFlag] = useState<boolean>(false);
+
+  const selectedDateRef = useRef<string>(selectedDate);
+  const draftNoteRef = useRef<string>(draftNote);
+  const notesMapRef = useRef<CalendarNotesMap>(notesMap);
+
+  selectedDateRef.current = selectedDate;
+  draftNoteRef.current = draftNote;
+  notesMapRef.current = notesMap;
+
+  const commitNoteForDate = useCallback((dateIso: string, rawText: string, showSavedBadge = false) => {
+    const normalizedDraft = normalizeNoteText(rawText);
+    const existingSaved = notesMapRef.current[dateIso]?.content ?? '';
+    if (normalizedDraft === existingSaved && (hasNoteContent(normalizedDraft) || !notesMapRef.current[dateIso])) {
+      if (showSavedBadge && hasNoteContent(normalizedDraft)) {
+        setJustSavedFlag(true);
+      }
+      return;
+    }
+    setNotesMap((prev) => {
+      const next = upsertCalendarNote(prev, dateIso, normalizedDraft);
+      persistCalendarNotesToStorage(next);
+      return next;
+    });
+    if (showSavedBadge) {
+      setJustSavedFlag(true);
+    }
+  }, []);
+
+  // Auto-save draft changes gently after short pause so thoughts are never lost
+  useEffect(() => {
+    const existingSaved = notesMapRef.current[selectedDate]?.content ?? '';
+    if (normalizeNoteText(draftNote) === existingSaved) return undefined;
+    const timer = window.setTimeout(() => {
+      commitNoteForDate(selectedDate, draftNote, false);
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [draftNote, selectedDate, commitNoteForDate]);
+
+  // Reset transient "Saved" highlight after brief confirmation
+  useEffect(() => {
+    if (!justSavedFlag) return undefined;
+    const timer = window.setTimeout(() => setJustSavedFlag(false), 1800);
+    return () => window.clearTimeout(timer);
+  }, [justSavedFlag]);
+
+  // Flush any unsaved note if component unmounts
+  useEffect(() => {
+    return () => {
+      const dateIso = selectedDateRef.current;
+      const latestText = draftNoteRef.current;
+      const existingSaved = notesMapRef.current[dateIso]?.content ?? '';
+      if (normalizeNoteText(latestText) !== existingSaved) {
+        const next = upsertCalendarNote(notesMapRef.current, dateIso, latestText);
+        persistCalendarNotesToStorage(next);
+      }
+    };
+  }, []);
+
+  const switchSelectedDate = useCallback(
+    (nextDateIso: string, syncMonth: boolean) => {
+      const currentDateIso = selectedDateRef.current;
+      const latestDraft = draftNoteRef.current;
+      let latestMap = notesMapRef.current;
+
+      if (currentDateIso !== nextDateIso) {
+        const existingSaved = latestMap[currentDateIso]?.content ?? '';
+        if (normalizeNoteText(latestDraft) !== existingSaved) {
+          latestMap = upsertCalendarNote(latestMap, currentDateIso, latestDraft);
+          persistCalendarNotesToStorage(latestMap);
+          setNotesMap(latestMap);
+        }
+      }
+
+      setSelectedDate(nextDateIso);
+      setDraftNote(latestMap[nextDateIso]?.content ?? '');
+      setJustSavedFlag(false);
+      if (syncMonth) {
+        setDisplayedMonth(nextDateIso.slice(0, 7));
+      }
+    },
+    []
+  );
+
+  const handleClearSelectedNote = () => {
+    setDraftNote('');
+    setJustSavedFlag(false);
+    setNotesMap((prev) => {
+      const next = deleteCalendarNote(prev, selectedDate);
+      persistCalendarNotesToStorage(next);
+      return next;
+    });
+  };
 
   const activityMap = useMemo(
     () =>
@@ -118,21 +230,26 @@ export const DashboardCalendarWidget: React.FC<DashboardCalendarWidgetProps> = (
     [activityMap, displayedMonth]
   );
 
+  const notedDatesInMonth = useMemo(
+    () => getNotedDatesInMonth(notesMap, displayedMonth),
+    [notesMap, displayedMonth]
+  );
+
   const selectedDay = useMemo(
     () => activityMap.get(selectedDate) ?? createEmptyDayAggregate(selectedDate),
     [activityMap, selectedDate]
   );
 
+  const savedSelectedNote = notesMap[selectedDate];
+  const isDraftDirty =
+    normalizeNoteText(draftNote) !== (savedSelectedNote?.content ?? '');
+
   const handleSelectCell = (dateIso: string, inCurrentMonth: boolean) => {
-    setSelectedDate(dateIso);
-    if (!inCurrentMonth) {
-      setDisplayedMonth(dateIso.slice(0, 7));
-    }
+    switchSelectedDate(dateIso, !inCurrentMonth);
   };
 
   const handleJumpToday = () => {
-    setDisplayedMonth(todayIso.slice(0, 7));
-    setSelectedDate(todayIso);
+    switchSelectedDate(todayIso, true);
   };
 
   return (
@@ -155,6 +272,13 @@ export const DashboardCalendarWidget: React.FC<DashboardCalendarWidgetProps> = (
               {formatCalendarMonthHeading(displayedMonth)} · {monthTotals.activeDays} active{' '}
               {monthTotals.activeDays === 1 ? 'day' : 'days'} · {monthTotals.totalEvents}{' '}
               {monthTotals.totalEvents === 1 ? 'entry' : 'entries'}
+              {notedDatesInMonth.length > 0 && (
+                <>
+                  {' '}
+                  · {notedDatesInMonth.length}{' '}
+                  {notedDatesInMonth.length === 1 ? 'note' : 'notes'}
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -232,6 +356,9 @@ export const DashboardCalendarWidget: React.FC<DashboardCalendarWidgetProps> = (
               <span className="inline-flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-rose-600 inline-block" /> Due
               </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-[3px] bg-amber-300 border border-amber-600 inline-block" /> Note
+              </span>
             </div>
           </div>
 
@@ -253,6 +380,8 @@ export const DashboardCalendarWidget: React.FC<DashboardCalendarWidgetProps> = (
           >
             {calendarCells.map((cell) => {
               const dayInfo = activityMap.get(cell.dateIso);
+              const dayNote = notesMap[cell.dateIso];
+              const hasNote = Boolean(dayNote && hasNoteContent(dayNote.content));
               const isToday = cell.dateIso === todayIso;
               const isSelected = cell.dateIso === selectedDate;
               const count = dayInfo?.totalActivityCount || 0;
@@ -264,7 +393,7 @@ export const DashboardCalendarWidget: React.FC<DashboardCalendarWidgetProps> = (
                   data-testid={`calendar-day-${cell.dateIso}`}
                   aria-label={`${formatCalendarSelectedDateHeading(cell.dateIso)}${
                     count > 0 ? `, ${count} entries` : ''
-                  }`}
+                  }${hasNote ? ', has note' : ''}`}
                   aria-pressed={isSelected}
                   onClick={() => handleSelectCell(cell.dateIso, cell.inCurrentMonth)}
                   className={`min-h-[58px] sm:min-h-[64px] p-1.5 rounded-lg border text-left flex flex-col justify-between transition cursor-pointer ${
@@ -354,6 +483,19 @@ export const DashboardCalendarWidget: React.FC<DashboardCalendarWidgetProps> = (
                         }`}
                         title={`${dayInfo.mortalitiesCount} Mortality Log(s)`}
                       />
+                    )}
+                    {hasNote && dayNote && (
+                      <span
+                        data-testid={`calendar-day-note-indicator-${cell.dateIso}`}
+                        title={`Note: ${formatNotePreview(dayNote.content)}`}
+                        className={`inline-flex items-center px-1 py-px rounded-[3px] text-[9px] font-bold leading-none border ${
+                          isSelected
+                            ? 'bg-amber-300 text-slate-950 border-amber-200'
+                            : 'bg-amber-100 text-amber-900 border-amber-400'
+                        }`}
+                      >
+                        Note
+                      </span>
                     )}
                   </div>
                 </button>
@@ -505,6 +647,120 @@ export const DashboardCalendarWidget: React.FC<DashboardCalendarWidgetProps> = (
                   );
                 })
               )}
+            </div>
+
+            {/* Date-Wise Notepad */}
+            <div
+              data-testid="calendar-date-notepad"
+              className="rounded-lg border border-amber-200/90 bg-amber-50/45 overflow-hidden"
+            >
+              <div className="px-3 py-2 bg-amber-100/60 border-b border-amber-200/80 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <StickyNote className="w-3.5 h-3.5 text-amber-700 shrink-0" aria-hidden="true" />
+                  <span className="text-xs font-bold text-slate-900">Date Notepad</span>
+                  <span
+                    data-testid="calendar-notepad-status"
+                    className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                      isDraftDirty
+                        ? 'bg-amber-200/80 text-amber-900'
+                        : savedSelectedNote
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-white/80 text-slate-500'
+                    }`}
+                  >
+                    {isDraftDirty
+                      ? 'Saving...'
+                      : justSavedFlag
+                      ? 'Saved'
+                      : savedSelectedNote
+                      ? `Saved · ${formatNoteUpdatedTime(savedSelectedNote.updatedAt)}`
+                      : 'Empty'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    data-testid="calendar-notepad-save-btn"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => commitNoteForDate(selectedDate, draftNote, true)}
+                    className="!px-2.5 !py-1 text-[10px] font-bold flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                  >
+                    {justSavedFlag ? (
+                      <Check className="w-3 h-3" aria-hidden="true" />
+                    ) : (
+                      <Save className="w-3 h-3" aria-hidden="true" />
+                    )}
+                    <span>{justSavedFlag ? 'Saved' : 'Save Note'}</span>
+                  </button>
+                  {(hasNoteContent(draftNote) || Boolean(savedSelectedNote)) && (
+                    <button
+                      type="button"
+                      data-testid="calendar-notepad-clear-btn"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={handleClearSelectedNote}
+                      aria-label={`Clear note for ${formatCalendarSelectedDateHeading(selectedDate)}`}
+                      className="!px-2.5 !py-1 text-[10px] font-bold flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                    >
+                      <Trash2 className="w-3 h-3" aria-hidden="true" />
+                      <span>Clear</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-2.5 space-y-2">
+                <textarea
+                  data-testid="calendar-notepad-textarea"
+                  aria-label={`Date notepad for ${formatCalendarSelectedDateHeading(selectedDate)}`}
+                  rows={4}
+                  value={draftNote}
+                  onChange={(e) => {
+                    setDraftNote(e.target.value);
+                    if (justSavedFlag) setJustSavedFlag(false);
+                  }}
+                  onBlur={() => commitNoteForDate(selectedDate, draftNote, false)}
+                  onKeyDown={(e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+                      e.preventDefault();
+                      commitNoteForDate(selectedDate, draftNote, true);
+                    }
+                  }}
+                  placeholder="Write whatever is on your mind for this date — reminders, supplier follow-ups, flight plans, or daily notes..."
+                  className="w-full rounded-md border border-amber-200/90 bg-white/95 focus:bg-white px-2.5 py-2 text-xs text-slate-800 placeholder:text-slate-400 leading-relaxed focus:outline-none focus:ring-2 focus:ring-amber-400/70 focus:border-amber-400 resize-y min-h-[88px] max-h-48"
+                />
+
+                {notedDatesInMonth.length > 0 && (
+                  <div
+                    data-testid="calendar-noted-dates-strip"
+                    className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-amber-200/70"
+                  >
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-amber-900/80">
+                      Noted dates:
+                    </span>
+                    {notedDatesInMonth.map((dateIso) => {
+                      const isActive = dateIso === selectedDate;
+                      return (
+                        <button
+                          key={dateIso}
+                          type="button"
+                          data-testid={`calendar-day-note-jump-${dateIso}`}
+                          title={formatNotePreview(notesMap[dateIso]?.content || '')}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => switchSelectedDate(dateIso, false)}
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-bold border transition cursor-pointer ${
+                            isActive
+                              ? 'bg-[#1D6CE0] text-white border-[#1558BD]'
+                              : 'bg-white text-amber-900 border-amber-300 hover:bg-amber-100'
+                          }`}
+                        >
+                          {formatShortCalendarNoteChip(dateIso)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

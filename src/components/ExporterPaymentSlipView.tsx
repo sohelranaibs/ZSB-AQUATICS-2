@@ -942,33 +942,8 @@ export const ExporterPaymentSlipView: React.FC = () => {
         ))}
       </datalist>
 
-      {/* Top Action & Filter Bar */}
-      <div className="bg-[#273E56] text-white px-5 py-3.5 rounded-xl shadow-sm border-b-2 border-[#00897b] flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center space-x-3">
-          <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
-            <img
-              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
-              alt={companyProfile.companyName}
-              className="w-full h-full object-contain rounded-full"
-            />
-          </div>
-          <div>
-            <div className="flex items-center space-x-2.5">
-              <span className="text-lg sm:text-xl font-black tracking-tight text-amber-400 zsb-golden-brand">
-                {companyProfile.companyName}
-              </span>
-              <span className="text-slate-400">·</span>
-              <h1 className="text-sm sm:text-base font-bold text-[#80cbc4] tracking-wide">
-                Exporter Payment Slip (付款单) — Automatic Database Sheet
-              </h1>
-            </div>
-            <p className="text-xs text-slate-300 mt-0.5">
-              Automatically receives shipment records from Exporter Database (Select Shipping Mark &amp; Packing Date)
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
+      {/* Action Controls Bar */}
+      <div className="bg-white px-4 py-2.5 rounded-xl shadow-xs border border-slate-200 flex flex-wrap items-center justify-end gap-2">
           <button
             type="button"
             onClick={handleAddRow}
@@ -1037,7 +1012,6 @@ export const ExporterPaymentSlipView: React.FC = () => {
             <WeChatIcon className="w-4 h-4 text-white" />
             <span>SHARE WECHAT (微信)</span>
           </button>
-        </div>
       </div>
 
       {/* Automatic Lookup Dropdown Controls Card */}

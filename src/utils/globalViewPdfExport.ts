@@ -38,6 +38,7 @@ import {
   buildTotalBalanceLedgerEntries,
 } from './totalBalance.ts';
 import { calculateDailyExpenseSummary } from './dailyExpense.ts';
+import { buildAirWayBillRows } from './airWayBill.ts';
 
 export interface GlobalTableColumn {
   key: string;
@@ -1499,32 +1500,26 @@ export function buildGlobalViewTableReport(
     }
 
     case 'air_way_bill': {
-      const flightRows = allPackings.map((rec, idx) => {
-        const boxes = Number(rec.totalBox) || 0;
-        const rate = Number(rec.rmbRate) > 0 ? Number(rec.rmbRate) : rmbRate;
-        const rmbPerBox = boxes > 0 ? Math.round(((Number(rec.totalAmount) || 0) / boxes) * 100) / 100 : 0;
-        const totalRmb = Number(rec.totalAmount) || 0;
-        const bdtAmount = calculatePackingTotalAmountBDT(totalRmb, rate);
-        return {
-          sl: idx + 1,
-          date: formatDate(rec.packingDate),
-          shipper: rec.shipper || companyProfile.companyName,
-          flight: rec.flight || '-',
-          totalBox: boxes,
-          rmbPerBox: formatRMB(rmbPerBox),
-          totalRmb: formatRMB(totalRmb),
-          bdtAmount: formatCurrency(bdtAmount, ''),
-        };
-      });
+      const groupedAwbRows = buildAirWayBillRows(allPackings, {}, { defaultRate: rmbRate });
+      const flightRows = groupedAwbRows.map((row, idx) => ({
+        sl: idx + 1,
+        date: formatDate(row.date),
+        documentsHolder: row.documentsHolder || row.shipper || companyProfile.companyName,
+        flight: row.flight || '-',
+        totalBox: row.totalBox,
+        rmbPerBox: formatRMB(row.rmbPerBox),
+        totalRmb: formatRMB(row.totalRmb),
+        bdtAmount: formatCurrency(row.bdtAmount, ''),
+      }));
       stateSections = [
         {
           id: 'flight-return-bill-fallback',
           title: 'FLIGHT RETURN BILL — Consignment Air Waybill Register',
-          subtitle: `${flightRows.length} Consignment Shipment(s)`,
+          subtitle: `${flightRows.length} Consolidated Shipment Row(s)`,
           columns: [
             { key: 'sl', label: 'SL', align: 'center' },
             { key: 'date', label: 'DATE', align: 'center' },
-            { key: 'shipper', label: 'SHIPPER', align: 'left' },
+            { key: 'documentsHolder', label: 'DOCUMENTS HOLDER/SHIPPER', align: 'left' },
             { key: 'flight', label: 'FLIGHT / AWB', align: 'left' },
             { key: 'totalBox', label: 'TOTAL BOX', align: 'center' },
             { key: 'rmbPerBox', label: 'RMB / BOX', align: 'right' },

@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { GlobalSearchBar } from './GlobalSearchBar.tsx';
 import { PWAInstallButton } from './PWAInstallButton.tsx';
+import { HeaderOfflineAlert } from './HeaderOfflineAlert.tsx';
 import { DisplayMode, ZOOM_PRESETS } from '../utils/displayViewport.ts';
 import { buildWorkbookSheets } from './ThemeSidebarNav.tsx';
 
@@ -237,7 +238,8 @@ const HeaderSyncControls: React.FC<HeaderSyncControlsProps> = React.memo(
             className="text-[10px] font-mono font-semibold text-sky-200 border-l border-white/20 pl-2 inline-flex items-center gap-1.5"
           >
             <span>
-              Last Backup: {syncDisplay.formattedBackupTime}
+              <span className="hidden 2xl:inline">Last Backup: </span>
+              {syncDisplay.formattedBackupTime}
               <span
                 data-testid="header-sync-elapsed-badge"
                 className="hidden 2xl:inline text-slate-300"
@@ -365,6 +367,7 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
     currentUser,
     auditLogs,
     offlineSyncQueue,
+    isFlushingOfflineQueue,
     startPrintAllActiveSheets,
     printAllSequence,
   } = useApp();
@@ -484,17 +487,23 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
             <span>Print All</span>
           </button>
 
-          <span className="px-2 py-0.5 rounded bg-[#1D6CE0] text-white text-[10px] font-mono font-bold border border-white/20 shrink-0">
+          <span className="px-2 py-0.5 rounded bg-[#1D6CE0] text-white text-[10px] font-mono font-bold border border-white/20 shrink-0 max-w-[92px] truncate">
             #{activeSheetMeta?.num} {activeSheetMeta?.shortLabel}
           </span>
+
+          <HeaderOfflineAlert
+            compact
+            pendingQueueCount={offlineSyncQueue.length}
+            isSyncingQueue={isFlushingOfflineQueue}
+          />
         </div>
       </div>
 
-      {/* Top Control Header Bar (Deep Navy #273E56: Left Sidebar Toggle + Search | Right Sync + Snapshots + User) */}
+      {/* Top Control Header Bar (Deep Navy #273E56: Left Sidebar Toggle + Search | Right Sync + Snapshots + User + Offline Alert) */}
       {!isFullScreen && (
-      <div className="bg-[#273E56] px-3 sm:px-4 py-2 flex flex-wrap xl:flex-nowrap items-center justify-between gap-2 sm:gap-3">
+      <div className="bg-[#273E56] px-3 sm:px-4 py-2 flex flex-wrap xl:flex-nowrap items-center justify-between gap-2 sm:gap-2.5">
         {/* Left: Sidebar Toggle + Global Cross-Database Search Bar */}
-        <div className="flex items-center gap-2 sm:gap-2.5 flex-1 min-w-[180px] max-w-xs 2xl:max-w-sm">
+        <div className="flex items-center gap-2 sm:gap-2.5 flex-1 min-w-[140px] max-w-xs 2xl:max-w-sm">
           {onToggleSidebar && (
             <button
               type="button"
@@ -545,8 +554,8 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
             title="Sequentially trigger print preview for every visible workbook sheet in the current session (Shortcut: Alt+P)"
           >
             <Printer className="w-3.5 h-3.5 shrink-0" />
-            <span className="hidden lg:inline">Print All Sheets</span>
-            <span className="lg:hidden">Print All</span>
+            <span className="hidden 2xl:inline">Print All Sheets</span>
+            <span className="2xl:hidden">Print All</span>
           </button>
 
           <button
@@ -576,6 +585,12 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
               </div>
             </div>
           )}
+
+          {/* Top-Right Subtle Non-Blocking Offline Mode Alert */}
+          <HeaderOfflineAlert
+            pendingQueueCount={offlineSyncQueue.length}
+            isSyncingQueue={isFlushingOfflineQueue}
+          />
         </div>
       </div>
       )}
@@ -741,6 +756,13 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
               </>
             )}
           </button>
+
+          {isFullScreen && (
+            <HeaderOfflineAlert
+              pendingQueueCount={offlineSyncQueue.length}
+              isSyncingQueue={isFlushingOfflineQueue}
+            />
+          )}
         </div>
 
         <HeaderBottomSyncStatus

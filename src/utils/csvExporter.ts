@@ -7,7 +7,9 @@ import {
 import {
   MonthlyExportsPurchasesReportItem,
   MonthlyReportsSummaryTotals,
+  calculatePackingTotalAmountBDT,
 } from './calculations.ts';
+import { resolvePackingRecordStatus } from './batchDatabaseUpdate.ts';
 
 /**
  * UTF-8 Byte Order Mark (BOM) to force Microsoft Excel and spreadsheets
@@ -129,6 +131,228 @@ export function generatePackingsCSV(records: PackingRecord[]): string {
       pkg.fromDate || '',
       pkg.toDate || '',
       itemsSummary,
+      pkg.remarks || '',
+    ];
+  });
+
+  const lines = [
+    formatCsvRow(headers),
+    ...rows.map((row) => formatCsvRow(row)),
+  ];
+
+  return UTF8_BOM + lines.join('\r\n');
+}
+
+export type PackingLedgerCsvColumnId =
+  | 'invoiceNumber'
+  | 'date'
+  | 'shippingMark'
+  | 'flight'
+  | 'destination'
+  | 'shipper'
+  | 'documentsHolder'
+  | 'items'
+  | 'totalBox'
+  | 'totalWeight'
+  | 'totalAmount'
+  | 'rmbRate'
+  | 'amountBDT'
+  | 'status';
+
+export const PACKING_LEDGER_DEFAULT_CSV_COLUMNS: readonly PackingLedgerCsvColumnId[] = [
+  'invoiceNumber',
+  'date',
+  'shippingMark',
+  'flight',
+  'destination',
+  'shipper',
+  'documentsHolder',
+  'items',
+  'totalBox',
+  'totalWeight',
+  'totalAmount',
+  'rmbRate',
+  'amountBDT',
+  'status',
+];
+
+const PACKING_LEDGER_COLUMN_SPECS: Record<
+  PackingLedgerCsvColumnId,
+  {
+    header: string;
+    getValue: (pkg: PackingRecord) => string | number;
+  }
+> = {
+  invoiceNumber: {
+    header: 'Packing List No',
+    getValue: (pkg) => pkg.invoiceNumber || '',
+  },
+  date: {
+    header: 'Date',
+    getValue: (pkg) => pkg.packingDate || '',
+  },
+  shippingMark: {
+    header: 'Shipping Mark (Exporter)',
+    getValue: (pkg) => pkg.shippingMark || '',
+  },
+  flight: {
+    header: 'Flight',
+    getValue: (pkg) => pkg.flight || '',
+  },
+  destination: {
+    header: 'Destination',
+    getValue: (pkg) => pkg.destination || '',
+  },
+  shipper: {
+    header: 'Shipper',
+    getValue: (pkg) => pkg.shipper || '',
+  },
+  documentsHolder: {
+    header: 'Documents Holder',
+    getValue: (pkg) => pkg.documentsHolder || '',
+  },
+  items: {
+    header: 'Items',
+    getValue: (pkg) =>
+      (pkg.items || [])
+        .map((it) => it.item || 'Item')
+        .filter(Boolean)
+        .join(', '),
+  },
+  totalBox: {
+    header: 'Total Box',
+    getValue: (pkg) => Number(pkg.totalBox) || 0,
+  },
+  totalWeight: {
+    header: 'Total Weight (KG)',
+    getValue: (pkg) => Number(pkg.totalWeight) || 0,
+  },
+  totalAmount: {
+    header: 'Total Value (RMB)',
+    getValue: (pkg) => Number(pkg.totalAmount) || 0,
+  },
+  rmbRate: {
+    header: 'RMB Rate',
+    getValue: (pkg) => Number(pkg.rmbRate) || 0,
+  },
+  amountBDT: {
+    header: 'Total Amount (BDT)',
+    getValue: (pkg) => calculatePackingTotalAmountBDT(pkg.totalAmount, pkg.rmbRate),
+  },
+  status: {
+    header: 'Status',
+    getValue: (pkg) => resolvePackingRecordStatus(pkg),
+  },
+};
+
+function sanitizeCsvFilenameToken(raw: string, maxLength: number = 24): string {
+  const cleaned = raw
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return cleaned.slice(0, maxLength);
+}
+
+/**
+ * Generates a descriptive, filesystem-safe CSV filename reflecting active Packing List filters.
+ */
+export function formatFilteredPackingCsvFilename(options?: {
+  startDate?: string;
+  endDate?: string;
+  partyQuery?: string;
+  searchTerm?: string;
+  validationFilter?: string;
+  referenceDate?: string;
+}): string {
+  const {
+    startDate = '',
+    endDate = '',
+    partyQuery = '',
+    searchTerm = '',
+    validationFilter = 'all',
+    referenceDate,
+  } = options || {};
+
+  const parts = ['ZSB_Aquatics_Packing_List'];
+  const partyToken = sanitizeCsvFilenameToken(partyQuery);
+  const searchToken = sanitizeCsvFilenameToken(searchTerm);
+
+  if (partyToken) {
+    parts.push(`Filter_${partyToken}`);
+  }
+  if (searchToken && searchToken.toLowerCase() !== partyToken.toLowerCase()) {
+    parts.push(`Search_${searchToken}`);
+  }
+  if (validationFilter === 'invalid_only') {
+    parts.push('Invalid_Only');
+  }
+
+  if (startDate || endDate) {
+    const startToken = sanitizeCsvFilenameToken(startDate || 'start', 16) || 'start';
+    const endToken = sanitizeCsvFilenameToken(endDate || 'end', 16) || 'end';
+    parts.push(`${startToken}_to_${endToken}`);
+  } else {
+    const dateToken =
+      sanitizeCsvFilenameToken(referenceDate || new Date().toISOString().slice(0, 10), 16) ||
+      'export';
+    parts.push(dateToken);
+  }
+
+  return `${parts.join('_')}.csv`;
+}
+
+/**
+ * Generates an Excel-compatible UTF-8 CSV reflecting the currently filtered and sorted
+ * Packing List Ledger view, including persistent S. No., active column order,
+ * live BDT conversion, status, and item breakdown for offline spreadsheet analysis.
+ */
+export function generateFilteredPackingLedgerCSV(
+  records: readonly PackingRecord[],
+  options?: {
+    serialNumberMap?: ReadonlyMap<string, number>;
+    columnOrder?: readonly string[];
+  }
+): string {
+  const seenCols = new Set<PackingLedgerCsvColumnId>();
+  const orderedCols: PackingLedgerCsvColumnId[] = [];
+
+  if (options?.columnOrder && options.columnOrder.length > 0) {
+    for (const col of options.columnOrder) {
+      if (
+        Object.prototype.hasOwnProperty.call(PACKING_LEDGER_COLUMN_SPECS, col) &&
+        !seenCols.has(col as PackingLedgerCsvColumnId)
+      ) {
+        const typedCol = col as PackingLedgerCsvColumnId;
+        seenCols.add(typedCol);
+        orderedCols.push(typedCol);
+      }
+    }
+  }
+
+  const activeCols =
+    orderedCols.length > 0 ? orderedCols : [...PACKING_LEDGER_DEFAULT_CSV_COLUMNS];
+
+  const headers = [
+    'S. No.',
+    ...activeCols.map((colId) => PACKING_LEDGER_COLUMN_SPECS[colId].header),
+    'Items Breakdown',
+    'Remarks',
+  ];
+
+  const rows = records.map((pkg, index) => {
+    const persistentSerialNo =
+      pkg.serialNumber ?? options?.serialNumberMap?.get(pkg.id) ?? index + 1;
+    const itemsBreakdown = (pkg.items || [])
+      .map(
+        (it) =>
+          `${it.item || 'Item'}: ${it.box} box, ${it.weight} kg, Tot ${it.totalWeight} kg @ ${it.rate} = ${it.amount}`
+      )
+      .join('; ');
+
+    return [
+      persistentSerialNo,
+      ...activeCols.map((colId) => PACKING_LEDGER_COLUMN_SPECS[colId].getValue(pkg)),
+      itemsBreakdown,
       pkg.remarks || '',
     ];
   });

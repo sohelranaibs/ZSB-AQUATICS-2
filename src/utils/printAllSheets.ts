@@ -62,8 +62,8 @@ export function buildWorkbookSheets(counts: {
     {
       id: 'exporter_payment_slip',
       num: '07',
-      label: 'Exporter Payment Slip 付款单',
-      shortLabel: 'Payment Slip 付款单',
+      label: 'PAYMENT SLIP',
+      shortLabel: 'PAYMENT SLIP',
     },
     {
       id: 'profit_loss',

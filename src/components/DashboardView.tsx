@@ -524,45 +524,10 @@ export const DashboardView: React.FC = () => {
       {/* Executive Command Header */}
       <section
         aria-label="Executive Command Header"
-        className="bg-[#273E56] rounded-xl p-5 sm:p-6 border border-[#1E3247] text-white shadow-sm space-y-4"
+        className="bg-[#273E56] rounded-xl p-4 sm:p-5 border border-[#1E3247] text-white shadow-sm space-y-4"
       >
-        <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
-          <div className="flex items-start sm:items-center gap-3.5">
-            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white p-0.5 border-2 border-[#CBD8E6] shadow-md flex items-center justify-center overflow-hidden shrink-0">
-              <img
-                src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
-                alt={companyProfile.companyName}
-                className="w-full h-full object-contain rounded-full"
-              />
-            </div>
-            <div className="space-y-1 min-w-0 flex-1">
-              <div className="text-xs text-sky-300 font-semibold tracking-wide leading-snug">
-                <span className="font-bold">Sheet 01 · Executive Overview</span>
-                <span className="block text-slate-300 font-normal mt-0.5">
-                  Live Seafood Procurement, Air-Freight Export &amp; RMB Settlement Ledger
-                </span>
-              </div>
-              <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
-                <span className="inline-flex items-baseline gap-2.5 flex-wrap sm:flex-nowrap">
-                  <h1 className="text-xl sm:text-3xl font-black tracking-tight text-amber-400 zsb-golden-brand leading-tight">
-                    {companyProfile.companyName}
-                  </h1>
-                  <span className="text-slate-400 hidden sm:inline" aria-hidden="true">/</span>
-                </span>
-                <span className="text-sm sm:text-lg font-semibold text-emerald-300 leading-tight">
-                  Business Control Center
-                </span>
-              </div>
-              <div className="text-xs text-slate-300 pt-0.5 font-mono tabular-nums leading-snug break-words">
-                <span className="sm:whitespace-nowrap">
-                  Rate: 1 RMB = {companyProfile.rmbExchangeRate} {companyProfile.currency} · Synced {new Date().toLocaleDateString('en-GB')}
-                </span>
-              </div>
-            </div>
-          </div>
-
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
           {/* Quick Actions Row */}
-          <div className="flex flex-wrap items-center gap-1.5 xl:justify-end">
             {/* Low-Stock Notification Badge */}
             <button
               type="button"
@@ -670,7 +635,6 @@ export const DashboardView: React.FC = () => {
               <Upload className="w-3.5 h-3.5 stroke-[2.25] shrink-0" />
               <span>Import / Export</span>
             </button>
-          </div>
         </div>
 
         {/* Cumulative Executive Ledger Strip inside Hero */}

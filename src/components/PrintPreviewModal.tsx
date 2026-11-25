@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import {
   formatCurrency,
@@ -30,6 +30,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Layers,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { getPrintAllSequenceProgress } from '../utils/printAllSheets.ts';
 import {
@@ -46,6 +47,14 @@ import {
   PngShareModal,
   WeChatIcon,
 } from './PngShareModal.tsx';
+import { PrintHeaderFooterConfigPanel } from './PrintHeaderFooterConfigPanel.tsx';
+import {
+  PrintHeaderFooterConfig,
+  formatPrintHeaderDate,
+  isPrintHeaderFooterCustomized,
+  loadPrintHeaderFooterConfig,
+  savePrintHeaderFooterConfig,
+} from '../utils/printHeaderFooterConfig.ts';
 
 export const PrintPreviewModal: React.FC = () => {
   const {
@@ -65,9 +74,27 @@ export const PrintPreviewModal: React.FC = () => {
   const [isSavingPdf, setIsSavingPdf] = useState(false);
   const [isSavingPng, setIsSavingPng] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [showHeaderFooterConfig, setShowHeaderFooterConfig] = useState(false);
+  const [headerFooterConfig, setHeaderFooterConfig] = useState<PrintHeaderFooterConfig>(() =>
+    loadPrintHeaderFooterConfig(typeof window !== 'undefined' ? window.localStorage : null)
+  );
   const [printCurrentPageOnly, setPrintCurrentPageOnly] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
+
+  useEffect(() => {
+    if (!printModalData.isOpen) {
+      setShowHeaderFooterConfig(false);
+    }
+  }, [printModalData.isOpen]);
+
+  const handleHeaderFooterConfigChange = (next: PrintHeaderFooterConfig) => {
+    setHeaderFooterConfig(next);
+    savePrintHeaderFooterConfig(next, typeof window !== 'undefined' ? window.localStorage : null);
+  };
+
+  const isHeaderFooterCustomized = isPrintHeaderFooterCustomized(headerFooterConfig);
+  const formattedPrintDate = formatPrintHeaderDate();
 
   const sequenceProgress = getPrintAllSequenceProgress(printAllSequence);
 
@@ -242,174 +269,204 @@ export const PrintPreviewModal: React.FC = () => {
         className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[96vh] print:max-h-none print:border-none print:shadow-none print:rounded-none"
       >
         {/* Modal Top Control Bar (Hidden in Print) */}
-        <div className="bg-[#273E56] text-white px-5 py-3 flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#1D6CE0] print:hidden">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center space-x-2.5">
-              <div
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '9999px',
-                  overflow: 'hidden',
-                  border: '1.5px solid #CBD8E6',
-                  backgroundColor: '#ffffff',
-                  padding: '1.5px',
-                  flexShrink: 0,
-                }}
-                className="w-8 h-8 rounded-full overflow-hidden border border-[#CBD8E6] bg-white p-0.5 shrink-0 flex items-center justify-center"
-              >
-                <img
-                  src={resolvedLogoSrc}
-                  alt={companyProfile.companyName}
-                  onError={(e) => {
-                    const target = e.currentTarget;
-                    if (!target.src.endsWith(COMPANY_LOGO_URL)) {
-                      target.src = COMPANY_LOGO_URL;
-                    }
-                  }}
+        <div className="bg-[#273E56] text-white px-5 py-3 space-y-2.5 border-b-2 border-[#1D6CE0] print:hidden">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3 min-w-0">
+              <div className="flex items-center space-x-2.5 min-w-0">
+                <div
                   style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'contain',
+                    width: '32px',
+                    height: '32px',
                     borderRadius: '9999px',
-                    display: 'block',
+                    overflow: 'hidden',
+                    border: '1.5px solid #CBD8E6',
+                    backgroundColor: '#ffffff',
+                    padding: '1.5px',
+                    flexShrink: 0,
                   }}
-                  className="w-full h-full object-contain rounded-full"
-                />
+                  className="w-8 h-8 rounded-full overflow-hidden border border-[#CBD8E6] bg-white p-0.5 shrink-0 flex items-center justify-center"
+                >
+                  <img
+                    src={resolvedLogoSrc}
+                    alt={companyProfile.companyName}
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      if (!target.src.endsWith(COMPANY_LOGO_URL)) {
+                        target.src = COMPANY_LOGO_URL;
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'contain',
+                      borderRadius: '9999px',
+                      display: 'block',
+                    }}
+                    className="w-full h-full object-contain rounded-full"
+                  />
+                </div>
+                <FileSpreadsheet className="w-4 h-4 text-sky-300 shrink-0" />
+                <span className="font-bold text-sm tracking-wide truncate max-w-xs sm:max-w-md">{title}</span>
               </div>
-              <FileSpreadsheet className="w-4 h-4 text-sky-300 shrink-0" />
-              <span className="font-bold text-sm tracking-wide truncate max-w-xs sm:max-w-sm">{title}</span>
+
+              {/* Toggle 'Print All Pages' or 'Print Current Page Only' for Packing Lists */}
+              {type === 'packing' && (
+                <div className="flex items-center space-x-2 bg-[#1c2a33] px-2.5 py-1.5 rounded-lg border border-[#334b59]">
+                  <label className="flex items-center space-x-2 text-xs font-semibold text-slate-200 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      data-testid="print-page-mode-toggle"
+                      checked={printCurrentPageOnly}
+                      onChange={(e) => {
+                        setPrintCurrentPageOnly(e.target.checked);
+                        setCurrentPage(1);
+                      }}
+                      className="rounded border-[#334b59] text-[#00897b] focus:ring-[#00897b] w-4 h-4 cursor-pointer accent-[#00897b]"
+                    />
+                    <span className={printCurrentPageOnly ? 'text-[#5eead4] font-bold' : 'text-slate-200'}>
+                      {printCurrentPageOnly ? 'Print Current Page Only' : 'Print All Pages'}
+                    </span>
+                  </label>
+
+                  {printCurrentPageOnly && totalPages > 1 && (
+                    <div className="flex items-center space-x-1 pl-2 border-l border-[#334b59] text-xs">
+                      <button
+                        type="button"
+                        data-testid="print-prev-page-btn"
+                        disabled={currentPage <= 1}
+                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                        className="px-2 py-0.5 rounded bg-[#273E56] hover:bg-[#334b59] disabled:opacity-40 text-white font-bold cursor-pointer"
+                        title="Previous Page"
+                      >
+                        &larr;
+                      </button>
+                      <span className="font-mono font-bold text-[#5eead4] px-1">
+                        {currentPage} / {totalPages}
+                      </span>
+                      <button
+                        type="button"
+                        data-testid="print-next-page-btn"
+                        disabled={currentPage >= totalPages}
+                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                        className="px-2 py-0.5 rounded bg-[#273E56] hover:bg-[#334b59] disabled:opacity-40 text-white font-bold cursor-pointer"
+                        title="Next Page"
+                      >
+                        &rarr;
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* Toggle 'Print All Pages' or 'Print Current Page Only' for Packing Lists */}
-            {type === 'packing' && (
-              <div className="flex items-center space-x-2 bg-[#1c2a33] px-2.5 py-1.5 rounded-lg border border-[#334b59]">
-                <label className="flex items-center space-x-2 text-xs font-semibold text-slate-200 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    data-testid="print-page-mode-toggle"
-                    checked={printCurrentPageOnly}
-                    onChange={(e) => {
-                      setPrintCurrentPageOnly(e.target.checked);
-                      setCurrentPage(1);
-                    }}
-                    className="rounded border-[#334b59] text-[#00897b] focus:ring-[#00897b] w-4 h-4 cursor-pointer accent-[#00897b]"
-                  />
-                  <span className={printCurrentPageOnly ? 'text-[#5eead4] font-bold' : 'text-slate-200'}>
-                    {printCurrentPageOnly ? 'Print Current Page Only' : 'Print All Pages'}
-                  </span>
-                </label>
-
-                {printCurrentPageOnly && totalPages > 1 && (
-                  <div className="flex items-center space-x-1 pl-2 border-l border-[#334b59] text-xs">
-                    <button
-                      type="button"
-                      data-testid="print-prev-page-btn"
-                      disabled={currentPage <= 1}
-                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                      className="px-2 py-0.5 rounded bg-[#273E56] hover:bg-[#334b59] disabled:opacity-40 text-white font-bold cursor-pointer"
-                      title="Previous Page"
-                    >
-                      &larr;
-                    </button>
-                    <span className="font-mono font-bold text-[#5eead4] px-1">
-                      {currentPage} / {totalPages}
-                    </span>
-                    <button
-                      type="button"
-                      data-testid="print-next-page-btn"
-                      disabled={currentPage >= totalPages}
-                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                      className="px-2 py-0.5 rounded bg-[#273E56] hover:bg-[#334b59] disabled:opacity-40 text-white font-bold cursor-pointer"
-                      title="Next Page"
-                    >
-                      &rarr;
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Direct Save as PDF Button */}
-            <button
-              onClick={() => handleDirectSavePdf()}
-              disabled={isSavingPdf || isSavingPng}
-              className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-[#00897b] hover:bg-[#00796b] text-white rounded text-xs font-bold shadow transition cursor-pointer disabled:opacity-50"
-              title="Download high-resolution PDF file directly"
-            >
-              {isSavingPdf ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Generating PDF...</span>
-                </>
-              ) : (
-                <>
-                  <FileDown className="w-4 h-4" />
-                  <span>Save as PDF (.pdf)</span>
-                </>
-              )}
-            </button>
-
-            {/* Direct Save as PNG Button */}
-            <button
-              onClick={handleDirectSavePng}
-              disabled={isSavingPng || isSavingPdf}
-              className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-[#1877d2] hover:bg-[#1465b5] text-white rounded text-xs font-bold shadow transition cursor-pointer disabled:opacity-50"
-              title="Download high-resolution .PNG image file directly"
-            >
-              {isSavingPng ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Generating PNG...</span>
-                </>
-              ) : (
-                <>
-                  <ImageDown className="w-4 h-4" />
-                  <span>Save as PNG (.png)</span>
-                </>
-              )}
-            </button>
-
-            {/* Share via WeChat (微信) Button */}
             <button
               type="button"
-              data-testid="print-share-wechat-btn"
-              onClick={() => {
-                if (printAllSequence.isAutoPlaying) {
-                  togglePrintAllAutoPlay(false);
-                }
-                setIsShareModalOpen(true);
-              }}
-              disabled={isSavingPng || isSavingPdf}
-              className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#07C160] hover:bg-[#06a853] text-white rounded text-xs font-bold shadow transition cursor-pointer disabled:opacity-50"
-              title="Share .PNG image via WeChat (微信)"
-            >
-              <WeChatIcon className="w-4 h-4 text-white" />
-              <span>WeChat (微信)</span>
-            </button>
-
-            {/* Print Document Button */}
-            <button
-              onClick={() => handleBrowserPrint()}
-              className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#1c2a33] hover:bg-[#152028] text-white rounded border border-[#334b59] text-xs font-bold shadow transition cursor-pointer"
-              title="Open browser print dialogue"
-            >
-              <Printer className="w-4 h-4" />
-              <span>Print Document</span>
-            </button>
-
-            <button
               onClick={closePrintModal}
               aria-label="Close Preview"
-              className="p-1.5 text-slate-300 hover:text-white rounded-lg hover:bg-[#1c2a33] transition cursor-pointer"
+              className="p-1.5 text-slate-300 hover:text-white rounded-lg hover:bg-[#1c2a33] transition cursor-pointer shrink-0"
               title="Close Preview"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Direct Save as PDF Button */}
+              <button
+                onClick={() => handleDirectSavePdf()}
+                disabled={isSavingPdf || isSavingPng}
+                className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#00897b] hover:bg-[#00796b] text-white rounded text-xs font-bold shadow transition cursor-pointer disabled:opacity-50"
+                title="Download high-resolution PDF file directly"
+              >
+                {isSavingPdf ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Generating PDF...</span>
+                  </>
+                ) : (
+                  <>
+                    <FileDown className="w-4 h-4" />
+                    <span>Save as PDF (.pdf)</span>
+                  </>
+                )}
+              </button>
+
+              {/* Direct Save as PNG Button */}
+              <button
+                onClick={handleDirectSavePng}
+                disabled={isSavingPng || isSavingPdf}
+                className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#1877d2] hover:bg-[#1465b5] text-white rounded text-xs font-bold shadow transition cursor-pointer disabled:opacity-50"
+                title="Download high-resolution .PNG image file directly"
+              >
+                {isSavingPng ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Generating PNG...</span>
+                  </>
+                ) : (
+                  <>
+                    <ImageDown className="w-4 h-4" />
+                    <span>Save as PNG (.png)</span>
+                  </>
+                )}
+              </button>
+
+              {/* Share via WeChat (微信) Button */}
+              <button
+                type="button"
+                data-testid="print-share-wechat-btn"
+                onClick={() => {
+                  if (printAllSequence.isAutoPlaying) {
+                    togglePrintAllAutoPlay(false);
+                  }
+                  setIsShareModalOpen(true);
+                }}
+                disabled={isSavingPng || isSavingPdf}
+                className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#07C160] hover:bg-[#06a853] text-white rounded text-xs font-bold shadow transition cursor-pointer disabled:opacity-50"
+                title="Share .PNG image via WeChat (微信)"
+              >
+                <WeChatIcon className="w-4 h-4 text-white" />
+                <span>WeChat (微信)</span>
+              </button>
+
+              {/* Print Document Button */}
+              <button
+                onClick={() => handleBrowserPrint()}
+                className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#1c2a33] hover:bg-[#152028] text-white rounded border border-[#334b59] text-xs font-bold shadow transition cursor-pointer"
+                title="Open browser print dialogue"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Print Document</span>
+              </button>
+            </div>
+
+            {/* Configure Header & Footer Button */}
+            <button
+              type="button"
+              data-testid="print-header-footer-toggle-btn"
+              aria-expanded={showHeaderFooterConfig}
+              onClick={() => setShowHeaderFooterConfig((prev) => !prev)}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-xs font-bold shadow transition cursor-pointer border ${
+                showHeaderFooterConfig || isHeaderFooterCustomized
+                  ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 border-amber-300'
+                  : 'bg-[#1c2a33] hover:bg-[#152028] text-white border-[#334b59]'
+              }`}
+              title="Customize printed document header, date, signatures, and footer"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>Header &amp; Footer</span>
+            </button>
+          </div>
         </div>
+
+        {/* Collapsible Header & Footer Customization Drawer (Hidden in Print) */}
+        {showHeaderFooterConfig && (
+          <PrintHeaderFooterConfigPanel
+            config={headerFooterConfig}
+            onChange={handleHeaderFooterConfigChange}
+          />
+        )}
 
         {/* Sequential Print All Active Sheets Bar (Visible only during batch Print All sequence, hidden in print) */}
         {printAllSequence.isActive && sequenceProgress.currentSheet && (
@@ -591,115 +648,153 @@ export const PrintPreviewModal: React.FC = () => {
               />
             </div>
 
-            {/* Official Document Header (Hidden for exporter_payment_slip and batch_payment_slips which have their own headers) */}
-            {type !== 'exporter_payment_slip' && type !== 'batch_payment_slips' && (
-              <div
-                style={{ borderBottom: '2px solid #0f172a', position: 'relative', zIndex: 10 }}
-                className="pb-3.5 text-center space-y-1 relative z-10"
-              >
-                {/* Official Company Logo Emblem + Golden 3D Text Header (Logo on Left Side of ZSB AQUATICS) */}
-                <div className="flex items-center justify-center gap-3.5 mb-1">
+            {/* Official Document Header (Configurable via Header & Footer settings; skipped for exporter_payment_slip and batch_payment_slips which have custom headers) */}
+            {type !== 'exporter_payment_slip' &&
+              type !== 'batch_payment_slips' &&
+              headerFooterConfig.showHeader && (
+                <div
+                  data-testid="print-doc-header"
+                  style={{ borderBottom: '2px solid #0f172a', position: 'relative', zIndex: 10 }}
+                  className="pb-3.5 text-center space-y-1 relative z-10"
+                >
+                  {/* Official Company Logo Emblem + Golden 3D Text Header */}
+                  {headerFooterConfig.showCompanyName && (
+                    <div
+                      data-testid="print-doc-company-name"
+                      className="flex items-center justify-center gap-3.5 mb-1"
+                    >
+                      <div
+                        style={{
+                          width: '64px',
+                          height: '64px',
+                          borderRadius: '9999px',
+                          overflow: 'hidden',
+                          border: '2px solid #fbbf24',
+                          backgroundColor: '#ffffff',
+                          padding: '2px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                        }}
+                        className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shadow-xs flex items-center justify-center shrink-0"
+                      >
+                        <img
+                          data-testid="print-preview-company-logo"
+                          src={resolvedLogoSrc}
+                          alt={companyProfile.companyName}
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            if (!target.src.endsWith(COMPANY_LOGO_URL)) {
+                              target.src = COMPANY_LOGO_URL;
+                            }
+                          }}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'contain',
+                            borderRadius: '9999px',
+                            display: 'block',
+                          }}
+                          className="w-full h-full object-contain rounded-full"
+                        />
+                      </div>
+
+                      {/* Golden 3D Company Name */}
+                      <div
+                        className="zsb-3d-text-print text-3xl sm:text-4xl font-black tracking-widest uppercase"
+                        style={{
+                          color: '#f59e0b',
+                          fontFamily: "'Cinzel', Georgia, Cambria, 'Times New Roman', Times, serif",
+                          fontWeight: 900,
+                          letterSpacing: '0.09em',
+                          textShadow:
+                            '1px 1px 0px #b45309, 2px 2px 0px #92400e, 3px 3px 0px #78350f, 4px 4px 0px #451a03, 5px 5px 7px rgba(15, 23, 42, 0.35)',
+                        }}
+                      >
+                        {companyProfile.companyName}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Address & Contact strictly in font BLACK color */}
+                  {headerFooterConfig.showCompanyContact && (
+                    <div data-testid="print-doc-company-contact" className="space-y-1">
+                      <div
+                        style={{ color: '#000000' }}
+                        className="text-xs sm:text-sm font-bold tracking-wide"
+                      >
+                        Address: {companyProfile.address}
+                      </div>
+
+                      <div
+                        style={{ color: '#000000' }}
+                        className="text-xs sm:text-sm font-bold font-mono"
+                      >
+                        Mobile: {companyProfile.mobiles.join(' , ')} | EMAIL: {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}
+                      </div>
+                    </div>
+                  )}
+
                   <div
-                    style={{
-                      width: '64px',
-                      height: '64px',
-                      borderRadius: '9999px',
-                      overflow: 'hidden',
-                      border: '2px solid #fbbf24',
-                      backgroundColor: '#ffffff',
-                      padding: '2px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                    }}
-                    className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shadow-xs flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: '#0f172a', color: '#ffffff' }}
+                    className="inline-block mt-2 px-5 py-1.5 rounded text-xs font-bold tracking-widest uppercase shadow-sm"
                   >
-                    <img
-                      data-testid="print-preview-company-logo"
-                      src={resolvedLogoSrc}
-                      alt={companyProfile.companyName}
-                      onError={(e) => {
-                        const target = e.currentTarget;
-                        if (!target.src.endsWith(COMPANY_LOGO_URL)) {
-                          target.src = COMPANY_LOGO_URL;
-                        }
-                      }}
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'contain',
-                        borderRadius: '9999px',
-                        display: 'block',
-                      }}
-                      className="w-full h-full object-contain rounded-full"
-                    />
+                    {type === 'purchase'
+                      ? 'PURCHASE DATA ENTRY FORM (LIVE CRABS, EEL FISH & CHILLED FISH GRADES) — CHALLAN / BILL'
+                      : type === 'packing'
+                      ? 'EXPORT AIR PACKING LIST MANIFEST'
+                      : type === 'air_way_bill'
+                      ? data?.documentBadge ||
+                        `FLIGHT RETURN BILL — MONTHLY STATEMENT (${data?.monthLabel || 'ALL MONTHS'})`
+                      : type === 'payment'
+                      ? data?.paymentCategory === 'exporter'
+                        ? 'EXPORTER PAYMENT & RMB SETTLEMENT VOUCHER'
+                        : data?.paymentCategory === 'supplier'
+                        ? 'SUPPLIER PAYMENT VOUCHER'
+                        : 'SUPPLIER & EXPORTER PAYMENT VOUCHER'
+                      : type === 'monthly_statement'
+                      ? 'MONTHLY BUSINESS & FINANCIAL STATEMENT REPORT'
+                      : type === 'profit_loss'
+                      ? data?.isSingleExpenseVoucher || (!data?.summary && data?.category)
+                        ? 'OPERATIONAL EXPENSE & COSTING VOUCHER'
+                        : 'LOSS & PROFIT STATEMENT'
+                      : type === 'mortality_report'
+                      ? `MONTHLY INVENTORY MORTALITY & STOCK LOSS REPORT (${data?.monthLabel || 'CURRENT MONTH'})`
+                      : type === 'global_view_table'
+                      ? data?.documentBadge || 'OFFICIAL VIEW TABLE REPORT'
+                      : 'CONSOLIDATED FINANCIAL STATEMENT REPORT'}
                   </div>
 
-                  {/* Golden 3D Company Name */}
-                  <div
-                    className="zsb-3d-text-print text-3xl sm:text-4xl font-black tracking-widest uppercase"
-                    style={{
-                      color: '#f59e0b',
-                      fontFamily: "'Cinzel', Georgia, Cambria, 'Times New Roman', Times, serif",
-                      fontWeight: 900,
-                      letterSpacing: '0.09em',
-                      textShadow:
-                        '1px 1px 0px #b45309, 2px 2px 0px #92400e, 3px 3px 0px #78350f, 4px 4px 0px #451a03, 5px 5px 7px rgba(15, 23, 42, 0.35)',
-                    }}
-                  >
-                    {companyProfile.companyName}
-                  </div>
+                  {/* Optional Custom Header Note & Print Date Strip */}
+                  {(headerFooterConfig.showDate ||
+                    headerFooterConfig.customHeaderText.trim() !== '') && (
+                    <div
+                      data-testid="print-doc-custom-header-bar"
+                      style={{ color: '#334155' }}
+                      className="pt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] font-semibold"
+                    >
+                      {headerFooterConfig.customHeaderText.trim() !== '' && (
+                        <span
+                          data-testid="print-doc-custom-header"
+                          style={{ color: '#0f172a' }}
+                          className="font-bold tracking-wide"
+                        >
+                          {headerFooterConfig.customHeaderText.trim()}
+                        </span>
+                      )}
+                      {headerFooterConfig.showDate && (
+                        <span
+                          data-testid="print-doc-header-date"
+                          className="font-mono font-bold text-slate-700"
+                        >
+                          Printed: {formattedPrintDate}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
-
-                {/* Address strictly in font BLACK color */}
-
-                {/* Address strictly in font BLACK color */}
-                <div
-                  style={{ color: '#000000' }}
-                  className="text-xs sm:text-sm font-bold tracking-wide"
-                >
-                  Address: {companyProfile.address}
-                </div>
-
-                {/* Mobile Numbers strictly in font BLACK color */}
-                <div
-                  style={{ color: '#000000' }}
-                  className="text-xs sm:text-sm font-bold font-mono"
-                >
-                  Mobile: {companyProfile.mobiles.join(' , ')} | EMAIL: {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}
-                </div>
-
-                <div
-                  style={{ backgroundColor: '#0f172a', color: '#ffffff' }}
-                  className="inline-block mt-2 px-5 py-1.5 rounded text-xs font-bold tracking-widest uppercase shadow-sm"
-                >
-                  {type === 'purchase'
-                    ? 'PURCHASE DATA ENTRY FORM (LIVE CRABS, EEL FISH & CHILLED FISH GRADES) — CHALLAN / BILL'
-                    : type === 'packing'
-                    ? 'EXPORT AIR PACKING LIST MANIFEST'
-                    : type === 'air_way_bill'
-                    ? `FLIGHT RETURN BILL — MONTHLY STATEMENT (${data?.monthLabel || 'ALL MONTHS'})`
-                    : type === 'payment'
-                    ? data?.paymentCategory === 'exporter'
-                      ? 'EXPORTER PAYMENT & RMB SETTLEMENT VOUCHER'
-                      : data?.paymentCategory === 'supplier'
-                      ? 'SUPPLIER PAYMENT VOUCHER'
-                      : 'SUPPLIER & EXPORTER PAYMENT VOUCHER'
-                    : type === 'monthly_statement'
-                    ? 'MONTHLY BUSINESS & FINANCIAL STATEMENT REPORT'
-                    : type === 'profit_loss'
-                    ? data?.isSingleExpenseVoucher || (!data?.summary && data?.category)
-                      ? 'OPERATIONAL EXPENSE & COSTING VOUCHER'
-                      : 'LOSS & PROFIT STATEMENT'
-                    : type === 'mortality_report'
-                    ? `MONTHLY INVENTORY MORTALITY & STOCK LOSS REPORT (${data?.monthLabel || 'CURRENT MONTH'})`
-                    : type === 'global_view_table'
-                    ? data?.documentBadge || 'OFFICIAL VIEW TABLE REPORT'
-                    : 'CONSOLIDATED FINANCIAL STATEMENT REPORT'}
-                </div>
-              </div>
-            )}
+              )}
 
             {/* Type 1: Purchase Challan */}
             {type === 'purchase' && data && (
@@ -2195,30 +2290,32 @@ export const PrintPreviewModal: React.FC = () => {
               </div>
 
               {/* Signatures & Verification Seal */}
-              <div className="pt-6 mt-4 border-t border-slate-300 grid grid-cols-3 gap-6 text-center text-xs">
-                <div>
-                  <div className="border-b border-slate-400 pb-8 font-bold text-slate-800">
-                    Inventory &amp; Depot Supervisor
+              {headerFooterConfig.showFooter && headerFooterConfig.showSignatures && (
+                <div className="pt-6 mt-4 border-t border-slate-300 grid grid-cols-3 gap-6 text-center text-xs">
+                  <div>
+                    <div className="border-b border-slate-400 pb-8 font-bold text-slate-800">
+                      Inventory &amp; Depot Supervisor
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-1 uppercase font-semibold">Physical Count Verified</div>
                   </div>
-                  <div className="text-[10px] text-slate-500 mt-1 uppercase font-semibold">Physical Count Verified</div>
+                  <div>
+                    <div className="border-b border-slate-400 pb-8 font-bold text-slate-800">
+                      {companyProfile.partner || 'Md. Sohel Rana'}
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-1 uppercase font-semibold">
+                      Partner • <span style={{ color: '#d97706', fontWeight: 800 }} className="font-extrabold text-amber-500 zsb-golden-brand-light">ZSB AQUATICS</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="border-b border-slate-400 pb-8 font-bold text-slate-800">
+                      {companyProfile.managingPartner || 'Md. Mizanur Rahman'}
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-1 uppercase font-semibold">
+                      Managing Partner • <span style={{ color: '#d97706', fontWeight: 800 }} className="font-extrabold text-amber-500 zsb-golden-brand-light">ZSB AQUATICS</span>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <div className="border-b border-slate-400 pb-8 font-bold text-slate-800">
-                    {companyProfile.partner || 'Md. Sohel Rana'}
-                  </div>
-                  <div className="text-[10px] text-slate-500 mt-1 uppercase font-semibold">
-                    Partner • <span style={{ color: '#d97706', fontWeight: 800 }} className="font-extrabold text-amber-500 zsb-golden-brand-light">ZSB AQUATICS</span>
-                  </div>
-                </div>
-                <div>
-                  <div className="border-b border-slate-400 pb-8 font-bold text-slate-800">
-                    {companyProfile.managingPartner || 'Md. Mizanur Rahman'}
-                  </div>
-                  <div className="text-[10px] text-slate-500 mt-1 uppercase font-semibold">
-                    Managing Partner • <span style={{ color: '#d97706', fontWeight: 800 }} className="font-extrabold text-amber-500 zsb-golden-brand-light">ZSB AQUATICS</span>
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -2228,78 +2325,107 @@ export const PrintPreviewModal: React.FC = () => {
               style={{ fontFamily: '"Inter", "Noto Sans SC", -apple-system, BlinkMacSystemFont, sans-serif' }}
               className="border-2 border-black overflow-hidden"
             >
-              <div
-                style={{ backgroundColor: '#98486f', color: '#ffffff' }}
-                className="py-3 px-4 flex items-center justify-center gap-3 border-b-2 border-black"
-              >
-                <div
-                  style={{
-                    width: '48px',
-                    height: '48px',
-                    borderRadius: '9999px',
-                    overflow: 'hidden',
-                    border: '2px solid #fcd34d',
-                    backgroundColor: '#ffffff',
-                    padding: '2px',
-                    flexShrink: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                  className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-300 bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center"
-                >
-                  <img
-                    data-testid="print-preview-slip-logo"
-                    src={resolvedLogoSrc}
-                    alt={companyProfile.companyName}
-                    onError={(e) => {
-                      const target = e.currentTarget;
-                      if (!target.src.endsWith(COMPANY_LOGO_URL)) {
-                        target.src = COMPANY_LOGO_URL;
-                      }
-                    }}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'contain',
-                      borderRadius: '9999px',
-                      display: 'block',
-                    }}
-                    className="w-full h-full object-contain rounded-full"
-                  />
-                </div>
-                <div
-                  className="zsb-3d-text-lg text-3xl font-black tracking-wider uppercase"
-                  style={{
-                    color: '#ffe57f',
-                    fontFamily: "'Cinzel', Georgia, Cambria, 'Times New Roman', Times, serif",
-                    fontWeight: 900,
-                    letterSpacing: '0.09em',
-                    textShadow:
-                      '0px 1px 0px #f59e0b, 1px 2px 0px #d97706, 2px 3px 0px #b45309, 3px 4px 0px #92400e, 4px 5px 0px #78350f, 5px 6px 0px #451a03, 6px 8px 10px rgba(0, 0, 0, 0.75)',
-                  }}
-                >
-                  {companyProfile.companyName}
-                </div>
-              </div>
-              <div
-                style={{ backgroundColor: '#faefd0', color: '#000000' }}
-                className="text-center border-b-2 border-black divide-y divide-black/20"
-              >
-                <div className="py-1 px-3 text-xs sm:text-sm font-bold uppercase">
-                  29/B, NISHATNAGAR, TARARTEK, TURAG, DHAKA-1230
-                </div>
-                <div className="py-1 px-3 text-xs sm:text-sm font-bold uppercase">
-                  CONTACT NUMBER - +880 18411-65902, +880 1711 331545 | EMAIL:{' '}
-                  <span className="normal-case">{companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}</span>
-                </div>
-              </div>
-              <div
-                style={{ backgroundColor: '#faefd0', color: '#000000' }}
-                className="py-2 px-3 text-center border-b-2 border-black font-black text-lg sm:text-xl"
-              >
-                PAYMENT SLIP 付款单
-              </div>
+              {headerFooterConfig.showHeader && (
+                <>
+                  {headerFooterConfig.showCompanyName && (
+                    <div
+                      data-testid="print-doc-company-name"
+                      style={{ backgroundColor: '#98486f', color: '#ffffff' }}
+                      className="py-3 px-4 flex items-center justify-center gap-3 border-b-2 border-black"
+                    >
+                      <div
+                        style={{
+                          width: '48px',
+                          height: '48px',
+                          borderRadius: '9999px',
+                          overflow: 'hidden',
+                          border: '2px solid #fcd34d',
+                          backgroundColor: '#ffffff',
+                          padding: '2px',
+                          flexShrink: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                        className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-300 bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center"
+                      >
+                        <img
+                          data-testid="print-preview-slip-logo"
+                          src={resolvedLogoSrc}
+                          alt={companyProfile.companyName}
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            if (!target.src.endsWith(COMPANY_LOGO_URL)) {
+                              target.src = COMPANY_LOGO_URL;
+                            }
+                          }}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'contain',
+                            borderRadius: '9999px',
+                            display: 'block',
+                          }}
+                          className="w-full h-full object-contain rounded-full"
+                        />
+                      </div>
+                      <div
+                        className="zsb-3d-text-lg text-3xl font-black tracking-wider uppercase"
+                        style={{
+                          color: '#ffe57f',
+                          fontFamily: "'Cinzel', Georgia, Cambria, 'Times New Roman', Times, serif",
+                          fontWeight: 900,
+                          letterSpacing: '0.09em',
+                          textShadow:
+                            '0px 1px 0px #f59e0b, 1px 2px 0px #d97706, 2px 3px 0px #b45309, 3px 4px 0px #92400e, 4px 5px 0px #78350f, 5px 6px 0px #451a03, 6px 8px 10px rgba(0, 0, 0, 0.75)',
+                        }}
+                      >
+                        {companyProfile.companyName}
+                      </div>
+                    </div>
+                  )}
+                  {headerFooterConfig.showCompanyContact && (
+                    <div
+                      data-testid="print-doc-company-contact"
+                      style={{ backgroundColor: '#faefd0', color: '#000000' }}
+                      className="text-center border-b-2 border-black divide-y divide-black/20"
+                    >
+                      <div className="py-1 px-3 text-xs sm:text-sm font-bold uppercase">
+                        29/B, NISHATNAGAR, TARARTEK, TURAG, DHAKA-1230
+                      </div>
+                      <div className="py-1 px-3 text-xs sm:text-sm font-bold uppercase">
+                        CONTACT NUMBER - +880 18411-65902, +880 1711 331545 | EMAIL:{' '}
+                        <span className="normal-case">{companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}</span>
+                      </div>
+                    </div>
+                  )}
+                  <div
+                    style={{ backgroundColor: '#faefd0', color: '#000000' }}
+                    className="py-2 px-3 text-center border-b-2 border-black font-black text-lg sm:text-xl"
+                  >
+                    PAYMENT SLIP 付款单
+                  </div>
+                  {(headerFooterConfig.showDate ||
+                    headerFooterConfig.customHeaderText.trim() !== '') && (
+                    <div
+                      data-testid="print-doc-custom-header-bar"
+                      style={{ backgroundColor: '#faefd0', color: '#000000' }}
+                      className="py-1 px-3 text-center border-b-2 border-black flex flex-wrap items-center justify-center gap-x-4 gap-y-0.5 text-xs font-bold"
+                    >
+                      {headerFooterConfig.customHeaderText.trim() !== '' && (
+                        <span data-testid="print-doc-custom-header">
+                          {headerFooterConfig.customHeaderText.trim()}
+                        </span>
+                      )}
+                      {headerFooterConfig.showDate && (
+                        <span data-testid="print-doc-header-date" className="font-mono">
+                          Printed: {formattedPrintDate}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
               <table className="w-full border-collapse text-center text-xs">
                 <thead>
                   <tr
@@ -2379,104 +2505,130 @@ export const PrintPreviewModal: React.FC = () => {
                   </tr>
                 </tfoot>
               </table>
-              <div className="bg-white px-6 py-6 flex justify-end">
-                <div className="text-right space-y-0.5 flex flex-col items-end">
-                  <div className="text-xs sm:text-sm font-bold text-black uppercase">
-                    YOURS FAITHFULLY - 此致
+              {headerFooterConfig.showFooter && headerFooterConfig.showSignatures && (
+                <div data-testid="print-doc-signatures" className="bg-white px-6 py-6 flex justify-end">
+                  <div className="text-right space-y-0.5 flex flex-col items-end">
+                    <div className="text-xs sm:text-sm font-bold text-black uppercase">
+                      YOURS FAITHFULLY - 此致
+                    </div>
+                    <div className="py-1 flex justify-end">
+                      <img
+                        src="/assets/aistudio/Md._Sohel_Rana_38797da9.jpg"
+                        alt="Md. Sohel Rana Signature"
+                        className="h-12 sm:h-14 w-auto object-contain select-none"
+                      />
+                    </div>
+                    <div className="text-xs sm:text-sm font-black text-black uppercase">
+                      {companyProfile.partner || 'MD. SOHEL RANA'}
+                    </div>
+                    <div className="text-xs font-bold text-black uppercase">PARTNER</div>
                   </div>
-                  <div className="py-1 flex justify-end">
-                    <img
-                      src="/assets/aistudio/Md._Sohel_Rana_38797da9.jpg"
-                      alt="Md. Sohel Rana Signature"
-                      className="h-12 sm:h-14 w-auto object-contain select-none"
-                    />
-                  </div>
-                  <div className="text-xs sm:text-sm font-black text-black uppercase">
-                    {companyProfile.partner || 'MD. SOHEL RANA'}
-                  </div>
-                  <div className="text-xs font-bold text-black uppercase">PARTNER</div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
           {/* User Requirement: Signatures Like Managing Partner and Partner with Signature */}
-          {type !== 'exporter_payment_slip' && type !== 'batch_payment_slips' && (
-            <div className="pt-12 grid grid-cols-2 gap-8 text-center text-xs">
-              {/* Managing Partner Signature */}
-              <div className="flex flex-col items-center">
-                {/* Signature Line */}
-                <div
-                  style={{ borderBottom: '2px solid #0f172a' }}
-                  className="w-52 pb-1.5"
-                >
+          {type !== 'exporter_payment_slip' &&
+            type !== 'batch_payment_slips' &&
+            headerFooterConfig.showFooter &&
+            headerFooterConfig.showSignatures && (
+              <div
+                data-testid="print-doc-signatures"
+                className="pt-12 grid grid-cols-2 gap-8 text-center text-xs"
+              >
+                {/* Managing Partner Signature */}
+                <div className="flex flex-col items-center">
+                  {/* Signature Line */}
                   <div
-                    style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', color: '#0f172a' }}
-                    className="text-base font-bold tracking-wider"
+                    style={{ borderBottom: '2px solid #0f172a' }}
+                    className="w-52 pb-1.5"
                   >
-                    {companyProfile.managingPartner}
+                    <div
+                      style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', color: '#0f172a' }}
+                      className="text-base font-bold tracking-wider"
+                    >
+                      {companyProfile.managingPartner}
+                    </div>
+                  </div>
+                  <div
+                    style={{ color: '#0f172a' }}
+                    className="mt-1.5 font-bold uppercase tracking-wider text-xs"
+                  >
+                    Managing Partner
+                  </div>
+                  <div
+                    style={{ color: '#d97706', fontWeight: 800 }}
+                    className="text-[10px] uppercase font-extrabold text-amber-500 zsb-golden-brand-light"
+                  >
+                    {companyProfile.companyName}
                   </div>
                 </div>
-                <div
-                  style={{ color: '#0f172a' }}
-                  className="mt-1.5 font-bold uppercase tracking-wider text-xs"
-                >
-                  Managing Partner
-                </div>
-                <div
-                  style={{ color: '#d97706', fontWeight: 800 }}
-                  className="text-[10px] uppercase font-extrabold text-amber-500 zsb-golden-brand-light"
-                >
-                  {companyProfile.companyName}
-                </div>
-              </div>
 
-              {/* Partner Signature */}
-              <div className="flex flex-col items-center">
-                {/* Signature Line */}
-                <div
-                  style={{ borderBottom: '2px solid #0f172a' }}
-                  className="w-52 pb-1.5"
-                >
+                {/* Partner Signature */}
+                <div className="flex flex-col items-center">
+                  {/* Signature Line */}
                   <div
-                    style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', color: '#0f172a' }}
-                    className="text-base font-bold tracking-wider"
+                    style={{ borderBottom: '2px solid #0f172a' }}
+                    className="w-52 pb-1.5"
                   >
-                    {companyProfile.partner}
+                    <div
+                      style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', color: '#0f172a' }}
+                      className="text-base font-bold tracking-wider"
+                    >
+                      {companyProfile.partner}
+                    </div>
+                  </div>
+                  <div
+                    style={{ color: '#0f172a' }}
+                    className="mt-1.5 font-bold uppercase tracking-wider text-xs"
+                  >
+                    Partner
+                  </div>
+                  <div
+                    style={{ color: '#d97706', fontWeight: 800 }}
+                    className="text-[10px] uppercase font-extrabold text-amber-500 zsb-golden-brand-light"
+                  >
+                    {companyProfile.companyName}
                   </div>
                 </div>
-                <div
-                  style={{ color: '#0f172a' }}
-                  className="mt-1.5 font-bold uppercase tracking-wider text-xs"
-                >
-                  Partner
-                </div>
-                <div
-                  style={{ color: '#d97706', fontWeight: 800 }}
-                  className="text-[10px] uppercase font-extrabold text-amber-500 zsb-golden-brand-light"
-                >
-                  {companyProfile.companyName}
-                </div>
               </div>
-            </div>
-          )}
+            )}
 
           {/* Footer certification & dynamic A4 page counter */}
-          <div
-            style={{ borderTop: '1px solid #e2e8f0', color: '#94a3b8' }}
-            className="flex justify-between items-center text-[10px] pt-4 mt-6"
-          >
-            <span>
-              This is an official computer-generated document from <strong style={{ color: '#d97706', fontWeight: 800 }} className="font-extrabold text-amber-500 zsb-golden-brand-light">{companyProfile.companyName}</strong> System • Validated and archived.
-            </span>
-            <span className="print-page-number-counter font-mono font-bold text-slate-600">
-              <span className="print:hidden">
-                {type === 'packing' && printCurrentPageOnly
-                  ? `Page ${currentPage} of ${totalPages}`
-                  : 'Page 1 of 1'}
-              </span>
-            </span>
-          </div>
+          {headerFooterConfig.showFooter && (
+            <div
+              data-testid="print-doc-footer"
+              style={{ borderTop: '1px solid #e2e8f0', color: '#94a3b8' }}
+              className="flex justify-between items-center gap-3 text-[10px] pt-4 mt-6"
+            >
+              {headerFooterConfig.customFooterText.trim() !== '' ? (
+                <span
+                  data-testid="print-doc-custom-footer"
+                  style={{ color: '#334155' }}
+                  className="font-semibold"
+                >
+                  {headerFooterConfig.customFooterText.trim()}
+                </span>
+              ) : (
+                <span>
+                  This is an official computer-generated document from <strong style={{ color: '#d97706', fontWeight: 800 }} className="font-extrabold text-amber-500 zsb-golden-brand-light">{companyProfile.companyName}</strong> System • Validated and archived.
+                </span>
+              )}
+              {headerFooterConfig.showPageNumber && (
+                <span
+                  data-testid="print-doc-page-number"
+                  className="print-page-number-counter font-mono font-bold text-slate-600 shrink-0"
+                >
+                  <span className="print:hidden">
+                    {type === 'packing' && printCurrentPageOnly
+                      ? `Page ${currentPage} of ${totalPages}`
+                      : 'Page 1 of 1'}
+                  </span>
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

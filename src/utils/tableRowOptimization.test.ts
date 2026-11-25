@@ -257,3 +257,52 @@ test('updateCustomExporterSlipRowById normalizes uppercase mark/flight and bails
   assert.equal(isExporterSlipRowDataEqual(rows[1], updated[1]), true);
   assert.equal(isExporterSlipRowDataEqual(rows[0], updated[0]), false);
 });
+
+test('locked purchase and packing rows reject modifications and reflect lock state in equality checks', () => {
+  const purchaseRows: PurchaseItemRow[] = [
+    {
+      id: 'lp1',
+      item: 'XL',
+      quantity: 10,
+      rate: 500,
+      rateSpecified: true,
+      totalAmount: 5000,
+      previousAmount: 0,
+      paidAmount: 0,
+      balance: 5000,
+      locked: true,
+      lockReason: 'finalized',
+    },
+  ];
+
+  assert.equal(updatePurchaseRowById(purchaseRows, 'lp1', 'quantity', 99), purchaseRows);
+  assert.equal(updatePurchaseRowById(purchaseRows, 'lp1', 'rate', '999'), purchaseRows);
+  assert.equal(
+    isPurchaseRowDataEqual(purchaseRows[0], { ...purchaseRows[0], locked: false, lockReason: undefined }),
+    false
+  );
+
+  const packingRows: PackingItemRow[] = [
+    {
+      id: 'lk1',
+      item: 'BIG-3XL',
+      box: 5,
+      weight: 22,
+      reportWeight: 0,
+      totalWeight: 110,
+      unit: 'KG',
+      rate: 45,
+      amount: 4950,
+      locked: true,
+      lockReason: 'exported',
+    },
+  ];
+
+  assert.equal(updatePackingRowById(packingRows, 'lk1', 'box', 12), packingRows);
+  assert.equal(updatePackingRowById(packingRows, 'lk1', 'rate', 90), packingRows);
+  assert.equal(
+    isPackingRowDataEqual(packingRows[0], { ...packingRows[0], locked: false, lockReason: undefined }),
+    false
+  );
+});
+

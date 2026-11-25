@@ -12,28 +12,27 @@ import {
   AirWayBillRow,
   AirWayBillRowOverride,
   buildAirWayBillRows,
-  calculateAirWayBillRow,
   calculateAirWayBillTotals,
-  createEmptyAirWayBillRow,
   createInitialAirWayBillRows,
   extractAirWayBillFilterOptions,
   formatAirWayBillExportFilename,
+  isCompleteIsoDateInput,
   isValidSignedDecimalDraft,
   mergeAirWayBillRows,
+  normalizeAirWayBillDateKey,
   normalizeSignedZero,
   parseSignedNumber,
+  resolveAirWayBillSelection,
+  toggleAirWayBillRowSelection,
+  toggleAllAirWayBillRowsSelection,
 } from '../utils/airWayBill.ts';
-import {
-  isAirWayBillRowDataEqual,
-  updateCustomAirWayBillRowById,
-} from '../utils/tableRowOptimization.ts';
+import { isAirWayBillRowDataEqual } from '../utils/tableRowOptimization.ts';
 import {
   exportElementToPdf,
   exportElementToPng,
   resolveCompanyLogoSrc,
 } from '../utils/pdfGenerator.ts';
 import { yieldForDomFrame } from '../utils/pdfExportStyles.ts';
-import { COMPANY_LOGO_URL } from '../context/initialData.ts';
 import {
   ZSB_VIEW_SHORTCUT_EVENT,
   ViewShortcutEventDetail,
@@ -43,20 +42,49 @@ import {
   Printer,
   FileDown,
   Image as ImageIcon,
-  Plus,
   RotateCcw,
   Package,
   Loader2,
   ArrowUpRight,
   Check,
+  Lock,
+  X,
 } from 'lucide-react';
 import {
   PngShareModal,
   WeChatIcon,
 } from './PngShareModal.tsx';
+import { useTableColumnOrder } from '../hooks/useTableColumnOrder.ts';
+import {
+  ColumnReorderToolbar,
+  ColumnDragGrip,
+} from './ColumnReorderToolbar.tsx';
+
+const AWB_DEFAULT_COLUMNS = [
+  'date',
+  'documentsHolder',
+  'flight',
+  'totalBox',
+  'rmbPerBox',
+  'totalRmb',
+  'rate',
+  'bdtAmount',
+] as const;
+type AwbColumnId = (typeof AWB_DEFAULT_COLUMNS)[number];
+
+const AWB_COLUMN_WIDTHS: Record<AwbColumnId, string> = {
+  date: '13%',
+  documentsHolder: '18%',
+  flight: '9%',
+  totalBox: '8%',
+  rmbPerBox: '9%',
+  totalRmb: '10%',
+  rate: '8%',
+  bdtAmount: '13%',
+};
 
 const AWB_OVERRIDES_STORAGE_KEY = 'zsb_awb_row_overrides_v2';
-const AWB_CUSTOM_ROWS_STORAGE_KEY = 'zsb_awb_custom_rows_v1';
+const DEFAULT_BLANK_AWB_ROWS: AirWayBillRow[] = createInitialAirWayBillRows(4);
 
 const formatAwbCellNumber = (val: number, showZero = false) => {
   const cleanVal = normalizeSignedZero(Number(val) || 0);
@@ -75,10 +103,12 @@ const isEmptyOrSignOnlyDraft = (raw: string): boolean => {
 interface AirWayBillTableRowProps {
   row: AirWayBillRow;
   rowIndex: number;
-  holderShipperOptions: string[];
+  columnOrder: readonly AwbColumnId[];
+  isSelected: boolean;
+  onToggleSelect: (rowId: string) => void;
   onRowEditableChange: (
     row: AirWayBillRow,
-    field: 'rmbPerBox' | 'rate' | 'date' | 'shipper' | 'documentsHolder' | 'flight' | 'totalBox',
+    field: 'date' | 'rmbPerBox' | 'rate',
     rawValue: string
   ) => void;
 }
@@ -88,23 +118,34 @@ const areAirWayBillTableRowPropsEqual = (
   next: AirWayBillTableRowProps
 ): boolean =>
   prev.rowIndex === next.rowIndex &&
-  prev.holderShipperOptions === next.holderShipperOptions &&
+  prev.columnOrder === next.columnOrder &&
+  prev.isSelected === next.isSelected &&
+  prev.onToggleSelect === next.onToggleSelect &&
   prev.onRowEditableChange === next.onRowEditableChange &&
   isAirWayBillRowDataEqual(prev.row, next.row);
 
 const AirWayBillTableRow: React.FC<AirWayBillTableRowProps> = memo(
-  ({ row, rowIndex, holderShipperOptions, onRowEditableChange }) => {
+  ({ row, rowIndex, columnOrder, isSelected, onToggleSelect, onRowEditableChange }) => {
     const rowNum = rowIndex + 1;
     const isFromPackingList = Boolean(row.packingId);
+    const normalizedRowDate = normalizeAirWayBillDateKey(row.date || '');
 
+    const [dateDraft, setDateDraft] = useState<string>(() => normalizedRowDate);
     const [rmbDraft, setRmbDraft] = useState<string>(() =>
       row.rmbPerBox !== 0 ? String(row.rmbPerBox) : ''
     );
     const [rateDraft, setRateDraft] = useState<string>(() =>
       row.rate !== 0 || row.rateSpecified ? String(row.rate) : ''
     );
+    const isEditingDateRef = useRef(false);
     const isEditingRmbRef = useRef(false);
     const isEditingRateRef = useRef(false);
+
+    useEffect(() => {
+      if (!isEditingDateRef.current) {
+        setDateDraft(normalizedRowDate);
+      }
+    }, [normalizedRowDate]);
 
     useEffect(() => {
       if (!isEditingRmbRef.current) {
@@ -118,53 +159,45 @@ const AirWayBillTableRow: React.FC<AirWayBillTableRowProps> = memo(
       }
     }, [row.rate, row.rateSpecified]);
 
-    const selectedHolderShipper = row.documentsHolder || row.shipper || '';
+    const lockedHolderShipper = (row.documentsHolder || row.shipper || '').trim();
 
-    const rowHolderShipperOptions = useMemo(() => {
-      const seen = new Set<string>();
-      const list: string[] = [];
-      const pushUnique = (val?: string) => {
-        const clean = (val || '').trim();
-        if (clean && !seen.has(clean)) {
-          seen.add(clean);
-          list.push(clean);
-        }
-      };
-      pushUnique(selectedHolderShipper);
-      pushUnique(row.documentsHolder);
-      pushUnique(row.shipper);
-      for (const opt of holderShipperOptions) {
-        pushUnique(opt);
-      }
-      return list;
-    }, [selectedHolderShipper, row.documentsHolder, row.shipper, holderShipperOptions]);
+    const handleDateFocus = useCallback(() => {
+      isEditingDateRef.current = true;
+    }, []);
 
     const handleDateChange = useCallback(
       (e: React.ChangeEvent<HTMLInputElement>) => {
-        onRowEditableChange(row, 'date', e.target.value);
+        const raw = e.target.value;
+        setDateDraft(raw);
+        if (isCompleteIsoDateInput(raw)) {
+          onRowEditableChange(row, 'date', raw);
+        }
       },
       [onRowEditableChange, row]
     );
 
-    const handleDocumentsHolderChange = useCallback(
-      (e: React.ChangeEvent<HTMLSelectElement>) => {
-        onRowEditableChange(row, 'documentsHolder', e.target.value);
-      },
-      [onRowEditableChange, row]
-    );
+    const handleDateBlur = useCallback(() => {
+      isEditingDateRef.current = false;
+      if (isCompleteIsoDateInput(dateDraft)) {
+        if (dateDraft !== normalizedRowDate) {
+          onRowEditableChange(row, 'date', dateDraft);
+        }
+      } else {
+        // Restore valid date if user left the input incomplete or blank
+        setDateDraft(normalizedRowDate);
+      }
+    }, [dateDraft, normalizedRowDate, onRowEditableChange, row]);
 
-    const handleFlightChange = useCallback(
-      (e: React.ChangeEvent<HTMLInputElement>) => {
-        onRowEditableChange(row, 'flight', e.target.value);
+    const handleDateKeyDown = useCallback(
+      (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+          e.currentTarget.blur();
+        } else if (e.key === 'Escape') {
+          setDateDraft(normalizedRowDate);
+          e.currentTarget.blur();
+        }
       },
-      [onRowEditableChange, row]
-    );
-
-    const handleTotalBoxChange = useCallback(
-      (e: React.ChangeEvent<HTMLInputElement>) => {
-        onRowEditableChange(row, 'totalBox', e.target.value);
-      },
-      [onRowEditableChange, row]
+      [normalizedRowDate]
     );
 
     const handleRmbPerBoxChange = useCallback(
@@ -216,12 +249,45 @@ const AirWayBillTableRow: React.FC<AirWayBillTableRowProps> = memo(
       });
     }, []);
 
+    const handleToggleCheckbox = useCallback(() => {
+      onToggleSelect(row.id);
+    }, [onToggleSelect, row.id]);
+
     return (
       <tr
         data-testid={`awb-table-row-${rowNum}`}
-        style={{ backgroundColor: '#ffffff', color: '#000000' }}
-        className="hover:bg-sky-50/40 transition"
+        data-packing-locked="true"
+        data-selected={isSelected ? 'true' : 'false'}
+        style={{
+          backgroundColor: isSelected ? '#e0f2fe' : '#ffffff',
+          color: '#000000',
+        }}
+        className="hover:bg-sky-50/60 transition"
       >
+        {/* Select Row Checkbox */}
+        <td
+          style={{ border: '1.5px solid #000000', height: '36px' }}
+          className="px-1.5 py-1 text-center print:hidden"
+        >
+          {isFromPackingList ? (
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={handleToggleCheckbox}
+              data-testid={`awb-row-${rowNum}-select`}
+              aria-label={`Select row ${rowNum} (${lockedHolderShipper || 'Row'}${row.date ? ` ${formatDate(row.date)}` : ''})`}
+              title={
+                isSelected
+                  ? 'Selected for Bill Invoice (click to unselect)'
+                  : 'Select this row for an individual or multi-row Bill Invoice'
+              }
+              className="w-4 h-4 cursor-pointer accent-[#2f75b5] rounded align-middle"
+            />
+          ) : (
+            <span className="text-slate-300 select-none" aria-hidden="true" />
+          )}
+        </td>
+
         {/* 0. SL # */}
         <td
           style={{ border: '1.5px solid #000000', height: '36px' }}
@@ -232,148 +298,183 @@ const AirWayBillTableRow: React.FC<AirWayBillTableRowProps> = memo(
           </span>
         </td>
 
-        {/* 1. DATE */}
-        <td
-          style={{ border: '1.5px solid #000000', height: '36px' }}
-          className="px-1.5 py-1 text-center font-mono font-semibold text-xs sm:text-sm whitespace-nowrap"
-        >
-          {isFromPackingList ? (
-            <span data-testid={`awb-row-${rowNum}-date`}>
-              {formatDate(row.date)}
-            </span>
-          ) : (
-            <input
-              type="date"
-              aria-label={`Row ${rowNum} Date`}
-              value={row.date}
-              onChange={handleDateChange}
-              className="w-full h-full text-center font-mono text-[11px] sm:text-xs bg-transparent focus:bg-amber-50 focus:outline-none px-0.5"
-            />
-          )}
-        </td>
-
-        {/* 2. DOCUMENTS HOLDER/SHIPPER (DROPDOWN ON ALL ROWS) */}
-        <td
-          style={{ border: '1.5px solid #000000', height: '36px' }}
-          className="px-1.5 py-1 text-center font-bold text-xs sm:text-[13px]"
-        >
-          <select
-            aria-label={`Row ${rowNum} Documents Holder / Shipper`}
-            data-testid={`awb-row-${rowNum}-documents-holder`}
-            value={selectedHolderShipper}
-            onChange={handleDocumentsHolderChange}
-            className="w-full h-full text-center font-bold text-xs sm:text-[13px] bg-transparent focus:bg-amber-50 focus:outline-none px-1 py-0.5 rounded cursor-pointer truncate"
-          >
-            <option value="">-- Select --</option>
-            {rowHolderShipperOptions.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
-        </td>
-
-        {/* 3. FLIGHT */}
-        <td
-          style={{ border: '1.5px solid #000000', height: '36px' }}
-          className="px-2 py-1 text-center font-mono font-bold text-xs sm:text-sm whitespace-nowrap"
-        >
-          {isFromPackingList ? (
-            <span data-testid={`awb-row-${rowNum}-flight`}>
-              {row.flight}
-            </span>
-          ) : (
-            <input
-              type="text"
-              aria-label={`Row ${rowNum} Flight`}
-              placeholder=""
-              value={row.flight}
-              onChange={handleFlightChange}
-              className="w-full h-full text-center font-mono font-bold text-xs sm:text-sm bg-transparent focus:bg-amber-50 focus:outline-none px-1"
-            />
-          )}
-        </td>
-
-        {/* 4. TOTAL BOX */}
-        <td
-          style={{ border: '1.5px solid #000000', height: '36px' }}
-          className="px-2 py-1 text-center font-mono font-bold text-xs sm:text-sm tabular-nums"
-        >
-          {isFromPackingList ? (
-            <span data-testid={`awb-row-${rowNum}-box`}>
-              {row.totalBox !== 0 ? row.totalBox : ''}
-            </span>
-          ) : (
-            <input
-              type="number"
-              step="1"
-              aria-label={`Row ${rowNum} Total Box`}
-              value={row.totalBox !== 0 ? row.totalBox : ''}
-              onChange={handleTotalBoxChange}
-              className="w-full h-full text-center font-mono font-bold text-xs sm:text-sm bg-transparent focus:bg-amber-50 focus:outline-none px-1 tabular-nums"
-            />
-          )}
-        </td>
-
-        {/* 5. RMB/PER BOX (EDITABLE, SUPPORTS SIGNED VALUES) */}
-        <td
-          style={{ border: '1.5px solid #000000', height: '36px' }}
-          className="px-1.5 py-1 text-center font-mono font-bold text-xs sm:text-sm tabular-nums bg-amber-50/25"
-        >
-          <input
-            type="text"
-            inputMode="decimal"
-            aria-label={`Row ${rowNum} RMB/Per Box`}
-            data-testid={`awb-row-${rowNum}-rmb-per-box`}
-            value={rmbDraft}
-            onFocus={handleRmbFocus}
-            onBlur={handleRmbBlur}
-            onChange={handleRmbPerBoxChange}
-            className="w-full h-full text-center font-mono font-bold text-xs sm:text-sm bg-transparent focus:bg-amber-100/70 focus:outline-none px-1.5 py-0.5 rounded tabular-nums"
-          />
-        </td>
-
-        {/* 6. TOTAL RMB (= TOTAL BOX * RMB/PER BOX) */}
-        <td
-          data-testid={`awb-row-${rowNum}-total-rmb`}
-          style={{ border: '1.5px solid #000000', height: '36px' }}
-          className={`px-2 py-1 text-center font-mono font-bold text-xs sm:text-sm tabular-nums ${
-            row.totalRmb < 0 ? 'text-rose-700' : ''
-          }`}
-        >
-          {formatAwbCellNumber(row.totalRmb)}
-        </td>
-
-        {/* 7. RATE (EDITABLE, SUPPORTS -0, +0, NEGATIVE & POSITIVE VALUES) */}
-        <td
-          style={{ border: '1.5px solid #000000', height: '36px' }}
-          className="px-1.5 py-1 text-center font-mono font-bold text-xs sm:text-sm tabular-nums bg-amber-50/25"
-        >
-          <input
-            type="text"
-            inputMode="decimal"
-            aria-label={`Row ${rowNum} Rate`}
-            data-testid={`awb-row-${rowNum}-rate`}
-            value={rateDraft}
-            onFocus={handleRateFocus}
-            onBlur={handleRateBlur}
-            onChange={handleRateChange}
-            className={`w-full h-full text-center font-mono font-bold text-xs sm:text-sm bg-transparent focus:bg-amber-100/70 focus:outline-none px-1.5 py-0.5 rounded tabular-nums ${
-              row.rate < 0 ? 'text-rose-700' : ''
-            }`}
-          />
-        </td>
-
-        {/* 8. BDT AMOUNT (= TOTAL RMB * RATE) */}
-        <td
-          data-testid={`awb-row-${rowNum}-bdt-amount`}
-          style={{ border: '1.5px solid #000000', height: '36px' }}
-          className={`px-2 py-1 text-center font-mono font-extrabold text-xs sm:text-sm tabular-nums ${
-            row.bdtAmount < 0 ? 'text-rose-700' : ''
-          }`}
-        >
-          {formatAwbCellNumber(row.bdtAmount, row.totalRmb !== 0 && Boolean(row.rateSpecified))}
-        </td>
+        {columnOrder.map((colId) => {
+          switch (colId) {
+            case 'date':
+              return (
+                <td
+                  key="date"
+                  style={{ border: '1.5px solid #000000', height: '36px' }}
+                  className={`px-1 py-1 text-center font-mono font-semibold text-xs sm:text-sm whitespace-nowrap ${
+                    row.isDateOverridden ? 'bg-amber-50/70' : ''
+                  }`}
+                >
+                  {isFromPackingList ? (
+                    <input
+                      type="date"
+                      aria-label={`Row ${rowNum} Date`}
+                      data-testid={`awb-row-${rowNum}-date`}
+                      data-date-overridden={row.isDateOverridden ? 'true' : 'false'}
+                      title={
+                        row.isDateOverridden && row.originalDate
+                          ? `Adjusted Date (Original Packing List Date: ${formatDate(row.originalDate)}). Packing List remains unchanged.`
+                          : 'Edit date to move/group this row onto a different date and combine Total Box'
+                      }
+                      value={dateDraft}
+                      onFocus={handleDateFocus}
+                      onChange={handleDateChange}
+                      onBlur={handleDateBlur}
+                      onKeyDown={handleDateKeyDown}
+                      className="w-full h-full text-center font-mono font-semibold text-[11px] sm:text-xs bg-transparent focus:bg-amber-100/70 focus:outline-none px-0.5 rounded cursor-pointer"
+                    />
+                  ) : (
+                    <span
+                      data-testid={`awb-row-${rowNum}-date`}
+                      className="text-slate-300 select-none"
+                    />
+                  )}
+                </td>
+              );
+            case 'documentsHolder':
+              return (
+                <td
+                  key="documentsHolder"
+                  style={{ border: '1.5px solid #000000', height: '36px' }}
+                  className="px-2 py-1 text-center font-bold text-xs sm:text-[13px] select-none"
+                >
+                  <span
+                    data-testid={`awb-row-${rowNum}-documents-holder`}
+                    title={
+                      lockedHolderShipper
+                        ? `${lockedHolderShipper} (Locked — synced strictly from Packing List)`
+                        : undefined
+                    }
+                    className="block truncate"
+                  >
+                    {lockedHolderShipper}
+                  </span>
+                </td>
+              );
+            case 'flight':
+              return (
+                <td
+                  key="flight"
+                  style={{ border: '1.5px solid #000000', height: '36px' }}
+                  className="px-2 py-1 text-center font-mono font-bold text-xs sm:text-sm whitespace-nowrap select-none"
+                >
+                  <span
+                    data-testid={`awb-row-${rowNum}-flight`}
+                    title={
+                      row.flight
+                        ? `${row.flight} (Locked — synced strictly from Packing List)`
+                        : undefined
+                    }
+                  >
+                    {row.flight}
+                  </span>
+                </td>
+              );
+            case 'totalBox':
+              return (
+                <td
+                  key="totalBox"
+                  style={{ border: '1.5px solid #000000', height: '36px' }}
+                  className="px-2 py-1 text-center font-mono font-bold text-xs sm:text-sm tabular-nums select-none"
+                >
+                  <span
+                    data-testid={`awb-row-${rowNum}-box`}
+                    title={
+                      (row.mergedCount || 1) > 1
+                        ? `Combined total boxes from ${row.mergedCount} Packing List entries (${formatDate(row.date)} · ${lockedHolderShipper} · ${row.flight})`
+                        : row.totalBox !== 0
+                        ? 'Locked — synced strictly from Packing List'
+                        : undefined
+                    }
+                  >
+                    {row.totalBox !== 0 ? row.totalBox : ''}
+                  </span>
+                </td>
+              );
+            case 'rmbPerBox':
+              return (
+                <td
+                  key="rmbPerBox"
+                  style={{ border: '1.5px solid #000000', height: '36px' }}
+                  className={`px-1.5 py-1 text-center font-mono font-bold text-xs sm:text-sm tabular-nums ${
+                    isFromPackingList ? 'bg-amber-50/25' : ''
+                  }`}
+                >
+                  {isFromPackingList ? (
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      aria-label={`Row ${rowNum} RMB/Per Box`}
+                      data-testid={`awb-row-${rowNum}-rmb-per-box`}
+                      value={rmbDraft}
+                      onFocus={handleRmbFocus}
+                      onBlur={handleRmbBlur}
+                      onChange={handleRmbPerBoxChange}
+                      className="w-full h-full text-center font-mono font-bold text-xs sm:text-sm bg-transparent focus:bg-amber-100/70 focus:outline-none px-1.5 py-0.5 rounded tabular-nums"
+                    />
+                  ) : null}
+                </td>
+              );
+            case 'totalRmb':
+              return (
+                <td
+                  key="totalRmb"
+                  data-testid={`awb-row-${rowNum}-total-rmb`}
+                  style={{ border: '1.5px solid #000000', height: '36px' }}
+                  className={`px-2 py-1 text-center font-mono font-bold text-xs sm:text-sm tabular-nums ${
+                    row.totalRmb < 0 ? 'text-rose-700' : ''
+                  }`}
+                >
+                  {formatAwbCellNumber(row.totalRmb)}
+                </td>
+              );
+            case 'rate':
+              return (
+                <td
+                  key="rate"
+                  style={{ border: '1.5px solid #000000', height: '36px' }}
+                  className={`px-1.5 py-1 text-center font-mono font-bold text-xs sm:text-sm tabular-nums ${
+                    isFromPackingList ? 'bg-amber-50/25' : ''
+                  }`}
+                >
+                  {isFromPackingList ? (
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      aria-label={`Row ${rowNum} Rate`}
+                      data-testid={`awb-row-${rowNum}-rate`}
+                      value={rateDraft}
+                      onFocus={handleRateFocus}
+                      onBlur={handleRateBlur}
+                      onChange={handleRateChange}
+                      className={`w-full h-full text-center font-mono font-bold text-xs sm:text-sm bg-transparent focus:bg-amber-100/70 focus:outline-none px-1.5 py-0.5 rounded tabular-nums ${
+                        row.rate < 0 ? 'text-rose-700' : ''
+                      }`}
+                    />
+                  ) : null}
+                </td>
+              );
+            case 'bdtAmount':
+              return (
+                <td
+                  key="bdtAmount"
+                  data-testid={`awb-row-${rowNum}-bdt-amount`}
+                  style={{ border: '1.5px solid #000000', height: '36px' }}
+                  className={`px-2 py-1 text-center font-mono font-extrabold text-xs sm:text-sm tabular-nums ${
+                    row.bdtAmount < 0 ? 'text-rose-700' : ''
+                  }`}
+                >
+                  {formatAwbCellNumber(row.bdtAmount, row.totalRmb !== 0 && Boolean(row.rateSpecified))}
+                </td>
+              );
+            default:
+              return null;
+          }
+        })}
       </tr>
     );
   },
@@ -381,12 +482,13 @@ const AirWayBillTableRow: React.FC<AirWayBillTableRowProps> = memo(
 );
 
 export const AirWayBillView: React.FC = () => {
+  const awbColOrder = useTableColumnOrder('air_way_bill', AWB_DEFAULT_COLUMNS);
+
   const {
     companyProfile,
     packings,
     packingDraft,
     editingPackingId,
-    updatePacking,
     dropdownOptions,
     openPrintModal,
     setActiveTab,
@@ -399,30 +501,41 @@ export const AirWayBillView: React.FC = () => {
   const [selectedShipper, setSelectedShipper] = useState<string>('ALL');
   const [selectedDocumentsHolder, setSelectedDocumentsHolder] = useState<string>('ALL');
   const [selectedFlight, setSelectedFlight] = useState<string>('ALL');
+  const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
+  const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
 
   const [rowOverrides, setRowOverrides] = useState<Record<string, AirWayBillRowOverride>>(() => {
     try {
       const saved = localStorage.getItem(AWB_OVERRIDES_STORAGE_KEY);
-      return saved ? JSON.parse(saved) : {};
+      if (!saved) return {};
+      const parsed = JSON.parse(saved) as Record<string, Record<string, unknown>>;
+      if (!parsed || typeof parsed !== 'object') return {};
+      // Strip any legacy documentsHolder overrides so table strictly mirrors Packing List
+      const sanitized: Record<string, AirWayBillRowOverride> = {};
+      for (const [id, entry] of Object.entries(parsed)) {
+        if (!entry || typeof entry !== 'object') continue;
+        const clean: AirWayBillRowOverride = {};
+        if (typeof entry.date === 'string' && isCompleteIsoDateInput(entry.date)) {
+          clean.date = entry.date;
+        }
+        if (typeof entry.rmbPerBox === 'number' && Number.isFinite(entry.rmbPerBox)) {
+          clean.rmbPerBox = entry.rmbPerBox;
+        }
+        if (typeof entry.rate === 'number' && Number.isFinite(entry.rate)) {
+          clean.rate = entry.rate;
+        }
+        if (typeof entry.rateSpecified === 'boolean') {
+          clean.rateSpecified = entry.rateSpecified;
+        }
+        if (Object.keys(clean).length > 0) {
+          sanitized[id] = clean;
+        }
+      }
+      return sanitized;
     } catch {
       return {};
     }
-  });
-
-  const [customRows, setCustomRows] = useState<AirWayBillRow[]>(() => {
-    try {
-      const saved = localStorage.getItem(AWB_CUSTOM_ROWS_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed as AirWayBillRow[];
-        }
-      }
-    } catch {
-      // Fall back to default empty rows if stored draft is corrupted
-    }
-    return createInitialAirWayBillRows(4);
   });
 
   const [bulkRmbPerBox, setBulkRmbPerBox] = useState<string>('');
@@ -435,13 +548,12 @@ export const AirWayBillView: React.FC = () => {
   const awbScrollRef = useRef<HTMLDivElement>(null);
 
   const serializedAwbDraft = useMemo(
-    () => JSON.stringify({ rowOverrides, customRows }),
-    [rowOverrides, customRows]
+    () => JSON.stringify({ rowOverrides }),
+    [rowOverrides]
   );
 
   useDebouncedStoreSave('Flight Return Bill', serializedAwbDraft, () => {
     localStorage.setItem(AWB_OVERRIDES_STORAGE_KEY, JSON.stringify(rowOverrides));
-    localStorage.setItem(AWB_CUSTOM_ROWS_STORAGE_KEY, JSON.stringify(customRows));
   });
 
   // Combine saved Packing List records with any active draft in Packing List Form
@@ -450,26 +562,18 @@ export const AirWayBillView: React.FC = () => {
     [packings, packingDraft, editingPackingId]
   );
 
+  const originalDateByPackingId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const pkg of allManifestRecords) {
+      map.set(pkg.id, normalizeAirWayBillDateKey(pkg.packingDate || ''));
+    }
+    return map;
+  }, [allManifestRecords]);
+
   const filterOptions = useMemo(
     () => extractAirWayBillFilterOptions(allManifestRecords),
     [allManifestRecords]
   );
-
-  // Combined unique dropdown list of all DOCUMENTS HOLDER and SHIPPER entries
-  const holderShipperOptions = useMemo(() => {
-    const combined = new Set<string>([
-      ...filterOptions.documentsHolders,
-      ...(dropdownOptions.documentsHolders || []),
-      ...filterOptions.shippers,
-      ...(dropdownOptions.shippers || []),
-    ]);
-    return Array.from(combined).filter((v) => v.trim() !== '');
-  }, [
-    filterOptions.documentsHolders,
-    filterOptions.shippers,
-    dropdownOptions.documentsHolders,
-    dropdownOptions.shippers,
-  ]);
 
   const dbRows = useMemo(
     () =>
@@ -495,7 +599,7 @@ export const AirWayBillView: React.FC = () => {
 
   const displayRows = useMemo(
     () =>
-      mergeAirWayBillRows(dbRows, customRows, {
+      mergeAirWayBillRows(dbRows, DEFAULT_BLANK_AWB_ROWS, {
         yearMonth: selectedMonth,
         fromDate,
         toDate,
@@ -505,7 +609,6 @@ export const AirWayBillView: React.FC = () => {
       }),
     [
       dbRows,
-      customRows,
       selectedMonth,
       fromDate,
       toDate,
@@ -515,7 +618,33 @@ export const AirWayBillView: React.FC = () => {
     ]
   );
 
-  const totals = useMemo(() => calculateAirWayBillTotals(displayRows), [displayRows]);
+  const hasDateOverrides = useMemo(
+    () => Object.values(rowOverrides).some((entry) => Boolean(entry?.date)),
+    [rowOverrides]
+  );
+
+  const selection = useMemo(
+    () => resolveAirWayBillSelection(displayRows, selectedRowIds),
+    [displayRows, selectedRowIds]
+  );
+
+  const selectedRowIdSet = useMemo(
+    () => new Set(selection.selectedRowIds),
+    [selection.selectedRowIds]
+  );
+
+  useEffect(() => {
+    if (selectAllCheckboxRef.current) {
+      selectAllCheckboxRef.current.indeterminate = selection.isIndeterminate;
+    }
+  }, [selection.isIndeterminate]);
+
+  const activeInvoiceRows = selection.invoiceRows;
+  const totals = selection.invoiceTotals;
+  const fullStatementTotals = useMemo(
+    () => calculateAirWayBillTotals(displayRows),
+    [displayRows]
+  );
 
   const activePeriodLabel = useMemo(() => {
     if (fromDate && toDate) return `${formatDate(fromDate)} to ${formatDate(toDate)}`;
@@ -523,6 +652,53 @@ export const AirWayBillView: React.FC = () => {
     if (toDate) return `Up to ${formatDate(toDate)}`;
     return selectedMonth !== 'all' ? formatYearMonthLabel(selectedMonth) : 'All Active Months';
   }, [fromDate, toDate, selectedMonth]);
+
+  const invoiceDocumentBadge = useMemo(() => {
+    if (selection.hasSelection) {
+      if (selection.selectedRows.length === 1) {
+        const onlyRow = selection.selectedRows[0];
+        const holder = (onlyRow.documentsHolder || onlyRow.shipper || '').trim();
+        const dateText = onlyRow.date ? formatDate(onlyRow.date) : '';
+        const detail = [holder.toUpperCase(), dateText].filter(Boolean).join(' · ');
+        return detail
+          ? `FLIGHT RETURN BILL — BILL INVOICE (${detail})`
+          : 'FLIGHT RETURN BILL — INDIVIDUAL BILL INVOICE';
+      }
+      return `FLIGHT RETURN BILL — SELECTED BILL INVOICE (${selection.selectedRows.length} ROWS)`;
+    }
+    return `FLIGHT RETURN BILL — MONTHLY STATEMENT (${activePeriodLabel.toUpperCase()})`;
+  }, [selection.hasSelection, selection.selectedRows, activePeriodLabel]);
+
+  const exportShipperLabel = useMemo(() => {
+    if (selection.hasSelection) {
+      const uniqueHolders = Array.from(
+        new Set(
+          selection.selectedRows
+            .map((r) => (r.documentsHolder || r.shipper || '').trim())
+            .filter(Boolean)
+        )
+      );
+      if (uniqueHolders.length === 1) {
+        return uniqueHolders[0];
+      }
+      return `SELECTED_${selection.selectedRows.length}_ROWS`;
+    }
+    return selectedShipper;
+  }, [selection.hasSelection, selection.selectedRows, selectedShipper]);
+
+  const handleToggleRowSelect = useCallback((rowId: string) => {
+    setSelectedRowIds((prev) => toggleAirWayBillRowSelection(prev, rowId));
+  }, []);
+
+  const handleToggleSelectAll = useCallback(() => {
+    setSelectedRowIds((prev) =>
+      toggleAllAirWayBillRowsSelection(prev, selection.selectableRowIds)
+    );
+  }, [selection.selectableRowIds]);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedRowIds([]);
+  }, []);
 
   const { maxHeight: awbScrollMaxHeight, isCapped: isAwbScrollCapped } =
     useRowScrollViewport(awbScrollRef, displayRows.length, {
@@ -535,70 +711,78 @@ export const AirWayBillView: React.FC = () => {
   const handleRowEditableChange = useCallback(
     (
       row: AirWayBillRow,
-      field: 'rmbPerBox' | 'rate' | 'date' | 'shipper' | 'documentsHolder' | 'flight' | 'totalBox',
+      field: 'date' | 'rmbPerBox' | 'rate',
       rawValue: string
     ) => {
-      if (row.packingId && field === 'documentsHolder') {
-        const nextVal = rawValue.trim();
+      const targetPackingIds =
+        Array.isArray(row.packingIds) && row.packingIds.length > 0
+          ? row.packingIds
+          : row.packingId
+          ? [row.packingId]
+          : [];
+
+      // Table is locked strictly to Packing List records; never mutate Packing List data
+      if (targetPackingIds.length === 0) return;
+
+      if (field === 'date') {
+        if (!isCompleteIsoDateInput(rawValue)) return;
+        const nextIsoDate = normalizeAirWayBillDateKey(rawValue);
         setRowOverrides((prev) => {
-          const existing = prev[row.packingId!];
-          if (existing && existing.documentsHolder === nextVal) return prev;
-          return {
-            ...prev,
-            [row.packingId!]: {
-              ...existing,
-              documentsHolder: nextVal,
-            },
-          };
+          let changed = false;
+          const next = { ...prev };
+          for (const pid of targetPackingIds) {
+            const existing = prev[pid] || {};
+            const originalDate = originalDateByPackingId.get(pid) || '';
+            if (nextIsoDate === originalDate) {
+              if (existing.date !== undefined) {
+                const rest = { ...existing };
+                delete rest.date;
+                if (Object.keys(rest).length > 0) {
+                  next[pid] = rest;
+                } else {
+                  delete next[pid];
+                }
+                changed = true;
+              }
+            } else if (existing.date !== nextIsoDate) {
+              next[pid] = {
+                ...existing,
+                date: nextIsoDate,
+              };
+              changed = true;
+            }
+          }
+          return changed ? next : prev;
         });
         return;
       }
 
-      if (row.packingId && (field === 'rmbPerBox' || field === 'rate')) {
+      if (field === 'rmbPerBox' || field === 'rate') {
         const numVal = parseSignedNumber(rawValue);
         const isRateSpecified = field === 'rate' ? !isEmptyOrSignOnlyDraft(rawValue) : undefined;
         setRowOverrides((prev) => {
-          const existing = prev[row.packingId!];
-          if (
-            existing &&
-            existing[field] === numVal &&
-            (field !== 'rate' || existing.rateSpecified === isRateSpecified)
-          ) {
-            return prev;
+          let changed = false;
+          const next = { ...prev };
+          for (const pid of targetPackingIds) {
+            const existing = prev[pid];
+            if (
+              !existing ||
+              existing[field] !== numVal ||
+              (field === 'rate' && existing.rateSpecified !== isRateSpecified)
+            ) {
+              next[pid] = {
+                ...existing,
+                [field]: numVal,
+                ...(field === 'rate' ? { rateSpecified: isRateSpecified } : {}),
+              };
+              changed = true;
+            }
           }
-          return {
-            ...prev,
-            [row.packingId!]: {
-              ...existing,
-              [field]: numVal,
-              ...(field === 'rate' ? { rateSpecified: isRateSpecified } : {}),
-            },
-          };
+          return changed ? next : prev;
         });
-
-        // Also persist onto saved PackingRecord if it exists in packings
-        if (row.packingId !== 'draft-packing-manifest') {
-          const nextRmbPerBox =
-            field === 'rmbPerBox' ? numVal : row.rmbPerBox;
-          const nextRate = field === 'rate' ? numVal : row.rate;
-          updatePacking(
-            row.packingId,
-            {
-              awbRmbPerBox: nextRmbPerBox,
-              awbRate: nextRate,
-            },
-            true
-          );
-        }
-        return;
       }
-
-      // Custom row update with bailout
-      setCustomRows((prev) =>
-        updateCustomAirWayBillRowById(prev, row.id, field, rawValue)
-      );
     },
-    [updatePacking]
+    [originalDateByPackingId]
   );
 
   const handleApplyBulkRates = () => {
@@ -613,53 +797,51 @@ export const AirWayBillView: React.FC = () => {
     const rateVal = hasBulkRate ? parseSignedNumber(bulkRate) : undefined;
 
     const nextOverrides = { ...rowOverrides };
-    for (const row of dbRows) {
-      if (!row.packingId) continue;
-      nextOverrides[row.packingId] = {
-        ...nextOverrides[row.packingId],
-        rmbPerBox: rmbVal !== undefined ? rmbVal : row.rmbPerBox,
-        rate: rateVal !== undefined ? rateVal : row.rate,
-        rateSpecified: rateVal !== undefined ? true : row.rateSpecified,
-      };
-      if (row.packingId !== 'draft-packing-manifest') {
-        updatePacking(
-          row.packingId,
-          {
-            awbRmbPerBox: rmbVal !== undefined ? rmbVal : row.rmbPerBox,
-            awbRate: rateVal !== undefined ? rateVal : row.rate,
-          },
-          true
-        );
+    const targetRows = selection.hasSelection ? selection.selectedRows : dbRows;
+    for (const row of targetRows) {
+      const targetPackingIds =
+        Array.isArray(row.packingIds) && row.packingIds.length > 0
+          ? row.packingIds
+          : row.packingId
+          ? [row.packingId]
+          : [];
+      for (const pid of targetPackingIds) {
+        nextOverrides[pid] = {
+          ...nextOverrides[pid],
+          rmbPerBox: rmbVal !== undefined ? rmbVal : row.rmbPerBox,
+          rate: rateVal !== undefined ? rateVal : row.rate,
+          rateSpecified: rateVal !== undefined ? true : row.rateSpecified,
+        };
       }
     }
     setRowOverrides(nextOverrides);
-
-    setCustomRows((prev) =>
-      prev.map((r) => {
-        if (r.totalBox === 0 && !r.shipper && !r.documentsHolder && !r.flight) return r;
-        const nextRmb = rmbVal !== undefined ? rmbVal : r.rmbPerBox;
-        const nextRt = rateVal !== undefined ? rateVal : r.rate;
-        const computed = calculateAirWayBillRow(r.totalBox, nextRmb, nextRt);
-        return {
-          ...r,
-          rmbPerBox: nextRmb,
-          rate: nextRt,
-          rateSpecified: rateVal !== undefined ? true : r.rateSpecified,
-          totalRmb: computed.totalRmb,
-          bdtAmount: computed.bdtAmount,
-        };
-      })
+    showToast(
+      selection.hasSelection
+        ? `Applied RMB/Per Box and Rate to ${selection.selectedRows.length} selected row${selection.selectedRows.length === 1 ? '' : 's'}.`
+        : 'Applied RMB/Per Box and Rate across active Flight Return Bill rows.'
     );
-
-    showToast('Applied RMB/Per Box and Rate across active Flight Return Bill rows.');
   };
 
-  const handleAddRow = useCallback(() => {
-    setCustomRows((prev) => [
-      ...prev,
-      createEmptyAirWayBillRow(`awb-custom-${Date.now()}-${prev.length + 1}`),
-    ]);
-  }, []);
+  const handleRestoreOriginalDates = useCallback(() => {
+    setRowOverrides((prev) => {
+      let changed = false;
+      const next: Record<string, AirWayBillRowOverride> = {};
+      for (const [pid, entry] of Object.entries(prev)) {
+        if (entry?.date !== undefined) {
+          changed = true;
+          const rest = { ...entry };
+          delete rest.date;
+          if (Object.keys(rest).length > 0) {
+            next[pid] = rest;
+          }
+        } else {
+          next[pid] = entry;
+        }
+      }
+      return changed ? next : prev;
+    });
+    showToast('Restored original Packing List dates.');
+  }, [showToast]);
 
   const handleResetFiltersAndOverrides = () => {
     setSelectedMonth('all');
@@ -668,32 +850,40 @@ export const AirWayBillView: React.FC = () => {
     setSelectedShipper('ALL');
     setSelectedDocumentsHolder('ALL');
     setSelectedFlight('ALL');
-    const resetRows = createInitialAirWayBillRows(4);
-    setCustomRows(resetRows);
-    try {
-      localStorage.removeItem(AWB_CUSTOM_ROWS_STORAGE_KEY);
-    } catch {
-      // ignore storage errors
-    }
-    showToast('Reset Flight Return Bill filters.');
+    setSelectedRowIds([]);
+    setRowOverrides((prev) => {
+      const next: Record<string, AirWayBillRowOverride> = {};
+      for (const [pid, entry] of Object.entries(prev)) {
+        const rest = { ...entry };
+        delete rest.date;
+        if (Object.keys(rest).length > 0) {
+          next[pid] = rest;
+        }
+      }
+      return next;
+    });
+    showToast('Reset Flight Return Bill filters, row selection, and Packing List dates.');
   };
 
   const handleOpenPrintPreview = () => {
     openPrintModal({
       type: 'air_way_bill',
-      title:
-        fromDate || toDate || selectedMonth !== 'all'
-          ? `FLIGHT RETURN BILL — Monthly Statement (${activePeriodLabel})`
-          : 'FLIGHT RETURN BILL — Monthly Statement',
+      title: selection.hasSelection
+        ? `FLIGHT RETURN BILL — Bill Invoice (${selection.selectedRows.length} Selected Row${selection.selectedRows.length === 1 ? '' : 's'})`
+        : fromDate || toDate || selectedMonth !== 'all'
+        ? `FLIGHT RETURN BILL — Monthly Statement (${activePeriodLabel})`
+        : 'FLIGHT RETURN BILL — Monthly Statement',
       data: {
         yearMonth: selectedMonth,
         fromDate,
         toDate,
         monthLabel: activePeriodLabel,
-        shipper: selectedShipper,
+        documentBadge: invoiceDocumentBadge,
+        selectedRowCount: selection.selectedRows.length,
+        shipper: exportShipperLabel,
         documentsHolder: selectedDocumentsHolder,
         flight: selectedFlight,
-        rows: displayRows,
+        rows: activeInvoiceRows,
         totals,
       },
     });
@@ -704,7 +894,7 @@ export const AirWayBillView: React.FC = () => {
     setIsExporting(format);
     const filename = formatAirWayBillExportFilename(
       selectedMonth,
-      selectedShipper,
+      exportShipperLabel,
       format,
       undefined,
       fromDate,
@@ -736,8 +926,6 @@ export const AirWayBillView: React.FC = () => {
       handleOpenPrintPreview();
     } else if (action === 'SAVE_ACTIVE_VIEW') {
       void handleDirectExport('pdf');
-    } else if (action === 'ADD_FORM_ROW') {
-      handleAddRow();
     } else if (action === 'RESET_FORM') {
       handleResetFiltersAndOverrides();
     }
@@ -750,7 +938,6 @@ export const AirWayBillView: React.FC = () => {
       if (
         action === 'PRINT_ACTIVE_VIEW' ||
         action === 'SAVE_ACTIVE_VIEW' ||
-        action === 'ADD_FORM_ROW' ||
         action === 'RESET_FORM'
       ) {
         customEvent.detail.handled = true;
@@ -764,13 +951,13 @@ export const AirWayBillView: React.FC = () => {
   useEffect(() => {
     const handleClearDb = () => {
       setRowOverrides({});
-      setCustomRows(createInitialAirWayBillRows(4));
       setSelectedMonth('all');
       setFromDate('');
       setToDate('');
       setSelectedShipper('ALL');
       setSelectedDocumentsHolder('ALL');
       setSelectedFlight('ALL');
+      setSelectedRowIds([]);
       try {
         localStorage.removeItem(AWB_OVERRIDES_STORAGE_KEY);
       } catch {
@@ -785,57 +972,13 @@ export const AirWayBillView: React.FC = () => {
     };
   }, []);
 
-  const formatCellNumber = (val: number) => {
-    if (!val || val === 0) return '';
-    return val.toLocaleString('en-US', {
-      minimumFractionDigits: val % 1 === 0 ? 0 : 2,
-      maximumFractionDigits: 2,
-    });
-  };
-
-  const resolvedLogoSrc = resolveCompanyLogoSrc(companyProfile.logoUrl);
-
   return (
     <div
       className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5"
       data-testid="air-way-bill-view"
     >
-      {/* Top Executive Banner */}
-      <div className="bg-[#273E56] text-white px-5 py-3 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#00897b]">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
-            <img
-              src={resolvedLogoSrc}
-              alt={companyProfile.companyName}
-              onError={(e) => {
-                const target = e.currentTarget;
-                if (!target.src.endsWith(COMPANY_LOGO_URL)) {
-                  target.src = COMPANY_LOGO_URL;
-                }
-              }}
-              className="w-full h-full object-contain rounded-full"
-            />
-          </div>
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xl sm:text-2xl font-black tracking-tight text-amber-400 zsb-golden-brand">
-                {companyProfile.companyName}
-              </span>
-              <span className="text-slate-400">•</span>
-              <span className="text-sm sm:text-base font-bold text-[#80cbc4] uppercase tracking-wide">
-                FLIGHT RETURN BILL — Monthly Statement
-              </span>
-              <span className="text-xs bg-[#00897b]/25 text-[#5eead4] px-2.5 py-0.5 rounded border border-[#00897b]/50 font-mono font-bold">
-                Sheet #06
-              </span>
-            </div>
-            <p className="text-xs text-slate-300 mt-0.5">
-              Auto-synced from PACKING LIST DATA ENTRY FORM (AIR FREIGHT EXPORT MANIFEST) · Editable RMB/PER BOX &amp; RATE
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
+      {/* Action Controls Bar */}
+      <div className="bg-white px-4 py-2.5 rounded-xl shadow-xs border border-slate-200 flex flex-wrap items-center justify-end gap-2">
           <button
             type="button"
             data-testid="awb-save-pdf-btn"
@@ -887,7 +1030,6 @@ export const AirWayBillView: React.FC = () => {
             <Printer className="w-3.5 h-3.5 text-[#5eead4]" />
             <span>PRINT / PREVIEW</span>
           </button>
-        </div>
       </div>
 
       {/* Filter & Bulk Rate Toolbar */}
@@ -1109,21 +1251,32 @@ export const AirWayBillView: React.FC = () => {
               data-testid="awb-apply-bulk-btn"
               onClick={handleApplyBulkRates}
               className="px-3 py-1.5 bg-[#00897b] hover:bg-[#00796b] text-white font-bold rounded-lg shadow-2xs transition inline-flex items-center gap-1 cursor-pointer"
-              title="Apply RMB/Per Box and Rate to all active Packing List rows"
+              title={
+                selection.hasSelection
+                  ? 'Apply RMB/Per Box and Rate to selected Flight Return Bill rows only'
+                  : 'Apply RMB/Per Box and Rate to all active Packing List rows'
+              }
             >
               <Check className="w-3.5 h-3.5" />
-              <span>Apply to Rows</span>
+              <span>
+                {selection.hasSelection
+                  ? `Apply to Selected (${selection.selectedRows.length})`
+                  : 'Apply to Rows'}
+              </span>
             </button>
 
-            <button
-              type="button"
-              data-testid="awb-add-row-btn"
-              onClick={handleAddRow}
-              className="px-2.5 py-1.5 bg-[#273E56] hover:bg-[#1c2a33] text-white font-bold rounded-lg shadow-2xs transition inline-flex items-center gap-1 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>+ Row</span>
-            </button>
+            {hasDateOverrides && (
+              <button
+                type="button"
+                data-testid="awb-restore-dates-btn"
+                onClick={handleRestoreOriginalDates}
+                className="px-2.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold rounded-lg transition inline-flex items-center gap-1 cursor-pointer border border-amber-300"
+                title="Restore all rows back to their original Packing List dates"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Restore Dates</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -1146,74 +1299,6 @@ export const AirWayBillView: React.FC = () => {
         style={{ backgroundColor: '#ffffff', color: '#000000' }}
         className="zsb-print-paper w-full bg-white rounded-lg shadow-lg border border-slate-300 p-4 sm:p-6 space-y-4 overflow-x-auto print:max-w-[760px] print:mx-auto print:border-none print:shadow-none print:p-0"
       >
-        {/* Official Company Header with Logo Emblem for Sheet & Direct PDF/PNG Exports */}
-        <div
-          style={{ borderBottom: '2px solid #0f172a' }}
-          className="pb-3 text-center space-y-1"
-        >
-          <div className="flex justify-center mb-1">
-            <div
-              style={{
-                width: '60px',
-                height: '60px',
-                borderRadius: '9999px',
-                overflow: 'hidden',
-                border: '2px solid #fbbf24',
-                backgroundColor: '#ffffff',
-                padding: '2px',
-                margin: '0 auto',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-              className="w-15 h-15 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shadow-xs flex items-center justify-center"
-            >
-              <img
-                data-testid="awb-sheet-company-logo"
-                src={resolvedLogoSrc}
-                alt={companyProfile.companyName}
-                onError={(e) => {
-                  const target = e.currentTarget;
-                  if (!target.src.endsWith(COMPANY_LOGO_URL)) {
-                    target.src = COMPANY_LOGO_URL;
-                  }
-                }}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'contain',
-                  borderRadius: '9999px',
-                  display: 'block',
-                }}
-                className="w-full h-full object-contain rounded-full"
-              />
-            </div>
-          </div>
-
-          <div
-            className="zsb-3d-text-print text-2xl sm:text-3xl font-black tracking-widest uppercase"
-            style={{
-              color: '#f59e0b',
-              fontFamily: "'Cinzel', Georgia, Cambria, 'Times New Roman', Times, serif",
-              fontWeight: 900,
-              letterSpacing: '0.09em',
-              textShadow:
-                '1px 1px 0px #b45309, 2px 2px 0px #92400e, 3px 3px 0px #78350f, 4px 4px 0px #451a03, 5px 5px 7px rgba(15, 23, 42, 0.35)',
-            }}
-          >
-            {companyProfile.companyName}
-          </div>
-
-          <div style={{ color: '#000000' }} className="text-xs sm:text-sm font-bold tracking-wide">
-            Address: {companyProfile.address}
-          </div>
-
-          <div style={{ color: '#000000' }} className="text-xs sm:text-sm font-bold font-mono">
-            Mobile: {companyProfile.mobiles.join(' , ')} | EMAIL:{' '}
-            {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}
-          </div>
-        </div>
-
         {isAwbScrollCapped && (
           <div className="text-[11px] font-mono text-slate-600 flex items-center justify-between px-1">
             <span>
@@ -1221,6 +1306,45 @@ export const AirWayBillView: React.FC = () => {
             </span>
           </div>
         )}
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5 print:hidden">
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              data-testid="awb-packing-lock-banner"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-700"
+            >
+              <Lock className="w-3.5 h-3.5 text-slate-600 shrink-0" aria-hidden="true" />
+              <span>
+                Locked to Packing List · Only <strong>Date</strong>, <strong>RMB/Box</strong> &amp; <strong>Rate</strong> can be adjusted here
+              </span>
+            </div>
+
+            {selection.hasSelection && (
+              <div
+                data-testid="awb-selection-banner"
+                className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md border border-sky-300 bg-sky-50 text-[11px] font-bold text-sky-900"
+              >
+                <span>
+                  {selection.selectedRows.length} row{selection.selectedRows.length === 1 ? '' : 's'} selected for Bill Invoice
+                </span>
+                <button
+                  type="button"
+                  data-testid="awb-clear-selection-btn"
+                  onClick={handleClearSelection}
+                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-white hover:bg-sky-100 border border-sky-300 text-[10px] font-bold text-sky-900 transition cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                  <span>Clear</span>
+                </button>
+              </div>
+            )}
+          </div>
+          <ColumnReorderToolbar
+            tableId="air_way_bill"
+            isCustomized={awbColOrder.isCustomized}
+            onReset={awbColOrder.resetOrder}
+            compact
+          />
+        </div>
         <div
           ref={awbScrollRef}
           data-testid="awb-statement-scroll-box"
@@ -1236,24 +1360,20 @@ export const AirWayBillView: React.FC = () => {
             width: '100%',
             tableLayout: 'fixed',
           }}
-          className="min-w-[960px] w-full text-xs sm:text-sm font-sans select-none"
+          className="min-w-[1040px] w-full text-xs sm:text-sm font-sans select-none"
         >
           <colgroup>
-            <col style={{ width: '6%' }} />
-            <col style={{ width: '13%' }} />
-            <col style={{ width: '21%' }} />
-            <col style={{ width: '9%' }} />
-            <col style={{ width: '9%' }} />
-            <col style={{ width: '10%' }} />
-            <col style={{ width: '11%' }} />
-            <col style={{ width: '8%' }} />
-            <col style={{ width: '13%' }} />
+            <col className="print:hidden" style={{ width: '7%' }} />
+            <col style={{ width: '5%' }} />
+            {awbColOrder.columnOrder.map((colId) => (
+              <col key={colId} style={{ width: AWB_COLUMN_WIDTHS[colId] }} />
+            ))}
           </colgroup>
           <thead className="sticky top-0 z-10">
             {/* Row 1: Deep Blue "FLIGHT RETURN BILL" Title Banner */}
             <tr>
               <th
-                colSpan={9}
+                colSpan={10}
                 style={{
                   backgroundColor: '#2f75b5',
                   color: '#ffffff',
@@ -1266,7 +1386,7 @@ export const AirWayBillView: React.FC = () => {
               </th>
             </tr>
 
-            {/* Row 2: Light Blue Column Headers (Full Actual Sizing) */}
+            {/* Row 2: Light Blue Column Headers (Draggable & Dynamically Ordered) */}
             <tr
               style={{
                 backgroundColor: '#bdd7ee',
@@ -1274,33 +1394,61 @@ export const AirWayBillView: React.FC = () => {
               }}
               className="text-xs sm:text-[13px] font-extrabold uppercase text-center leading-tight"
             >
+              <th
+                data-testid="awb-select-row-header"
+                style={{ border: '1.5px solid #000000' }}
+                className="py-2 px-1 print:hidden"
+              >
+                <div className="flex flex-col items-center justify-center gap-1">
+                  <span className="text-[10px] sm:text-[11px] font-extrabold leading-none">
+                    SELECT ROW
+                  </span>
+                  <input
+                    ref={selectAllCheckboxRef}
+                    type="checkbox"
+                    data-testid="awb-select-all-checkbox"
+                    aria-label="Select all rows for bill invoice"
+                    disabled={selection.selectableRowIds.length === 0}
+                    checked={selection.allSelected}
+                    onChange={handleToggleSelectAll}
+                    title={
+                      selection.allSelected
+                        ? 'Unselect all rows'
+                        : 'Select all rows for Bill Invoice'
+                    }
+                    className="w-3.5 h-3.5 cursor-pointer accent-[#2f75b5] disabled:opacity-40"
+                  />
+                </div>
+              </th>
               <th style={{ border: '1.5px solid #000000' }} className="py-2.5 px-1.5">
                 SL #
               </th>
-              <th style={{ border: '1.5px solid #000000' }} className="py-2.5 px-2">
-                DATE
-              </th>
-              <th style={{ border: '1.5px solid #000000' }} className="py-2.5 px-2">
-                DOCUMENTS HOLDER/SHIPPER
-              </th>
-              <th style={{ border: '1.5px solid #000000' }} className="py-2.5 px-2">
-                FLIGHT
-              </th>
-              <th style={{ border: '1.5px solid #000000' }} className="py-2.5 px-2">
-                TOTAL BOX
-              </th>
-              <th style={{ border: '1.5px solid #000000' }} className="py-2.5 px-2">
-                RMB/PER BOX
-              </th>
-              <th style={{ border: '1.5px solid #000000' }} className="py-2.5 px-2">
-                TOTAL RMB
-              </th>
-              <th style={{ border: '1.5px solid #000000' }} className="py-2.5 px-2">
-                RATE
-              </th>
-              <th style={{ border: '1.5px solid #000000' }} className="py-2.5 px-2">
-                BDT AMOUNT
-              </th>
+              {awbColOrder.columnOrder.map((colId) => {
+                const labelMap: Record<AwbColumnId, string> = {
+                  date: 'DATE',
+                  documentsHolder: 'DOCUMENTS HOLDER/SHIPPER',
+                  flight: 'FLIGHT',
+                  totalBox: 'TOTAL BOX',
+                  rmbPerBox: 'RMB/PER BOX',
+                  totalRmb: 'TOTAL RMB',
+                  rate: 'RATE',
+                  bdtAmount: 'BDT AMOUNT',
+                };
+                const label = labelMap[colId];
+                return (
+                  <th
+                    key={colId}
+                    {...awbColOrder.getHeaderDragProps(colId, label)}
+                    style={{ border: '1.5px solid #000000' }}
+                    className={`py-2.5 px-2 ${awbColOrder.getHeaderDragClassName(colId)}`}
+                  >
+                    <span className="inline-flex items-center justify-center gap-1">
+                      <ColumnDragGrip className="w-2.5 h-2.5 opacity-55 shrink-0" />
+                      <span>{label}</span>
+                    </span>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
 
@@ -1310,7 +1458,9 @@ export const AirWayBillView: React.FC = () => {
                 key={row.id}
                 row={row}
                 rowIndex={idx}
-                holderShipperOptions={holderShipperOptions}
+                columnOrder={awbColOrder.columnOrder}
+                isSelected={selectedRowIdSet.has(row.id)}
+                onToggleSelect={handleToggleRowSelect}
                 onRowEditableChange={handleRowEditableChange}
               />
             ))}
@@ -1320,59 +1470,107 @@ export const AirWayBillView: React.FC = () => {
           <tfoot className="sticky bottom-0 z-10 bg-white">
             <tr>
               <td
-                colSpan={4}
+                data-testid="awb-footer-selection-count"
                 style={{
                   backgroundColor: '#bdd7ee',
                   color: '#000000',
                   border: '1.5px solid #000000',
                   height: '38px',
                 }}
-                className="py-1.5 px-3 text-center text-xs sm:text-sm font-extrabold uppercase tracking-wide"
+                className="py-1.5 px-1 text-center text-[10px] font-extrabold uppercase print:hidden"
               >
-                TOTAL BOX
+                {selection.hasSelection ? `${selection.selectedRows.length} SEL` : ''}
               </td>
               <td
-                data-testid="awb-grand-total-box"
-                style={{
-                  backgroundColor: '#ffffff',
-                  color: totals.totalBoxes < 0 ? '#be123c' : '#000000',
-                  border: '1.5px solid #000000',
-                  height: '38px',
-                }}
-                className="py-1.5 px-2 text-center font-mono font-black text-xs sm:text-sm tabular-nums"
-              >
-                {normalizeSignedZero(totals.totalBoxes).toLocaleString('en-US', {
-                  minimumFractionDigits: Number.isInteger(totals.totalBoxes) ? 0 : 2,
-                  maximumFractionDigits: 2,
-                })}
-              </td>
-              <td
-                colSpan={3}
                 style={{
                   backgroundColor: '#bdd7ee',
                   color: '#000000',
                   border: '1.5px solid #000000',
                   height: '38px',
                 }}
-                className="py-1.5 px-3 text-center text-xs sm:text-sm font-extrabold uppercase tracking-wide"
+                className="py-1.5 px-1 text-center text-[11px] font-extrabold uppercase"
               >
-                TOTAL AMOUNT (BDT)
+                TOTAL
               </td>
-              <td
-                data-testid="awb-grand-total-bdt"
-                style={{
-                  backgroundColor: '#ffffff',
-                  color: totals.totalAmountBDT < 0 ? '#be123c' : '#000000',
-                  border: '1.5px solid #000000',
-                  height: '38px',
-                }}
-                className="py-1.5 px-2.5 text-center font-mono font-black text-xs sm:text-sm tabular-nums"
-              >
-                {normalizeSignedZero(totals.totalAmountBDT).toLocaleString('en-US', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </td>
+              {(() => {
+                const totalBoxIdx = awbColOrder.columnOrder.indexOf('totalBox');
+                const bdtAmountIdx = awbColOrder.columnOrder.indexOf('bdtAmount');
+                const totalBoxLabelIdx =
+                  totalBoxIdx > 0 && totalBoxIdx - 1 !== bdtAmountIdx ? totalBoxIdx - 1 : -1;
+                const bdtLabelIdx =
+                  bdtAmountIdx > 0 && bdtAmountIdx - 1 !== totalBoxIdx ? bdtAmountIdx - 1 : -1;
+
+                return awbColOrder.columnOrder.map((colId, colIdx) => {
+                  if (colId === 'totalBox') {
+                    return (
+                      <td
+                        key="totalBox"
+                        data-testid="awb-grand-total-box"
+                        style={{
+                          backgroundColor: '#ffffff',
+                          color: totals.totalBoxes < 0 ? '#be123c' : '#000000',
+                          border: '1.5px solid #000000',
+                          height: '38px',
+                        }}
+                        className="py-1.5 px-2 text-center font-mono font-black text-xs sm:text-sm tabular-nums"
+                      >
+                        {totalBoxLabelIdx === -1 && (
+                          <span className="text-[10px] font-sans font-extrabold uppercase mr-1">
+                            BOX:
+                          </span>
+                        )}
+                        {normalizeSignedZero(totals.totalBoxes).toLocaleString('en-US', {
+                          minimumFractionDigits: Number.isInteger(totals.totalBoxes) ? 0 : 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </td>
+                    );
+                  }
+                  if (colId === 'bdtAmount') {
+                    return (
+                      <td
+                        key="bdtAmount"
+                        data-testid="awb-grand-total-bdt"
+                        style={{
+                          backgroundColor: '#ffffff',
+                          color: totals.totalAmountBDT < 0 ? '#be123c' : '#000000',
+                          border: '1.5px solid #000000',
+                          height: '38px',
+                        }}
+                        className="py-1.5 px-2.5 text-center font-mono font-black text-xs sm:text-sm tabular-nums"
+                      >
+                        {bdtLabelIdx === -1 && (
+                          <span className="text-[10px] font-sans font-extrabold uppercase mr-1">
+                            BDT:
+                          </span>
+                        )}
+                        {normalizeSignedZero(totals.totalAmountBDT).toLocaleString('en-US', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </td>
+                    );
+                  }
+                  return (
+                    <td
+                      key={colId}
+                      style={{
+                        backgroundColor: '#bdd7ee',
+                        color: '#000000',
+                        border: '1.5px solid #000000',
+                        height: '38px',
+                      }}
+                      className="py-1.5 px-2 text-center text-[11px] font-extrabold uppercase tracking-wide"
+                    >
+                      {colIdx === totalBoxLabelIdx
+                        ? 'TOTAL BOX'
+                        : colIdx === bdtLabelIdx
+                        ? 'TOTAL BDT'
+                        : ''}
+                    </td>
+                  );
+                });
+              })()}
             </tr>
           </tfoot>
         </table>
@@ -1384,23 +1582,32 @@ export const AirWayBillView: React.FC = () => {
         <div className="flex flex-wrap items-center gap-6 font-mono">
           <div>
             <span className="text-slate-500 uppercase text-[10px] font-sans font-bold block">
-              Synced Packing Manifests
+              {selection.hasSelection ? 'Selected For Invoice' : 'Synced Packing Manifests'}
             </span>
             <span className="text-sm font-black text-slate-900">
-              {dbRows.length} Consignment{dbRows.length === 1 ? '' : 's'}
+              {selection.hasSelection
+                ? `${selection.selectedRows.length} of ${dbRows.length} Row${dbRows.length === 1 ? '' : 's'}`
+                : `${dbRows.length} Summary Row${dbRows.length === 1 ? '' : 's'}${
+                    dbRows.reduce((sum, r) => sum + (r.mergedCount || 1), 0) > dbRows.length
+                      ? ` (${dbRows.reduce((sum, r) => sum + (r.mergedCount || 1), 0)} Manifests)`
+                      : ''
+                  }`}
             </span>
           </div>
           <div>
             <span className="text-slate-500 uppercase text-[10px] font-sans font-bold block">
-              Cumulative Total Box
+              {selection.hasSelection ? 'Selected Total Box' : 'Cumulative Total Box'}
             </span>
             <span className="text-sm font-black text-blue-800">
               {totals.totalBoxes} Boxes
+              {selection.hasSelection && fullStatementTotals.totalBoxes !== totals.totalBoxes
+                ? ` / ${fullStatementTotals.totalBoxes}`
+                : ''}
             </span>
           </div>
           <div>
             <span className="text-slate-500 uppercase text-[10px] font-sans font-bold block">
-              Cumulative Total RMB
+              {selection.hasSelection ? 'Selected Total RMB' : 'Cumulative Total RMB'}
             </span>
             <span className="text-sm font-black text-teal-800">
               ¥{' '}
@@ -1412,7 +1619,7 @@ export const AirWayBillView: React.FC = () => {
           </div>
           <div>
             <span className="text-slate-500 uppercase text-[10px] font-sans font-bold block">
-              Total Amount (BDT)
+              {selection.hasSelection ? 'Selected Amount (BDT)' : 'Total Amount (BDT)'}
             </span>
             <span className="text-sm font-black text-emerald-700">
               {companyProfile.currency}{' '}
@@ -1560,7 +1767,7 @@ export const AirWayBillView: React.FC = () => {
                 style={{ backgroundColor: '#0f172a', color: '#ffffff' }}
                 className="inline-block mt-2 px-5 py-1.5 rounded text-xs font-bold tracking-widest uppercase shadow-sm"
               >
-                {`FLIGHT RETURN BILL — MONTHLY STATEMENT (${activePeriodLabel.toUpperCase()})`}
+                {invoiceDocumentBadge}
               </div>
             </div>
 
@@ -1633,7 +1840,7 @@ export const AirWayBillView: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {displayRows.map((row, idx) => (
+                  {activeInvoiceRows.map((row, idx) => (
                     <tr key={row.id || idx} style={{ backgroundColor: '#ffffff', color: '#000000' }}>
                       <td
                         style={{ border: '1.5px solid #000000', height: '27px' }}
@@ -1822,14 +2029,18 @@ export const AirWayBillView: React.FC = () => {
         <PngShareModal
           isOpen={isShareModalOpen}
           onClose={() => setIsShareModalOpen(false)}
-          title={`Flight Return Bill Monthly Statement — ${activePeriodLabel} (${selectedShipper})`}
+          title={
+            selection.hasSelection
+              ? `Flight Return Bill Invoice — ${selection.selectedRows.length} Selected Row${selection.selectedRows.length === 1 ? '' : 's'} (${exportShipperLabel})`
+              : `Flight Return Bill Monthly Statement — ${activePeriodLabel} (${selectedShipper})`
+          }
           documentType="air_way_bill"
           documentData={{
             yearMonth: selectedMonth,
             fromDate,
             toDate,
             monthLabel: activePeriodLabel,
-            shipper: selectedShipper,
+            shipper: exportShipperLabel,
             documentsHolder: selectedDocumentsHolder,
             flight: selectedFlight,
             totals,
@@ -1837,7 +2048,7 @@ export const AirWayBillView: React.FC = () => {
           targetElementId="awb-print-preview-document"
           defaultFilename={formatAirWayBillExportFilename(
             selectedMonth,
-            selectedShipper,
+            exportShipperLabel,
             'png',
             undefined,
             fromDate,

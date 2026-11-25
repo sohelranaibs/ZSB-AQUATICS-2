@@ -5,6 +5,8 @@ import {
   formatCsvRow,
   generatePurchasesCSV,
   generatePackingsCSV,
+  generateFilteredPackingLedgerCSV,
+  formatFilteredPackingCsvFilename,
   generatePaymentsCSV,
   UTF8_BOM,
 } from './csvExporter.ts';
@@ -172,4 +174,133 @@ test('getDateRangePreset produces valid start and end dates', () => {
   const allPreset = getDateRangePreset('all', ref);
   assert.equal(allPreset.startDate, '');
   assert.equal(allPreset.endDate, '');
+});
+
+test('generateFilteredPackingLedgerCSV exports filtered rows with persistent S. No., BDT, status, and custom column order', () => {
+  const filteredPackings: PackingRecord[] = [
+    {
+      id: 'pkg-2',
+      serialNumber: 2,
+      invoiceNumber: 'PKG-2026-1002',
+      shippingMark: 'BANGLA TRADE, LTD',
+      flight: 'CZ CAN',
+      destination: 'GUANGZHOU',
+      shipper: 'RAKIB TRADERS',
+      documentsHolder: 'SHISHIR MAMA',
+      packingDate: '2026-11-12',
+      fromDate: '2026-11-10',
+      toDate: '2026-11-12',
+      items: [
+        {
+          id: 'pi-2',
+          item: 'F1',
+          box: 6,
+          weight: 10,
+          totalWeight: 60,
+          unit: 'KG',
+          rate: 25,
+          amount: 1500,
+        },
+      ],
+      totalBox: 6,
+      totalWeight: 60,
+      totalAmount: 1500,
+      rmbRate: 18,
+      paymentStatus: 'PAID',
+      remarks: 'Urgent "live" shipment',
+      createdAt: '2026-11-12T10:00:00Z',
+    },
+    {
+      id: 'pkg-5',
+      invoiceNumber: 'PKG-2026-1005',
+      shippingMark: 'ANJUM EXPORT',
+      flight: 'YG KMG',
+      destination: 'KUNMING',
+      shipper: 'BANGLA SEAFOOD',
+      documentsHolder: 'SAJID INT.',
+      packingDate: '2026-11-14',
+      fromDate: '2026-11-13',
+      toDate: '2026-11-14',
+      items: [
+        {
+          id: 'pi-5a',
+          item: '2F',
+          box: 4,
+          weight: 12,
+          totalWeight: 48,
+          unit: 'KG',
+          rate: 20,
+          amount: 960,
+        },
+      ],
+      totalBox: 4,
+      totalWeight: 48,
+      totalAmount: 960,
+      rmbRate: 17.5,
+      exporterStatus: 'REPORT',
+      remarks: '',
+      createdAt: '2026-11-14T08:00:00Z',
+    },
+  ];
+
+  const serialMap = new Map<string, number>([
+    ['pkg-2', 2],
+    ['pkg-5', 5],
+  ]);
+
+  // Default order
+  const csv = generateFilteredPackingLedgerCSV(filteredPackings, {
+    serialNumberMap: serialMap,
+  });
+  assert.equal(csv.startsWith(UTF8_BOM), true);
+  const lines = csv.slice(UTF8_BOM.length).split('\r\n');
+  assert.equal(lines.length, 3); // header + 2 filtered rows
+  assert.equal(
+    lines[0],
+    'S. No.,Packing List No,Date,Shipping Mark (Exporter),Flight,Destination,Shipper,Documents Holder,Items,Total Box,Total Weight (KG),Total Value (RMB),RMB Rate,Total Amount (BDT),Status,Items Breakdown,Remarks'
+  );
+  // Row 1 retains persistent S. No. = 2, quotes commas/quotes, computes 1500 * 18 = 27000
+  assert.equal(lines[1].startsWith('2,PKG-2026-1002,2026-11-12,"BANGLA TRADE, LTD",CZ CAN,GUANGZHOU,RAKIB TRADERS,SHISHIR MAMA,F1,6,60,1500,18,27000,PAID,'), true);
+  assert.equal(lines[1].endsWith('"Urgent ""live"" shipment"'), true);
+  // Row 2 resolves persistent S. No. = 5 from serialNumberMap, computes 960 * 17.5 = 16800
+  assert.equal(lines[2].startsWith('5,PKG-2026-1005,2026-11-14,ANJUM EXPORT,YG KMG,KUNMING,BANGLA SEAFOOD,SAJID INT.,2F,4,48,960,17.5,16800,REPORT,'), true);
+
+  // Custom dragged column order is reflected in CSV headers & cell order
+  const customCsv = generateFilteredPackingLedgerCSV([filteredPackings[0]], {
+    serialNumberMap: serialMap,
+    columnOrder: ['shipper', 'shippingMark', 'invoiceNumber', 'amountBDT'],
+  });
+  const customLines = customCsv.slice(UTF8_BOM.length).split('\r\n');
+  assert.equal(
+    customLines[0],
+    'S. No.,Shipper,Shipping Mark (Exporter),Packing List No,Total Amount (BDT),Items Breakdown,Remarks'
+  );
+  assert.equal(
+    customLines[1].startsWith('2,RAKIB TRADERS,"BANGLA TRADE, LTD",PKG-2026-1002,27000,'),
+    true
+  );
+});
+
+test('formatFilteredPackingCsvFilename produces clean filesystem-safe names with filter tags', () => {
+  assert.equal(
+    formatFilteredPackingCsvFilename({ referenceDate: '2026-11-24' }),
+    'ZSB_Aquatics_Packing_List_2026-11-24.csv'
+  );
+  assert.equal(
+    formatFilteredPackingCsvFilename({
+      partyQuery: 'BANGLA / TRADE!',
+      startDate: '2026-11-01',
+      endDate: '2026-11-24',
+    }),
+    'ZSB_Aquatics_Packing_List_Filter_BANGLA_TRADE_2026-11-01_to_2026-11-24.csv'
+  );
+  assert.equal(
+    formatFilteredPackingCsvFilename({
+      partyQuery: 'RAKIB',
+      searchTerm: 'CAN',
+      validationFilter: 'invalid_only',
+      referenceDate: '2026-11-24',
+    }),
+    'ZSB_Aquatics_Packing_List_Filter_RAKIB_Search_CAN_Invalid_Only_2026-11-24.csv'
+  );
 });

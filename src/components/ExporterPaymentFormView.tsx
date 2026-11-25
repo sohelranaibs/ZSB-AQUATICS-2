@@ -1292,48 +1292,6 @@ export const ExporterPaymentFormView: React.FC = () => {
 
   return (
     <div className="p-3 sm:p-5 max-w-7xl mx-auto space-y-5">
-      {/* Top Banner (Sheet #04 - Dedicated Exporter Payment) */}
-      <div className="bg-[#273E56] text-white px-5 py-3 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#00897b]">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
-            <img
-              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
-              alt={companyProfile.companyName}
-              className="w-full h-full object-contain rounded-full"
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <span className="text-xl sm:text-2xl font-black tracking-tight text-amber-400 zsb-golden-brand">
-              {companyProfile.companyName}
-            </span>
-            <span className="text-lg text-slate-400 hidden sm:inline">|</span>
-            <span className="text-sm sm:text-base font-semibold text-[#80cbc4] uppercase tracking-wide">
-              Exporter Payment Data Entry Form – All Record History (Debit, Credit, Balance &amp; Status)
-            </span>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setActiveTab('payment_form')}
-            className="text-xs bg-[#1c2a33] hover:bg-[#162129] text-slate-200 px-3 py-1 rounded border border-[#334b59] font-bold flex items-center space-x-1.5 transition cursor-pointer"
-          >
-            <span>Supplier Payment Sheet (#05)</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('exporter_payment_slip')}
-            className="text-xs bg-[#00897b] hover:bg-[#00796b] text-white px-3 py-1 rounded font-bold flex items-center space-x-1.5 transition cursor-pointer shadow-xs"
-          >
-            <Receipt className="w-3.5 h-3.5" />
-            <span>Exporter Payment Slip 付款单 (#07)</span>
-          </button>
-          <span className="text-xs bg-[#00897b]/25 text-[#5eead4] px-2.5 py-1 rounded border border-[#00897b]/50 font-mono font-bold">
-            Sheet #04
-          </span>
-        </div>
-      </div>
-
       {/* Automatic Exporter Database Lookup (Select Shipping Mark & Packing Date) */}
       <div
         data-testid="exporter-form-auto-lookup-card"
@@ -1530,36 +1488,6 @@ export const ExporterPaymentFormView: React.FC = () => {
         {/* Left: The Dedicated Exporter Payment Excel Sheet (8 Cols) */}
         <div className="lg:col-span-8 space-y-4">
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            {/* Slate-Teal Sheet Header Box */}
-            <div className="bg-[#273E56] text-white py-3 px-4 text-center border-b border-[#1d2c35] space-y-1.5">
-              <div className="flex items-center justify-center gap-2.5">
-                <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
-                  <img
-                    src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
-                    alt={companyProfile.companyName}
-                    className="w-full h-full object-contain rounded-full"
-                  />
-                </div>
-                <div className="text-xl sm:text-2xl font-black tracking-tight text-amber-400 zsb-golden-brand">
-                  {companyProfile.companyName}
-                </div>
-              </div>
-              <div className="text-xs sm:text-sm font-bold tracking-wider uppercase text-[#80cbc4]">
-                EXPORTER PAYMENT DATA ENTRY &amp; RECORD HISTORY (DEBIT, CREDIT, BALANCE &amp; STATUS)
-              </div>
-              <div className="flex flex-wrap items-center justify-center gap-2 pt-0.5">
-                <span className="bg-[#1c2a33] border border-[#334b59] text-slate-200 px-2.5 py-0.5 rounded text-[11px] font-medium">
-                  Address: {companyProfile.address}
-                </span>
-                <span className="bg-[#1c2a33] border border-[#334b59] text-slate-200 px-2.5 py-0.5 rounded text-[11px] font-medium font-mono">
-                  Mobile: {companyProfile.mobiles.join(', ')}
-                </span>
-                <span className="bg-[#1c2a33] border border-[#334b59] text-slate-200 px-2.5 py-0.5 rounded text-[11px] font-medium font-mono">
-                  EMAIL: {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}
-                </span>
-              </div>
-            </div>
-
             {/* Validation Alert Banner */}
             {validationAttempted && !validation.isValid && (
               <div

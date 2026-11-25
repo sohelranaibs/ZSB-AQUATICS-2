@@ -4,6 +4,7 @@ import {
   calculatePaymentRow,
   calculatePurchaseRowTotal,
 } from './calculations.ts';
+import { sanitizeRowLockReason } from './rowLock.ts';
 
 export const FORM_DRAFT_STORAGE_KEYS = {
   PURCHASE_FORM: 'zsb_purchase_form_draft_v1',
@@ -124,6 +125,7 @@ export function sanitizePurchaseFormDraft(
       const quantity = toSafeNumber(r.quantity, 0);
       const rate = toSafeNumber(r.rate, 0);
       const rateSpecified = Boolean(r.rateSpecified) || rate !== 0;
+      const locked = Boolean(r.locked);
       return {
         id: toSafeString(r.id, String(idx + 1)),
         item: toSafeString(r.item, ''),
@@ -134,6 +136,13 @@ export function sanitizePurchaseFormDraft(
         previousAmount: toSafeNumber(r.previousAmount, 0),
         paidAmount: toSafeNumber(r.paidAmount, 0),
         balance: toSafeNumber(r.balance, 0),
+        ...(locked
+          ? {
+              locked: true,
+              lockReason: sanitizeRowLockReason(r.lockReason) || 'manual',
+              lockedAt: typeof r.lockedAt === 'string' ? r.lockedAt : undefined,
+            }
+          : {}),
       };
     });
 
@@ -199,6 +208,7 @@ export function sanitizePackingFormDraft(
       const rate = toSafeNumber(r.rate, 0);
       const reportWeight = toSafeNumber(r.reportWeight, 0);
       const calcs = calculatePackingRow(box, weight, rate, reportWeight);
+      const locked = Boolean(r.locked);
       return {
         id: toSafeString(r.id, String(idx + 1)),
         item: toSafeString(r.item, ''),
@@ -209,6 +219,13 @@ export function sanitizePackingFormDraft(
         unit: toSafeString(r.unit, 'KG'),
         rate,
         amount: calcs.amount,
+        ...(locked
+          ? {
+              locked: true,
+              lockReason: sanitizeRowLockReason(r.lockReason) || 'manual',
+              lockedAt: typeof r.lockedAt === 'string' ? r.lockedAt : undefined,
+            }
+          : {}),
       };
     });
 

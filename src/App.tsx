@@ -479,6 +479,7 @@ const MainContent: React.FC = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       const target = e.target as HTMLElement | null;
       const resolved = resolveGlobalKeyboardShortcut({
         key: e.key,

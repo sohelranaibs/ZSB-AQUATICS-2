@@ -36,6 +36,17 @@ import {
   ViewShortcutEventDetail,
 } from '../utils/keyboardShortcuts.ts';
 import {
+  countLockedRows,
+  countUnlockedPopulatedRows,
+  getRowLockLabel,
+  getRowLockShortTag,
+  hydrateLoadedRowsWithFinalizedLock,
+  isPopulatedPurchaseRow,
+  lockPopulatedRows,
+  toggleRowLockById,
+  unlockAllRows,
+} from '../utils/rowLock.ts';
+import {
   FileText,
   Search,
   Trash2,
@@ -51,11 +62,26 @@ import {
   Edit2,
   ImageDown,
   Loader2,
+  Lock,
+  Unlock,
 } from 'lucide-react';
 import {
   PngShareModal,
   WeChatIcon,
 } from './PngShareModal.tsx';
+import { useTableColumnOrder } from '../hooks/useTableColumnOrder.ts';
+import {
+  ColumnReorderToolbar,
+  ColumnDragGrip,
+} from './ColumnReorderToolbar.tsx';
+
+const PURCHASE_FORM_DEFAULT_COLUMNS = [
+  'item',
+  'quantity',
+  'rate',
+  'total',
+] as const;
+type PurchaseFormColumnId = (typeof PURCHASE_FORM_DEFAULT_COLUMNS)[number];
 
 const createEmptyPurchaseRow = (id: string): PurchaseItemRow => ({
   id,
@@ -84,6 +110,7 @@ const isEmptyOrSignOnlyRateDraft = (raw: string): boolean => {
 interface PurchaseItemTableRowProps {
   row: PurchaseItemRow;
   rowIndex: number;
+  columnOrder: readonly PurchaseFormColumnId[];
   purchaseItemOptions: React.ReactNode;
   hasItemError: boolean;
   hasQuantityError: boolean;
@@ -96,6 +123,7 @@ interface PurchaseItemTableRowProps {
     value: string | number
   ) => void;
   onClearRow: (id: string) => void;
+  onToggleRowLock: (id: string) => void;
 }
 
 const arePurchaseItemTableRowPropsEqual = (
@@ -103,6 +131,7 @@ const arePurchaseItemTableRowPropsEqual = (
   next: PurchaseItemTableRowProps
 ): boolean =>
   prev.rowIndex === next.rowIndex &&
+  prev.columnOrder === next.columnOrder &&
   prev.purchaseItemOptions === next.purchaseItemOptions &&
   prev.hasItemError === next.hasItemError &&
   prev.hasQuantityError === next.hasQuantityError &&
@@ -111,12 +140,14 @@ const arePurchaseItemTableRowPropsEqual = (
   prev.rateResetToken === next.rateResetToken &&
   prev.onRowChange === next.onRowChange &&
   prev.onClearRow === next.onClearRow &&
+  prev.onToggleRowLock === next.onToggleRowLock &&
   isPurchaseRowDataEqual(prev.row, next.row);
 
 const PurchaseItemTableRow: React.FC<PurchaseItemTableRowProps> = memo(
   ({
     row,
     rowIndex,
+    columnOrder,
     purchaseItemOptions,
     hasItemError,
     hasQuantityError,
@@ -125,7 +156,11 @@ const PurchaseItemTableRow: React.FC<PurchaseItemTableRowProps> = memo(
     rateResetToken,
     onRowChange,
     onClearRow,
+    onToggleRowLock,
   }) => {
+    const isLocked = Boolean(row.locked);
+    const lockLabel = getRowLockLabel(row);
+    const lockShortTag = getRowLockShortTag(row);
     const isFilled =
       row.item.trim() !== '' ||
       row.quantity !== 0 ||
@@ -199,14 +234,23 @@ const PurchaseItemTableRow: React.FC<PurchaseItemTableRowProps> = memo(
     }, []);
 
     const handleClearClick = useCallback(() => {
+      if (isLocked) return;
       onClearRow(row.id);
-    }, [onClearRow, row.id]);
+    }, [isLocked, onClearRow, row.id]);
+
+    const handleToggleLockClick = useCallback(() => {
+      onToggleRowLock(row.id);
+    }, [onToggleRowLock, row.id]);
 
     return (
       <tr
+        data-testid={`purchase-row-${rowIndex + 1}`}
+        data-locked={isLocked ? 'true' : 'false'}
         className={`transition-colors ${
           hasAnyRowError
             ? 'bg-rose-50/60 hover:bg-rose-50'
+            : isLocked
+            ? 'bg-amber-50/55 border-l-[3px] border-l-amber-500'
             : isFilled
             ? 'bg-amber-50/20 hover:bg-amber-50/50'
             : rowIndex % 2 === 0
@@ -214,107 +258,173 @@ const PurchaseItemTableRow: React.FC<PurchaseItemTableRowProps> = memo(
             : 'bg-slate-50/50 hover:bg-slate-100/60'
         }`}
       >
-        {/* Row SL Number */}
+        {/* Row SL Number + Lock Tag */}
         <td className="px-2 py-1.5 border-r border-slate-200 text-center">
-          <span className="zsb-sl-badge">
-            {String(rowIndex + 1).padStart(2, '0')}
-          </span>
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="zsb-sl-badge">
+              {String(rowIndex + 1).padStart(2, '0')}
+            </span>
+            {isLocked && (
+              <span
+                data-testid={`purchase-row-${rowIndex + 1}-lock-tag`}
+                title={lockLabel}
+                className="inline-flex items-center gap-0.5 text-[9px] font-extrabold uppercase tracking-tight text-amber-800 bg-amber-100 border border-amber-300 px-1 rounded"
+              >
+                <Lock className="w-2.5 h-2.5 shrink-0" aria-hidden="true" />
+                <span>{lockShortTag}</span>
+              </span>
+            )}
+          </div>
         </td>
 
-        {/* Item / Grade Dropdown */}
-        <td className="p-1.5 border-r border-slate-200">
-          <select
-            aria-label={`Row ${rowIndex + 1} Item`}
-            aria-invalid={hasItemError}
-            value={row.item}
-            onChange={handleItemChange}
-            className={`w-full border rounded-md px-2 py-1.5 font-semibold focus:bg-white focus:outline-none focus:ring-2 ${
-              hasItemError
-                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 text-rose-900 focus:ring-rose-500'
-                : row.item
-                ? 'bg-white border-slate-300 text-slate-900 focus:ring-blue-500'
-                : 'bg-slate-50 border-slate-200 text-slate-500 focus:ring-blue-500'
-            }`}
-          >
-            <option value="">-- Select Grade / Size --</option>
-            {purchaseItemOptions}
-          </select>
-        </td>
+        {columnOrder.map((colId) => {
+          switch (colId) {
+            case 'item':
+              return (
+                <td key="item" className="p-1.5 border-r border-slate-200">
+                  <select
+                    aria-label={`Row ${rowIndex + 1} Item`}
+                    aria-invalid={hasItemError}
+                    disabled={isLocked}
+                    title={isLocked ? `${lockLabel} — unlock row to edit` : undefined}
+                    value={row.item}
+                    onChange={handleItemChange}
+                    className={`w-full border rounded-md px-2 py-1.5 font-semibold focus:bg-white focus:outline-none focus:ring-2 ${
+                      isLocked
+                        ? 'bg-slate-100/90 border-slate-200 text-slate-600 cursor-not-allowed'
+                        : hasItemError
+                        ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 text-rose-900 focus:ring-rose-500'
+                        : row.item
+                        ? 'bg-white border-slate-300 text-slate-900 focus:ring-blue-500'
+                        : 'bg-slate-50 border-slate-200 text-slate-500 focus:ring-blue-500'
+                    }`}
+                  >
+                    <option value="">-- Select Grade / Size --</option>
+                    {purchaseItemOptions}
+                  </select>
+                </td>
+              );
+            case 'quantity':
+              return (
+                <td key="quantity" className="p-1.5 border-r border-slate-200">
+                  <input
+                    aria-label={`Row ${rowIndex + 1} Quantity`}
+                    aria-invalid={hasQuantityError}
+                    disabled={isLocked}
+                    title={isLocked ? `${lockLabel} — unlock row to edit` : undefined}
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={row.quantity || ''}
+                    onChange={handleQuantityChange}
+                    className={`w-full border rounded-md px-2.5 py-1.5 text-right font-mono tabular-nums font-semibold focus:outline-none focus:ring-2 ${
+                      isLocked
+                        ? 'bg-slate-100/90 border-slate-200 text-slate-600 cursor-not-allowed'
+                        : hasQuantityError
+                        ? 'bg-rose-50/40 border-rose-500 ring-1 ring-rose-300 text-slate-900 focus:ring-rose-500'
+                        : 'bg-white border-slate-200 text-slate-900 focus:ring-blue-500'
+                    }`}
+                    placeholder="0"
+                  />
+                </td>
+              );
+            case 'rate':
+              return (
+                <td key="rate" className="p-1.5 border-r border-slate-200">
+                  <input
+                    aria-label={`Row ${rowIndex + 1} Rate`}
+                    aria-invalid={hasRateError}
+                    data-testid={`purchase-row-${rowIndex + 1}-rate`}
+                    disabled={isLocked}
+                    title={isLocked ? `${lockLabel} — unlock row to edit` : undefined}
+                    type="text"
+                    inputMode="decimal"
+                    value={rateDraft}
+                    onChange={handleRateChange}
+                    onFocus={handleRateFocus}
+                    onBlur={handleRateBlur}
+                    className={`w-full border rounded-md px-2.5 py-1.5 text-right font-mono tabular-nums font-semibold focus:outline-none focus:ring-2 ${
+                      isLocked
+                        ? 'bg-slate-100/90 border-slate-200 text-slate-600 cursor-not-allowed'
+                        : hasRateError
+                        ? 'bg-rose-50/40 border-rose-500 ring-1 ring-rose-300 text-rose-900 focus:ring-rose-500'
+                        : row.rate < 0
+                        ? 'bg-white border-slate-200 text-rose-700 focus:ring-blue-500'
+                        : 'bg-white border-slate-200 text-slate-900 focus:ring-blue-500'
+                    }`}
+                    placeholder="0.00"
+                  />
+                </td>
+              );
+            case 'total':
+              return (
+                <td
+                  key="total"
+                  data-testid={`purchase-row-${rowIndex + 1}-total`}
+                  className={`px-3 py-1.5 border-r border-slate-200 text-right font-mono tabular-nums font-bold text-xs ${
+                    isLocked ? 'bg-amber-100/40' : 'bg-amber-50/40'
+                  } ${row.totalAmount < 0 ? 'text-rose-700' : 'text-slate-900'}`}
+                >
+                  {row.totalAmount !== 0
+                    ? row.totalAmount.toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })
+                    : '0.00'}
+                </td>
+              );
+            default:
+              return null;
+          }
+        })}
 
-        {/* Quantity Input */}
-        <td className="p-1.5 border-r border-slate-200">
-          <input
-            aria-label={`Row ${rowIndex + 1} Quantity`}
-            aria-invalid={hasQuantityError}
-            type="number"
-            min="0"
-            step="any"
-            value={row.quantity || ''}
-            onChange={handleQuantityChange}
-            className={`w-full bg-white border rounded-md px-2.5 py-1.5 text-right font-mono tabular-nums font-semibold text-slate-900 focus:outline-none focus:ring-2 ${
-              hasQuantityError
-                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 focus:ring-rose-500'
-                : 'border-slate-200 focus:ring-blue-500'
-            }`}
-            placeholder="0"
-          />
-        </td>
-
-        {/* Unit Rate Input (Supports -0, +0, negative, and positive rates) */}
-        <td className="p-1.5 border-r border-slate-200">
-          <input
-            aria-label={`Row ${rowIndex + 1} Rate`}
-            aria-invalid={hasRateError}
-            data-testid={`purchase-row-${rowIndex + 1}-rate`}
-            type="text"
-            inputMode="decimal"
-            value={rateDraft}
-            onChange={handleRateChange}
-            onFocus={handleRateFocus}
-            onBlur={handleRateBlur}
-            className={`w-full bg-white border rounded-md px-2.5 py-1.5 text-right font-mono tabular-nums font-semibold focus:outline-none focus:ring-2 ${
-              hasRateError
-                ? 'border-rose-500 ring-1 ring-rose-300 bg-rose-50/40 text-rose-900 focus:ring-rose-500'
-                : row.rate < 0
-                ? 'border-slate-200 text-rose-700 focus:ring-blue-500'
-                : 'border-slate-200 text-slate-900 focus:ring-blue-500'
-            }`}
-            placeholder="0.00"
-          />
-        </td>
-
-        {/* Row Total Amount (Quantity * Rate) */}
-        <td
-          data-testid={`purchase-row-${rowIndex + 1}-total`}
-          className={`px-3 py-1.5 border-r border-slate-200 bg-amber-50/40 text-right font-mono tabular-nums font-bold text-xs ${
-            row.totalAmount < 0 ? 'text-rose-700' : 'text-slate-900'
-          }`}
-        >
-          {row.totalAmount !== 0
-            ? row.totalAmount.toLocaleString('en-US', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })
-            : '0.00'}
-        </td>
-
-        {/* Row Clear Action */}
+        {/* Row Lock & Clear Actions */}
         <td className="p-1.5 text-center">
-          <button
-            type="button"
-            data-testid={`purchase-row-${rowIndex + 1}-clear`}
-            onClick={handleClearClick}
-            disabled={!isFilled}
-            aria-label={`Clear row ${rowIndex + 1}`}
-            title="Reset this row"
-            className={`p-1 rounded transition ${
-              isFilled
-                ? 'text-slate-500 hover:text-rose-600 hover:bg-rose-50 cursor-pointer'
-                : 'text-slate-300 cursor-not-allowed'
-            }`}
-          >
-            <RotateCcw className="w-3.5 h-3.5 mx-auto" />
-          </button>
+          <div className="inline-flex items-center justify-center gap-1">
+            <button
+              type="button"
+              data-testid={`purchase-row-${rowIndex + 1}-lock`}
+              onClick={handleToggleLockClick}
+              disabled={!isLocked && !isFilled}
+              aria-pressed={isLocked}
+              aria-label={isLocked ? `Unlock row ${rowIndex + 1}` : `Lock row ${rowIndex + 1}`}
+              title={
+                isLocked
+                  ? `${lockLabel} — Click to unlock for editing`
+                  : isFilled
+                  ? 'Lock this row to prevent accidental edits'
+                  : 'Enter row data before locking'
+              }
+              className={`p-1 rounded border transition ${
+                isLocked
+                  ? 'bg-amber-100 border-amber-300 text-amber-800 hover:bg-amber-200 cursor-pointer'
+                  : isFilled
+                  ? 'bg-white border-slate-200 text-slate-500 hover:text-amber-700 hover:border-amber-300 hover:bg-amber-50 cursor-pointer'
+                  : 'bg-transparent border-transparent text-slate-300 cursor-not-allowed'
+              }`}
+            >
+              {isLocked ? (
+                <Lock className="w-3.5 h-3.5" aria-hidden="true" />
+              ) : (
+                <Unlock className="w-3.5 h-3.5" aria-hidden="true" />
+              )}
+            </button>
+            <button
+              type="button"
+              data-testid={`purchase-row-${rowIndex + 1}-clear`}
+              onClick={handleClearClick}
+              disabled={!isFilled || isLocked}
+              aria-label={`Clear row ${rowIndex + 1}`}
+              title={isLocked ? 'Unlock row before clearing' : 'Reset this row'}
+              className={`p-1 rounded transition ${
+                isFilled && !isLocked
+                  ? 'text-slate-500 hover:text-rose-600 hover:bg-rose-50 cursor-pointer'
+                  : 'text-slate-300 cursor-not-allowed'
+              }`}
+            >
+              <RotateCcw className="w-3.5 h-3.5 mx-auto" />
+            </button>
+          </div>
         </td>
       </tr>
     );
@@ -337,6 +447,11 @@ export const PurchaseFormView: React.FC = () => {
     showToast,
     requestSuperAdminSingleDelete,
   } = useApp();
+
+  const purchaseColOrder = useTableColumnOrder(
+    'purchase_form',
+    PURCHASE_FORM_DEFAULT_COLUMNS
+  );
 
   // Invoice header state (hydrated from localStorage unsaved draft if available)
   const nextInvoiceNo = generateInvoiceNumber('PUR', purchases.length);
@@ -485,11 +600,18 @@ export const PurchaseFormView: React.FC = () => {
 
   const savedInvoiceOptionElements = useMemo(
     () =>
-      purchases.map((p) => (
-        <option key={p.id} value={p.id}>
-          {p.invoiceNumber} — {p.description} ({formatDate(p.date)})
-        </option>
-      )),
+      purchases.map((p) => {
+        const lockSuffix = p.exportedAt
+          ? ' [Exported · Locked]'
+          : p.finalizedAt || p.items.some((i) => i.locked)
+          ? ' [Finalized · Locked]'
+          : '';
+        return (
+          <option key={p.id} value={p.id}>
+            {p.invoiceNumber} — {p.description} ({formatDate(p.date)}){lockSuffix}
+          </option>
+        );
+      }),
     [purchases]
   );
 
@@ -539,10 +661,48 @@ export const PurchaseFormView: React.FC = () => {
     []
   );
 
+  // Toggle row-level lock to protect finalized/exported rows from accidental edits
+  const handleToggleRowLock = useCallback(
+    (id: string) => {
+      const targetRow = rowsRef.current.find((r) => r.id === id);
+      if (!targetRow) return;
+      if (!targetRow.locked && !isPopulatedPurchaseRow(targetRow)) {
+        showToast('Enter item details before locking this row.');
+        return;
+      }
+      const nextLocked = !targetRow.locked;
+      setRows((prev) => toggleRowLockById(prev, id, 'manual'));
+      showToast(
+        nextLocked
+          ? `Row locked${targetRow.item ? ` (${targetRow.item})` : ''} to prevent accidental edits.`
+          : `Row unlocked${targetRow.item ? ` (${targetRow.item})` : ''} for editing.`
+      );
+    },
+    [showToast]
+  );
+
+  const handleLockAllPopulated = useCallback(() => {
+    const unlockedCount = countUnlockedPopulatedRows(rowsRef.current, isPopulatedPurchaseRow);
+    if (unlockedCount === 0) return;
+    setRows((prev) => lockPopulatedRows(prev, isPopulatedPurchaseRow, 'manual'));
+    showToast(`Locked ${unlockedCount} populated purchase row(s) against accidental edits.`);
+  }, [showToast]);
+
+  const handleUnlockAllRows = useCallback(() => {
+    const lockedCount = countLockedRows(rowsRef.current);
+    if (lockedCount === 0) return;
+    setRows((prev) => unlockAllRows(prev));
+    showToast(`Unlocked ${lockedCount} purchase row(s) for editing.`);
+  }, [showToast]);
+
   // Clear or remove a single row (Requires Super Admin Permission)
   const handleClearRow = useCallback(
     (id: string) => {
       const targetRow = rowsRef.current.find((r) => r.id === id);
+      if (targetRow?.locked) {
+        showToast('This row is locked. Unlock it first before clearing.');
+        return;
+      }
       requestSuperAdminSingleDelete(
         {
           recordType: 'custom_row',
@@ -586,18 +746,32 @@ export const PurchaseFormView: React.FC = () => {
     setOverallPreviousAmount(found.previousAmount || 0);
     setOverallPaidAmount(found.paidAmount || 0);
 
-    const loadedRows: PurchaseItemRow[] = found.items.map((it) => ({
+    const normalizedItems: PurchaseItemRow[] = found.items.map((it) => ({
       ...it,
       rateSpecified: it.rateSpecified ?? true,
       totalAmount: calculatePurchaseRowTotal(it.quantity, it.rate),
     }));
+    const loadedRows: PurchaseItemRow[] = hydrateLoadedRowsWithFinalizedLock(
+      normalizedItems,
+      {
+        finalizedAt: found.finalizedAt,
+        exportedAt: found.exportedAt,
+        createdAt: found.createdAt,
+        status: found.status,
+      }
+    );
     while (loadedRows.length < 5) {
       loadedRows.push(createEmptyPurchaseRow(generateRecordId('prow')));
     }
     setRows(loadedRows);
     setRateResetToken((t) => t + 1);
     setValidationAttempted(false);
-    showToast(`Loaded purchase invoice ${found.invoiceNumber} for editing.`);
+    const lockedCount = countLockedRows(loadedRows);
+    showToast(
+      lockedCount > 0
+        ? `Loaded ${found.invoiceNumber} — ${lockedCount} finalized row(s) locked against accidental edits.`
+        : `Loaded purchase invoice ${found.invoiceNumber} for editing.`
+    );
   };
 
   const handleCancelEdit = () => {
@@ -658,16 +832,44 @@ export const PurchaseFormView: React.FC = () => {
   );
 
   const populatedRowCount = useMemo(
-    () =>
-      rows.filter(
-        (r) =>
-          r.item.trim() !== '' ||
-          r.quantity !== 0 ||
-          r.rate !== 0 ||
-          Boolean(r.rateSpecified)
-      ).length,
+    () => rows.filter(isPopulatedPurchaseRow).length,
     [rows]
   );
+
+  const lockedRowCount = useMemo(() => countLockedRows(rows), [rows]);
+  const unlockedPopulatedRowCount = useMemo(
+    () => countUnlockedPopulatedRows(rows, isPopulatedPurchaseRow),
+    [rows]
+  );
+
+  const markPopulatedRowsAsExported = useCallback(() => {
+    const nowIso = new Date().toISOString();
+    const nextRows = lockPopulatedRows(
+      rowsRef.current,
+      isPopulatedPurchaseRow,
+      'exported',
+      nowIso
+    );
+    if (nextRows !== rowsRef.current) {
+      setRows(nextRows);
+    }
+    if (editingPurchaseId) {
+      const existing = purchases.find((p) => p.id === editingPurchaseId);
+      if (existing) {
+        const exportedItems = lockPopulatedRows(
+          existing.items,
+          isPopulatedPurchaseRow,
+          'exported',
+          nowIso
+        );
+        updatePurchase(editingPurchaseId, {
+          items: exportedItems,
+          exportedAt: nowIso,
+        });
+      }
+    }
+    return nextRows;
+  }, [editingPurchaseId, purchases, updatePurchase]);
 
   const handleSavePDF = () => {
     const check = validatePurchaseForm({
@@ -688,44 +890,56 @@ export const PurchaseFormView: React.FC = () => {
     }
 
     setValidationAttempted(false);
-    const validItems = check.validItems;
+    const nowIso = new Date().toISOString();
+    const finalizedItems = lockPopulatedRows(
+      check.validItems,
+      isPopulatedPurchaseRow,
+      'finalized',
+      nowIso
+    );
 
     if (editingPurchaseId) {
+      const existingRec = purchases.find((p) => p.id === editingPurchaseId);
       const updatedFields = {
         invoiceNumber: invoiceNumber.trim(),
         date,
         description,
         contactNumber,
-        items: validItems,
+        items: finalizedItems,
         totalQty,
         totalAmount,
         previousAmount: overallPreviousAmount,
         paidAmount: overallPaidAmount,
         balance,
         remarks,
+        finalizedAt: nowIso,
+        exportedAt: existingRec?.exportedAt,
         calculationPending: false,
         pendingFields: undefined,
         rawValues: undefined,
       };
 
       updatePurchase(editingPurchaseId, updatedFields);
+      setRows((prev) =>
+        lockPopulatedRows(prev, isPopulatedPurchaseRow, 'finalized', nowIso)
+      );
 
       const updatedRecord = {
         ...updatedFields,
         id: editingPurchaseId,
-        createdAt: new Date().toISOString(),
+        createdAt: existingRec?.createdAt || nowIso,
       };
 
       openPrintModal({
         type: 'purchase',
         title: `Purchase Challan / Bill (Updated) - ${updatedRecord.invoiceNumber}`,
         data: updatedRecord,
-        items: validItems,
+        items: finalizedItems,
       });
 
       setLastSavedRecord({ id: editingPurchaseId, invoiceNumber: updatedRecord.invoiceNumber });
       showToast(
-        `Purchase invoice ${updatedRecord.invoiceNumber} updated successfully! Click "Edit" if you need further adjustments.`
+        `Purchase invoice ${updatedRecord.invoiceNumber} updated and finalized rows locked against accidental edits.`
       );
     } else {
       const newRecord = {
@@ -733,13 +947,14 @@ export const PurchaseFormView: React.FC = () => {
         date,
         description,
         contactNumber,
-        items: validItems,
+        items: finalizedItems,
         totalQty,
         totalAmount,
         previousAmount: overallPreviousAmount,
         paidAmount: overallPaidAmount,
         balance,
         remarks,
+        finalizedAt: nowIso,
       };
 
       const newId = addPurchase(newRecord);
@@ -748,30 +963,27 @@ export const PurchaseFormView: React.FC = () => {
         type: 'purchase',
         title: `Purchase Challan / Bill - ${newRecord.invoiceNumber}`,
         data: newRecord,
-        items: validItems,
+        items: finalizedItems,
       });
 
       setLastSavedRecord({ id: newId, invoiceNumber: newRecord.invoiceNumber });
       setInvoiceNumber(generateInvoiceNumber('PUR', purchases.length + 1));
       resetFormFields();
       showToast(
-        `Purchase Bill ${newRecord.invoiceNumber} saved successfully. Click "Edit" if you need to update it.`
+        `Purchase Bill ${newRecord.invoiceNumber} finalized and saved. Reloading it will keep rows locked by default.`
       );
     }
   };
 
   const exportableRows = useMemo(() => {
-    const validItems = rows.filter(
-      (r) =>
-        r.item.trim() !== '' ||
-        r.quantity !== 0 ||
-        r.rate !== 0 ||
-        Boolean(r.rateSpecified)
-    );
+    const validItems = rows.filter(isPopulatedPurchaseRow);
     return validItems.length > 0 ? validItems : rows.slice(0, 5);
   }, [rows]);
 
   const handlePrintSelected = () => {
+    const lockedRows = markPopulatedRowsAsExported();
+    const activeRows = lockedRows.filter(isPopulatedPurchaseRow);
+    const itemsForExport = activeRows.length > 0 ? activeRows : lockedRows.slice(0, 5);
     openPrintModal({
       type: 'purchase',
       title: `Purchase Challan / Bill (Preview) - ${invoiceNumber}`,
@@ -780,7 +992,7 @@ export const PurchaseFormView: React.FC = () => {
         date,
         description,
         contactNumber,
-        items: exportableRows,
+        items: itemsForExport,
         totalQty,
         totalAmount,
         previousAmount: overallPreviousAmount,
@@ -788,7 +1000,7 @@ export const PurchaseFormView: React.FC = () => {
         balance,
         remarks,
       },
-      items: exportableRows,
+      items: itemsForExport,
     });
   };
 
@@ -834,7 +1046,8 @@ export const PurchaseFormView: React.FC = () => {
       await yieldForDomFrame();
       const success = await exportElementToPng('purchase-voucher-export-canvas', filename, 760);
       if (success) {
-        showToast(`PNG image downloaded: ${filename}`);
+        markPopulatedRowsAsExported();
+        showToast(`PNG image downloaded: ${filename} (exported rows locked)`);
       } else {
         showToast('Opening Print / Save PNG preview...');
         handlePrintSelected();
@@ -879,112 +1092,15 @@ export const PurchaseFormView: React.FC = () => {
 
   return (
     <div className="p-3 sm:p-5 max-w-[1440px] mx-auto space-y-5">
-      {/* Top Banner */}
-      <div className="bg-[#273E56] text-white px-5 py-3.5 rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#00897b]">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-sm flex items-center justify-center">
-            <img
-              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
-              alt={companyProfile.companyName}
-              className="w-full h-full object-contain rounded-full"
-            />
-          </div>
-          <div>
-            <div className="flex flex-wrap items-center gap-2.5">
-              <span className="text-xl sm:text-2xl font-black tracking-tight text-amber-400 zsb-golden-brand">
-                {companyProfile.companyName}
-              </span>
-              <span className="text-slate-400 hidden sm:inline">·</span>
-              <span className="text-sm sm:text-base font-semibold text-[#80cbc4] tracking-wide">
-                Purchase Challan / Bill — Data Entry Voucher
-              </span>
-            </div>
-            <div className="mt-1 inline-flex flex-wrap items-center gap-2 bg-[#1c2a33] border border-[#334b59] px-2.5 py-0.5 rounded text-[11px] font-medium text-slate-200">
-              <span>{companyProfile.address}</span>
-              <span className="text-slate-500">|</span>
-              <span className="font-mono">
-                Mob: {companyProfile.mobiles.join(', ')}
-              </span>
-              <span className="text-slate-500">|</span>
-              <span className="font-mono">
-                EMAIL: {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}
-              </span>
-            </div>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300 font-mono tabular-nums">
-          <span>Active Rows: {populatedRowCount}/{rows.length}</span>
-          <span aria-hidden="true">·</span>
-          <span className="bg-[#00897b]/25 text-[#5eead4] px-2.5 py-0.5 rounded border border-[#00897b]/50 font-bold">Sheet #02</span>
-        </div>
-      </div>
-
       {/* Main Grid: Redesigned Purchase Voucher Sheet (Left 9 Cols) + Controls & Ledger Context (Right 3 Cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* Left: Purchase Data Entry Voucher (9 Cols) */}
         <div className="lg:col-span-9 space-y-4">
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            {/* Sheet Title Header */}
-            <div className="bg-[#273E56] text-white py-3 px-5 flex flex-wrap items-center justify-between gap-3 border-b border-[#1d2c35]">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#5eead4] bg-white p-0.5 shrink-0 shadow-xs flex items-center justify-center">
-                  <img
-                    src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
-                    alt={companyProfile.companyName}
-                    className="w-full h-full object-contain rounded-full"
-                  />
-                </div>
-                <div>
-                  <div className="text-lg sm:text-xl font-black tracking-tight text-amber-400 zsb-golden-brand">
-                    {companyProfile.companyName}
-                  </div>
-                  <div className="text-xs font-semibold tracking-wider uppercase text-[#80cbc4]">
-                    PURCHASE DATA ENTRY FORM (LIVE CRABS, EEL FISH &amp; CHILLED FISH GRADES)
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-2.5">
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={handlePrintSelected}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#00897b] hover:bg-[#00796b] text-white text-xs font-bold shadow-xs transition cursor-pointer whitespace-nowrap"
-                    title="Open Print / Save PDF & .PNG Preview"
-                  >
-                    <Printer className="w-3.5 h-3.5 shrink-0" />
-                    <span>PRINT / SAVE PDF</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDirectSavePng}
-                    disabled={isExportingPng}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#1877d2] hover:bg-[#1465b5] text-white text-xs font-bold shadow-xs transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
-                    title="Download Purchase Challan / Data Entry Form as .PNG image"
-                  >
-                    {isExportingPng ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-                        <span>SAVING .PNG...</span>
-                      </>
-                    ) : (
-                      <>
-                        <ImageDown className="w-3.5 h-3.5 shrink-0" />
-                        <span>SAVE .PNG</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-                <div className="text-right font-mono text-xs text-slate-300 tabular-nums pl-2 border-l border-[#334b59]">
-                  <div className="text-[11px] text-[#80cbc4] uppercase">Voucher Ref</div>
-                  <div className="font-bold text-white text-sm">{invoiceNumber}</div>
-                </div>
-              </div>
-            </div>
-
             {/* Top Edit Mode Indicator Banner */}
             {editingPurchaseId && (
               <div className="bg-amber-100 border-b-2 border-amber-300 text-amber-950 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Edit2 className="w-4 h-4 text-amber-700 shrink-0" />
                   <span className="font-bold uppercase tracking-wider text-amber-900">
                     EDIT MODE ACTIVE:
@@ -993,7 +1109,9 @@ export const PurchaseFormView: React.FC = () => {
                     {invoiceNumber}
                   </span>
                   <span className="text-amber-800 hidden sm:inline">
-                    (Modify supplier, items, rates, or payments, then click <strong>UPDATE INVOICE</strong>)
+                    {lockedRowCount > 0
+                      ? `(${lockedRowCount} finalized/exported row${lockedRowCount === 1 ? '' : 's'} locked — unlock a row to modify, then click UPDATE INVOICE)`
+                      : '(Modify supplier, items, rates, or payments, then click UPDATE INVOICE)'}
                   </span>
                 </div>
                 <button
@@ -1240,7 +1358,73 @@ export const PurchaseFormView: React.FC = () => {
             )}
 
             {/* Redesigned 6-Column Line-Item Table */}
-            <div className="p-2.5 bg-slate-50/70">
+            <div className="p-2.5 bg-slate-50/70 space-y-2">
+              {/* Compact Row-Level Lock Status & Bulk Controls Strip */}
+              <div
+                data-testid="purchase-row-lock-bar"
+                className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+              >
+                <div className="flex items-center gap-2 text-slate-700">
+                  <Lock
+                    className={`w-3.5 h-3.5 shrink-0 ${
+                      lockedRowCount > 0 ? 'text-amber-600' : 'text-slate-400'
+                    }`}
+                    aria-hidden="true"
+                  />
+                  <span
+                    data-testid="purchase-locked-count"
+                    className={`font-bold font-mono tabular-nums ${
+                      lockedRowCount > 0 ? 'text-amber-800' : 'text-slate-600'
+                    }`}
+                  >
+                    {lockedRowCount > 0
+                      ? `${lockedRowCount} Locked ${lockedRowCount === 1 ? 'Row' : 'Rows'}`
+                      : 'Row Lock Protection'}
+                  </span>
+                  <span className="text-[11px] text-slate-500 hidden sm:inline">
+                    {lockedRowCount > 0
+                      ? 'Locked rows cannot be edited or cleared until unlocked.'
+                      : 'Finalized and exported rows lock automatically to prevent accidental edits.'}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <ColumnReorderToolbar
+                    tableId="purchase_form"
+                    isCustomized={purchaseColOrder.isCustomized}
+                    onReset={purchaseColOrder.resetOrder}
+                    compact
+                  />
+                  <button
+                    type="button"
+                    data-testid="purchase-lock-all-btn"
+                    onClick={handleLockAllPopulated}
+                    disabled={unlockedPopulatedRowCount === 0}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold border transition whitespace-nowrap ${
+                      unlockedPopulatedRowCount > 0
+                        ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 cursor-pointer'
+                        : 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed'
+                    }`}
+                  >
+                    <Lock className="w-3 h-3 shrink-0" aria-hidden="true" />
+                    <span>Lock All Filled</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="purchase-unlock-all-btn"
+                    onClick={handleUnlockAllRows}
+                    disabled={lockedRowCount === 0}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold border transition whitespace-nowrap ${
+                      lockedRowCount > 0
+                        ? 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300 cursor-pointer'
+                        : 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed'
+                    }`}
+                  >
+                    <Unlock className="w-3 h-3 shrink-0" aria-hidden="true" />
+                    <span>Unlock All</span>
+                  </button>
+                </div>
+              </div>
+
               <div
                 data-testid="purchase-entry-scroll-box"
                 className="overflow-x-auto border border-slate-200 rounded-lg bg-white"
@@ -1251,33 +1435,83 @@ export const PurchaseFormView: React.FC = () => {
               >
                 <thead>
                   <tr className="bg-[#273E56] text-white uppercase text-[11px] font-bold tracking-wider border-b border-[#1d2c35]">
-                    <th className="px-2.5 py-2.5 border-r border-[#334b59] w-12 text-center whitespace-nowrap">
+                    <th className="px-2.5 py-2.5 border-r border-[#334b59] w-16 text-center whitespace-nowrap">
                       SL #
                     </th>
-                    <th className="px-3 py-2.5 border-r border-[#334b59] text-left min-w-[160px]">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="whitespace-nowrap">ITEM / GRADE</span>
-                        <button
-                          type="button"
-                          onClick={() => setIsAddingNewItem(true)}
-                          className="text-[10px] bg-[#00897b] hover:bg-[#00796b] px-1.5 py-0.5 rounded text-white font-bold cursor-pointer whitespace-nowrap shrink-0"
-                          title="Add new purchase item grade"
-                        >
-                          + Grade
-                        </button>
-                      </div>
-                    </th>
-                    <th className="px-3 py-2.5 border-r border-[#334b59] w-36 text-right whitespace-nowrap">
-                      QUANTITY (KG)
-                    </th>
-                    <th className="px-3 py-2.5 border-r border-[#334b59] w-36 text-right whitespace-nowrap">
-                      RATE ({companyProfile.currency})
-                    </th>
-                    <th className="px-3 py-2.5 border-r border-[#334b59] w-44 text-right whitespace-nowrap">
-                      TOTAL AMOUNT ({companyProfile.currency})
-                    </th>
-                    <th className="px-2 py-2.5 w-14 text-center whitespace-nowrap">
-                      CLEAR
+                    {purchaseColOrder.columnOrder.map((colId) => {
+                      const dragClass = purchaseColOrder.getHeaderDragClassName(colId);
+                      switch (colId) {
+                        case 'item':
+                          return (
+                            <th
+                              key="item"
+                              {...purchaseColOrder.getHeaderDragProps('item', 'ITEM / GRADE')}
+                              className={`px-3 py-2.5 border-r border-[#334b59] text-left min-w-[160px] ${dragClass}`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                                  <ColumnDragGrip />
+                                  <span>ITEM / GRADE</span>
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsAddingNewItem(true);
+                                  }}
+                                  className="text-[10px] bg-[#00897b] hover:bg-[#00796b] px-1.5 py-0.5 rounded text-white font-bold cursor-pointer whitespace-nowrap shrink-0"
+                                  title="Add new purchase item grade"
+                                >
+                                  + Grade
+                                </button>
+                              </div>
+                            </th>
+                          );
+                        case 'quantity':
+                          return (
+                            <th
+                              key="quantity"
+                              {...purchaseColOrder.getHeaderDragProps('quantity', 'QUANTITY (KG)')}
+                              className={`px-3 py-2.5 border-r border-[#334b59] w-36 text-right whitespace-nowrap ${dragClass}`}
+                            >
+                              <span className="inline-flex items-center justify-end gap-1">
+                                <ColumnDragGrip />
+                                <span>QUANTITY (KG)</span>
+                              </span>
+                            </th>
+                          );
+                        case 'rate':
+                          return (
+                            <th
+                              key="rate"
+                              {...purchaseColOrder.getHeaderDragProps('rate', `RATE (${companyProfile.currency})`)}
+                              className={`px-3 py-2.5 border-r border-[#334b59] w-36 text-right whitespace-nowrap ${dragClass}`}
+                            >
+                              <span className="inline-flex items-center justify-end gap-1">
+                                <ColumnDragGrip />
+                                <span>RATE ({companyProfile.currency})</span>
+                              </span>
+                            </th>
+                          );
+                        case 'total':
+                          return (
+                            <th
+                              key="total"
+                              {...purchaseColOrder.getHeaderDragProps('total', `TOTAL AMOUNT (${companyProfile.currency})`)}
+                              className={`px-3 py-2.5 border-r border-[#334b59] w-44 text-right whitespace-nowrap ${dragClass}`}
+                            >
+                              <span className="inline-flex items-center justify-end gap-1">
+                                <ColumnDragGrip />
+                                <span>TOTAL AMOUNT ({companyProfile.currency})</span>
+                              </span>
+                            </th>
+                          );
+                        default:
+                          return null;
+                      }
+                    })}
+                    <th className="px-2 py-2.5 w-20 text-center whitespace-nowrap">
+                      LOCK / CLR
                     </th>
                   </tr>
                 </thead>
@@ -1295,6 +1529,7 @@ export const PurchaseFormView: React.FC = () => {
                         key={row.id}
                         row={row}
                         rowIndex={idx}
+                        columnOrder={purchaseColOrder.columnOrder}
                         purchaseItemOptions={purchaseItemOptionElements}
                         hasItemError={Boolean(rowErr?.item || highlightFirstEmptyRow)}
                         hasQuantityError={Boolean(rowErr?.quantity || highlightFirstEmptyRow)}
@@ -1303,50 +1538,75 @@ export const PurchaseFormView: React.FC = () => {
                         rateResetToken={rateResetToken}
                         onRowChange={handleRowChange}
                         onClearRow={handleClearRow}
+                        onToggleRowLock={handleToggleRowLock}
                       />
                     );
                   })}
                 </tbody>
 
-                {/* Clean 6-Column Aligned Subtotal Footer */}
+                {/* Clean 6-Column Aligned Subtotal Footer (Dynamically synced with columnOrder) */}
                 <tfoot>
                   <tr className="bg-[#273E56] text-white font-bold border-t-2 border-[#00897b]">
-                    <td colSpan={2} className="px-3 py-2.5">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <button
-                          type="button"
-                          onClick={handleAddRow}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#00897b] hover:bg-[#00796b] text-white text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0"
-                        >
-                          <Plus className="w-3.5 h-3.5 text-white" />
-                          <span>Add Item Row</span>
-                        </button>
-                        <span className="text-[11px] uppercase tracking-wider text-slate-300">
-                          TOTAL QTY:
-                        </span>
-                      </div>
+                    <td className="px-2 py-2.5 text-center text-[10px] uppercase tracking-wider text-slate-300 border-r border-[#334b59] whitespace-nowrap">
+                      TOTAL
                     </td>
-                    <td
-                      data-testid="purchase-footer-qty"
-                      className="px-3 py-2.5 text-right font-mono tabular-nums text-[#5eead4] text-sm font-black border-l border-[#334b59] whitespace-nowrap"
-                    >
-                      {totalQty}
-                    </td>
-                    <td className="px-3 py-2.5 text-right uppercase tracking-wider text-[11px] text-slate-300 border-l border-[#334b59] whitespace-nowrap">
-                      SUBTOTAL:
-                    </td>
-                    <td
-                      data-testid="purchase-footer-total"
-                      className={`px-3 py-2.5 text-right font-mono tabular-nums text-sm font-black border-l border-[#334b59] whitespace-nowrap ${
-                        totalAmount < 0 ? 'text-rose-300' : 'text-white'
-                      }`}
-                    >
-                      {totalAmount.toLocaleString('en-US', {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </td>
-                    <td className="px-2 py-2.5 border-l border-[#334b59]"></td>
+                    {purchaseColOrder.columnOrder.map((colId) => {
+                      switch (colId) {
+                        case 'item':
+                          return (
+                            <td key="item" className="px-3 py-2.5 border-r border-[#334b59]">
+                              <button
+                                type="button"
+                                onClick={handleAddRow}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#00897b] hover:bg-[#00796b] text-white text-xs font-semibold transition cursor-pointer whitespace-nowrap shrink-0"
+                              >
+                                <Plus className="w-3.5 h-3.5 text-white" />
+                                <span>Add Item Row</span>
+                              </button>
+                            </td>
+                          );
+                        case 'quantity':
+                          return (
+                            <td
+                              key="quantity"
+                              data-testid="purchase-footer-qty"
+                              className="px-3 py-2.5 text-right font-mono tabular-nums text-[#5eead4] text-sm font-black border-r border-[#334b59] whitespace-nowrap"
+                            >
+                              <span className="text-[10px] font-sans font-semibold text-slate-300 uppercase mr-1.5">
+                                QTY:
+                              </span>
+                              {totalQty}
+                            </td>
+                          );
+                        case 'rate':
+                          return (
+                            <td
+                              key="rate"
+                              className="px-3 py-2.5 text-right uppercase tracking-wider text-[11px] text-slate-300 border-r border-[#334b59] whitespace-nowrap"
+                            >
+                              SUBTOTAL
+                            </td>
+                          );
+                        case 'total':
+                          return (
+                            <td
+                              key="total"
+                              data-testid="purchase-footer-total"
+                              className={`px-3 py-2.5 text-right font-mono tabular-nums text-sm font-black border-r border-[#334b59] whitespace-nowrap ${
+                                totalAmount < 0 ? 'text-rose-300' : 'text-white'
+                              }`}
+                            >
+                              {totalAmount.toLocaleString('en-US', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </td>
+                          );
+                        default:
+                          return null;
+                      }
+                    })}
+                    <td className="px-2 py-2.5"></td>
                   </tr>
                 </tfoot>
               </table>
@@ -1627,11 +1887,36 @@ export const PurchaseFormView: React.FC = () => {
               </span>
             </button>
 
+            {/* Direct SAVE .PNG Button */}
+            <button
+              type="button"
+              data-testid="purchase-direct-save-png-btn"
+              onClick={handleDirectSavePng}
+              disabled={isExportingPng}
+              className="w-full bg-[#1877d2] hover:bg-[#1465b5] text-white py-2.5 px-3 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
+              title="Download Purchase Challan / Data Entry Form directly as .PNG image (locks exported rows)"
+            >
+              {isExportingPng ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                  <span>SAVING .PNG...</span>
+                </>
+              ) : (
+                <>
+                  <ImageDown className="w-4 h-4 shrink-0" />
+                  <span>SAVE .PNG</span>
+                </>
+              )}
+            </button>
+
             {/* Share via WeChat (.PNG) */}
             <button
               type="button"
               data-testid="purchase-share-wechat-btn"
-              onClick={() => setIsShareModalOpen(true)}
+              onClick={() => {
+                markPopulatedRowsAsExported();
+                setIsShareModalOpen(true);
+              }}
               className="w-full bg-[#07C160] hover:bg-[#06a853] text-white py-2.5 px-3 rounded-lg font-bold text-xs shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
               title="Share Purchase Challan .PNG to WeChat (微信)"
             >

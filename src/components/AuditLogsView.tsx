@@ -26,6 +26,20 @@ import {
 
 import { DateRangePicker } from './DateRangePicker.tsx';
 import { DatePresetKey } from '../utils/dateFilters.ts';
+import { useTableColumnOrder } from '../hooks/useTableColumnOrder.ts';
+import {
+  ColumnReorderToolbar,
+  ColumnDragGrip,
+} from './ColumnReorderToolbar.tsx';
+
+const AUDIT_LOGS_DEFAULT_COLUMNS = [
+  'timestamp',
+  'action',
+  'module',
+  'entityId',
+  'summary',
+  'actor',
+] as const;
 
 const MODULE_OPTIONS: ('ALL' | AuditLogModule)[] = [
   'ALL',
@@ -41,6 +55,10 @@ const MODULE_OPTIONS: ('ALL' | AuditLogModule)[] = [
 ];
 
 export const AuditLogsView: React.FC = () => {
+  const auditColOrder = useTableColumnOrder(
+    'audit_logs',
+    AUDIT_LOGS_DEFAULT_COLUMNS
+  );
   const {
     auditLogs,
     addAuditLog,
@@ -655,6 +673,12 @@ export const AuditLogsView: React.FC = () => {
 
           {/* Audit Logs Table */}
           <div className="p-3 bg-slate-50/70">
+            <ColumnReorderToolbar
+              tableId="audit_logs"
+              isCustomized={auditColOrder.isCustomized}
+              onReset={auditColOrder.resetOrder}
+              className="mb-1.5"
+            />
             <div
               data-testid="audit-logs-scroll-box"
               className="overflow-x-auto border border-slate-200 rounded-lg bg-white"
@@ -666,12 +690,49 @@ export const AuditLogsView: React.FC = () => {
               <thead className="sticky top-0 z-10">
                 <tr className="bg-[#273E56] text-white font-bold uppercase text-[11px] border-b border-[#1d2c35]">
                   <th className="py-2.5 px-2 text-center w-12">SL #</th>
-                  <th className="py-2.5 px-3.5">TIMESTAMP</th>
-                  <th className="py-2.5 px-3 text-center">ACTION</th>
-                  <th className="py-2.5 px-3">MODULE</th>
-                  <th className="py-2.5 px-3">REF NO.</th>
-                  <th className="py-2.5 px-3.5">ACTIVITY SUMMARY &amp; DETAILS</th>
-                  <th className="py-2.5 px-3.5">ACTOR</th>
+                  {auditColOrder.columnOrder.map((colId) => {
+                    const dragClass = auditColOrder.getHeaderDragClassName(colId);
+                    switch (colId) {
+                      case 'timestamp':
+                        return (
+                          <th key="timestamp" {...auditColOrder.getHeaderDragProps('timestamp', 'TIMESTAMP')} className={`py-2.5 px-3.5 ${dragClass}`}>
+                            <span className="inline-flex items-center gap-1"><ColumnDragGrip /><span>TIMESTAMP</span></span>
+                          </th>
+                        );
+                      case 'action':
+                        return (
+                          <th key="action" {...auditColOrder.getHeaderDragProps('action', 'ACTION')} className={`py-2.5 px-3 text-center ${dragClass}`}>
+                            <span className="inline-flex items-center justify-center gap-1"><ColumnDragGrip /><span>ACTION</span></span>
+                          </th>
+                        );
+                      case 'module':
+                        return (
+                          <th key="module" {...auditColOrder.getHeaderDragProps('module', 'MODULE')} className={`py-2.5 px-3 ${dragClass}`}>
+                            <span className="inline-flex items-center gap-1"><ColumnDragGrip /><span>MODULE</span></span>
+                          </th>
+                        );
+                      case 'entityId':
+                        return (
+                          <th key="entityId" {...auditColOrder.getHeaderDragProps('entityId', 'REF NO.')} className={`py-2.5 px-3 ${dragClass}`}>
+                            <span className="inline-flex items-center gap-1"><ColumnDragGrip /><span>REF NO.</span></span>
+                          </th>
+                        );
+                      case 'summary':
+                        return (
+                          <th key="summary" {...auditColOrder.getHeaderDragProps('summary', 'ACTIVITY SUMMARY & DETAILS')} className={`py-2.5 px-3.5 ${dragClass}`}>
+                            <span className="inline-flex items-center gap-1"><ColumnDragGrip /><span>ACTIVITY SUMMARY &amp; DETAILS</span></span>
+                          </th>
+                        );
+                      case 'actor':
+                        return (
+                          <th key="actor" {...auditColOrder.getHeaderDragProps('actor', 'ACTOR')} className={`py-2.5 px-3.5 ${dragClass}`}>
+                            <span className="inline-flex items-center gap-1"><ColumnDragGrip /><span>ACTOR</span></span>
+                          </th>
+                        );
+                      default:
+                        return null;
+                    }
+                  })}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200/80">
@@ -702,35 +763,59 @@ export const AuditLogsView: React.FC = () => {
                         <td className="py-2.5 px-2 text-center whitespace-nowrap">
                           <span className="zsb-sl-badge">{String(idx + 1).padStart(2, '0')}</span>
                         </td>
-                        <td className="py-2.5 px-3.5 font-mono text-[11px] text-slate-600 whitespace-nowrap tabular-nums">
-                          {formatTimestampDisplay(log.timestamp)}
-                        </td>
-                        <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                          <span
-                            className={`inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${badge.className}`}
-                          >
-                            {badge.label}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 font-semibold text-slate-800 whitespace-nowrap">
-                          {log.module}
-                        </td>
-                        <td className="py-2.5 px-3 font-mono font-bold text-sky-900 whitespace-nowrap">
-                          {log.entityId || '-'}
-                        </td>
-                        <td className="py-2.5 px-3.5">
-                          <div className="font-semibold text-slate-900">
-                            {log.summary}
-                          </div>
-                          {log.details && (
-                            <div className="text-[11px] font-mono text-slate-500 mt-0.5">
-                              {log.details}
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-3.5 text-slate-700 font-medium whitespace-nowrap">
-                          {log.actor}
-                        </td>
+                        {auditColOrder.columnOrder.map((colId) => {
+                          switch (colId) {
+                            case 'timestamp':
+                              return (
+                                <td key="timestamp" className="py-2.5 px-3.5 font-mono text-[11px] text-slate-600 whitespace-nowrap tabular-nums">
+                                  {formatTimestampDisplay(log.timestamp)}
+                                </td>
+                              );
+                            case 'action':
+                              return (
+                                <td key="action" className="py-2.5 px-3 text-center whitespace-nowrap">
+                                  <span
+                                    className={`inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${badge.className}`}
+                                  >
+                                    {badge.label}
+                                  </span>
+                                </td>
+                              );
+                            case 'module':
+                              return (
+                                <td key="module" className="py-2.5 px-3 font-semibold text-slate-800 whitespace-nowrap">
+                                  {log.module}
+                                </td>
+                              );
+                            case 'entityId':
+                              return (
+                                <td key="entityId" className="py-2.5 px-3 font-mono font-bold text-sky-900 whitespace-nowrap">
+                                  {log.entityId || '-'}
+                                </td>
+                              );
+                            case 'summary':
+                              return (
+                                <td key="summary" className="py-2.5 px-3.5">
+                                  <div className="font-semibold text-slate-900">
+                                    {log.summary}
+                                  </div>
+                                  {log.details && (
+                                    <div className="text-[11px] font-mono text-slate-500 mt-0.5">
+                                      {log.details}
+                                    </div>
+                                  )}
+                                </td>
+                              );
+                            case 'actor':
+                              return (
+                                <td key="actor" className="py-2.5 px-3.5 text-slate-700 font-medium whitespace-nowrap">
+                                  {log.actor}
+                                </td>
+                              );
+                            default:
+                              return null;
+                          }
+                        })}
                       </tr>
                     );
                   })

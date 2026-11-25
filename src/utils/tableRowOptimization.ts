@@ -31,7 +31,9 @@ export function isPurchaseRowDataEqual(
     prev.quantity === next.quantity &&
     prev.rate === next.rate &&
     Boolean(prev.rateSpecified) === Boolean(next.rateSpecified) &&
-    prev.totalAmount === next.totalAmount
+    prev.totalAmount === next.totalAmount &&
+    Boolean(prev.locked) === Boolean(next.locked) &&
+    prev.lockReason === next.lockReason
   );
 }
 
@@ -53,7 +55,9 @@ export function isPackingRowDataEqual(
     prev.totalWeight === next.totalWeight &&
     prev.unit === next.unit &&
     prev.rate === next.rate &&
-    prev.amount === next.amount
+    prev.amount === next.amount &&
+    Boolean(prev.locked) === Boolean(next.locked) &&
+    prev.lockReason === next.lockReason
   );
 }
 
@@ -91,7 +95,13 @@ export function isAirWayBillRowDataEqual(
   return (
     prev.id === next.id &&
     prev.packingId === next.packingId &&
+    Boolean(prev.isCustom) === Boolean(next.isCustom) &&
+    (prev.mergedCount || 1) === (next.mergedCount || 1) &&
+    (prev.packingIds || []).join(',') === (next.packingIds || []).join(',') &&
+    (prev.customRowIds || []).join(',') === (next.customRowIds || []).join(',') &&
     prev.date === next.date &&
+    (prev.originalDate || '') === (next.originalDate || '') &&
+    Boolean(prev.isDateOverridden) === Boolean(next.isDateOverridden) &&
     prev.shipper === next.shipper &&
     (prev.documentsHolder || '') === (next.documentsHolder || '') &&
     prev.flight === next.flight &&
@@ -141,6 +151,7 @@ export function updatePurchaseRowById(
   let changed = false;
   const next = prev.map((row) => {
     if (row.id !== id) return row;
+    if (row.locked) return row;
 
     const updated: PurchaseItemRow = { ...row };
     if (field === 'item') {
@@ -194,6 +205,7 @@ export function updatePackingRowById(
   let changed = false;
   const next = prev.map((row) => {
     if (row.id !== id) return row;
+    if (row.locked) return row;
 
     const updated: PackingItemRow = { ...row, [field]: value };
     const b = field === 'box' ? Number(value) || 0 : row.box;

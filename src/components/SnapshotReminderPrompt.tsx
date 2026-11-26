@@ -30,7 +30,7 @@ export const SnapshotReminderPrompt: React.FC = () => {
       aria-modal="false"
       aria-labelledby="snapshot-reminder-title"
       data-testid="snapshot-reminder-prompt"
-      className="fixed bottom-4 right-4 z-50 w-[calc(100vw-2rem)] max-w-md rounded-2xl bg-[#1E3247] text-white border-2 border-amber-400/75 shadow-2xl overflow-hidden print:hidden"
+      className="fixed bottom-20 md:bottom-4 right-3 sm:right-4 z-50 w-[calc(100vw-1.5rem)] sm:w-[calc(100vw-2rem)] max-w-md rounded-2xl bg-[#1E3247] text-white border-2 border-amber-400/75 shadow-2xl overflow-hidden print:hidden"
     >
       {/* Top Header Strip */}
       <div className="bg-[#152536] px-4 py-3 border-b border-white/15 flex items-start justify-between gap-3">

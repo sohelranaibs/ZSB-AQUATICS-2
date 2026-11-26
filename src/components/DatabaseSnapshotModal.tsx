@@ -258,15 +258,15 @@ export const DatabaseSnapshotModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 print:hidden"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-2 sm:p-4 print:hidden"
       role="dialog"
       aria-modal="true"
       aria-labelledby="snapshot-modal-title"
       data-testid="database-snapshot-modal"
     >
-      <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
+      <div className="bg-white w-full max-w-4xl max-h-[94dvh] sm:max-h-[90vh] rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
         {/* Modal Header */}
-        <div className="bg-[#273E56] text-white px-5 py-4 flex items-center justify-between border-b-2 border-[#00897b] shrink-0">
+        <div className="bg-[#273E56] text-white px-3.5 sm:px-5 py-3 sm:py-4 flex items-center justify-between gap-2 border-b-2 border-[#00897b] shrink-0">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-xl bg-[#00897b] flex items-center justify-center shrink-0">
               <Archive className="w-5 h-5 text-white" />
@@ -302,7 +302,7 @@ export const DatabaseSnapshotModal: React.FC = () => {
         </div>
 
         {/* Live Database Telemetry & Mode Switcher Bar */}
-        <div className="bg-[#1c2a33] text-slate-200 px-5 py-3 border-b border-[#334b59] flex flex-wrap items-center justify-between gap-3 shrink-0 text-xs">
+        <div className="bg-[#1c2a33] text-slate-200 px-3.5 sm:px-5 py-2.5 sm:py-3 border-b border-[#334b59] flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 shrink-0 text-xs">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono tabular-nums">
             <span className="text-slate-400 font-sans font-semibold">Current Live State:</span>
             <span className="text-white font-bold" data-testid="snapshot-live-total-count">

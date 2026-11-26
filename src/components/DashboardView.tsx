@@ -356,14 +356,14 @@ export const DashboardView: React.FC = () => {
 
   if (dashboardSubView === 'monthly_reports') {
     return (
-      <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
+      <div className="p-3 sm:p-6 max-w-7xl mx-auto space-y-5 sm:space-y-6">
         <MonthlyReportsExportView onBackToOverview={() => setDashboardSubView('overview')} />
       </div>
     );
   }
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
+    <div className="p-3 sm:p-6 max-w-7xl mx-auto space-y-4 sm:space-y-5">
       {/* Quick Summary Widget: Daily-Updated Mini-Cards for Total Purchases Today & Total Pending Payments */}
       <DashboardQuickSummaryWidget
         purchases={purchases}
@@ -374,24 +374,24 @@ export const DashboardView: React.FC = () => {
         onNavigateTab={setActiveTab}
       />
 
-      {/* Top 5-Card BI Executive Overview Strip — Decorated in 1 Single Horizontal Row */}
+      {/* Top 5-Card BI Executive Overview Strip — Reflows 2-col Mobile -> 3-col Tablet -> 5-col Desktop */}
       <section
         aria-label="Executive BI KPI Overview Strip"
         data-testid="dashboard-bi-kpi-strip"
-        className="bg-white rounded-2xl border border-[#CBD8E6] shadow-xs overflow-x-auto"
+        className="bg-white rounded-2xl border border-[#CBD8E6] shadow-xs overflow-hidden"
       >
         <div
           data-testid="dashboard-bi-kpi-row"
-          className="grid grid-cols-5 min-w-[760px] divide-x divide-[#E2E8F0] items-stretch"
+          className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-y lg:divide-y-0 divide-x divide-[#E2E8F0] items-stretch"
         >
           {/* KPI 1: Total Export Revenue */}
-          <div className="relative p-3.5 sm:p-4 pb-2.5 flex flex-col justify-between bg-gradient-to-b from-sky-50/40 via-white to-white border-t-3 border-t-[#1D6CE0] min-w-0">
-            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-              <div className="w-9 h-9 xl:w-10 xl:h-10 rounded-full bg-[#1D6CE0] text-white flex items-center justify-center shrink-0 shadow-xs ring-4 ring-[#1D6CE0]/10">
+          <div className="relative p-2.5 sm:p-4 pb-2.5 flex flex-col justify-between bg-gradient-to-b from-sky-50/40 via-white to-white border-t-3 border-t-[#1D6CE0] min-w-0">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 xl:w-10 xl:h-10 rounded-full bg-[#1D6CE0] text-white flex items-center justify-center shrink-0 shadow-xs ring-4 ring-[#1D6CE0]/10">
                 <Package className="w-4 h-4 xl:w-5 xl:h-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 truncate">
+                <div className="text-[9.5px] sm:text-[10px] font-extrabold uppercase tracking-wider text-slate-500 leading-tight line-clamp-2 sm:truncate">
                   TOTAL EXPORT REVENUE
                 </div>
                 <div className="text-sm xl:text-base 2xl:text-lg font-black text-slate-900 font-mono tabular-nums truncate mt-0.5">
@@ -412,13 +412,13 @@ export const DashboardView: React.FC = () => {
           </div>
 
           {/* KPI 2: Total Procurement Spend */}
-          <div className="relative p-3.5 sm:p-4 pb-2.5 flex flex-col justify-between bg-gradient-to-b from-emerald-50/40 via-white to-white border-t-3 border-t-[#00B14F] min-w-0">
-            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-              <div className="w-9 h-9 xl:w-10 xl:h-10 rounded-full bg-[#00B14F] text-white flex items-center justify-center shrink-0 shadow-xs ring-4 ring-[#00B14F]/10">
+          <div className="relative p-2.5 sm:p-4 pb-2.5 flex flex-col justify-between bg-gradient-to-b from-emerald-50/40 via-white to-white border-t-3 border-t-[#00B14F] min-w-0">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 xl:w-10 xl:h-10 rounded-full bg-[#00B14F] text-white flex items-center justify-center shrink-0 shadow-xs ring-4 ring-[#00B14F]/10">
                 <Wallet className="w-4 h-4 xl:w-5 xl:h-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 truncate">
+                <div className="text-[9.5px] sm:text-[10px] font-extrabold uppercase tracking-wider text-slate-500 leading-tight line-clamp-2 sm:truncate">
                   TOTAL PROCUREMENT
                 </div>
                 <div className="text-sm xl:text-base 2xl:text-lg font-black text-slate-900 font-mono tabular-nums truncate mt-0.5">
@@ -439,13 +439,13 @@ export const DashboardView: React.FC = () => {
           </div>
 
           {/* KPI 3: Total Orders & Manifests */}
-          <div className="relative p-3.5 sm:p-4 pb-2.5 flex flex-col justify-between bg-gradient-to-b from-violet-50/40 via-white to-white border-t-3 border-t-[#7C3AED] min-w-0">
-            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-              <div className="w-9 h-9 xl:w-10 xl:h-10 rounded-full bg-[#7C3AED] text-white flex items-center justify-center shrink-0 shadow-xs ring-4 ring-[#7C3AED]/10">
+          <div className="relative p-2.5 sm:p-4 pb-2.5 flex flex-col justify-between bg-gradient-to-b from-violet-50/40 via-white to-white border-t-3 border-t-[#7C3AED] min-w-0">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 xl:w-10 xl:h-10 rounded-full bg-[#7C3AED] text-white flex items-center justify-center shrink-0 shadow-xs ring-4 ring-[#7C3AED]/10">
                 <ShoppingCart className="w-4 h-4 xl:w-5 xl:h-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 truncate">
+                <div className="text-[9.5px] sm:text-[10px] font-extrabold uppercase tracking-wider text-slate-500 leading-tight line-clamp-2 sm:truncate">
                   TOTAL ORDERS &amp; BILLS
                 </div>
                 <div className="text-sm xl:text-base 2xl:text-lg font-black text-slate-900 font-mono tabular-nums truncate mt-0.5">
@@ -466,13 +466,13 @@ export const DashboardView: React.FC = () => {
           </div>
 
           {/* KPI 4: Suppliers & Marks */}
-          <div className="relative p-3.5 sm:p-4 pb-2.5 flex flex-col justify-between bg-gradient-to-b from-orange-50/40 via-white to-white border-t-3 border-t-[#F97316] min-w-0">
-            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-              <div className="w-9 h-9 xl:w-10 xl:h-10 rounded-full bg-[#F97316] text-white flex items-center justify-center shrink-0 shadow-xs ring-4 ring-[#F97316]/10">
+          <div className="relative p-2.5 sm:p-4 pb-2.5 flex flex-col justify-between bg-gradient-to-b from-orange-50/40 via-white to-white border-t-3 border-t-[#F97316] min-w-0">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 xl:w-10 xl:h-10 rounded-full bg-[#F97316] text-white flex items-center justify-center shrink-0 shadow-xs ring-4 ring-[#F97316]/10">
                 <Users className="w-4 h-4 xl:w-5 xl:h-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 truncate">
+                <div className="text-[9.5px] sm:text-[10px] font-extrabold uppercase tracking-wider text-slate-500 leading-tight line-clamp-2 sm:truncate">
                   SUPPLIERS &amp; MARKS
                 </div>
                 <div className="text-sm xl:text-base 2xl:text-lg font-black text-slate-900 font-mono tabular-nums truncate mt-0.5">
@@ -493,13 +493,13 @@ export const DashboardView: React.FC = () => {
           </div>
 
           {/* KPI 5: Operating Margin % */}
-          <div className="relative p-3.5 sm:p-4 pb-2.5 flex flex-col justify-between bg-gradient-to-b from-rose-50/40 via-white to-white border-t-3 border-t-[#E11D48] min-w-0">
-            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-              <div className="w-9 h-9 xl:w-10 xl:h-10 rounded-full bg-[#E11D48] text-white flex items-center justify-center shrink-0 shadow-xs ring-4 ring-[#E11D48]/10">
+          <div className="col-span-2 sm:col-span-1 relative p-2.5 sm:p-4 pb-2.5 flex flex-col justify-between bg-gradient-to-b from-rose-50/40 via-white to-white border-t-3 border-t-[#E11D48] min-w-0">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 xl:w-10 xl:h-10 rounded-full bg-[#E11D48] text-white flex items-center justify-center shrink-0 shadow-xs ring-4 ring-[#E11D48]/10">
                 <Percent className="w-4 h-4 xl:w-5 xl:h-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 truncate">
+                <div className="text-[9.5px] sm:text-[10px] font-extrabold uppercase tracking-wider text-slate-500 leading-tight line-clamp-2 sm:truncate">
                   GROSS MARGIN
                 </div>
                 <div className="text-sm xl:text-base 2xl:text-lg font-black text-slate-900 font-mono tabular-nums truncate mt-0.5">
@@ -524,9 +524,9 @@ export const DashboardView: React.FC = () => {
       {/* Executive Command Header */}
       <section
         aria-label="Executive Command Header"
-        className="bg-[#273E56] rounded-xl p-4 sm:p-5 border border-[#1E3247] text-white shadow-sm space-y-4"
+        className="bg-[#273E56] rounded-xl p-3.5 sm:p-5 border border-[#1E3247] text-white shadow-sm space-y-3.5 sm:space-y-4"
       >
-        <div className="flex flex-wrap items-center justify-end gap-1.5">
+        <div className="flex flex-wrap items-center justify-start sm:justify-end gap-1.5">
           {/* Quick Actions Row */}
             {/* Low-Stock Notification Badge */}
             <button

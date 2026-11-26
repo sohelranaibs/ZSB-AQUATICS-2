@@ -8,6 +8,7 @@ import { AppProvider, useApp } from './context/AppContext.tsx';
 import { useToastMessage } from './context/VolatileFeedbackStore.ts';
 import { ExcelHeaderRibbon } from './components/ExcelHeaderRibbon.tsx';
 import { ThemeSidebarNav, buildWorkbookSheets } from './components/ThemeSidebarNav.tsx';
+import { MobileBottomNav } from './components/MobileBottomNav.tsx';
 import { DashboardView } from './components/DashboardView.tsx';
 import { PurchaseFormView } from './components/PurchaseFormView.tsx';
 import { PackingListView } from './components/PackingListView.tsx';
@@ -89,7 +90,7 @@ const GlobalToastBanner: React.FC = React.memo(() => {
       role="status"
       aria-live="polite"
       data-testid="global-toast-banner"
-      className="fixed bottom-14 right-3 sm:bottom-4 sm:right-4 z-[70] bg-[#273E56] text-white px-4 py-3 rounded-xl shadow-lg border border-[#1D6CE0] flex items-center space-x-2.5 text-xs font-semibold transition-all duration-150 print:hidden max-w-md"
+      className="fixed bottom-20 inset-x-3 sm:inset-x-auto md:bottom-4 sm:right-4 z-[70] bg-[#273E56] text-white px-4 py-3 rounded-xl shadow-lg border border-[#1D6CE0] flex items-center space-x-2.5 text-xs font-semibold transition-all duration-150 print:hidden sm:max-w-md"
     >
       <CheckCircle2 className="w-4 h-4 text-[#00B14F] shrink-0" />
       <span className="leading-snug">{toastMessage}</span>
@@ -524,6 +525,7 @@ const MainContent: React.FC = () => {
   const activeScrollTargetRef = useRef<HTMLElement | null>(null);
   const touchGestureActiveRef = useRef(false);
   const [isSwipeScrolling, setIsSwipeScrolling] = useState(false);
+  const [hasWrapperOverflow, setHasWrapperOverflow] = useState(false);
   const [scrollState, setScrollState] = useState<HorizontalScrollState>(() =>
     computeHorizontalScrollState(0, 0, 0)
   );
@@ -604,6 +606,8 @@ const MainContent: React.FC = () => {
     (preferredTarget?: HTMLElement | null) => {
       const wrapperEl = sheetScrollWrapperRef.current;
       if (!wrapperEl) return;
+      const outerHasOverflow = wrapperEl.scrollWidth > wrapperEl.clientWidth + 4;
+      setHasWrapperOverflow((prev) => (prev === outerHasOverflow ? prev : outerHasOverflow));
       const targetEl =
         preferredTarget && wrapperEl.contains(preferredTarget)
           ? preferredTarget
@@ -916,8 +920,8 @@ const MainContent: React.FC = () => {
         {/* Toast Notification Banner */}
         <GlobalToastBanner />
 
-        {/* Smart Mobile Horizontal Swipe-to-Scroll Navigation Strip (Visible when horizontal overflow exists in Smart Mobile mode) */}
-        {layoutMetrics.displayMode === 'smart_mobile' && scrollState.maxScrollLeft > 0 && (
+        {/* Smart Mobile Horizontal Swipe-to-Scroll Navigation Strip (Visible only when the sheet wrapper itself overflows horizontally, e.g. zoomed > 100%) */}
+        {layoutMetrics.displayMode === 'smart_mobile' && hasWrapperOverflow && scrollState.maxScrollLeft > 0 && (
           <div
             data-testid="smart-mobile-swipe-bar"
             className="bg-white text-slate-800 px-3 py-1.5 border-b border-[#CBD8E6] flex items-center justify-between gap-2 text-[11px] print:hidden select-none"
@@ -979,7 +983,7 @@ const MainContent: React.FC = () => {
           onPointerCancel={handleWrapperPointerUp}
           onPointerLeave={handleWrapperPointerUp}
           onScrollCapture={handleWrapperScroll}
-          className="flex-1 min-w-0 overflow-x-auto smart-scroll-container bg-[#EDF2F7] md:rounded-tl-[24px] pb-14 shadow-inner"
+          className="flex-1 min-w-0 overflow-x-auto smart-scroll-container bg-[#EDF2F7] md:rounded-tl-[24px] pb-24 md:pb-14 shadow-inner"
         >
           <main
             data-testid="sheet-zoom-canvas"
@@ -1027,11 +1031,19 @@ const MainContent: React.FC = () => {
         </div>
       </div>
 
+      {/* Ergonomic Thumb-Zone Mobile Bottom Navigation Bar (< md) */}
+      <MobileBottomNav
+        sheets={workbookSheets}
+        isMobileDrawerOpen={isMobileDrawerOpen}
+        onOpenMobileDrawer={handleOpenMobileDrawer}
+        hidden={isFullScreen}
+      />
+
       {/* Floating Quick Display, Zoom & Full Screen Pill (Shown in Full Screen when Ribbon is Hidden) */}
       {isFullScreen && (
       <div
         data-testid="floating-display-quickbar"
-        className="fixed bottom-3 right-3 z-50 flex items-center space-x-1 bg-white/95 text-slate-800 px-2 py-1 rounded-full shadow-lg border border-slate-200 backdrop-blur-sm print:hidden select-none text-[11px] font-mono transition-all"
+        className="fixed bottom-3 right-3 max-w-[calc(100vw-1.5rem)] overflow-x-auto z-50 flex items-center space-x-1 bg-white/95 text-slate-800 px-2 py-1 rounded-full shadow-lg border border-slate-200 backdrop-blur-sm print:hidden select-none text-[11px] font-mono transition-all"
       >
         <button
           type="button"

@@ -34,7 +34,7 @@
     @apply antialiased font-sans selection:bg-blue-100 selection:text-slate-950;
   }
 
-  button:not([data-testid^="calendar-day-"]):not([data-testid^="bangla-day-"]):not([data-testid^="bangla-festival-"]):not([data-testid^="db-cell-trigger-"]) {
+  button:not([data-testid^="calendar-day-"]):not([data-testid^="bangla-day-"]):not([data-testid^="bangla-festival-"]):not([data-testid^="db-cell-trigger-"]):not([data-mobile-chrome-btn="true"]) {
     background-color: #fbbf24;
     background-image: linear-gradient(180deg, #ffba55 0%, #f7941d 52%, #e67b08 100%);
     color: #000000;
@@ -97,10 +97,10 @@
   color: #000000 !important;
 }
 
-button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], :has(img))),
-[type="button"]:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], :has(img))),
-[type="submit"]:not(:where(:has(img))),
-[type="reset"]:not(:where(:has(img))) {
+button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], [data-mobile-chrome-btn="true"], :has(img))),
+[type="button"]:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], [data-mobile-chrome-btn="true"], :has(img))),
+[type="submit"]:not(:where([data-mobile-chrome-btn="true"], :has(img))),
+[type="reset"]:not(:where([data-mobile-chrome-btn="true"], :has(img))) {
   background-color: #fbbf24 !important;
   background-image: linear-gradient(180deg, #ffba55 0%, #f7941d 52%, #e67b08 100%) !important;
   color: #000000 !important;
@@ -116,10 +116,10 @@ button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day
   overflow: visible !important;
 }
 
-button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], :has(img))):hover:not(:disabled),
-[type="button"]:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], :has(img))):hover:not(:disabled),
-[type="submit"]:not(:where(:has(img))):hover:not(:disabled),
-[type="reset"]:not(:where(:has(img))):hover:not(:disabled) {
+button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], [data-mobile-chrome-btn="true"], :has(img))):hover:not(:disabled),
+[type="button"]:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], [data-mobile-chrome-btn="true"], :has(img))):hover:not(:disabled),
+[type="submit"]:not(:where([data-mobile-chrome-btn="true"], :has(img))):hover:not(:disabled),
+[type="reset"]:not(:where([data-mobile-chrome-btn="true"], :has(img))):hover:not(:disabled) {
   background-color: #f59e0b !important;
   background-image: linear-gradient(180deg, #ffc66b 0%, #fb9c24 52%, #ec840c 100%) !important;
   border-color: #fde68a !important;
@@ -132,10 +132,10 @@ button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day
   filter: none !important;
 }
 
-button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], :has(img))):disabled,
-[type="button"]:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], :has(img))):disabled,
-[type="submit"]:not(:where(:has(img))):disabled,
-[type="reset"]:not(:where(:has(img))):disabled {
+button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], [data-mobile-chrome-btn="true"], :has(img))):disabled,
+[type="button"]:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], [data-mobile-chrome-btn="true"], :has(img))):disabled,
+[type="submit"]:not(:where([data-mobile-chrome-btn="true"], :has(img))):disabled,
+[type="reset"]:not(:where([data-mobile-chrome-btn="true"], :has(img))):disabled {
   background-color: #fbbf24 !important;
   background-image: linear-gradient(180deg, #ffca7a 0%, #f5a642 52%, #e68c24 100%) !important;
   color: #000000 !important;
@@ -143,25 +143,25 @@ button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day
   opacity: 0.75 !important;
 }
 
-button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], :has(img))) *:not(svg):not(path):not(circle):not(rect):not(line):not(polyline):not(polygon):not(ellipse),
-[type="button"]:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], :has(img))) *:not(svg):not(path):not(circle):not(rect):not(line):not(polyline):not(polygon):not(ellipse),
-[type="submit"]:not(:where(:has(img))) *:not(svg):not(path):not(circle):not(rect):not(line):not(polyline):not(polygon):not(ellipse),
-[type="reset"]:not(:where(:has(img))) *:not(svg):not(path):not(circle):not(rect):not(line):not(polyline):not(polygon):not(ellipse) {
+button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], [data-mobile-chrome-btn="true"], :has(img))) *:not(svg):not(path):not(circle):not(rect):not(line):not(polyline):not(polygon):not(ellipse),
+[type="button"]:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], [data-mobile-chrome-btn="true"], :has(img))) *:not(svg):not(path):not(circle):not(rect):not(line):not(polyline):not(polygon):not(ellipse),
+[type="submit"]:not(:where([data-mobile-chrome-btn="true"], :has(img))) *:not(svg):not(path):not(circle):not(rect):not(line):not(polyline):not(polygon):not(ellipse),
+[type="reset"]:not(:where([data-mobile-chrome-btn="true"], :has(img))) *:not(svg):not(path):not(circle):not(rect):not(line):not(polyline):not(polygon):not(ellipse) {
   color: #000000 !important;
   text-shadow: none !important;
   text-transform: uppercase !important;
 }
 
-button:not(:has(img)).zsb-golden-brand,
-button:not(:has(img)) .zsb-golden-brand,
-button:not(:has(img)) .zsb-golden-brand-light,
-[type="button"]:not(:has(img)).zsb-golden-brand,
-[type="button"]:not(:has(img)) .zsb-golden-brand,
-[type="button"]:not(:has(img)) .zsb-golden-brand-light {
+button:not(:has(img)):not([data-mobile-chrome-btn="true"]).zsb-golden-brand,
+button:not(:has(img)):not([data-mobile-chrome-btn="true"]) .zsb-golden-brand,
+button:not(:has(img)):not([data-mobile-chrome-btn="true"]) .zsb-golden-brand-light,
+[type="button"]:not(:has(img)):not([data-mobile-chrome-btn="true"]).zsb-golden-brand,
+[type="button"]:not(:has(img)):not([data-mobile-chrome-btn="true"]) .zsb-golden-brand,
+[type="button"]:not(:has(img)):not([data-mobile-chrome-btn="true"]) .zsb-golden-brand-light {
   color: #000000 !important;
 }
 
-button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], :has(img))) :is(span, kbd, div) {
+button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], [data-mobile-chrome-btn="true"], :has(img))) :is(span, kbd, div) {
   background-color: transparent !important;
   background-image: none !important;
 }
@@ -202,10 +202,10 @@ button[role="switch"][aria-checked="false"] > span {
 
 /* Protruding 3D Concave Silver-White Circular Icon Medallion (primary icon inside labeled buttons) */
 :is(
-  button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], .zsb-help-icon-btn, .zsb-clear-icon-btn, :has(img))),
-  [type="button"]:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], .zsb-help-icon-btn, .zsb-clear-icon-btn, :has(img))),
-  [type="submit"],
-  [type="reset"]
+  button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], [data-mobile-chrome-btn="true"], .zsb-help-icon-btn, .zsb-clear-icon-btn, :has(img))),
+  [type="button"]:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], [data-mobile-chrome-btn="true"], .zsb-help-icon-btn, .zsb-clear-icon-btn, :has(img))),
+  [type="submit"]:not([data-mobile-chrome-btn="true"]),
+  [type="reset"]:not([data-mobile-chrome-btn="true"])
 ) svg.lucide:first-of-type {
   order: -1 !important;
   box-sizing: content-box !important;
@@ -227,8 +227,8 @@ button[role="switch"][aria-checked="false"] > span {
 
 /* Trailing secondary chevrons/icons inside multi-icon buttons stay crisp black & unboxed */
 html body :is(
-  button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], :has(img))),
-  [type="button"]:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], :has(img)))
+  button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], [data-mobile-chrome-btn="true"], :has(img))),
+  [type="button"]:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], [data-mobile-chrome-btn="true"], :has(img)))
 ) svg.lucide.lucide.lucide:not(:first-of-type) {
   order: 99 !important;
   background: transparent !important;
@@ -241,7 +241,7 @@ html body :is(
 }
 
 /* Stacked sidebar & compact header buttons use tighter vertical medallion overlap for slim capsule height */
-:is(aside, header) :is(button, [type="button"]) svg.lucide:first-of-type {
+:is(aside, header) :is(button:not([data-mobile-chrome-btn="true"]), [type="button"]:not([data-mobile-chrome-btn="true"])) svg.lucide:first-of-type {
   padding: 0.28em !important;
   margin: -0.32em 0.24em -0.32em -0.22em !important;
 }
@@ -259,13 +259,12 @@ html body :is(
   button[data-testid="dashboard-calendar-next-btn"],
   button[data-testid="sidebar-collapse-btn"],
   button[data-testid="sidebar-expand-btn"],
-  button[data-testid="mobile-ledger-menu-btn"],
-  button[class*="w-5"][class*="h-5"],
-  button[class*="w-6"][class*="h-6"],
-  button[class*="w-7"][class*="h-7"],
-  button[class*="w-8"][class*="h-8"],
-  button[class*="w-9"][class*="h-9"],
-  button:has(> svg.lucide:only-child):not(:has(span, div)):not([class*="px-"])
+  button[class*="w-5"][class*="h-5"]:not([data-mobile-chrome-btn="true"]),
+  button[class*="w-6"][class*="h-6"]:not([data-mobile-chrome-btn="true"]),
+  button[class*="w-7"][class*="h-7"]:not([data-mobile-chrome-btn="true"]),
+  button[class*="w-8"][class*="h-8"]:not([data-mobile-chrome-btn="true"]),
+  button[class*="w-9"][class*="h-9"]:not([data-mobile-chrome-btn="true"]),
+  button:has(> svg.lucide:only-child):not(:has(span, div)):not([class*="px-"]):not([data-mobile-chrome-btn="true"])
 ) {
   padding: 2px !important;
   display: inline-flex;
@@ -287,13 +286,12 @@ html body :is(
   button[data-testid="dashboard-calendar-next-btn"],
   button[data-testid="sidebar-collapse-btn"],
   button[data-testid="sidebar-expand-btn"],
-  button[data-testid="mobile-ledger-menu-btn"],
-  button[class*="w-5"][class*="h-5"],
-  button[class*="w-6"][class*="h-6"],
-  button[class*="w-7"][class*="h-7"],
-  button[class*="w-8"][class*="h-8"],
-  button[class*="w-9"][class*="h-9"],
-  button:has(> svg.lucide:only-child):not(:has(span, div)):not([class*="px-"])
+  button[class*="w-5"][class*="h-5"]:not([data-mobile-chrome-btn="true"]),
+  button[class*="w-6"][class*="h-6"]:not([data-mobile-chrome-btn="true"]),
+  button[class*="w-7"][class*="h-7"]:not([data-mobile-chrome-btn="true"]),
+  button[class*="w-8"][class*="h-8"]:not([data-mobile-chrome-btn="true"]),
+  button[class*="w-9"][class*="h-9"]:not([data-mobile-chrome-btn="true"]),
+  button:has(> svg.lucide:only-child):not(:has(span, div)):not([class*="px-"]):not([data-mobile-chrome-btn="true"])
 ) svg.lucide {
   margin: 0 !important;
   padding: 0.28em !important;
@@ -414,16 +412,16 @@ button.zsb-help-icon-btn svg {
 }
 
 /* Clicked / Active / Pressed State for ALL Buttons -> Distinct Pressed Depth + Bright Rim + Crisp Black Text */
-button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not(:has(> img))[data-zsb-clicked="true"]:not(:disabled),
-button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not(:has(> img))[aria-pressed="true"]:not(:disabled),
-button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not(:has(> img)):active:not(:disabled),
-[type="button"]:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not(:has(> img))[data-zsb-clicked="true"]:not(:disabled),
-[type="button"]:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not(:has(> img))[aria-pressed="true"]:not(:disabled),
-[type="button"]:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not(:has(> img)):active:not(:disabled),
-[type="submit"][data-zsb-clicked="true"]:not(:disabled),
-[type="submit"]:active:not(:disabled),
-[type="reset"][data-zsb-clicked="true"]:not(:disabled),
-[type="reset"]:active:not(:disabled),
+button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not([data-mobile-chrome-btn="true"]):not(:has(> img))[data-zsb-clicked="true"]:not(:disabled),
+button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not([data-mobile-chrome-btn="true"]):not(:has(> img))[aria-pressed="true"]:not(:disabled),
+button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not([data-mobile-chrome-btn="true"]):not(:has(> img)):active:not(:disabled),
+[type="button"]:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not([data-mobile-chrome-btn="true"]):not(:has(> img))[data-zsb-clicked="true"]:not(:disabled),
+[type="button"]:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not([data-mobile-chrome-btn="true"]):not(:has(> img))[aria-pressed="true"]:not(:disabled),
+[type="button"]:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not([data-mobile-chrome-btn="true"]):not(:has(> img)):active:not(:disabled),
+[type="submit"]:not([data-mobile-chrome-btn="true"])[data-zsb-clicked="true"]:not(:disabled),
+[type="submit"]:not([data-mobile-chrome-btn="true"]):active:not(:disabled),
+[type="reset"]:not([data-mobile-chrome-btn="true"])[data-zsb-clicked="true"]:not(:disabled),
+[type="reset"]:not([data-mobile-chrome-btn="true"]):active:not(:disabled),
 .packing-ledger-plain-table button:not([data-testid^="db-cell-trigger-"])[data-zsb-clicked="true"]:not(:disabled),
 .packing-ledger-plain-table button:not([data-testid^="db-cell-trigger-"]):active:not(:disabled) {
   background-color: #f59e0b !important;
@@ -437,7 +435,7 @@ button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]
   filter: none !important;
 }
 
-button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"])[aria-current="page"]:not(:disabled) {
+button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not([data-mobile-chrome-btn="true"])[aria-current="page"]:not(:disabled) {
   background-color: #f59e0b !important;
   background-image: linear-gradient(180deg, #ffbe5c 0%, #f58a12 52%, #dc6e04 100%) !important;
   color: #000000 !important;
@@ -448,17 +446,17 @@ button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]
     0 4px 12px rgba(15, 23, 42, 0.35) !important;
 }
 
-button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"])[data-zsb-clicked="true"]:not(:disabled) *:not(svg):not(svg *),
-button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"])[aria-pressed="true"]:not(:disabled) *:not(svg):not(svg *),
-button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"])[aria-current="page"]:not(:disabled) *:not(svg):not(svg *),
-button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):active:not(:disabled) *:not(svg):not(svg *),
-[type="button"]:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"])[data-zsb-clicked="true"]:not(:disabled) *:not(svg):not(svg *),
-[type="button"]:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"])[aria-pressed="true"]:not(:disabled) *:not(svg):not(svg *),
-[type="button"]:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):active:not(:disabled) *:not(svg):not(svg *),
-[type="submit"][data-zsb-clicked="true"]:not(:disabled) *:not(svg):not(svg *),
-[type="submit"]:active:not(:disabled) *:not(svg):not(svg *),
-[type="reset"][data-zsb-clicked="true"]:not(:disabled) *:not(svg):not(svg *),
-[type="reset"]:active:not(:disabled) *:not(svg):not(svg *) {
+button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not([data-mobile-chrome-btn="true"])[data-zsb-clicked="true"]:not(:disabled) *:not(svg):not(svg *),
+button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not([data-mobile-chrome-btn="true"])[aria-pressed="true"]:not(:disabled) *:not(svg):not(svg *),
+button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not([data-mobile-chrome-btn="true"])[aria-current="page"]:not(:disabled) *:not(svg):not(svg *),
+button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not([data-mobile-chrome-btn="true"]):active:not(:disabled) *:not(svg):not(svg *),
+[type="button"]:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not([data-mobile-chrome-btn="true"])[data-zsb-clicked="true"]:not(:disabled) *:not(svg):not(svg *),
+[type="button"]:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not([data-mobile-chrome-btn="true"])[aria-pressed="true"]:not(:disabled) *:not(svg):not(svg *),
+[type="button"]:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([role="switch"]):not([data-mobile-chrome-btn="true"]):active:not(:disabled) *:not(svg):not(svg *),
+[type="submit"]:not([data-mobile-chrome-btn="true"])[data-zsb-clicked="true"]:not(:disabled) *:not(svg):not(svg *),
+[type="submit"]:not([data-mobile-chrome-btn="true"]):active:not(:disabled) *:not(svg):not(svg *),
+[type="reset"]:not([data-mobile-chrome-btn="true"])[data-zsb-clicked="true"]:not(:disabled) *:not(svg):not(svg *),
+[type="reset"]:not([data-mobile-chrome-btn="true"]):active:not(:disabled) *:not(svg):not(svg *) {
   color: #000000 !important;
   text-shadow: none !important;
 }
@@ -797,11 +795,11 @@ html body :where(
 }
 
 /* Reclaim crisp jewel-tone icons inside buttons even when the button sits inside a dark gradient modal header */
-html body :is(button, [type="button"], [type="submit"], [type="reset"]) svg.lucide.lucide.lucide.lucide {
+html body :is(button:not([data-mobile-chrome-btn="true"]), [type="button"]:not([data-mobile-chrome-btn="true"]), [type="submit"]:not([data-mobile-chrome-btn="true"]), [type="reset"]:not([data-mobile-chrome-btn="true"])) svg.lucide.lucide.lucide.lucide {
   color: #1d4ed8 !important;
 }
 
-html body :is(button, [type="button"], [type="submit"], [type="reset"]) svg.lucide.lucide.lucide.lucide:is(
+html body :is(button:not([data-mobile-chrome-btn="true"]), [type="button"]:not([data-mobile-chrome-btn="true"]), [type="submit"]:not([data-mobile-chrome-btn="true"]), [type="reset"]:not([data-mobile-chrome-btn="true"])) svg.lucide.lucide.lucide.lucide:is(
   .lucide-trash-2, .lucide-log-out, .lucide-x, .lucide-alert-circle,
   .lucide-circle-alert, .lucide-alert-triangle, .lucide-triangle-alert,
   .lucide-shield-alert, .lucide-minus, .lucide-minus-circle, .lucide-zoom-out
@@ -809,30 +807,52 @@ html body :is(button, [type="button"], [type="submit"], [type="reset"]) svg.luci
   color: #be123c !important;
 }
 
-html body :is(button, [type="button"], [type="submit"], [type="reset"]) svg.lucide.lucide.lucide.lucide:is(
+html body :is(button:not([data-mobile-chrome-btn="true"]), [type="button"]:not([data-mobile-chrome-btn="true"]), [type="submit"]:not([data-mobile-chrome-btn="true"]), [type="reset"]:not([data-mobile-chrome-btn="true"])) svg.lucide.lucide.lucide.lucide:is(
   .lucide-plus, .lucide-plus-circle, .lucide-save, .lucide-check,
   .lucide-check-circle, .lucide-check-circle-2, .lucide-circle-check, .lucide-upload
 ) {
   color: #047857 !important;
 }
 
-html body :is(button, [type="button"], [type="submit"], [type="reset"]) svg.lucide.lucide.lucide.lucide:is(
+html body :is(button:not([data-mobile-chrome-btn="true"]), [type="button"]:not([data-mobile-chrome-btn="true"]), [type="submit"]:not([data-mobile-chrome-btn="true"]), [type="reset"]:not([data-mobile-chrome-btn="true"])) svg.lucide.lucide.lucide.lucide:is(
   .lucide-edit-2, .lucide-edit-3, .lucide-square-pen, .lucide-pen
 ) {
   color: #a21caf !important;
 }
 
-html body :is(button, [type="button"], [type="submit"], [type="reset"]) svg.lucide.lucide.lucide.lucide:is(
+html body :is(button:not([data-mobile-chrome-btn="true"]), [type="button"]:not([data-mobile-chrome-btn="true"]), [type="submit"]:not([data-mobile-chrome-btn="true"]), [type="reset"]:not([data-mobile-chrome-btn="true"])) svg.lucide.lucide.lucide.lucide:is(
   .lucide-download, .lucide-file-down, .lucide-refresh-cw, .lucide-rotate-ccw, .lucide-copy
 ) {
   color: #0f766e !important;
 }
 
-html body :is(button, [type="button"], [type="submit"], [type="reset"]) svg.lucide.lucide.lucide.lucide:is(
+html body :is(button:not([data-mobile-chrome-btn="true"]), [type="button"]:not([data-mobile-chrome-btn="true"]), [type="submit"]:not([data-mobile-chrome-btn="true"]), [type="reset"]:not([data-mobile-chrome-btn="true"])) svg.lucide.lucide.lucide.lucide:is(
   .lucide-printer, .lucide-external-link, .lucide-chevron-left, .lucide-chevron-right,
   .lucide-chevron-up, .lucide-chevron-down
 ) {
   color: #3730a3 !important;
+}
+
+/* Native-style Mobile Top Bar & Bottom Nav Chrome Buttons */
+html body button[data-mobile-chrome-btn="true"] {
+  background-color: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  text-transform: none !important;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html body button[data-mobile-chrome-btn="true"] svg.lucide {
+  color: currentColor !important;
+  background: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  order: 0 !important;
 }
 
 /* Crisp Editorial Brand Wordmark for Screen Headers — Golden & Bold */
@@ -1280,25 +1300,90 @@ html body :is(button, [type="button"], [type="submit"], [type="reset"]) svg.luci
   -webkit-user-select: none;
 }
 
+/* Safe-area helpers for notched mobile devices */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Preserve crisp high-contrast icons inside native Mobile Top Bar, Drawer Close & Bottom Nav */
+html body button[data-mobile-chrome-btn="true"] svg.lucide.lucide.lucide.lucide {
+  color: currentColor !important;
+  stroke: currentColor !important;
+  background: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  stroke-width: 2.1 !important;
+}
+
+html body button[data-mobile-chrome-btn="true"] *:not(svg):not(svg *) {
+  text-transform: none !important;
+}
+
+/* Eliminate 300ms mobile tap delay on interactive controls */
+button,
+a,
+input,
+select,
+textarea,
+[role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Smooth momentum touch scrolling for horizontal tables & panels */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
 /* When Smart Mobile Display Adjust is active on mobile screens (< 768px) */
 @media (max-width: 767px) {
+  html,
+  body {
+    overflow-x: clip;
+  }
+
+  .smart-mobile-active {
+    max-width: 100vw;
+    overflow-x: clip;
+  }
+
   .smart-mobile-active [data-testid="sheet-zoom-canvas"] {
-    min-width: 640px;
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
   }
 
   .smart-mobile-active main {
-    padding-left: 0.25rem !important;
-    padding-right: 0.25rem !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    max-width: 100%;
+  }
+
+  /* Prevent iOS Safari auto-zoom on standalone form inputs while preserving dense table ergonomics */
+  .smart-mobile-active :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), select, textarea):not(table *) {
+    font-size: 16px;
   }
 
   .smart-mobile-active table {
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .smart-mobile-active th,
   .smart-mobile-active td {
-    padding-left: 0.375rem;
-    padding-right: 0.375rem;
+    padding-left: 0.45rem;
+    padding-right: 0.45rem;
+  }
+
+  /* Keep buttons comfortable to tap without overflowing narrow screens */
+  .smart-mobile-active main button:not([data-testid^="db-cell-trigger-"]):not([data-testid^="calendar-day-"]):not([data-testid^="bangla-day-"]):not([data-testid^="bangla-festival-"]):not([role="switch"]):not(.zsb-help-icon-btn):not(.zsb-clear-icon-btn) {
+    min-height: 36px;
   }
 }
 

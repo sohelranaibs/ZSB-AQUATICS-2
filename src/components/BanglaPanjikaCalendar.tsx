@@ -215,9 +215,14 @@ export const BanglaPanjikaCalendar: React.FC = () => {
           </div>
         </div>
 
+        {/* Subtle Mobile Swipe Hint */}
+        <div className="md:hidden text-[11px] font-semibold text-slate-900/80 flex items-center justify-between px-1">
+          <span>Swipe horizontally to view all 7 days &rarr;</span>
+        </div>
+
         {/* Main 7-Column Calendar Table & Legend Card */}
         <div className="bg-white shadow-sm border border-[#73846c] overflow-x-auto">
-          <div className="min-w-[780px]">
+          <div className="min-w-[640px] sm:min-w-[780px]">
             {/* Weekday Header Bar */}
             <div className="grid grid-cols-7 bg-[#788871] border-b border-[#63725d] divide-x divide-white/35">
               {BANGLA_WEEKDAYS.map((wd) => (

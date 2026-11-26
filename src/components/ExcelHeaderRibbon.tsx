@@ -24,6 +24,9 @@ import {
   User,
   CloudOff,
   Printer,
+  Search,
+  SlidersHorizontal,
+  X,
 } from 'lucide-react';
 import { GlobalSearchBar } from './GlobalSearchBar.tsx';
 import { PWAInstallButton } from './PWAInstallButton.tsx';
@@ -131,7 +134,7 @@ const HeaderSyncControls: React.FC<HeaderSyncControlsProps> = React.memo(
     return (
       <div
         data-testid="header-sync-group"
-        className={`flex items-center gap-2 sm:gap-2.5 px-3 py-1 rounded-full border bg-[#1F3349] shrink-0 transition-colors ${
+        className={`flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-2.5 px-3 py-1.5 sm:py-1 rounded-2xl sm:rounded-full border bg-[#1F3349] shrink-0 transition-colors ${
           syncDisplay.isSlowSync || syncDisplay.indicatorColor === 'rose'
             ? 'border-amber-400/70'
             : 'border-white/15'
@@ -379,6 +382,14 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
     otherCosts: otherCosts.length,
   });
 
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = React.useState(false);
+  const [isMobileToolsOpen, setIsMobileToolsOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    setIsMobileSearchOpen(false);
+    setIsMobileToolsOpen(false);
+  }, [activeTab]);
+
 
 
   const formulaText = useMemo(() => {
@@ -432,28 +443,30 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
   const activeSheetMeta = workbookSheets.find((s) => s.id === activeTab) || workbookSheets[0];
 
   return (
-    <header className="bg-[#273E56] text-white select-none print:hidden md:sticky md:top-0 z-40">
-      {/* Persistent Mobile ZSB AQUATICS Export Ledger Bar (< md, visible across every sheet) */}
+    <header className="bg-[#273E56] text-white select-none print:hidden sticky top-0 z-40 pt-safe">
+      {/* Compact Sticky 52px Mobile Top App Bar (< md, keeps sticky chrome <= 15% of mobile viewport height) */}
       <div
         data-testid="mobile-export-ledger-bar"
-        className="md:hidden bg-[#273E56] text-white px-3 py-2 border-b border-white/15 flex items-center justify-between gap-2"
+        className="md:hidden h-[52px] bg-[#273E56] text-white px-2 border-b border-white/15 flex items-center justify-between gap-1.5"
       >
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-1 min-w-0 flex-1">
           {onOpenMobileDrawer && (
             <button
               type="button"
+              data-mobile-chrome-btn="true"
               data-testid="mobile-ledger-menu-btn"
               onClick={onOpenMobileDrawer}
               aria-label="Open ZSB AQUATICS Export Ledger Menu"
-              className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white border border-white/20 flex items-center justify-center shrink-0 cursor-pointer"
+              className="w-11 h-11 rounded-xl text-white hover:bg-white/10 active:bg-white/15 flex items-center justify-center shrink-0 cursor-pointer"
             >
-              <Menu className="w-4 h-4" />
+              <Menu className="w-5 h-5" />
             </button>
           )}
           <button
             type="button"
+            data-mobile-chrome-btn="true"
             onClick={() => setActiveTab('dashboard')}
-            className="flex items-center gap-2 min-w-0 text-left cursor-pointer"
+            className="flex items-center gap-2 min-w-0 text-left cursor-pointer min-h-[44px]"
           >
             <div className="w-7 h-7 rounded-full bg-white p-0.5 border border-[#CBD8E6] flex items-center justify-center overflow-hidden shrink-0">
               <img
@@ -463,33 +476,62 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
               />
             </div>
             <div className="min-w-0 leading-tight">
-              <div className="text-xs font-black tracking-tight text-amber-400 zsb-golden-brand truncate">
-                {companyProfile.companyName}
+              <div className="text-[13px] font-extrabold tracking-tight text-white truncate">
+                {activeSheetMeta?.shortLabel || activeSheetMeta?.label || 'Dashboard'}
               </div>
-              <div className="text-[10px] font-semibold text-sky-200 truncate">
-                Export Ledger
+              <div className="text-[10px] font-bold text-amber-400 zsb-golden-brand truncate">
+                {companyProfile.companyName}
               </div>
             </div>
           </button>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-0.5 shrink-0">
           <button
             type="button"
-            data-testid="mobile-print-all-active-sheets-btn"
-            aria-label="Print All Active Sheets"
-            onClick={() => startPrintAllActiveSheets()}
-            disabled={printAllSequence.isActive}
-            title="Sequentially trigger print preview for every visible workbook sheet"
-            className="flex items-center space-x-1 px-2 py-1 text-[10px] font-bold rounded-full shadow-2xs transition whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-60"
+            data-mobile-chrome-btn="true"
+            data-testid="mobile-search-toggle-btn"
+            aria-expanded={isMobileSearchOpen}
+            aria-label={isMobileSearchOpen ? 'Close Global Search' : 'Open Global Search'}
+            onClick={() => {
+              setIsMobileSearchOpen((prev) => {
+                const next = !prev;
+                if (next) setIsMobileToolsOpen(false);
+                return next;
+              });
+            }}
+            className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
+              isMobileSearchOpen ? 'text-amber-300 bg-white/10' : 'text-slate-100 hover:bg-white/10'
+            }`}
           >
-            <Printer className="w-3 h-3 shrink-0" />
-            <span>Print All</span>
+            {isMobileSearchOpen ? <X className="w-5 h-5" /> : <Search className="w-5 h-5" />}
           </button>
 
-          <span className="px-2 py-0.5 rounded bg-[#1D6CE0] text-white text-[10px] font-mono font-bold border border-white/20 shrink-0 max-w-[92px] truncate">
-            #{activeSheetMeta?.num} {activeSheetMeta?.shortLabel}
-          </span>
+          <button
+            type="button"
+            data-mobile-chrome-btn="true"
+            data-testid="mobile-tools-toggle-btn"
+            aria-expanded={isMobileToolsOpen}
+            aria-label={isMobileToolsOpen ? 'Close Workspace Controls' : 'Open Sync, Display & Print Controls'}
+            onClick={() => {
+              setIsMobileToolsOpen((prev) => {
+                const next = !prev;
+                if (next) setIsMobileSearchOpen(false);
+                return next;
+              });
+            }}
+            className={`relative w-11 h-11 rounded-xl flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
+              isMobileToolsOpen ? 'text-amber-300 bg-white/10' : 'text-slate-100 hover:bg-white/10'
+            }`}
+          >
+            {isMobileToolsOpen ? <X className="w-5 h-5" /> : <SlidersHorizontal className="w-5 h-5" />}
+            {offlineSyncQueue.length > 0 && !isMobileToolsOpen && (
+              <span
+                aria-hidden="true"
+                className="absolute top-2 right-2 w-2 h-2 rounded-full bg-amber-400"
+              />
+            )}
+          </button>
 
           <HeaderOfflineAlert
             compact
@@ -499,9 +541,154 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
         </div>
       </div>
 
-      {/* Top Control Header Bar (Deep Navy #273E56: Left Sidebar Toggle + Search | Right Sync + Snapshots + User + Offline Alert) */}
+      {/* Expandable Mobile Global Search Bar (< md) */}
+      {isMobileSearchOpen && (
+        <div
+          data-testid="mobile-search-panel"
+          className="md:hidden bg-[#1F3349] px-3 py-2.5 border-b border-white/15"
+        >
+          <GlobalSearchBar />
+        </div>
+      )}
+
+      {/* Expandable Mobile Sync, Snapshots, Print & Display Controls Drawer (< md) */}
+      {isMobileToolsOpen && (
+        <div
+          data-testid="mobile-tools-panel"
+          className="md:hidden bg-[#1F3349] px-3 py-3 border-b border-white/15 space-y-2.5 max-h-[70dvh] overflow-y-auto"
+        >
+          <HeaderSyncControls
+            totalRecordsCount={totalRecordsCount}
+            isLiveSyncEnabled={isLiveSyncEnabled}
+            toggleLiveSync={toggleLiveSync}
+            forceSyncNow={forceSyncNow}
+          />
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              data-testid="mobile-snapshots-btn"
+              onClick={() => {
+                setIsMobileToolsOpen(false);
+                openSnapshotModal();
+              }}
+              className="flex-1 min-w-[130px] flex items-center justify-center space-x-1.5 px-3 py-2 text-xs font-bold rounded-full shadow-2xs transition cursor-pointer"
+            >
+              <Archive className="w-3.5 h-3.5 shrink-0" />
+              <span>Snapshots ({snapshots.length})</span>
+            </button>
+
+            <button
+              type="button"
+              data-testid="mobile-print-all-active-sheets-btn"
+              aria-label="Print All Active Sheets"
+              onClick={() => {
+                setIsMobileToolsOpen(false);
+                startPrintAllActiveSheets();
+              }}
+              disabled={printAllSequence.isActive}
+              className="flex-1 min-w-[120px] flex items-center justify-center space-x-1.5 px-3 py-2 text-xs font-bold rounded-full shadow-2xs transition cursor-pointer disabled:opacity-60"
+            >
+              <Printer className="w-3.5 h-3.5 shrink-0" />
+              <span>Print All</span>
+            </button>
+
+            <PWAInstallButton />
+
+            {offlineSyncQueue.length > 0 && onOpenSyncQueueModal && (
+              <button
+                type="button"
+                data-testid="mobile-bg-sync-queue-btn"
+                onClick={() => {
+                  setIsMobileToolsOpen(false);
+                  onOpenSyncQueueModal();
+                }}
+                className="flex items-center space-x-1.5 px-3 py-2 text-xs font-bold text-black rounded-full shadow-2xs transition whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <CloudOff className="w-3.5 h-3.5" />
+                <span>BG SYNC ({offlineSyncQueue.length})</span>
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/10">
+            <div
+              role="group"
+              aria-label="Mobile Display Viewport Mode"
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-[#273E56] p-1"
+            >
+              <button
+                type="button"
+                onClick={() => onChangeDisplayMode?.('smart_mobile')}
+                aria-pressed={displayMode === 'smart_mobile'}
+                className="flex items-center space-x-1 px-2.5 py-1.5 rounded-full text-[11px] font-bold transition cursor-pointer"
+              >
+                <Smartphone className="w-3.5 h-3.5 shrink-0" />
+                <span>Mobile Fit</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onChangeDisplayMode?.('desktop_full')}
+                aria-pressed={displayMode === 'desktop_full'}
+                className="flex items-center space-x-1 px-2.5 py-1.5 rounded-full text-[11px] font-bold transition cursor-pointer"
+              >
+                <Monitor className="w-3.5 h-3.5 shrink-0" />
+                <span>Desktop</span>
+              </button>
+            </div>
+
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-[#273E56] px-2 py-1">
+              <button
+                type="button"
+                onClick={onZoomOut}
+                disabled={zoomPercent <= 40}
+                aria-label="Zoom Out"
+                className="flex items-center justify-center w-7 h-7 rounded-full disabled:opacity-40 cursor-pointer"
+              >
+                <ZoomOut className="w-3.5 h-3.5" />
+              </button>
+              <span className="text-[11px] font-mono font-bold text-white px-1">
+                {effectivePercentLabel}
+              </span>
+              <button
+                type="button"
+                onClick={onZoomIn}
+                disabled={zoomPercent >= 200}
+                aria-label="Zoom In"
+                className="flex items-center justify-center w-7 h-7 rounded-full disabled:opacity-40 cursor-pointer"
+              >
+                <ZoomIn className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsMobileToolsOpen(false);
+                onToggleFullScreen?.();
+              }}
+              aria-pressed={isFullScreen}
+              className="flex items-center space-x-1 px-3 py-1.5 rounded-full text-[11px] font-bold transition cursor-pointer"
+            >
+              {isFullScreen ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5 shrink-0" />
+                  <span>Exit Full</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5 shrink-0" />
+                  <span>Full Screen</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Top Control Header Bar (Desktop >= md: Left Sidebar Toggle + Search | Right Sync + Snapshots + User + Offline Alert) */}
       {!isFullScreen && (
-      <div className="bg-[#273E56] px-3 sm:px-4 py-2 flex flex-wrap xl:flex-nowrap items-center justify-between gap-2 sm:gap-2.5">
+      <div className="hidden md:flex bg-[#273E56] px-3 sm:px-4 py-2 flex-wrap xl:flex-nowrap items-center justify-between gap-2 sm:gap-2.5">
         {/* Left: Sidebar Toggle + Global Cross-Database Search Bar */}
         <div className="flex items-center gap-2 sm:gap-2.5 flex-1 min-w-[140px] max-w-xs 2xl:max-w-sm">
           {onToggleSidebar && (
@@ -595,8 +782,8 @@ export const ExcelHeaderRibbon: React.FC<ExcelHeaderRibbonProps> = React.memo(({
       </div>
       )}
 
-      {/* Clean Compact Navy Formula Bar + Display & Zoom Toolbar */}
-      <div className="bg-[#1F3349] px-3 sm:px-4 py-1.5 border-t border-white/10 flex flex-wrap md:flex-nowrap items-center justify-between gap-2.5 text-xs font-mono text-slate-200">
+      {/* Clean Compact Navy Formula Bar + Display & Zoom Toolbar (Desktop >= md) */}
+      <div className="hidden md:flex bg-[#1F3349] px-3 sm:px-4 py-1.5 border-t border-white/10 flex-wrap md:flex-nowrap items-center justify-between gap-2.5 text-xs font-mono text-slate-200">
         <div className={`${isFullScreen ? 'flex' : 'hidden md:flex'} items-center gap-2 min-w-0 flex-1 overflow-hidden`}>
           {isFullScreen && (
             <button

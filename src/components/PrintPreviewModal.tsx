@@ -402,14 +402,14 @@ export const PrintPreviewModal: React.FC = () => {
   return (
     <div
       id="printable-modal-backdrop"
-      className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 flex items-center justify-center p-2 sm:p-4 print:p-0 print:bg-white print:static print:overflow-visible"
+      className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 flex items-center justify-center p-0 sm:p-4 print:p-0 print:bg-white print:static print:overflow-visible"
     >
       <div
         id="printable-modal-card"
-        className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[96vh] print:max-h-none print:border-none print:shadow-none print:rounded-none"
+        className="bg-white rounded-none sm:rounded-2xl shadow-2xl max-w-4xl w-full border-0 sm:border border-slate-200 overflow-hidden flex flex-col max-h-[100dvh] sm:max-h-[96vh] print:max-h-none print:border-none print:shadow-none print:rounded-none"
       >
         {/* Modal Top Control Bar (Hidden in Print) */}
-        <div className="bg-[#273E56] text-white px-5 py-3 space-y-2.5 border-b-2 border-[#1D6CE0] print:hidden">
+        <div className="bg-[#273E56] text-white px-3 sm:px-5 py-2.5 sm:py-3 space-y-2 sm:space-y-2.5 border-b-2 border-[#1D6CE0] print:hidden">
           <div className="flex items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-3 min-w-0">
               <div className="flex items-center space-x-2.5 min-w-0">
@@ -796,12 +796,12 @@ export const PrintPreviewModal: React.FC = () => {
         )}
 
         {/* Preview Paper Desk Workspace */}
-        <div className="bg-slate-200/95 p-3 sm:p-6 overflow-y-auto flex justify-center items-start flex-1 min-h-0 print:p-0 print:bg-white">
+        <div className="bg-slate-200/95 p-2.5 sm:p-6 overflow-auto block flex-1 min-h-0 print:p-0 print:bg-white print:overflow-visible">
           {/* Printable Voucher Paper Content (A4 Portrait Printable Width: 760px / 190mm) */}
           <div
             id="printable-document"
             ref={printableDocRef}
-            className="zsb-print-paper relative w-full max-w-[760px] bg-white shadow-2xl rounded-sm border border-slate-300 p-5 sm:p-7 space-y-5 text-slate-900 print:shadow-none overflow-hidden"
+            className="zsb-print-paper relative mx-auto w-full max-w-[760px] bg-white shadow-2xl rounded-sm border border-slate-300 p-3.5 sm:p-7 space-y-4 sm:space-y-5 text-slate-900 print:shadow-none overflow-hidden"
             style={{ backgroundColor: '#ffffff', color: '#000000', position: 'relative' }}
           >
             {/* Centered Watermark Logo */}

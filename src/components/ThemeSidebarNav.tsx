@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import { ActiveTab } from '../types/index.ts';
-import { canUserAccessTab, resolveCanonicalTeamRole } from '../utils/rbacPermissions.ts';
+import { canUserAccessTab } from '../utils/rbacPermissions.ts';
 import {
   buildWorkbookSheets,
   WorkbookSheetNavItem,
@@ -96,15 +96,29 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
     [sheets, currentUser]
   );
 
-  const canonicalRole = useMemo(
-    () => resolveCanonicalTeamRole(currentUser),
-    [currentUser]
-  );
+  React.useEffect(() => {
+    if (!isMobileDrawerOpen) return undefined;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && onCloseMobileDrawer) {
+        onCloseMobileDrawer();
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', handleEsc);
+    };
+  }, [isMobileDrawerOpen, onCloseMobileDrawer]);
 
   const handleSelectSheet = (id: ActiveTab) => {
     setActiveTab(id);
     if (onCloseMobileDrawer) {
       onCloseMobileDrawer();
+    }
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
@@ -263,18 +277,8 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
         })}
       </nav>
 
-      {/* Bottom Role Clearance & Logout Row */}
+      {/* Bottom Logout Row */}
       <div className="border-t border-white/10 shrink-0">
-        <div
-          data-testid="sidebar-role-clearance"
-          className="px-4 py-1.5 flex items-center justify-between text-[10px] font-mono text-slate-300 border-b border-white/10"
-        >
-          <span>Role</span>
-          <span className="text-amber-300 font-bold uppercase tracking-wide truncate max-w-[130px]">
-            {canonicalRole}
-          </span>
-        </div>
-
         <div className="px-3 py-2">
           <button
             type="button"
@@ -309,13 +313,14 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
           />
           <aside
             data-testid="theme-sidebar-mobile-drawer"
-            className="relative z-10 flex flex-col w-64 max-w-[82vw] h-full bg-[#273E56] text-slate-100 border-r border-[#385775] shadow-2xl select-none"
+            className="relative z-10 flex flex-col w-72 max-w-[85vw] h-full bg-[#273E56] text-slate-100 border-r border-[#385775] shadow-2xl select-none"
           >
-            <div className="px-4 py-3 flex items-center justify-between gap-2.5 border-b border-white/10 shrink-0">
+            <div className="px-4 py-3 flex items-center justify-between gap-2.5 border-b border-white/10 shrink-0 pt-safe">
               <button
                 type="button"
+                data-mobile-chrome-btn="true"
                 onClick={() => handleSelectSheet('dashboard')}
-                className="flex items-center gap-3 min-w-0 text-left cursor-pointer"
+                className="flex items-center gap-3 min-w-0 text-left cursor-pointer min-h-[44px]"
               >
                 <div className="w-9 h-9 rounded-full bg-white p-0.5 border border-[#CBD8E6] shadow-sm flex items-center justify-center overflow-hidden shrink-0">
                   <img
@@ -336,15 +341,16 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
 
               <button
                 type="button"
+                data-mobile-chrome-btn="true"
                 onClick={onCloseMobileDrawer}
                 aria-label="Close Export Ledger Menu"
-                className="w-7 h-7 rounded-md bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white flex items-center justify-center transition cursor-pointer shrink-0"
+                className="w-11 h-11 rounded-xl bg-white/10 text-white hover:bg-white/20 active:bg-white/25 flex items-center justify-center transition cursor-pointer shrink-0"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft className="w-5 h-5" />
               </button>
             </div>
 
-            <nav aria-label="Mobile Workbook Sheets Menu" className="flex-1 overflow-y-auto py-2.5 px-3 space-y-2">
+            <nav aria-label="Mobile Workbook Sheets Menu" className="flex-1 overflow-y-auto py-3 px-3 space-y-2">
               {visibleSheets.map((s) => {
                 const isActive = activeTab === s.id;
                 return (
@@ -354,7 +360,7 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
                     data-testid={`mobile-sidebar-nav-${s.id}`}
                     aria-current={isActive ? 'page' : undefined}
                     onClick={() => handleSelectSheet(s.id)}
-                    className={`w-full py-1.5 px-3 rounded-xl flex items-center justify-between gap-2 text-left transition-colors cursor-pointer border ${
+                    className={`w-full min-h-[44px] py-2.5 px-3.5 rounded-xl flex items-center justify-between gap-2 text-left transition-colors cursor-pointer border ${
                       isActive
                         ? 'bg-[#273E56] text-white border-amber-400 font-bold shadow-xs'
                         : 'bg-[#273E56] text-slate-100 border-white/15 hover:text-white font-medium'
@@ -380,12 +386,12 @@ export const ThemeSidebarNav: React.FC<ThemeSidebarNavProps> = React.memo(({
               })}
             </nav>
 
-            <div className="border-t border-white/10 shrink-0">
-              <div className="px-3 py-2">
+            <div className="border-t border-white/10 shrink-0 pb-safe">
+              <div className="px-3 py-2.5">
                 <button
                   type="button"
                   onClick={logout}
-                  className="w-full py-1.5 px-3 rounded-xl flex items-center gap-2.5 text-slate-100 hover:text-white hover:bg-white/10 text-[13px] leading-tight font-semibold transition cursor-pointer"
+                  className="w-full min-h-[44px] py-2.5 px-3.5 rounded-xl flex items-center gap-2.5 text-slate-100 hover:text-white hover:bg-white/10 text-[13px] leading-tight font-semibold transition cursor-pointer"
                 >
                   <LogOut className="w-4 h-4 shrink-0" />
                   <span>Logout</span>

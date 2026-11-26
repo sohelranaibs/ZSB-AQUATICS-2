@@ -276,7 +276,7 @@ export const DashboardCalendarWidget: React.FC<DashboardCalendarWidgetProps> = (
       className="bg-white rounded-xl border border-[#CBD8E6] shadow-xs overflow-hidden"
     >
       {/* Header Bar */}
-      <div className="bg-[#273E56] text-white px-5 py-3.5 border-b border-[#1E3247] flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-[#273E56] text-white px-3.5 sm:px-5 py-3 sm:py-3.5 border-b border-[#1E3247] flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
           <span className="w-8 h-8 rounded-lg bg-[#1E3247] border border-white/15 flex items-center justify-center shrink-0">
             <Calendar className="w-4 h-4 text-amber-400" />
@@ -351,7 +351,7 @@ export const DashboardCalendarWidget: React.FC<DashboardCalendarWidgetProps> = (
       {/* Main Split: 7-col Calendar Grid + 5-col Selected Day Activity Panel */}
       <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-200">
         {/* Left: Monthly Calendar Grid */}
-        <div className="lg:col-span-7 p-4 space-y-3 bg-white">
+        <div className="lg:col-span-7 p-2.5 sm:p-4 space-y-2.5 sm:space-y-3 bg-white">
           {/* Legend */}
           <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600 pb-1 border-b border-slate-100">
             <span className="font-bold text-slate-800 font-mono">
@@ -380,7 +380,7 @@ export const DashboardCalendarWidget: React.FC<DashboardCalendarWidgetProps> = (
           </div>
 
           {/* Weekday Headers */}
-          <div className="grid grid-cols-7 gap-1.5 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">
+          <div className="grid grid-cols-7 gap-1 sm:gap-1.5 text-center text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500">
             {WEEKDAY_LABELS.map((day) => (
               <div key={day} className="py-1">
                 {day}
@@ -393,7 +393,7 @@ export const DashboardCalendarWidget: React.FC<DashboardCalendarWidgetProps> = (
             role="grid"
             aria-label={`Calendar dates for ${formatCalendarMonthHeading(displayedMonth)}`}
             data-testid="dashboard-calendar-grid"
-            className="grid grid-cols-7 gap-1.5"
+            className="grid grid-cols-7 gap-1 sm:gap-1.5"
           >
             {calendarCells.map((cell) => {
               const dayInfo = activityMap.get(cell.dateIso);
@@ -413,7 +413,7 @@ export const DashboardCalendarWidget: React.FC<DashboardCalendarWidgetProps> = (
                   }${hasNote ? ', has note' : ''}`}
                   aria-pressed={isSelected}
                   onClick={() => handleSelectCell(cell.dateIso, cell.inCurrentMonth)}
-                  className={`min-h-[58px] sm:min-h-[64px] p-1.5 rounded-lg border text-left flex flex-col justify-between transition cursor-pointer ${
+                  className={`min-h-[46px] sm:min-h-[64px] p-1 sm:p-1.5 rounded-lg border text-left flex flex-col justify-between transition cursor-pointer ${
                     isSelected
                       ? 'bg-[#1D6CE0] text-white border-[#1558BD] shadow-xs ring-2 ring-[#1D6CE0]/25'
                       : isToday
@@ -562,7 +562,7 @@ export const DashboardCalendarWidget: React.FC<DashboardCalendarWidgetProps> = (
         </div>
 
         {/* Right: Selected Day Ledger & Quick Entry */}
-        <div className="lg:col-span-5 p-4 bg-slate-50/40 flex flex-col justify-between gap-3">
+        <div className="lg:col-span-5 p-3 sm:p-4 bg-slate-50/40 flex flex-col justify-between gap-3">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200">
               <div>

@@ -164,7 +164,7 @@ export const LandingLoginView: React.FC = () => {
               setLandingMode('staff');
               setSupplierError(null);
             }}
-            className={`py-2 px-3 text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap transition cursor-pointer ${
+            className={`py-2 px-2 sm:px-3 text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 leading-tight transition cursor-pointer ${
               landingMode === 'staff'
                 ? 'ring-2 ring-[#273E56] ring-offset-1 shadow-md'
                 : 'opacity-50 hover:opacity-80'
@@ -183,14 +183,15 @@ export const LandingLoginView: React.FC = () => {
               setLandingMode('supplier');
               setErrorMessage(null);
             }}
-            className={`py-2 px-3 text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap transition cursor-pointer ${
+            className={`py-2 px-2 sm:px-3 text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 leading-tight transition cursor-pointer ${
               landingMode === 'supplier'
                 ? 'ring-2 ring-[#273E56] ring-offset-1 shadow-md'
                 : 'opacity-50 hover:opacity-80'
             }`}
           >
             <FileSpreadsheet className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-            <span>Supplier Statement</span>
+            <span className="sm:hidden">Supplier</span>
+            <span className="hidden sm:inline">Supplier Statement</span>
           </button>
         </div>
 

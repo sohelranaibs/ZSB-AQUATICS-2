@@ -106,7 +106,7 @@ export const OfflineIndicator: React.FC<OfflineIndicatorProps> = ({
       role="status"
       aria-live="polite"
       data-testid="pwa-offline-indicator"
-      className={`fixed bottom-4 left-4 z-[85] flex items-center gap-2.5 rounded-xl px-3.5 py-2 text-xs font-bold text-white shadow-lg border print:hidden ${
+      className={`fixed bottom-20 md:bottom-4 left-3 right-3 sm:right-auto sm:left-4 max-w-[calc(100vw-1.5rem)] z-[85] flex flex-wrap items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold text-white shadow-lg border print:hidden ${
         !isOnline
           ? 'bg-amber-700 border-amber-400'
           : 'bg-[#273E56] border-sky-400'

@@ -502,11 +502,11 @@ export const QuickEntryModal: React.FC<QuickEntryModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label="Excel and CSV Data Import and Export Center"
-      className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5"
+      className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-2 sm:p-5"
     >
-      <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[94dvh] sm:max-h-[92vh]">
         {/* Header */}
-        <div className="bg-[#273E56] text-white px-6 py-4 flex flex-wrap items-center justify-between gap-4 border-b border-white/15">
+        <div className="bg-[#273E56] text-white px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-3 sm:gap-4 border-b border-white/15">
           <div className="flex items-center space-x-3">
             <div className="w-11 h-11 rounded-xl bg-[#1D6CE0] text-white flex items-center justify-center shadow-lg font-black shrink-0">
               <FileSpreadsheet className="w-6 h-6 stroke-[2.2]" />

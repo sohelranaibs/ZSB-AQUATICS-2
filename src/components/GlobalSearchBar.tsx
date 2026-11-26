@@ -282,7 +282,7 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
           ref={dropdownRef}
           id="global-search-results-list"
           data-testid="global-search-dropdown"
-          className="absolute left-0 mt-1.5 w-[94vw] sm:w-[540px] md:w-[620px] max-w-[calc(100vw-1.5rem)] bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden max-h-[500px] flex flex-col"
+          className="fixed left-2 right-2 top-[106px] sm:absolute sm:left-0 sm:right-auto sm:top-auto sm:mt-1.5 sm:w-[540px] md:w-[620px] max-w-[calc(100vw-1rem)] bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden max-h-[65dvh] sm:max-h-[500px] flex flex-col"
         >
           {/* Header Bar with Module Tabs */}
           <div className="bg-slate-50 px-3 py-2 border-b border-slate-200 flex items-center justify-between gap-2 overflow-x-auto text-xs shrink-0">
@@ -469,7 +469,7 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
           </div>
 
           {/* Footer Bar: Keyboard Hints */}
-          <div className="bg-slate-50 px-3 py-1.5 border-t border-slate-200 text-[10px] text-slate-500 flex items-center justify-between shrink-0">
+          <div className="hidden sm:flex bg-slate-50 px-3 py-1.5 border-t border-slate-200 text-[10px] text-slate-500 items-center justify-between shrink-0">
             <div className="flex items-center space-x-3">
               <span>
                 <kbd className="px-1 py-0.5 bg-white border border-slate-200 rounded font-mono text-slate-700">↑</kbd>{' '}

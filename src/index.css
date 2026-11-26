@@ -161,7 +161,7 @@ button:not(:has(img)):not([data-mobile-chrome-btn="true"]) .zsb-golden-brand-lig
   color: #000000 !important;
 }
 
-button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], [data-mobile-chrome-btn="true"], :has(img))) :is(span, kbd, div) {
+button:not(:where([data-testid^="db-cell-trigger-"], [data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"], [role="switch"], [data-mobile-chrome-btn="true"], :has(img))) :is(span, kbd, div):not(.zsb-touch-ripple-host):not(.zsb-touch-ripple-wave) {
   background-color: transparent !important;
   background-image: none !important;
 }
@@ -1533,4 +1533,140 @@ table[data-col-resized="true"] td {
   box-shadow: 0 4px 10px rgba(15, 23, 42, 0.25);
   border: 1px solid rgba(56, 189, 248, 0.55);
 }
+
+/* ============================================================================
+   SMART MOBILE MODE — TACTILE BUTTON TOUCH FEEDBACK (SCALE-DOWN + SUBTLE RIPPLE)
+   Applies strictly when display mode is `smart_mobile` so touch taps give crisp,
+   immediate physical confirmation without clipping protruding icon medallions.
+   ============================================================================ */
+[data-display-mode="smart_mobile"] :where(
+  button:not([data-testid^="db-cell-trigger-"]):not(:disabled),
+  [type="button"]:not([data-testid^="db-cell-trigger-"]):not(:disabled),
+  [type="submit"]:not(:disabled),
+  [type="reset"]:not(:disabled),
+  [role="button"]:not([data-testid^="db-cell-trigger-"]):not([aria-disabled="true"])
+) {
+  transition:
+    transform 170ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 170ms ease,
+    background-color 150ms ease,
+    border-color 150ms ease,
+    opacity 150ms ease;
+  will-change: transform;
+}
+
+/* Subtle tactile scale-down while touched/pressed in smart_mobile mode */
+[data-display-mode="smart_mobile"] :where(
+  button:not([data-testid^="db-cell-trigger-"]):not(:disabled),
+  [type="button"]:not([data-testid^="db-cell-trigger-"]):not(:disabled),
+  [type="submit"]:not(:disabled),
+  [type="reset"]:not(:disabled),
+  [role="button"]:not([data-testid^="db-cell-trigger-"]):not([aria-disabled="true"])
+):is([data-zsb-touch-pressed="true"], :active) {
+  transform: scale(0.955) !important;
+  transition-duration: 90ms;
+}
+
+/* Slightly more pronounced press for compact mobile top/bottom chrome buttons */
+[data-display-mode="smart_mobile"] button[data-mobile-chrome-btn="true"]:not(:disabled):is([data-zsb-touch-pressed="true"], :active) {
+  transform: scale(0.92) !important;
+  transition-duration: 90ms;
+}
+
+/* Temporary relative anchor only for static buttons while a ripple wave is animating */
+[data-zsb-ripple-pos="relative"] {
+  position: relative;
+}
+
+/* Clipped inner overlay preserves protruding button medallions (button keeps overflow: visible).
+   soft-light blending keeps pure #000000 button text mathematically crisp while illuminating
+   the glossy golden-orange capsule underneath. */
+.zsb-touch-ripple-host {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+  mix-blend-mode: soft-light;
+}
+
+.zsb-touch-ripple-wave {
+  position: absolute;
+  border-radius: 9999px;
+  pointer-events: none;
+  transform: scale(0);
+  opacity: 0.82;
+  background-color: transparent !important;
+  background-image: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.88) 0%,
+    rgba(255, 250, 235, 0.44) 42%,
+    rgba(255, 255, 255, 0) 72%
+  ) !important;
+  animation: zsb-touch-ripple-expand 440ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Warm amber-gold feathered ripple highlight on dark-surface mobile chrome buttons */
+button[data-mobile-chrome-btn="true"] .zsb-touch-ripple-host {
+  mix-blend-mode: normal;
+}
+
+button[data-mobile-chrome-btn="true"] .zsb-touch-ripple-wave {
+  background-color: transparent !important;
+  background-image: radial-gradient(
+    circle,
+    rgba(251, 191, 36, 0.44) 0%,
+    rgba(251, 191, 36, 0.16) 46%,
+    rgba(251, 191, 36, 0) 72%
+  ) !important;
+}
+
+/* Subtle royal-blue feathered ripple tint on light calendar day buttons */
+button:is([data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"]) .zsb-touch-ripple-host {
+  mix-blend-mode: normal;
+}
+
+button:is([data-testid^="calendar-day-"], [data-testid^="bangla-day-"], [data-testid^="bangla-festival-"]) .zsb-touch-ripple-wave {
+  background-color: transparent !important;
+  background-image: radial-gradient(
+    circle,
+    rgba(29, 108, 224, 0.34) 0%,
+    rgba(29, 108, 224, 0.14) 46%,
+    rgba(29, 108, 224, 0) 72%
+  ) !important;
+}
+
+@keyframes zsb-touch-ripple-expand {
+  0% {
+    transform: scale(0.16);
+    opacity: 0.85;
+  }
+  65% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(1.08);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-display-mode="smart_mobile"] :is(button, [type="button"], [type="submit"], [type="reset"], [role="button"]):is([data-zsb-touch-pressed="true"], :active),
+  [data-display-mode="smart_mobile"] button[data-mobile-chrome-btn="true"]:not(:disabled):is([data-zsb-touch-pressed="true"], :active) {
+    transform: none !important;
+  }
+  .zsb-touch-ripple-host,
+  .zsb-touch-ripple-wave {
+    display: none !important;
+    animation: none !important;
+  }
+}
+
+@media print {
+  .zsb-touch-ripple-host,
+  .zsb-touch-ripple-wave {
+    display: none !important;
+  }
+}
+
 

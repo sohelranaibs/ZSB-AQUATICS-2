@@ -1,15 +1,5 @@
-import React, { useState } from 'react';
-import {
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import React, { useMemo, useState } from 'react';
+import { CartesianSeries, SvgCartesianChart } from './SvgCharts.tsx';
 import { Activity, TrendingDown, TrendingUp } from 'lucide-react';
 import { formatCurrency } from '../utils/calculations.ts';
 import {
@@ -129,6 +119,60 @@ export const TotalBalanceTrendChartCard: React.FC<TotalBalanceTrendChartCardProp
   const [showFlowOverlay, setShowFlowOverlay] = useState(false);
 
   const isPositiveGrowth = trend.netPeriodChange >= 0;
+
+  const chartSeries = useMemo<CartesianSeries<TotalBalanceMonthlyTrendPoint>[]>(() => {
+    const base: CartesianSeries<TotalBalanceMonthlyTrendPoint>[] = [
+      {
+        key: 'endingTotalBalance',
+        name: `Cumulative Total Balance (${currency})`,
+        type: 'line',
+        color: '#1D6CE0',
+        strokeWidth: 3,
+        dotRadius: 4,
+      },
+    ];
+    if (showFlowOverlay) {
+      base.push(
+        {
+          key: 'partnerDeposit',
+          name: `Monthly Partner Deposits (${currency})`,
+          type: 'line',
+          color: '#16A34A',
+          strokeWidth: 2,
+          strokeDasharray: '4 3',
+          dotRadius: 2.5,
+        },
+        {
+          key: 'partnerWithdrawal',
+          name: `Partner Withdrawals (${currency})`,
+          type: 'line',
+          color: '#D97706',
+          strokeWidth: 2,
+          strokeDasharray: '4 3',
+          dotRadius: 2.5,
+        },
+        {
+          key: 'profitDistribution',
+          name: `Profit Payouts (${currency})`,
+          type: 'line',
+          color: '#7C3AED',
+          strokeWidth: 2,
+          strokeDasharray: '4 3',
+          dotRadius: 2.5,
+        },
+        {
+          key: 'costingDeducted',
+          name: `Monthly Costing Deducted (${currency})`,
+          type: 'line',
+          color: '#DC2626',
+          strokeWidth: 2,
+          strokeDasharray: '4 3',
+          dotRadius: 2.5,
+        }
+      );
+    }
+    return base;
+  }, [currency, showFlowOverlay]);
 
   return (
     <section
@@ -260,93 +304,18 @@ export const TotalBalanceTrendChartCard: React.FC<TotalBalanceTrendChartCardProp
             data-testid="total-balance-trend-recharts-container"
             className="w-full h-[270px]"
           >
-            <ResponsiveContainer width="100%" height={270}>
-              <LineChart
-                data={trend.points}
-                margin={{ top: 14, right: 32, left: 10, bottom: 8 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                <XAxis
-                  dataKey="shortMonthLabel"
-                  tick={{ fill: '#334155', fontSize: 11, fontWeight: 600 }}
-                  axisLine={{ stroke: '#cbd5e1' }}
-                  tickLine={false}
-                  padding={{ left: 12, right: 16 }}
-                  interval={0}
-                />
-                <YAxis
-                  tickFormatter={formatCompactAxisTick}
-                  tick={{ fill: '#475569', fontSize: 11, fontFamily: 'monospace' }}
-                  axisLine={{ stroke: '#cbd5e1' }}
-                  tickLine={false}
-                  width={58}
-                />
-                <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 4" />
-                <Tooltip content={<BalanceTrendTooltip currency={currency} />} />
-                <Legend
-                  wrapperStyle={{
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    paddingTop: '8px',
-                    color: '#334155',
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="endingTotalBalance"
-                  name={`Cumulative Total Balance (${currency})`}
-                  stroke="#1D6CE0"
-                  strokeWidth={3}
-                  dot={{ r: 4, fill: '#1D6CE0', stroke: '#ffffff', strokeWidth: 2 }}
-                  activeDot={{ r: 6, fill: '#fbbf24', stroke: '#1e3247', strokeWidth: 2 }}
-                  isAnimationActive={false}
-                />
-                {showFlowOverlay && (
-                  <>
-                    <Line
-                      type="monotone"
-                      dataKey="partnerDeposit"
-                      name={`Monthly Partner Deposits (${currency})`}
-                      stroke="#16A34A"
-                      strokeWidth={2}
-                      strokeDasharray="4 3"
-                      dot={{ r: 2.5, fill: '#16A34A' }}
-                      isAnimationActive={false}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="partnerWithdrawal"
-                      name={`Partner Withdrawals (${currency})`}
-                      stroke="#D97706"
-                      strokeWidth={2}
-                      strokeDasharray="4 3"
-                      dot={{ r: 2.5, fill: '#D97706' }}
-                      isAnimationActive={false}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="profitDistribution"
-                      name={`Profit Payouts (${currency})`}
-                      stroke="#7C3AED"
-                      strokeWidth={2}
-                      strokeDasharray="4 3"
-                      dot={{ r: 2.5, fill: '#7C3AED' }}
-                      isAnimationActive={false}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="costingDeducted"
-                      name={`Monthly Costing Deducted (${currency})`}
-                      stroke="#DC2626"
-                      strokeWidth={2}
-                      strokeDasharray="4 3"
-                      dot={{ r: 2.5, fill: '#DC2626' }}
-                      isAnimationActive={false}
-                    />
-                  </>
-                )}
-              </LineChart>
-            </ResponsiveContainer>
+            <SvgCartesianChart
+              data={trend.points}
+              xKey="shortMonthLabel"
+              height={270}
+              leftTickFormatter={formatCompactAxisTick}
+              referenceLineY={0}
+              legendPosition="bottom"
+              series={chartSeries}
+              renderTooltip={(pt) => (
+                <BalanceTrendTooltip active payload={[{ payload: pt }]} currency={currency} />
+              )}
+            />
           </div>
         </div>
       )}

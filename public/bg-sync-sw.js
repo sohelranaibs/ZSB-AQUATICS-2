@@ -122,12 +122,108 @@ async function triggerFlushToClients(source) {
   });
 }
 
-self.addEventListener('install', () => {
-  self.skipWaiting();
+const RUNTIME_CACHE = 'zsb-aquatics-runtime-v1';
+const FONT_CACHE = 'zsb-aquatics-fonts-v1';
+const PRECACHE_URLS = [
+  '/',
+  '/manifest.webmanifest',
+  '/icon.svg',
+  '/pwa-192x192.png',
+  '/pwa-512x512.png',
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches
+      .open(RUNTIME_CACHE)
+      .then((cache) => cache.addAll(PRECACHE_URLS).catch(() => undefined))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((k) => k !== RUNTIME_CACHE && k !== FONT_CACHE)
+            .map((k) => caches.delete(k))
+        )
+      )
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  const req = event.request;
+  if (req.method !== 'GET') return;
+
+  const url = new URL(req.url);
+
+  // Cache-first for Google Fonts
+  if (
+    url.origin === 'https://fonts.googleapis.com' ||
+    url.origin === 'https://fonts.gstatic.com'
+  ) {
+    event.respondWith(
+      caches.open(FONT_CACHE).then(async (cache) => {
+        const cached = await cache.match(req);
+        if (cached) return cached;
+        try {
+          const fresh = await fetch(req);
+          if (fresh && (fresh.status === 200 || fresh.status === 0)) {
+            cache.put(req, fresh.clone());
+          }
+          return fresh;
+        } catch {
+          return cached || Response.error();
+        }
+      })
+    );
+    return;
+  }
+
+  // Only cache same-origin app assets & navigations
+  if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) {
+    return;
+  }
+
+  // Network-first for HTML navigations with offline fallback
+  if (req.mode === 'navigate') {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          if (res && res.status === 200) {
+            const copy = res.clone();
+            caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy));
+          }
+          return res;
+        })
+        .catch(async () => {
+          const cache = await caches.open(RUNTIME_CACHE);
+          return (await cache.match(req)) || (await cache.match('/')) || Response.error();
+        })
+    );
+    return;
+  }
+
+  // Stale-while-revalidate for static assets (JS, CSS, images, icons)
+  event.respondWith(
+    caches.open(RUNTIME_CACHE).then(async (cache) => {
+      const cached = await cache.match(req);
+      const fetchPromise = fetch(req)
+        .then((res) => {
+          if (res && res.status === 200) {
+            cache.put(req, res.clone());
+          }
+          return res;
+        })
+        .catch(() => cached || Response.error());
+      return cached || fetchPromise;
+    })
+  );
 });
 
 self.addEventListener('sync', (event) => {

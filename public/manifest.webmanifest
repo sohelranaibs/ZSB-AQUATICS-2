@@ -1,0 +1,31 @@
+{
+  "id": "/",
+  "name": "ZSB AQUATICS | Business Control Center",
+  "short_name": "ZSB Aquatics",
+  "description": "Live Seafood Procurement, Air-Freight Export, RMB Settlement, and Profit & Loss ERP for ZSB AQUATICS.",
+  "theme_color": "#273e56",
+  "background_color": "#273e56",
+  "display": "standalone",
+  "start_url": "/",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -7,17 +7,7 @@ import {
   getCurrentYearMonth,
   formatYearMonthLabel,
 } from '../utils/calculations.ts';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  Cell,
-} from 'recharts';
+import { SvgCartesianChart } from './SvgCharts.tsx';
 import { Users, Award, Plus, ArrowUpRight } from 'lucide-react';
 
 const BAR_COLORS = ['#1D6CE0', '#00B14F', '#7C3AED', '#F97316', '#E11D48'];
@@ -227,155 +217,77 @@ export const TopSuppliersChart: React.FC = () => {
           </div>
 
           <div className="w-full h-[270px]" data-testid="top-suppliers-barchart">
-            <ResponsiveContainer width="100%" height={270}>
-              {displayMode === 'volume_only' ? (
-                <BarChart
-                  data={chartData}
-                  margin={{ top: 10, right: 16, left: 4, bottom: 8 }}
-                  barSize={42}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                  <XAxis
-                    dataKey="shortName"
-                    tick={{ fill: '#334155', fontSize: 11, fontWeight: 600 }}
-                    axisLine={{ stroke: '#cbd5e1' }}
-                    tickLine={false}
-                    interval={0}
-                  />
-                  <YAxis
-                    tickFormatter={(val: number) =>
-                      val >= 1000 ? `${(val / 1000).toFixed(1)}k` : `${val}`
-                    }
-                    tick={{ fill: '#475569', fontSize: 11, fontFamily: 'monospace' }}
-                    axisLine={{ stroke: '#cbd5e1' }}
-                    tickLine={false}
-                    width={52}
-                  />
-                  <Tooltip
-                    formatter={(value: any, name: any, props: any) => {
-                      const payload: TopSupplierStat | undefined = props?.payload;
-                      const formattedVol = `${Number(value || 0).toLocaleString()} KG`;
-                      if (payload && payload.totalAmount > 0) {
-                        return [
-                          `${formattedVol} (${formatCurrency(payload.totalAmount, companyProfile.currency)})`,
-                          String(name),
-                        ];
-                      }
-                      return [formattedVol, String(name)];
-                    }}
-                    labelFormatter={(_label: any, payload: any) => {
-                      const item = payload?.[0]?.payload as TopSupplierStat | undefined;
-                      return item
-                        ? `#${item.rank} ${item.supplierName} (${item.invoiceCount} Bills)`
-                        : String(_label);
-                    }}
-                    contentStyle={{
-                      backgroundColor: '#ffffff',
-                      borderColor: '#CBD8E6',
-                      borderRadius: '10px',
-                      color: '#0f172a',
-                      fontSize: '12px',
-                      fontFamily: 'monospace',
-                      boxShadow: '0 8px 20px rgba(15, 23, 42, 0.08)',
-                    }}
-                    itemStyle={{ color: '#0f172a' }}
-                    labelStyle={{ color: '#1D6CE0', fontWeight: 700, marginBottom: '4px' }}
-                  />
-                  <Legend
-                    wrapperStyle={{ fontSize: '12px', fontWeight: 600, paddingTop: '6px', color: '#334155' }}
-                  />
-                  <Bar
-                    dataKey="totalVolume"
-                    name="Total Purchase Volume (KG)"
-                    fill="#1877d2"
-                    radius={[4, 4, 0, 0]}
-                    isAnimationActive={false}
-                  >
-                    {chartData.map((entry, index) => (
-                      <Cell
-                        key={`cell-${entry.supplierName}-${index}`}
-                        fill={BAR_COLORS[index % BAR_COLORS.length]}
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              ) : (
-                <BarChart
-                  data={chartData}
-                  margin={{ top: 10, right: 16, left: 4, bottom: 8 }}
-                  barGap={6}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                  <XAxis
-                    dataKey="shortName"
-                    tick={{ fill: '#334155', fontSize: 11, fontWeight: 600 }}
-                    axisLine={{ stroke: '#cbd5e1' }}
-                    tickLine={false}
-                    interval={0}
-                  />
-                  <YAxis
-                    yAxisId="left"
-                    tickFormatter={(val: number) => `${val}kg`}
-                    tick={{ fill: '#1877d2', fontSize: 11, fontFamily: 'monospace' }}
-                    axisLine={{ stroke: '#93c5fd' }}
-                    tickLine={false}
-                    width={54}
-                  />
-                  <YAxis
-                    yAxisId="right"
-                    orientation="right"
-                    tickFormatter={(val: number) =>
-                      val >= 1000 ? `${Math.round(val / 1000)}k` : String(val)
-                    }
-                    tick={{ fill: '#00897b', fontSize: 11, fontFamily: 'monospace' }}
-                    axisLine={{ stroke: '#5eead4' }}
-                    tickLine={false}
-                    width={54}
-                  />
-                  <Tooltip
-                    formatter={(value: any, name: any) => {
-                      const label = String(name);
-                      if (label.includes(companyProfile.currency)) {
-                        return [formatCurrency(Number(value) || 0, companyProfile.currency), label];
-                      }
-                      return [`${Number(value || 0).toLocaleString()} KG`, label];
-                    }}
-                    contentStyle={{
-                      backgroundColor: '#ffffff',
-                      borderColor: '#CBD8E6',
-                      borderRadius: '10px',
-                      color: '#0f172a',
-                      fontSize: '12px',
-                      fontFamily: 'monospace',
-                      boxShadow: '0 8px 20px rgba(15, 23, 42, 0.08)',
-                    }}
-                    itemStyle={{ color: '#0f172a' }}
-                    labelStyle={{ color: '#1D6CE0', fontWeight: 700, marginBottom: '4px' }}
-                  />
-                  <Legend
-                    wrapperStyle={{ fontSize: '12px', fontWeight: 600, paddingTop: '6px', color: '#334155' }}
-                  />
-                  <Bar
-                    yAxisId="left"
-                    dataKey="totalVolume"
-                    name="Total Purchase Volume (KG)"
-                    fill="#1877d2"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={34}
-                    isAnimationActive={false}
-                  />
-                  <Bar
-                    yAxisId="right"
-                    dataKey="totalAmount"
-                    name={`Total Purchase Value (${companyProfile.currency})`}
-                    fill="#00897b"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={34}
-                    isAnimationActive={false}
-                  />
-                </BarChart>
-              )}
-            </ResponsiveContainer>
+            {displayMode === 'volume_only' ? (
+              <SvgCartesianChart
+                data={chartData}
+                xKey="shortName"
+                height={270}
+                leftTickFormatter={(val) =>
+                  val >= 1000 ? `${(val / 1000).toFixed(1)}k` : `${val}`
+                }
+                legendPosition="bottom"
+                series={[
+                  {
+                    key: 'totalVolume',
+                    name: 'Total Purchase Volume (KG)',
+                    type: 'bar',
+                    color: '#1877d2',
+                    maxBarSize: 42,
+                    cellColors: BAR_COLORS,
+                  },
+                ]}
+                formatTooltipLabel={(item) =>
+                  `#${item.rank} ${item.supplierName} (${item.invoiceCount} Bills)`
+                }
+                formatTooltipValue={(val, _s, item) => {
+                  const formattedVol = `${Number(val || 0).toLocaleString()} KG`;
+                  if (item.totalAmount > 0) {
+                    return `${formattedVol} (${formatCurrency(item.totalAmount, companyProfile.currency)})`;
+                  }
+                  return formattedVol;
+                }}
+              />
+            ) : (
+              <SvgCartesianChart
+                data={chartData}
+                xKey="shortName"
+                height={270}
+                leftTickFormatter={(val) => `${val}kg`}
+                rightTickFormatter={(val) =>
+                  val >= 1000 ? `${Math.round(val / 1000)}k` : String(val)
+                }
+                leftAxisColor="#1877d2"
+                rightAxisColor="#00897b"
+                legendPosition="bottom"
+                series={[
+                  {
+                    key: 'totalVolume',
+                    name: 'Total Purchase Volume (KG)',
+                    type: 'bar',
+                    color: '#1877d2',
+                    yAxisId: 'left',
+                    maxBarSize: 34,
+                  },
+                  {
+                    key: 'totalAmount',
+                    name: `Total Purchase Value (${companyProfile.currency})`,
+                    type: 'bar',
+                    color: '#00897b',
+                    yAxisId: 'right',
+                    maxBarSize: 34,
+                  },
+                ]}
+                formatTooltipLabel={(item) =>
+                  `#${item.rank} ${item.supplierName} (${item.invoiceCount} Bills)`
+                }
+                formatTooltipValue={(val, s) => {
+                  if (s.key === 'totalAmount') {
+                    return formatCurrency(Number(val) || 0, companyProfile.currency);
+                  }
+                  return `${Number(val || 0).toLocaleString()} KG`;
+                }}
+              />
+            )}
           </div>
         </div>
 

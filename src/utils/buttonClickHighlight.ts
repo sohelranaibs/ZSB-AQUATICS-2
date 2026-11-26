@@ -108,9 +108,13 @@ export function bindGlobalButtonGoldenClickHandler(rootDoc: Document = document)
           }
           return;
         }
+        const escapeCss = (val: string) =>
+          typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+            ? CSS.escape(val)
+            : val.replace(/["\\]/g, '\\$&');
         if (testId) {
           const replacement = rootDoc.querySelector(
-            `[data-testid="${CSS.escape(testId)}"]`
+            `[data-testid="${escapeCss(testId)}"]`
           ) as HTMLElement | null;
           if (isEligibleClickedButton(replacement)) {
             markButtonAsClicked(replacement, rootDoc);
@@ -119,7 +123,7 @@ export function bindGlobalButtonGoldenClickHandler(rootDoc: Document = document)
         }
         if (ariaLabel) {
           const replacement = rootDoc.querySelector(
-            `[aria-label="${CSS.escape(ariaLabel)}"]`
+            `[aria-label="${escapeCss(ariaLabel)}"]`
           ) as HTMLElement | null;
           if (isEligibleClickedButton(replacement)) {
             markButtonAsClicked(replacement, rootDoc);

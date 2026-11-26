@@ -69,6 +69,7 @@ import {
   saveDisplayPreferences,
 } from './utils/displayViewport.ts';
 import { bindGlobalButtonGoldenClickHandler } from './utils/buttonClickHighlight.ts';
+import { bindSmartMobileButtonTouchFeedback } from './utils/mobileTouchFeedback.ts';
 import {
   initializeSafeClientHmr,
   runWhenDocumentReady,
@@ -185,6 +186,9 @@ const MainContent: React.FC = () => {
 
   useEffect(() => {
     saveDisplayPreferences(displayPrefs);
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-display-mode', displayPrefs.displayMode);
+    }
   }, [displayPrefs]);
 
   useEffect(() => {
@@ -1203,7 +1207,10 @@ const AuthGate: React.FC = () => {
 export default function App() {
   useEffect(() => {
     return runWhenDocumentReady(() => {
+      const initialPrefs = loadDisplayPreferences();
+      document.documentElement.setAttribute('data-display-mode', initialPrefs.displayMode);
       const cleanupButtons = bindGlobalButtonGoldenClickHandler(document);
+      const cleanupTouchFeedback = bindSmartMobileButtonTouchFeedback(document);
       const { cleanup: cleanupHmr } = initializeSafeClientHmr({
         isProduction: import.meta.env.PROD,
         doc: document,
@@ -1213,6 +1220,7 @@ export default function App() {
 
       return () => {
         cleanupButtons();
+        cleanupTouchFeedback();
         cleanupHmr();
       };
     }, typeof document !== 'undefined' ? document : undefined);

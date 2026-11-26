@@ -1,17 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  LabelList,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { SvgDonutChart, SvgHorizontalBarChart } from './SvgCharts.tsx';
 import { BarChart3, PieChart as PieChartIcon } from 'lucide-react';
 import { formatCurrency } from '../utils/calculations.ts';
 import {
@@ -180,28 +168,21 @@ export const PartnerCapitalChartCard: React.FC<PartnerCapitalChartCardProps> = (
           >
             {chartType === 'donut' ? (
               <>
-                <ResponsiveContainer width="100%" height={240}>
-                  <PieChart>
-                    <Pie
-                      data={chartData}
-                      dataKey="sharePercent"
-                      nameKey="partnerName"
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={64}
-                      outerRadius={96}
-                      paddingAngle={chartData.length > 1 ? 3 : 0}
-                      stroke="#ffffff"
-                      strokeWidth={2}
-                      isAnimationActive={false}
-                    >
-                      {chartData.map((entry) => (
-                        <Cell key={entry.partnerKey} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip content={<CapitalTooltip currency={currency} />} />
-                  </PieChart>
-                </ResponsiveContainer>
+                <SvgDonutChart
+                  data={chartData.map((entry) => ({
+                    key: entry.partnerKey,
+                    label: entry.partnerName,
+                    value: entry.sharePercent,
+                    color: entry.color,
+                    datum: entry,
+                  }))}
+                  height={240}
+                  innerRadius={64}
+                  outerRadius={96}
+                  renderTooltip={(slice) => (
+                    <CapitalTooltip active payload={[{ payload: slice.datum }]} currency={currency} />
+                  )}
+                />
                 <div
                   aria-hidden="true"
                   className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center px-4"
@@ -218,54 +199,22 @@ export const PartnerCapitalChartCard: React.FC<PartnerCapitalChartCardProps> = (
                 </div>
               </>
             ) : (
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart
-                  data={chartData}
-                  layout="vertical"
-                  margin={{ top: 8, right: 56, left: 6, bottom: 8 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
-                  <XAxis
-                    type="number"
-                    domain={[0, 100]}
-                    tickFormatter={(val: number) => `${val}%`}
-                    tick={{ fill: '#475569', fontSize: 11, fontFamily: 'monospace' }}
-                    axisLine={{ stroke: '#cbd5e1' }}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="shortName"
-                    width={116}
-                    tick={{ fill: '#1e293b', fontSize: 11, fontWeight: 600 }}
-                    axisLine={{ stroke: '#cbd5e1' }}
-                    tickLine={false}
-                  />
-                  <Tooltip content={<CapitalTooltip currency={currency} />} />
-                  <Bar
-                    dataKey="sharePercent"
-                    name="Capital Share %"
-                    radius={[0, 6, 6, 0]}
-                    barSize={24}
-                    isAnimationActive={false}
-                  >
-                    {chartData.map((entry) => (
-                      <Cell key={entry.partnerKey} fill={entry.color} />
-                    ))}
-                    <LabelList
-                      dataKey="sharePercent"
-                      position="right"
-                      formatter={(val: unknown) => `${Number(val || 0).toFixed(1)}%`}
-                      style={{
-                        fill: '#0f172a',
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        fontFamily: 'monospace',
-                      }}
-                    />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              <SvgHorizontalBarChart
+                data={chartData.map((entry) => ({
+                  key: entry.partnerKey,
+                  label: entry.shortName,
+                  value: entry.sharePercent,
+                  color: entry.color,
+                  datum: entry,
+                }))}
+                height={240}
+                maxValue={100}
+                formatXTick={(val) => `${val}%`}
+                formatBarLabel={(val) => `${val.toFixed(1)}%`}
+                renderTooltip={(bar) => (
+                  <CapitalTooltip active payload={[{ payload: bar.datum }]} currency={currency} />
+                )}
+              />
             )}
           </div>
 

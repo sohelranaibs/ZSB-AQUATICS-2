@@ -26,19 +26,7 @@ import {
 } from '../utils/formDraftStorage.ts';
 import { DailyProfitLossSection } from './DailyProfitLossSection.tsx';
 import { FlightProfitabilityFxSection } from './FlightProfitabilityFxSection.tsx';
-import {
-  ComposedChart,
-  AreaChart,
-  Area,
-  Bar,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts';
+import { SvgCartesianChart } from './SvgCharts.tsx';
 import {
   TrendingUp,
   TrendingDown,
@@ -635,164 +623,98 @@ export const ProfitLossView: React.FC = () => {
             </div>
 
             <div className="w-full h-[290px]" data-testid="pl-mom-trends-chart">
-              <ResponsiveContainer width="100%" height={290}>
-                {chartType === 'composed' ? (
-                  <ComposedChart
-                    data={trendsData.points}
-                    margin={{ top: 12, right: 16, left: 6, bottom: 8 }}
-                    barGap={8}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                    <XAxis
-                      dataKey="shortMonthLabel"
-                      tick={{ fill: '#334155', fontSize: 11, fontWeight: 600 }}
-                      axisLine={{ stroke: '#cbd5e1' }}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      tickFormatter={(val: number) =>
-                        Math.abs(val) >= 1000 ? `${(val / 1000).toFixed(0)}k` : `${val}`
-                      }
-                      tick={{ fill: '#475569', fontSize: 11, fontFamily: 'monospace' }}
-                      axisLine={{ stroke: '#cbd5e1' }}
-                      tickLine={false}
-                      width={56}
-                    />
-                    <Tooltip
-                      formatter={(value: any, name: any) => [
-                        formatCurrency(Number(value) || 0, companyProfile.currency),
-                        String(name),
-                      ]}
-                      labelFormatter={(_label: any, payload: any) => {
-                        const pt = payload?.[0]?.payload as
-                          | ProfitLossMonthlyTrendPoint
-                          | undefined;
-                        if (!pt) return String(_label);
-                        const revDelta =
-                          pt.revenueMoMPercent !== null
-                            ? ` · Rev ${formatMoMDelta(pt.revenueMoMPercent)}`
-                            : '';
-                        const outDelta =
-                          pt.outflowMoMPercent !== null
-                            ? ` · Outflow ${formatMoMDelta(pt.outflowMoMPercent)}`
-                            : '';
-                        return `${pt.monthLabel}${revDelta}${outDelta}`;
-                      }}
-                      contentStyle={{
-                        backgroundColor: '#ffffff',
-                        borderColor: '#CBD8E6',
-                        borderRadius: '10px',
-                        color: '#0f172a',
-                        fontSize: '12px',
-                        fontFamily: 'monospace',
-                        boxShadow: '0 8px 20px rgba(15, 23, 42, 0.08)',
-                      }}
-                      itemStyle={{ color: '#0f172a' }}
-                      labelStyle={{ color: '#1D6CE0', fontWeight: 700, marginBottom: '4px' }}
-                    />
-                    <Legend
-                      wrapperStyle={{ fontSize: '12px', fontWeight: 600, paddingTop: '8px', color: '#334155' }}
-                    />
-                    <Bar
-                      dataKey="exportRevenue"
-                      name={`Total Export Revenue (${companyProfile.currency})`}
-                      fill="#00897b"
-                      radius={[4, 4, 0, 0]}
-                      maxBarSize={42}
-                      isAnimationActive={false}
-                    />
-                    <Bar
-                      dataKey="supplierPaymentOutflow"
-                      name={`Supplier Payment Outflows (${companyProfile.currency})`}
-                      fill="#1877d2"
-                      radius={[4, 4, 0, 0]}
-                      maxBarSize={42}
-                      isAnimationActive={false}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="netCashflowSpread"
-                      name={`Net Revenue Spread (${companyProfile.currency})`}
-                      stroke="#071c36"
-                      strokeWidth={2.5}
-                      dot={{ r: 4, fill: '#071c36', strokeWidth: 2, stroke: '#ffffff' }}
-                      isAnimationActive={false}
-                    />
-                  </ComposedChart>
-                ) : (
-                  <AreaChart
-                    data={trendsData.points}
-                    margin={{ top: 12, right: 16, left: 6, bottom: 8 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                    <XAxis
-                      dataKey="shortMonthLabel"
-                      tick={{ fill: '#334155', fontSize: 11, fontWeight: 600 }}
-                      axisLine={{ stroke: '#cbd5e1' }}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      tickFormatter={(val: number) =>
-                        Math.abs(val) >= 1000 ? `${(val / 1000).toFixed(0)}k` : `${val}`
-                      }
-                      tick={{ fill: '#475569', fontSize: 11, fontFamily: 'monospace' }}
-                      axisLine={{ stroke: '#cbd5e1' }}
-                      tickLine={false}
-                      width={56}
-                    />
-                    <Tooltip
-                      formatter={(value: any, name: any) => [
-                        formatCurrency(Number(value) || 0, companyProfile.currency),
-                        String(name),
-                      ]}
-                      contentStyle={{
-                        backgroundColor: '#ffffff',
-                        borderColor: '#CBD8E6',
-                        borderRadius: '10px',
-                        color: '#0f172a',
-                        fontSize: '12px',
-                        fontFamily: 'monospace',
-                        boxShadow: '0 8px 20px rgba(15, 23, 42, 0.08)',
-                      }}
-                      itemStyle={{ color: '#0f172a' }}
-                      labelStyle={{ color: '#1D6CE0', fontWeight: 700, marginBottom: '4px' }}
-                    />
-                    <Legend
-                      wrapperStyle={{ fontSize: '12px', fontWeight: 600, paddingTop: '8px', color: '#334155' }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="exportRevenue"
-                      name={`Total Export Revenue (${companyProfile.currency})`}
-                      stroke="#00897b"
-                      fill="#00897b"
-                      fillOpacity={0.18}
-                      strokeWidth={2.5}
-                      isAnimationActive={false}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="supplierPaymentOutflow"
-                      name={`Supplier Payment Outflows (${companyProfile.currency})`}
-                      stroke="#1877d2"
-                      fill="#1877d2"
-                      fillOpacity={0.18}
-                      strokeWidth={2.5}
-                      isAnimationActive={false}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="netCashflowSpread"
-                      name={`Net Revenue Spread (${companyProfile.currency})`}
-                      stroke="#071c36"
-                      fill="#071c36"
-                      fillOpacity={0.1}
-                      strokeWidth={2}
-                      isAnimationActive={false}
-                    />
-                  </AreaChart>
-                )}
-              </ResponsiveContainer>
+              {chartType === 'composed' ? (
+                <SvgCartesianChart
+                  data={trendsData.points}
+                  xKey="shortMonthLabel"
+                  height={290}
+                  leftTickFormatter={(val) =>
+                    Math.abs(val) >= 1000 ? `${(val / 1000).toFixed(0)}k` : `${val}`
+                  }
+                  legendPosition="bottom"
+                  series={[
+                    {
+                      key: 'exportRevenue',
+                      name: `Total Export Revenue (${companyProfile.currency})`,
+                      type: 'bar',
+                      color: '#00897b',
+                      maxBarSize: 42,
+                    },
+                    {
+                      key: 'supplierPaymentOutflow',
+                      name: `Supplier Payment Outflows (${companyProfile.currency})`,
+                      type: 'bar',
+                      color: '#1877d2',
+                      maxBarSize: 42,
+                    },
+                    {
+                      key: 'netCashflowSpread',
+                      name: `Net Revenue Spread (${companyProfile.currency})`,
+                      type: 'line',
+                      color: '#071c36',
+                      strokeWidth: 2.5,
+                      dotRadius: 4,
+                    },
+                  ]}
+                  formatTooltipLabel={(pt: ProfitLossMonthlyTrendPoint) => {
+                    const revDelta =
+                      pt.revenueMoMPercent !== null
+                        ? ` · Rev ${formatMoMDelta(pt.revenueMoMPercent)}`
+                        : '';
+                    const outDelta =
+                      pt.outflowMoMPercent !== null
+                        ? ` · Outflow ${formatMoMDelta(pt.outflowMoMPercent)}`
+                        : '';
+                    return `${pt.monthLabel}${revDelta}${outDelta}`;
+                  }}
+                  formatTooltipValue={(val) =>
+                    formatCurrency(Number(val) || 0, companyProfile.currency)
+                  }
+                />
+              ) : (
+                <SvgCartesianChart
+                  data={trendsData.points}
+                  xKey="shortMonthLabel"
+                  height={290}
+                  leftTickFormatter={(val) =>
+                    Math.abs(val) >= 1000 ? `${(val / 1000).toFixed(0)}k` : `${val}`
+                  }
+                  legendPosition="bottom"
+                  series={[
+                    {
+                      key: 'exportRevenue',
+                      name: `Total Export Revenue (${companyProfile.currency})`,
+                      type: 'area',
+                      color: '#00897b',
+                      strokeWidth: 2.5,
+                      gradientTopOpacity: 0.24,
+                      gradientBottomOpacity: 0.03,
+                    },
+                    {
+                      key: 'supplierPaymentOutflow',
+                      name: `Supplier Payment Outflows (${companyProfile.currency})`,
+                      type: 'area',
+                      color: '#1877d2',
+                      strokeWidth: 2.5,
+                      gradientTopOpacity: 0.22,
+                      gradientBottomOpacity: 0.03,
+                    },
+                    {
+                      key: 'netCashflowSpread',
+                      name: `Net Revenue Spread (${companyProfile.currency})`,
+                      type: 'area',
+                      color: '#071c36',
+                      strokeWidth: 2,
+                      gradientTopOpacity: 0.14,
+                      gradientBottomOpacity: 0.02,
+                    },
+                  ]}
+                  formatTooltipLabel={(pt: ProfitLossMonthlyTrendPoint) => pt.monthLabel}
+                  formatTooltipValue={(val) =>
+                    formatCurrency(Number(val) || 0, companyProfile.currency)
+                  }
+                />
+              )}
             </div>
           </div>
 
@@ -921,24 +843,24 @@ export const ProfitLossView: React.FC = () => {
         className="bg-white rounded-xl shadow border border-[#CBD8E6] overflow-hidden"
       >
         {/* Module Header Bar */}
-        <div className="bg-[#273E56] text-white px-5 py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-[#1E3247]">
-          <div className="flex items-center gap-2.5 min-w-0">
+        <div className="bg-[#273E56] text-white px-5 py-3 flex flex-col xl:flex-row xl:items-center justify-between gap-3 border-b border-[#1E3247]">
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0">
             <Award className="w-4 h-4 text-sky-300 shrink-0" />
-            <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-white whitespace-nowrap">
+            <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-white">
               Supplier Performance: Top 5 Suppliers
             </h2>
-            <span className="text-slate-400 shrink-0" aria-hidden="true">
+            <span className="text-slate-400 shrink-0 hidden sm:inline" aria-hidden="true">
               ·
             </span>
             <span
               data-testid="pl-supplier-window-label"
-              className="text-xs text-slate-300 font-mono tabular-nums whitespace-nowrap shrink-0"
+              className="text-xs text-slate-300 font-mono tabular-nums"
             >
               {supplierPerformance.windowRangeLabel}
             </span>
           </div>
 
-          <div className="flex flex-wrap lg:flex-nowrap items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             {/* Chart Mode Toggle */}
             <div
               role="group"
@@ -1140,172 +1062,90 @@ export const ProfitLossView: React.FC = () => {
               </div>
 
               <div className="w-full h-[300px]" data-testid="pl-supplier-performance-chart">
-                <ResponsiveContainer width="100%" height={300}>
-                  {supplierChartMode === 'value' ? (
-                    <ComposedChart
-                      data={supplierPerformance.topSuppliers}
-                      margin={{ top: 12, right: 16, left: 6, bottom: 8 }}
-                      barGap={6}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                      <XAxis
-                        dataKey="shortLabel"
-                        tick={{ fill: '#334155', fontSize: 11, fontWeight: 600 }}
-                        axisLine={{ stroke: '#cbd5e1' }}
-                        tickLine={false}
-                      />
-                      <YAxis
-                        tickFormatter={(val: number) =>
-                          Math.abs(val) >= 1000 ? `${(val / 1000).toFixed(0)}k` : `${val}`
-                        }
-                        tick={{ fill: '#475569', fontSize: 11, fontFamily: 'monospace' }}
-                        axisLine={{ stroke: '#cbd5e1' }}
-                        tickLine={false}
-                        width={56}
-                      />
-                      <Tooltip
-                        formatter={(value: any, name: any) => [
-                          formatCurrency(Number(value) || 0, companyProfile.currency),
-                          String(name),
-                        ]}
-                        labelFormatter={(_label: any, payload: any) => {
-                          const sup = payload?.[0]?.payload as
-                            | SupplierPerformanceMetric
-                            | undefined;
-                          if (!sup) return String(_label);
-                          return `#${sup.rank} ${sup.supplierName} · ${sup.totalQuantityKg} KG (${sup.shareOfWindowSpendPercent}% of 6M Spend)`;
-                        }}
-                        contentStyle={{
-                          backgroundColor: '#ffffff',
-                          borderColor: '#CBD8E6',
-                          borderRadius: '10px',
-                          color: '#0f172a',
-                          fontSize: '12px',
-                          fontFamily: 'monospace',
-                          boxShadow: '0 8px 20px rgba(15, 23, 42, 0.08)',
-                        }}
-                        itemStyle={{ color: '#0f172a' }}
-                        labelStyle={{ color: '#1D6CE0', fontWeight: 700, marginBottom: '4px' }}
-                      />
-                      <Legend
-                        wrapperStyle={{ fontSize: '12px', fontWeight: 600, paddingTop: '8px', color: '#334155' }}
-                      />
-                      <Bar
-                        dataKey="totalPurchaseValue"
-                        name={`Total Purchase Value (${companyProfile.currency})`}
-                        fill="#1877d2"
-                        radius={[4, 4, 0, 0]}
-                        maxBarSize={42}
-                        isAnimationActive={false}
-                      />
-                      <Bar
-                        dataKey="totalPaidAmount"
-                        name={`Paid Settlement (${companyProfile.currency})`}
-                        fill="#00897b"
-                        radius={[4, 4, 0, 0]}
-                        maxBarSize={42}
-                        isAnimationActive={false}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="totalBalanceDue"
-                        name={`Outstanding Due (${companyProfile.currency})`}
-                        stroke="#071c36"
-                        strokeWidth={2.5}
-                        dot={{ r: 4, fill: '#071c36', strokeWidth: 2, stroke: '#ffffff' }}
-                        isAnimationActive={false}
-                      />
-                    </ComposedChart>
-                  ) : (
-                    <ComposedChart
-                      data={supplierPerformance.topSuppliers}
-                      margin={{ top: 12, right: 16, left: 6, bottom: 8 }}
-                      barGap={8}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                      <XAxis
-                        dataKey="shortLabel"
-                        tick={{ fill: '#334155', fontSize: 11, fontWeight: 600 }}
-                        axisLine={{ stroke: '#cbd5e1' }}
-                        tickLine={false}
-                      />
-                      <YAxis
-                        yAxisId="left"
-                        tickFormatter={(val: number) =>
-                          Math.abs(val) >= 1000 ? `${(val / 1000).toFixed(0)}k` : `${val}`
-                        }
-                        tick={{ fill: '#1877d2', fontSize: 11, fontFamily: 'monospace' }}
-                        axisLine={{ stroke: '#93c5fd' }}
-                        tickLine={false}
-                        width={56}
-                      />
-                      <YAxis
-                        yAxisId="right"
-                        orientation="right"
-                        tickFormatter={(val: number) => `${val} KG`}
-                        tick={{ fill: '#00897b', fontSize: 11, fontFamily: 'monospace' }}
-                        axisLine={{ stroke: '#5eead4' }}
-                        tickLine={false}
-                        width={58}
-                      />
-                      <Tooltip
-                        formatter={(value: any, name: any) => {
-                          const label = String(name);
-                          if (label.includes('KG')) {
-                            return [`${Number(value) || 0} KG`, label];
-                          }
-                          return [
-                            formatCurrency(Number(value) || 0, companyProfile.currency),
-                            label,
-                          ];
-                        }}
-                        labelFormatter={(_label: any, payload: any) => {
-                          const sup = payload?.[0]?.payload as
-                            | SupplierPerformanceMetric
-                            | undefined;
-                          if (!sup) return String(_label);
-                          return `#${sup.rank} ${sup.supplierName} · Avg ${formatCurrency(
-                            sup.avgRatePerKg,
-                            companyProfile.currency
-                          )}/KG`;
-                        }}
-                        contentStyle={{
-                          backgroundColor: '#ffffff',
-                          borderColor: '#CBD8E6',
-                          borderRadius: '10px',
-                          color: '#0f172a',
-                          fontSize: '12px',
-                          fontFamily: 'monospace',
-                          boxShadow: '0 8px 20px rgba(15, 23, 42, 0.08)',
-                        }}
-                        itemStyle={{ color: '#0f172a' }}
-                        labelStyle={{ color: '#1D6CE0', fontWeight: 700, marginBottom: '4px' }}
-                      />
-                      <Legend
-                        wrapperStyle={{ fontSize: '12px', fontWeight: 600, paddingTop: '8px', color: '#334155' }}
-                      />
-                      <Bar
-                        yAxisId="left"
-                        dataKey="totalPurchaseValue"
-                        name={`Total Purchase Value (${companyProfile.currency})`}
-                        fill="#1877d2"
-                        radius={[4, 4, 0, 0]}
-                        maxBarSize={44}
-                        isAnimationActive={false}
-                      />
-                      <Line
-                        yAxisId="right"
-                        type="monotone"
-                        dataKey="totalQuantityKg"
-                        name="Total Quantity Procured (KG)"
-                        stroke="#00897b"
-                        strokeWidth={2.5}
-                        dot={{ r: 4, fill: '#00897b', strokeWidth: 2, stroke: '#ffffff' }}
-                        isAnimationActive={false}
-                      />
-                    </ComposedChart>
-                  )}
-                </ResponsiveContainer>
+                {supplierChartMode === 'value' ? (
+                  <SvgCartesianChart
+                    data={supplierPerformance.topSuppliers}
+                    xKey="shortLabel"
+                    height={300}
+                    leftTickFormatter={(val) =>
+                      Math.abs(val) >= 1000 ? `${(val / 1000).toFixed(0)}k` : `${val}`
+                    }
+                    legendPosition="bottom"
+                    series={[
+                      {
+                        key: 'totalPurchaseValue',
+                        name: `Total Purchase Value (${companyProfile.currency})`,
+                        type: 'bar',
+                        color: '#1877d2',
+                        maxBarSize: 42,
+                      },
+                      {
+                        key: 'totalPaidAmount',
+                        name: `Paid Settlement (${companyProfile.currency})`,
+                        type: 'bar',
+                        color: '#00897b',
+                        maxBarSize: 42,
+                      },
+                      {
+                        key: 'totalBalanceDue',
+                        name: `Outstanding Due (${companyProfile.currency})`,
+                        type: 'line',
+                        color: '#071c36',
+                        strokeWidth: 2.5,
+                        dotRadius: 4,
+                      },
+                    ]}
+                    formatTooltipLabel={(sup: SupplierPerformanceMetric) =>
+                      `#${sup.rank} ${sup.supplierName} · ${sup.totalQuantityKg} KG (${sup.shareOfWindowSpendPercent}% of 6M Spend)`
+                    }
+                    formatTooltipValue={(val) =>
+                      formatCurrency(Number(val) || 0, companyProfile.currency)
+                    }
+                  />
+                ) : (
+                  <SvgCartesianChart
+                    data={supplierPerformance.topSuppliers}
+                    xKey="shortLabel"
+                    height={300}
+                    leftTickFormatter={(val) =>
+                      Math.abs(val) >= 1000 ? `${(val / 1000).toFixed(0)}k` : `${val}`
+                    }
+                    rightTickFormatter={(val) => `${val} KG`}
+                    leftAxisColor="#1877d2"
+                    rightAxisColor="#00897b"
+                    legendPosition="bottom"
+                    series={[
+                      {
+                        key: 'totalPurchaseValue',
+                        name: `Total Purchase Value (${companyProfile.currency})`,
+                        type: 'bar',
+                        color: '#1877d2',
+                        yAxisId: 'left',
+                        maxBarSize: 44,
+                      },
+                      {
+                        key: 'totalQuantityKg',
+                        name: 'Total Quantity Procured (KG)',
+                        type: 'line',
+                        color: '#00897b',
+                        yAxisId: 'right',
+                        strokeWidth: 2.5,
+                        dotRadius: 4,
+                      },
+                    ]}
+                    formatTooltipLabel={(sup: SupplierPerformanceMetric) =>
+                      `#${sup.rank} ${sup.supplierName} · Avg ${formatCurrency(
+                        sup.avgRatePerKg,
+                        companyProfile.currency
+                      )}/KG`
+                    }
+                    formatTooltipValue={(val, s) =>
+                      s.key === 'totalQuantityKg'
+                        ? `${Number(val) || 0} KG`
+                        : formatCurrency(Number(val) || 0, companyProfile.currency)
+                    }
+                  />
+                )}
               </div>
             </div>
 

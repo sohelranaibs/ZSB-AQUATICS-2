@@ -6,6 +6,16 @@ import {
   getScaledDimensions,
   needsLegacyColorConversion,
 } from './pdfExportStyles.ts';
+import {
+  A4_PAGE_WIDTH_MM,
+  A4_PAGE_HEIGHT_MM,
+  A4_CONTENT_MARGIN_X_MM,
+  A4_CONTENT_WIDTH_MM,
+  A4_PAD_CONTENT_TOP_Y_MM,
+  A4_PAD_CONTENT_HEIGHT_MM,
+  drawPdfCompanyPadFrame,
+  resolveCompanyPadMetadata,
+} from './companyPadLayout.ts';
 
 let cachedCompanyLogoDataUrl: string | null = null;
 let cachedSignatureDataUrl: string | null = null;
@@ -60,6 +70,39 @@ function compactDataUrl(rawDataUrl: string, maxDim: number = 256): Promise<strin
 }
 
 export function getCachedCompanyLogoDataUrl(): string | null {
+  return cachedCompanyLogoDataUrl;
+}
+
+async function ensureCompanyLogoDataUrl(): Promise<string | null> {
+  if (cachedCompanyLogoDataUrl) return cachedCompanyLogoDataUrl;
+  const pad = resolveCompanyPadMetadata();
+  if (pad.logoUrl && pad.logoUrl.startsWith('data:image/')) {
+    return pad.logoUrl;
+  }
+  if (typeof window === 'undefined' || typeof fetch === 'undefined') {
+    return null;
+  }
+  try {
+    const src = pad.logoUrl || COMPANY_LOGO_URL;
+    const absUrl = new URL(src, window.location.origin).href;
+    const res = await fetch(absUrl);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const rawDataUrl = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () =>
+        resolve(typeof reader.result === 'string' ? reader.result : '');
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(blob);
+    });
+    if (rawDataUrl.startsWith('data:image/')) {
+      const compacted = await compactDataUrl(rawDataUrl, 256);
+      cachedCompanyLogoDataUrl = compacted;
+      return compacted;
+    }
+  } catch {
+    // Graceful fallback if logo fetch fails
+  }
   return cachedCompanyLogoDataUrl;
 }
 
@@ -271,7 +314,8 @@ function getCollectedDocumentCss(): string {
 async function renderElementViaSvgForeignObject(
   element: HTMLElement,
   resolvedImgSrcs: string[],
-  targetWidth: number
+  targetWidth: number,
+  borderless: boolean = false
 ): Promise<HTMLCanvasElement | null> {
   if (typeof window === 'undefined' || typeof XMLSerializer === 'undefined') return null;
 
@@ -407,8 +451,8 @@ async function renderElementViaSvgForeignObject(
   clone.style.color = '#000000';
   clone.style.fontFamily = rootFontFamily;
   clone.style.boxShadow = 'none';
-  clone.style.borderRadius = '2px';
-  clone.style.border = '1px solid #cbd5e1';
+  clone.style.borderRadius = borderless ? '0px' : '2px';
+  clone.style.border = borderless ? 'none' : '1px solid #cbd5e1';
   clone.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
 
   const collectedCss = getCollectedDocumentCss().replace(/\]\]>/g, '');
@@ -457,8 +501,10 @@ async function renderElementViaSvgForeignObject(
  */
 export async function renderElementToHighResCanvas(
   elementOrId: string | HTMLElement,
-  targetWidth: number = 760
+  targetWidth: number = 760,
+  options?: { borderless?: boolean }
 ): Promise<HTMLCanvasElement | null> {
+  const borderless = Boolean(options?.borderless);
   const element =
     typeof elementOrId === 'string' ? document.getElementById(elementOrId) : elementOrId;
   if (!element) {
@@ -477,7 +523,8 @@ export async function renderElementToHighResCanvas(
     const nativeCanvas = await renderElementViaSvgForeignObject(
       element,
       resolvedImgSrcs,
-      targetWidth
+      targetWidth,
+      borderless
     );
     if (nativeCanvas) {
       return nativeCanvas;
@@ -637,8 +684,8 @@ export async function renderElementToHighResCanvas(
             clonedTarget.style.padding = '28px';
           }
           clonedTarget.style.margin = '0 auto';
-          clonedTarget.style.borderRadius = '2px';
-          clonedTarget.style.border = '1px solid #cbd5e1';
+          clonedTarget.style.borderRadius = borderless ? '0px' : '2px';
+          clonedTarget.style.border = borderless ? 'none' : '1px solid #cbd5e1';
           clonedTarget.style.boxShadow = 'none';
         }
       },
@@ -678,15 +725,18 @@ export async function exportElementToPng(
 }
 
 /**
- * Exports a DOM element as a downloadable PDF file
- * Handles Tailwind v4 modern oklch color parsing and preserves exact Print Preview appearance
+ * Exports a DOM element as a downloadable ISO A4 PDF file with the official
+ * Company Pad letterhead, corporate border frame, watermark, and Page X of Y footer on EVERY page.
  */
 export async function exportElementToPdf(
   elementOrId: string | HTMLElement,
   filename: string
 ): Promise<boolean> {
   try {
-    const canvas = await renderElementToHighResCanvas(elementOrId, 760);
+    const [canvas, logoDataUrl] = await Promise.all([
+      renderElementToHighResCanvas(elementOrId, 760, { borderless: true }),
+      ensureCompanyLogoDataUrl(),
+    ]);
     if (!canvas) return false;
 
     const pdf = new jsPDF({
@@ -696,35 +746,40 @@ export async function exportElementToPdf(
       compress: true,
     });
 
-    // Standard A4 dimensions in mm
-    const pageWidth = 210;
-    const pageHeight = 297;
-    const margin = 10; // Standard 10mm paper margin on all sides matching Print Preview
-    const printableWidth = pageWidth - margin * 2; // 190mm
-    const printableHeight = pageHeight - margin * 2; // 277mm
+    // Strictly ISO A4 portrait content box nested cleanly inside the Company Pad header & footer bands
+    const contentX = A4_CONTENT_MARGIN_X_MM; // 10mm
+    const contentY = A4_PAD_CONTENT_TOP_Y_MM; // 34mm
+    const printableWidth = A4_CONTENT_WIDTH_MM; // 190mm
+    const printableHeight = A4_PAD_CONTENT_HEIGHT_MM; // 246.5mm
 
-    // Scale canvas to fit within 190mm width
     const totalImgHeightMm = (canvas.height * printableWidth) / canvas.width;
 
     if (totalImgHeightMm <= printableHeight) {
-      // Single page voucher: perfectly centered with standard 10mm margins
       const imgData = canvas.toDataURL('image/jpeg', 0.92);
-      pdf.addImage(imgData, 'JPEG', margin, margin, printableWidth, totalImgHeightMm, undefined, 'FAST');
+      pdf.addImage(
+        imgData,
+        'JPEG',
+        contentX,
+        contentY,
+        printableWidth,
+        totalImgHeightMm,
+        undefined,
+        'FAST'
+      );
     } else {
-      // Multi-page document: slice canvas cleanly by page chunks
       const slicePixelHeight = (printableHeight * canvas.width) / printableWidth;
       let currentSourceY = 0;
       let pageIndex = 0;
 
       while (currentSourceY < canvas.height) {
         if (pageIndex > 0) {
-          pdf.addPage();
+          pdf.addPage('a4', 'portrait');
         }
 
         const currentSlicePixels = Math.min(slicePixelHeight, canvas.height - currentSourceY);
         const sliceCanvas = document.createElement('canvas');
         sliceCanvas.width = canvas.width;
-        sliceCanvas.height = currentSlicePixels;
+        sliceCanvas.height = Math.max(1, Math.ceil(currentSlicePixels));
         const sliceCtx = sliceCanvas.getContext('2d');
 
         if (sliceCtx) {
@@ -744,7 +799,16 @@ export async function exportElementToPdf(
 
           const sliceData = sliceCanvas.toDataURL('image/jpeg', 0.92);
           const currentSliceHeightMm = (currentSlicePixels * printableWidth) / canvas.width;
-          pdf.addImage(sliceData, 'JPEG', margin, margin, printableWidth, currentSliceHeightMm, undefined, 'FAST');
+          pdf.addImage(
+            sliceData,
+            'JPEG',
+            contentX,
+            contentY,
+            printableWidth,
+            currentSliceHeightMm,
+            undefined,
+            'FAST'
+          );
         }
 
         currentSourceY += currentSlicePixels;
@@ -752,25 +816,33 @@ export async function exportElementToPdf(
       }
     }
 
-    // Add dynamic page number counter (e.g., 'Page 1 of 2') to bottom-right of multi-page PDFs
-    const totalPages = pdf.getNumberOfPages();
-    if (totalPages > 1) {
-      for (let p = 1; p <= totalPages; p++) {
-        pdf.setPage(p);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(8);
-        pdf.setTextColor(71, 85, 105);
-        pdf.text(`Page ${p} of ${totalPages}`, pageWidth - margin, pageHeight - 5, { align: 'right' });
-      }
-    }
-
     const baseName = filename.replace(/\.(pdf|png)$/i, '');
     const cleanFilename = `${baseName}.pdf`;
+    const documentLabel = baseName.replace(/[_-]+/g, ' ').trim().slice(0, 36);
+
+    // Stamp the Official A4 Company Pad letterhead, frame, watermark & footer on EVERY page
+    const totalPages = pdf.getNumberOfPages();
+    for (let p = 1; p <= totalPages; p++) {
+      pdf.setPage(p);
+      drawPdfCompanyPadFrame(pdf, {
+        pageNumber: p,
+        totalPages,
+        logoDataUrl,
+        documentLabel,
+        drawWatermark: true,
+      });
+    }
+
     const elementId = typeof elementOrId === 'string' ? elementOrId : elementOrId.id;
     if (typeof window !== 'undefined') {
       (window as unknown as Record<string, unknown>).__LAST_EXPORTED_PDF__ = {
         filename: cleanFilename,
         elementId,
+        paperSize: 'A4',
+        widthMm: A4_PAGE_WIDTH_MM,
+        heightMm: A4_PAGE_HEIGHT_MM,
+        companyPadOnEveryPage: true,
+        pageCount: totalPages,
         timestamp: new Date().toISOString(),
       };
     }
@@ -783,8 +855,8 @@ export async function exportElementToPdf(
 }
 
 /**
- * Exports multiple DOM elements (e.g., individual payment slips) as a single combined multi-page PDF document.
- * Each element is rendered onto its own discrete A4 page with standard 10mm margins.
+ * Exports multiple DOM elements (e.g., individual payment slips) as a single combined multi-page
+ * ISO A4 PDF document with the Official Company Pad rendered on EVERY page.
  */
 export async function exportElementsToCombinedPdf(
   targets: (string | HTMLElement)[],
@@ -801,23 +873,27 @@ export async function exportElementsToCombinedPdf(
       compress: true,
     });
 
-    const pageWidth = 210;
-    const pageHeight = 297;
-    const margin = 10;
-    const printableWidth = pageWidth - margin * 2; // 190mm
-    const printableHeight = pageHeight - margin * 2; // 277mm
+    const contentX = A4_CONTENT_MARGIN_X_MM; // 10mm
+    const contentY = A4_PAD_CONTENT_TOP_Y_MM; // 34mm
+    const printableWidth = A4_CONTENT_WIDTH_MM; // 190mm
+    const printableHeight = A4_PAD_CONTENT_HEIGHT_MM; // 246.5mm
 
     let pagesAdded = 0;
-    const renderedCanvases = await Promise.all(
-      targets.map((target) => renderElementToHighResCanvas(target, targetWidth))
-    );
+    const [renderedCanvases, logoDataUrl] = await Promise.all([
+      Promise.all(
+        targets.map((target) =>
+          renderElementToHighResCanvas(target, targetWidth, { borderless: true })
+        )
+      ),
+      ensureCompanyLogoDataUrl(),
+    ]);
 
     for (let i = 0; i < renderedCanvases.length; i++) {
       const canvas = renderedCanvases[i];
       if (!canvas) continue;
 
       if (pagesAdded > 0) {
-        pdf.addPage();
+        pdf.addPage('a4', 'portrait');
       }
       pagesAdded++;
 
@@ -825,7 +901,16 @@ export async function exportElementsToCombinedPdf(
 
       if (totalImgHeightMm <= printableHeight) {
         const imgData = canvas.toDataURL('image/jpeg', 0.92);
-        pdf.addImage(imgData, 'JPEG', margin, margin, printableWidth, totalImgHeightMm, undefined, 'FAST');
+        pdf.addImage(
+          imgData,
+          'JPEG',
+          contentX,
+          contentY,
+          printableWidth,
+          totalImgHeightMm,
+          undefined,
+          'FAST'
+        );
       } else {
         const slicePixelHeight = (printableHeight * canvas.width) / printableWidth;
         let currentSourceY = 0;
@@ -833,13 +918,13 @@ export async function exportElementsToCombinedPdf(
 
         while (currentSourceY < canvas.height) {
           if (subPageIndex > 0) {
-            pdf.addPage();
+            pdf.addPage('a4', 'portrait');
           }
 
           const currentSlicePixels = Math.min(slicePixelHeight, canvas.height - currentSourceY);
           const sliceCanvas = document.createElement('canvas');
           sliceCanvas.width = canvas.width;
-          sliceCanvas.height = currentSlicePixels;
+          sliceCanvas.height = Math.max(1, Math.ceil(currentSlicePixels));
           const sliceCtx = sliceCanvas.getContext('2d');
 
           if (sliceCtx) {
@@ -859,7 +944,16 @@ export async function exportElementsToCombinedPdf(
 
             const sliceData = sliceCanvas.toDataURL('image/jpeg', 0.92);
             const currentSliceHeightMm = (currentSlicePixels * printableWidth) / canvas.width;
-            pdf.addImage(sliceData, 'JPEG', margin, margin, printableWidth, currentSliceHeightMm, undefined, 'FAST');
+            pdf.addImage(
+              sliceData,
+              'JPEG',
+              contentX,
+              contentY,
+              printableWidth,
+              currentSliceHeightMm,
+              undefined,
+              'FAST'
+            );
           }
 
           currentSourceY += currentSlicePixels;
@@ -870,23 +964,32 @@ export async function exportElementsToCombinedPdf(
 
     if (pagesAdded === 0) return false;
 
-    // Add dynamic page number counter to bottom-right of all PDF pages
+    const baseName = filename.replace(/\.(pdf|png)$/i, '');
+    const cleanFilename = `${baseName}.pdf`;
+    const documentLabel = baseName.replace(/[_-]+/g, ' ').trim().slice(0, 36);
+
+    // Stamp Official A4 Company Pad letterhead, frame, watermark & footer on EVERY page
     const totalPages = pdf.getNumberOfPages();
     for (let p = 1; p <= totalPages; p++) {
       pdf.setPage(p);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(8);
-      pdf.setTextColor(71, 85, 105);
-      pdf.text(`Page ${p} of ${totalPages}`, pageWidth - margin, pageHeight - 5, { align: 'right' });
+      drawPdfCompanyPadFrame(pdf, {
+        pageNumber: p,
+        totalPages,
+        logoDataUrl,
+        documentLabel,
+        drawWatermark: true,
+      });
     }
 
-    const baseName = filename.replace(/\.(pdf|png)$/i, '');
-    const cleanFilename = `${baseName}.pdf`;
     if (typeof window !== 'undefined') {
       (window as unknown as Record<string, unknown>).__LAST_EXPORTED_PDF__ = {
         filename: cleanFilename,
         type: 'batch_payment_slips_combined',
-        pageCount: targets.length,
+        paperSize: 'A4',
+        widthMm: A4_PAGE_WIDTH_MM,
+        heightMm: A4_PAGE_HEIGHT_MM,
+        companyPadOnEveryPage: true,
+        pageCount: totalPages,
         timestamp: new Date().toISOString(),
       };
     }
@@ -968,6 +1071,14 @@ export function openPrintableDocumentWindow(
     .join('\n');
 
   const topBarLogoSrc = resolveCompanyLogoSrc();
+  const pad = resolveCompanyPadMetadata();
+  const escapeHtml = (val: string) =>
+    String(val || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  const todayFormatted = formatDate(new Date().toISOString().slice(0, 10));
 
   const htmlContent = `<!DOCTYPE html>
 <html lang="en">
@@ -975,18 +1086,18 @@ export function openPrintableDocumentWindow(
   <meta charset="UTF-8">
   <base href="${baseOrigin}">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${docTitle} - ZSB AQUATICS</title>
+  <title>${escapeHtml(docTitle)} - ${escapeHtml(pad.companyName)}</title>
   ${stylesHtml}
   <style>
     @page {
       size: A4 portrait;
-      margin: 10mm;
+      margin: 8mm;
       @bottom-right {
         content: "Page " counter(page) " of " counter(pages);
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        font-size: 10px;
+        font-size: 9px;
         font-weight: 700;
-        color: #334155;
+        color: #1e293b;
       }
     }
     * { box-sizing: border-box; }
@@ -999,9 +1110,124 @@ export function openPrintableDocumentWindow(
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
     }
-    #print-root {
-      max-width: 190mm;
+    .zsb-a4-pad-shell {
+      width: 100% !important;
+      max-width: 194mm;
       margin: 0 auto;
+      border-collapse: collapse !important;
+      table-layout: auto !important;
+      border: 1.5px solid #273E56 !important;
+      background: #ffffff;
+    }
+    .zsb-a4-pad-shell > thead { display: table-header-group; }
+    .zsb-a4-pad-shell > tfoot { display: table-footer-group; }
+    .zsb-a4-pad-shell > thead > tr > td,
+    .zsb-a4-pad-shell > tbody > tr > td,
+    .zsb-a4-pad-shell > tfoot > tr > td {
+      border: none !important;
+      padding: 0 !important;
+    }
+    .zsb-pad-top-bar {
+      height: 7px;
+      background: #273E56;
+      border-bottom: 3px solid #D4AF37;
+    }
+    .zsb-pad-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 14px 7px 14px;
+      border-bottom: 2px solid #273E56;
+      box-shadow: inset 0 -1px 0 #D4AF37;
+      background: #ffffff;
+    }
+    .zsb-pad-header-logo {
+      width: 48px;
+      height: 48px;
+      border-radius: 9999px;
+      border: 2px solid #D4AF37;
+      background: #ffffff;
+      padding: 2px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .zsb-pad-header-logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      border-radius: 9999px;
+      display: block;
+    }
+    .zsb-pad-header-center {
+      text-align: center;
+      flex: 1;
+      min-width: 0;
+    }
+    .zsb-pad-company-name {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 20px;
+      font-weight: 900;
+      color: #273E56;
+      letter-spacing: 0.06em;
+      line-height: 1.1;
+    }
+    .zsb-pad-tagline {
+      font-size: 8.5px;
+      font-weight: 800;
+      color: #b45309;
+      letter-spacing: 0.08em;
+      margin-top: 2px;
+    }
+    .zsb-pad-address {
+      font-size: 9.5px;
+      color: #1e293b;
+      margin-top: 2px;
+    }
+    .zsb-pad-contact {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 9px;
+      font-weight: 700;
+      color: #334155;
+      margin-top: 1px;
+    }
+    .zsb-pad-stamp {
+      border: 1px solid #cbd5e1;
+      background: #f1f5f9;
+      border-radius: 4px;
+      padding: 5px 8px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .zsb-pad-stamp-title {
+      font-size: 8px;
+      font-weight: 800;
+      color: #273E56;
+      letter-spacing: 0.04em;
+    }
+    .zsb-pad-stamp-meta {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 8.5px;
+      font-weight: 700;
+      color: #b45309;
+      margin-top: 2px;
+    }
+    .zsb-pad-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 6px 14px;
+      border-top: 2px solid #273E56;
+      border-bottom: 5px solid #273E56;
+      font-size: 9px;
+      color: #334155;
+      background: #ffffff;
+    }
+    #print-root {
+      padding: 10px 12px;
       background: #ffffff;
     }
     .print-bar {
@@ -1009,8 +1235,8 @@ export function openPrintableDocumentWindow(
       color: #ffffff;
       padding: 10px 20px;
       border-radius: 10px;
-      margin: 0 auto 20px auto;
-      max-width: 190mm;
+      margin: 0 auto 16px auto;
+      max-width: 194mm;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -1072,12 +1298,12 @@ export function openPrintableDocumentWindow(
       font-size: 13px;
     }
     .btn-close:hover { background: #475569; }
-    table { width: 100% !important; border-collapse: collapse !important; table-layout: fixed !important; font-variant-numeric: tabular-nums !important; }
-    th, td { vertical-align: middle !important; box-sizing: border-box !important; }
+    #print-root table { width: 100% !important; border-collapse: collapse !important; table-layout: fixed !important; font-variant-numeric: tabular-nums !important; }
+    #print-root th, #print-root td { vertical-align: middle !important; box-sizing: border-box !important; }
     @media print {
       .print-bar { display: none !important; }
       body { padding: 0 !important; margin: 0 !important; }
-      #print-root { max-width: 100% !important; width: 100% !important; }
+      .zsb-a4-pad-shell { max-width: 100% !important; width: 100% !important; }
       .print-page-number-counter {
         position: fixed;
         bottom: 2mm;
@@ -1103,23 +1329,64 @@ export function openPrintableDocumentWindow(
   <div class="print-bar">
     <div class="print-brand">
       <div class="print-brand-logo">
-        <img src="${topBarLogoSrc}" alt="ZSB AQUATICS" />
+        <img src="${topBarLogoSrc}" alt="${escapeHtml(pad.companyName)}" />
       </div>
       <div>
-        <span style="color:#ffe066;font-weight:900;font-size:18px;letter-spacing:0.08em;font-family:'Cinzel',Georgia,serif;text-shadow:0px 1px 0px #d97706,1px 2px 0px #b45309,2px 3px 0px #92400e,3px 4px 0px #78350f,4px 5px 6px rgba(0,0,0,0.7);">ZSB AQUATICS</span>
+        <span style="color:#ffe066;font-weight:900;font-size:18px;letter-spacing:0.08em;font-family:'Cinzel',Georgia,serif;">${escapeHtml(pad.companyName)}</span>
         <span style="color:#94a3b8;margin:0 8px;">|</span>
-        <span style="font-weight:600;font-size:13px;color:#f8fafc;">Official A4 Print Ready Document</span>
+        <span style="font-weight:600;font-size:13px;color:#f8fafc;">Official A4 Company Pad Document</span>
       </div>
     </div>
     <div class="print-actions">
-      <button class="btn-print" onclick="window.print()">🖨️ Click to Print Now (or Ctrl+P)</button>
+      <button class="btn-print" onclick="window.print()">Print Now (A4 Company Pad)</button>
       <button class="btn-close" onclick="window.close()">Close</button>
     </div>
   </div>
 
-  <div id="print-root">
-    ${clonedElement.outerHTML}
-  </div>
+  <table class="zsb-a4-pad-shell">
+    <thead>
+      <tr>
+        <td>
+          <div class="zsb-pad-top-bar"></div>
+          <div class="zsb-pad-header">
+            <div class="zsb-pad-header-logo">
+              <img src="${topBarLogoSrc}" alt="${escapeHtml(pad.companyName)}" />
+            </div>
+            <div class="zsb-pad-header-center">
+              <div class="zsb-pad-company-name">${escapeHtml(pad.companyName.toUpperCase())}</div>
+              <div class="zsb-pad-tagline">${escapeHtml(pad.tagline)}</div>
+              ${pad.address ? `<div class="zsb-pad-address">Address: ${escapeHtml(pad.address)}</div>` : ''}
+              ${pad.contactLine ? `<div class="zsb-pad-contact">${escapeHtml(pad.contactLine)}</div>` : ''}
+            </div>
+            <div class="zsb-pad-stamp">
+              <div class="zsb-pad-stamp-title">OFFICIAL COMPANY PAD</div>
+              <div class="zsb-pad-stamp-meta">A4 · ${escapeHtml(todayFormatted)}</div>
+            </div>
+          </div>
+        </td>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          <div id="print-root">
+            ${clonedElement.outerHTML}
+          </div>
+        </td>
+      </tr>
+    </tbody>
+    <tfoot>
+      <tr>
+        <td>
+          <div class="zsb-pad-footer">
+            <strong style="color:#273E56;">${escapeHtml(pad.footerLeft)}</strong>
+            <span>${escapeHtml(pad.footerCenter)}</span>
+            <strong style="color:#0f172a;">ISO A4 · Official Pad</strong>
+          </div>
+        </td>
+      </tr>
+    </tfoot>
+  </table>
 
   <script>
     (function() {

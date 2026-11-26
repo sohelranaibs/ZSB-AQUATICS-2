@@ -30,7 +30,9 @@ import {
   Copy,
   Check,
   HardDrive,
+  Clock,
 } from 'lucide-react';
+import { useSnapshotReminder } from '../hooks/useSnapshotReminder.ts';
 
 const AUTO_CLEANUP_STORAGE_KEY = 'zsb_snapshot_auto_cleanup_v1';
 
@@ -53,6 +55,15 @@ export const DatabaseSnapshotModal: React.FC = () => {
     dropdownOptions,
     packingDraft,
   } = useApp();
+
+  const {
+    reminderState,
+    isDue: isBackupReminderDue,
+    progressPercent: backupReminderProgress,
+    formattedUsage: backupUsageFormatted,
+    formattedRemaining: backupRemainingFormatted,
+    toggleReminderEnabled,
+  } = useSnapshotReminder({ trackUsage: false });
 
   const [activeMode, setActiveMode] = useState<'archive' | 'import_json'>('archive');
   const [labelInput, setLabelInput] = useState<string>('');
@@ -459,6 +470,71 @@ export const DatabaseSnapshotModal: React.FC = () => {
                   </div>
                 </div>
               </form>
+
+              {/* Recurring 24-Hour Active Usage Backup Reminder Status */}
+              <section
+                aria-label="24-Hour Backup Reminder"
+                data-testid="snapshot-reminder-settings-card"
+                className="p-4 rounded-xl bg-amber-50/70 border border-amber-200 space-y-2.5"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Clock className="w-4 h-4 text-amber-700 shrink-0" />
+                      <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wide">
+                        24-Hour Active Usage Backup Reminder
+                      </h3>
+                      {isBackupReminderDue && (
+                        <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded bg-amber-500 text-slate-950">
+                          Backup Due
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-700">
+                      Tracks active foreground usage across sessions and prompts you every 24 hours to save a fresh local database snapshot. Saving any snapshot automatically resets the cycle.
+                    </p>
+                  </div>
+
+                  <label
+                    htmlFor="snapshot-24h-reminder-toggle"
+                    className="flex items-center space-x-1.5 text-[11px] font-bold text-slate-900 cursor-pointer select-none shrink-0"
+                  >
+                    <input
+                      id="snapshot-24h-reminder-toggle"
+                      data-testid="snapshot-24h-reminder-toggle"
+                      type="checkbox"
+                      checked={reminderState.enabled}
+                      onChange={(e) => toggleReminderEnabled(e.target.checked)}
+                      className="rounded border-amber-400 text-[#00897b] focus:ring-[#00897b] cursor-pointer"
+                    />
+                    <span>Remind Every 24h</span>
+                  </label>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[11px] font-mono">
+                    <span className="text-slate-700 font-semibold">
+                      Active Usage Since Last Snapshot:{' '}
+                      <strong className="text-slate-950">{backupUsageFormatted}</strong> / 24h 0m
+                    </span>
+                    <span className="text-amber-900 font-bold">
+                      {!reminderState.enabled
+                        ? 'Paused'
+                        : isBackupReminderDue
+                        ? 'Prompt Ready'
+                        : `${backupRemainingFormatted} remaining`}
+                    </span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-amber-200/80 overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-300 ${
+                        isBackupReminderDue ? 'bg-amber-600' : 'bg-[#00897b]'
+                      }`}
+                      style={{ width: `${backupReminderProgress}%` }}
+                    />
+                  </div>
+                </div>
+              </section>
 
               {/* Storage Performance & 30-Day Snapshot Cleanup Utility */}
               <section

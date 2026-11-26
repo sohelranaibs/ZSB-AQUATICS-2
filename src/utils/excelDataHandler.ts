@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import {
+  CompanyProfile,
   PurchaseRecord,
   PackingRecord,
   PaymentRecord,
@@ -8,6 +9,10 @@ import {
   PackingItemRow,
   PaymentItemRow,
 } from '../types/index.ts';
+import {
+  buildCompanyPadWorksheet,
+  applyA4CompanyPadToXlsxBuffer,
+} from './companyPadLayout.ts';
 import {
   calculatePurchaseRowTotal,
   calculatePurchaseTotals,
@@ -198,12 +203,21 @@ export function otherCostsToSheetRows(records: OtherCostRecord[]): Record<string
   }));
 }
 
+const DATASET_REPORT_TITLES: Record<DatasetKey, string> = {
+  purchase: 'Purchases Ledger Report',
+  packing: 'Export Packing List Report',
+  payment: 'Payment Vouchers Report',
+  other_cost: 'Daily Expense & Other Costs Report',
+};
+
 /**
- * Builds an Excel (.xlsx) binary buffer for a single dataset.
+ * Builds an ISO A4 Excel (.xlsx) binary buffer for a single dataset with the Official Company Pad
+ * letterhead, repeating Print Titles ($1:$6), and Page Layout headers/footers on every printed A4 page.
  */
 export function generateSingleSheetWorkbookBuffer(
   type: DatasetKey,
-  records: any[]
+  records: any[],
+  companyProfile?: Partial<CompanyProfile> | null
 ): Uint8Array {
   const wb = XLSX.utils.book_new();
   let rows: Record<string, any>[] = [];
@@ -223,25 +237,32 @@ export function generateSingleSheetWorkbookBuffer(
     sheetName = 'Other_Costs';
   }
 
-  const ws =
-    rows.length > 0
-      ? XLSX.utils.json_to_sheet(rows)
-      : XLSX.utils.aoa_to_sheet([getTemplateHeaders(type)]);
+  const headers = rows.length > 0 ? Object.keys(rows[0]) : getTemplateHeaders(type);
+  const ws = buildCompanyPadWorksheet({
+    reportTitle: DATASET_REPORT_TITLES[type],
+    headers,
+    rows,
+    profile: companyProfile,
+  });
 
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
   const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  return new Uint8Array(out);
+  return applyA4CompanyPadToXlsxBuffer(new Uint8Array(out), [sheetName], companyProfile);
 }
 
 /**
- * Builds a complete multi-sheet Master Workbook (.xlsx) containing all 4 ledgers.
+ * Builds a complete multi-sheet ISO A4 Master Workbook (.xlsx) containing all 4 ledgers,
+ * each formatted with the Official Company Pad letterhead and repeating print titles on every A4 page.
  */
-export function generateMasterWorkbookBuffer(data: {
-  purchases: PurchaseRecord[];
-  packings: PackingRecord[];
-  payments: PaymentRecord[];
-  otherCosts: OtherCostRecord[];
-}): Uint8Array {
+export function generateMasterWorkbookBuffer(
+  data: {
+    purchases: PurchaseRecord[];
+    packings: PackingRecord[];
+    payments: PaymentRecord[];
+    otherCosts: OtherCostRecord[];
+  },
+  companyProfile?: Partial<CompanyProfile> | null
+): Uint8Array {
   const wb = XLSX.utils.book_new();
 
   const purchaseRows = purchasesToSheetRows(data.purchases);
@@ -249,30 +270,39 @@ export function generateMasterWorkbookBuffer(data: {
   const paymentRows = paymentsToSheetRows(data.payments);
   const costRows = otherCostsToSheetRows(data.otherCosts);
 
-  const wsPurchases =
-    purchaseRows.length > 0
-      ? XLSX.utils.json_to_sheet(purchaseRows)
-      : XLSX.utils.aoa_to_sheet([getTemplateHeaders('purchase')]);
-  const wsPackings =
-    packingRows.length > 0
-      ? XLSX.utils.json_to_sheet(packingRows)
-      : XLSX.utils.aoa_to_sheet([getTemplateHeaders('packing')]);
-  const wsPayments =
-    paymentRows.length > 0
-      ? XLSX.utils.json_to_sheet(paymentRows)
-      : XLSX.utils.aoa_to_sheet([getTemplateHeaders('payment')]);
-  const wsCosts =
-    costRows.length > 0
-      ? XLSX.utils.json_to_sheet(costRows)
-      : XLSX.utils.aoa_to_sheet([getTemplateHeaders('other_cost')]);
+  const wsPurchases = buildCompanyPadWorksheet({
+    reportTitle: DATASET_REPORT_TITLES.purchase,
+    headers: purchaseRows.length > 0 ? Object.keys(purchaseRows[0]) : getTemplateHeaders('purchase'),
+    rows: purchaseRows,
+    profile: companyProfile,
+  });
+  const wsPackings = buildCompanyPadWorksheet({
+    reportTitle: DATASET_REPORT_TITLES.packing,
+    headers: packingRows.length > 0 ? Object.keys(packingRows[0]) : getTemplateHeaders('packing'),
+    rows: packingRows,
+    profile: companyProfile,
+  });
+  const wsPayments = buildCompanyPadWorksheet({
+    reportTitle: DATASET_REPORT_TITLES.payment,
+    headers: paymentRows.length > 0 ? Object.keys(paymentRows[0]) : getTemplateHeaders('payment'),
+    rows: paymentRows,
+    profile: companyProfile,
+  });
+  const wsCosts = buildCompanyPadWorksheet({
+    reportTitle: DATASET_REPORT_TITLES.other_cost,
+    headers: costRows.length > 0 ? Object.keys(costRows[0]) : getTemplateHeaders('other_cost'),
+    rows: costRows,
+    profile: companyProfile,
+  });
 
-  XLSX.utils.book_append_sheet(wb, wsPurchases, 'Purchases');
-  XLSX.utils.book_append_sheet(wb, wsPackings, 'Packing_Lists');
-  XLSX.utils.book_append_sheet(wb, wsPayments, 'Payments');
-  XLSX.utils.book_append_sheet(wb, wsCosts, 'Other_Costs');
+  const sheetNames = ['Purchases', 'Packing_Lists', 'Payments', 'Other_Costs'];
+  XLSX.utils.book_append_sheet(wb, wsPurchases, sheetNames[0]);
+  XLSX.utils.book_append_sheet(wb, wsPackings, sheetNames[1]);
+  XLSX.utils.book_append_sheet(wb, wsPayments, sheetNames[2]);
+  XLSX.utils.book_append_sheet(wb, wsCosts, sheetNames[3]);
 
   const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  return new Uint8Array(out);
+  return applyA4CompanyPadToXlsxBuffer(new Uint8Array(out), sheetNames, companyProfile);
 }
 
 /**
@@ -280,6 +310,16 @@ export function generateMasterWorkbookBuffer(data: {
  */
 export function downloadExcelBuffer(buffer: Uint8Array, filename: string): void {
   const safeName = filename.endsWith('.xlsx') ? filename : `${filename}.xlsx`;
+  if (typeof window !== 'undefined') {
+    (window as unknown as Record<string, unknown>).__LAST_EXPORTED_EXCEL__ = {
+      filename: safeName,
+      paperSize: 'A4',
+      excelPaperSizeCode: 9,
+      companyPadOnEveryPage: true,
+      byteLength: buffer.byteLength,
+      timestamp: new Date().toISOString(),
+    };
+  }
   const blob = new Blob([buffer as unknown as BlobPart], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
@@ -456,16 +496,37 @@ export function getSampleTemplateRows(type: DatasetKey): Record<string, any>[] {
 }
 
 /**
- * Downloads a sample Excel (.xlsx) template for the specified dataset or all datasets.
+ * Downloads an ISO A4 sample Excel (.xlsx) template with the Official Company Pad letterhead
+ * for the specified dataset or all datasets.
  */
-export function downloadSampleExcelTemplate(type: DatasetKey | 'all'): void {
+export function downloadSampleExcelTemplate(
+  type: DatasetKey | 'all',
+  companyProfile?: Partial<CompanyProfile> | null
+): void {
   const wb = XLSX.utils.book_new();
   if (type === 'all') {
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(getSampleTemplateRows('purchase')), 'Purchases');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(getSampleTemplateRows('packing')), 'Packing_Lists');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(getSampleTemplateRows('payment')), 'Payments');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(getSampleTemplateRows('other_cost')), 'Other_Costs');
-    const out = new Uint8Array(XLSX.write(wb, { bookType: 'xlsx', type: 'array' }));
+    const specs: Array<{ key: DatasetKey; sheetName: string }> = [
+      { key: 'purchase', sheetName: 'Purchases' },
+      { key: 'packing', sheetName: 'Packing_Lists' },
+      { key: 'payment', sheetName: 'Payments' },
+      { key: 'other_cost', sheetName: 'Other_Costs' },
+    ];
+    for (const spec of specs) {
+      const sampleRows = getSampleTemplateRows(spec.key);
+      const ws = buildCompanyPadWorksheet({
+        reportTitle: `${DATASET_REPORT_TITLES[spec.key]} (Import Template)`,
+        headers: getTemplateHeaders(spec.key),
+        rows: sampleRows,
+        profile: companyProfile,
+      });
+      XLSX.utils.book_append_sheet(wb, ws, spec.sheetName);
+    }
+    const rawOut = new Uint8Array(XLSX.write(wb, { bookType: 'xlsx', type: 'array' }));
+    const out = applyA4CompanyPadToXlsxBuffer(
+      rawOut,
+      specs.map((s) => s.sheetName),
+      companyProfile
+    );
     downloadExcelBuffer(out, 'ZSB_Aquatics_Master_Import_Template.xlsx');
     return;
   }
@@ -478,8 +539,16 @@ export function downloadSampleExcelTemplate(type: DatasetKey | 'all'): void {
       : type === 'payment'
       ? 'Payments'
       : 'Other_Costs';
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(getSampleTemplateRows(type)), sheetName);
-  const out = new Uint8Array(XLSX.write(wb, { bookType: 'xlsx', type: 'array' }));
+  const sampleRows = getSampleTemplateRows(type);
+  const ws = buildCompanyPadWorksheet({
+    reportTitle: `${DATASET_REPORT_TITLES[type]} (Import Template)`,
+    headers: getTemplateHeaders(type),
+    rows: sampleRows,
+    profile: companyProfile,
+  });
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  const rawOut = new Uint8Array(XLSX.write(wb, { bookType: 'xlsx', type: 'array' }));
+  const out = applyA4CompanyPadToXlsxBuffer(rawOut, [sheetName], companyProfile);
   downloadExcelBuffer(out, `ZSB_Aquatics_${sheetName}_Template.xlsx`);
 }
 
@@ -590,8 +659,103 @@ function extractWorksheetCellLiteralOrValue(cell: XLSX.CellObject | undefined): 
   return cell.v;
 }
 
+const KNOWN_LEDGER_HEADER_KEYS = new Set([
+  'invoiceno',
+  'invoicenumber',
+  'date',
+  'purchasedate',
+  'packingdate',
+  'paymentdate',
+  'expensedate',
+  'supplier',
+  'supplierdescription',
+  'contactnumber',
+  'item',
+  'grade',
+  'product',
+  'quantity',
+  'qty',
+  'rate',
+  'ratermb',
+  'totalamount',
+  'totalamountbdt',
+  'totalvaluermb',
+  'previousamount',
+  'paidamount',
+  'balanceamount',
+  'itemsbreakdown',
+  'remarks',
+  'packinglistno',
+  'shippingmark',
+  'flight',
+  'destination',
+  'shipper',
+  'documentsholder',
+  'box',
+  'weight',
+  'weightperboxkg',
+  'totalweightkg',
+  'rmbrate',
+  'status',
+  'paymentvoucherno',
+  'paymentno',
+  'party',
+  'partysupplier',
+  'category',
+  'expensecategory',
+  'totalamountdebit',
+  'debitamount',
+  'creditamount',
+  'returnrmb',
+  'exportgoodsref',
+  'exportref',
+  'amount',
+  'amountbdt',
+  'amounttk',
+  'description',
+  'particulars',
+  'paymentmethod',
+  'paidby',
+  'referenceinvoice',
+  'refinvoice',
+]);
+
+/**
+ * Automatically detects the true table column header row in a worksheet, skipping
+ * multi-row Company Pad letterheads (Rows 1-5) when re-importing exported A4 Excel sheets,
+ * while remaining 100% compatible with plain Row-1 header sheets and headerless sheets.
+ */
+function detectWorksheetHeaderRowIndex(
+  ws: XLSX.WorkSheet,
+  range: XLSX.Range
+): number {
+  const maxScanRow = Math.min(range.e.r, range.s.r + 15);
+  for (let R = range.s.r; R <= maxScanRow; R++) {
+    let populatedCount = 0;
+    let knownHeaderMatches = 0;
+
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const addr = XLSX.utils.encode_cell({ r: R, c: C });
+      const val = extractWorksheetCellLiteralOrValue(ws[addr]);
+      if (hasPresentImportText(val)) {
+        populatedCount++;
+        const normalized = normalizeKey(String(val));
+        if (KNOWN_LEDGER_HEADER_KEYS.has(normalized)) {
+          knownHeaderMatches++;
+        }
+      }
+    }
+
+    if (populatedCount >= 2 && knownHeaderMatches >= 2) {
+      return R;
+    }
+  }
+  return range.s.r;
+}
+
 /**
  * Extracts worksheet row objects preserving formula expressions (`=SUM(...)`) as literal text strings.
+ * Automatically skips top Company Pad letterhead rows when present.
  */
 export function extractWorksheetRowObjectsWithLiteralFormulas(
   ws: XLSX.WorkSheet
@@ -599,11 +763,12 @@ export function extractWorksheetRowObjectsWithLiteralFormulas(
   const ref = ws['!ref'];
   if (!ref) return [];
   const range = XLSX.utils.decode_range(ref);
+  const headerRowIndex = detectWorksheetHeaderRowIndex(ws, range);
   const headerRow: string[] = [];
   const usedHeaders = new Set<string>();
 
   for (let C = range.s.c; C <= range.e.c; C++) {
-    const addr = XLSX.utils.encode_cell({ r: range.s.r, c: C });
+    const addr = XLSX.utils.encode_cell({ r: headerRowIndex, c: C });
     const rawHeader = extractWorksheetCellLiteralOrValue(ws[addr]);
     let headerText = hasPresentImportText(rawHeader) ? String(rawHeader).trim() : `__EMPTY_${C}`;
     if (usedHeaders.has(headerText)) {
@@ -614,7 +779,7 @@ export function extractWorksheetRowObjectsWithLiteralFormulas(
   }
 
   const rows: Record<string, any>[] = [];
-  for (let R = range.s.r + 1; R <= range.e.r; R++) {
+  for (let R = headerRowIndex + 1; R <= range.e.r; R++) {
     const rowObj: Record<string, any> = {};
     let hasAnyPopulated = false;
 
@@ -1648,13 +1813,14 @@ export function parseMasterWorkbookBuffer(
 }
 
 /**
- * High-level helper to export any dataset as either .xlsx or .csv
+ * High-level helper to export any dataset as either ISO A4 Company Pad .xlsx or .csv
  */
 export function exportDatasetFile(
   type: DatasetKey,
   format: 'xlsx' | 'csv',
   records: any[],
-  customFilename?: string
+  customFilename?: string,
+  companyProfile?: Partial<CompanyProfile> | null
 ): string {
   const today = new Date().toISOString().slice(0, 10);
   const labelMap: Record<DatasetKey, string> = {
@@ -1666,7 +1832,7 @@ export function exportDatasetFile(
   const baseName = customFilename || `ZSB_Aquatics_${labelMap[type]}_${today}`;
 
   if (format === 'xlsx') {
-    const buffer = generateSingleSheetWorkbookBuffer(type, records);
+    const buffer = generateSingleSheetWorkbookBuffer(type, records, companyProfile);
     const filename = baseName.endsWith('.xlsx') ? baseName : `${baseName}.xlsx`;
     downloadExcelBuffer(buffer, filename);
     return filename;

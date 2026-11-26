@@ -7,7 +7,13 @@ import {
 } from './calculations.ts';
 import { SupplierRecordHistoryRow } from './supplierHistory.ts';
 import { getCachedCompanyLogoDataUrl } from './pdfGenerator.ts';
-import { getJsPdfImageFormat } from './pdfExportStyles.ts';
+import {
+  A4_PAGE_WIDTH_MM,
+  A4_PAGE_HEIGHT_MM,
+  A4_PAD_CONTENT_TOP_Y_MM,
+  A4_PAD_CONTENT_BOTTOM_Y_MM,
+  drawPdfCompanyPadFrame,
+} from './companyPadLayout.ts';
 
 export interface SupplierReconciliationPdfInput {
   companyProfile: CompanyProfile;
@@ -150,90 +156,20 @@ export function buildSupplierReconciliationPdfDocument(
     compress: true,
   });
 
-  const pageWidth = 210;
-  const pageHeight = 297;
+  const pageWidth = A4_PAGE_WIDTH_MM;
+  const pageHeight = A4_PAGE_HEIGHT_MM;
   const margin = 12;
   const contentWidth = pageWidth - margin * 2; // 186mm
-  const bottomSafeY = pageHeight - 18;
+  const contentTopY = A4_PAD_CONTENT_TOP_Y_MM + 2; // 36mm (below A4 Company Pad letterhead)
+  const bottomSafeY = A4_PAD_CONTENT_BOTTOM_Y_MM - 2; // 278.5mm (above A4 Company Pad footer)
 
   // Column widths summing to 186mm
   const colWidths = [14, 26, 56, 30, 30, 30];
 
   const logoDataUrl = getCachedCompanyLogoDataUrl();
-  const logoFormat = logoDataUrl ? getJsPdfImageFormat(logoDataUrl) : 'JPEG';
 
-  const drawWatermarkOnCurrentPage = () => {
-    if (!logoDataUrl) return;
-    try {
-      const pdfAny = pdf as unknown as {
-        saveGraphicsState?: () => void;
-        restoreGraphicsState?: () => void;
-        setGState?: (state: unknown) => void;
-        GState?: new (opts: { opacity: number }) => unknown;
-      };
-      if (pdfAny.saveGraphicsState && pdfAny.setGState && pdfAny.GState) {
-        pdfAny.saveGraphicsState();
-        pdfAny.setGState(new pdfAny.GState({ opacity: 0.05 }));
-        pdf.addImage(
-          logoDataUrl,
-          logoFormat,
-          (pageWidth - 72) / 2,
-          (pageHeight - 72) / 2,
-          72,
-          72,
-          'zsb-company-logo',
-          'FAST'
-        );
-        pdfAny.restoreGraphicsState?.();
-      }
-    } catch {
-      // Ignore optional watermark transparency error
-    }
-  };
-
-  drawWatermarkOnCurrentPage();
-
-  // Official Company Header
-  let y = 13;
-  if (logoDataUrl) {
-    try {
-      pdf.setDrawColor(212, 175, 55);
-      pdf.setLineWidth(0.5);
-      pdf.circle(margin + 36, y + 6, 7, 'S');
-      pdf.addImage(
-        logoDataUrl,
-        logoFormat,
-        margin + 30.2,
-        y + 0.2,
-        11.6,
-        11.6,
-        'zsb-company-logo',
-        'FAST'
-      );
-    } catch {
-      // Fallback to text-only header if image format unsupported
-    }
-  }
-
-  pdf.setFont('times', 'bold');
-  pdf.setFontSize(20);
-  pdf.setTextColor(217, 119, 6); // rich amber/gold contrast on white
-  pdf.text(payload.companyName.toUpperCase(), pageWidth / 2 + (logoDataUrl ? 6 : 0), y + 8.5, {
-    align: 'center',
-  });
-  y += 14;
-
-  pdf.setFont('helvetica', 'bold');
-  pdf.setFontSize(8.5);
-  pdf.setTextColor(15, 23, 42);
-  pdf.text(payload.address, pageWidth / 2, y, { align: 'center' });
-  y += 4.2;
-
-  pdf.setFont('courier', 'bold');
-  pdf.setFontSize(8);
-  pdf.setTextColor(30, 41, 59);
-  pdf.text(payload.contactLine, pageWidth / 2, y, { align: 'center' });
-  y += 4.5;
+  // Start right below the Official A4 Company Pad letterhead band (which is drawn on EVERY page)
+  let y = contentTopY;
 
   // Title Pill Banner
   const titleBadgeW = 94;
@@ -246,13 +182,7 @@ export function buildSupplierReconciliationPdfDocument(
   pdf.text('SUPPLIER ACCOUNT RECONCILIATION LEDGER', pageWidth / 2, y + 4.6, {
     align: 'center',
   });
-  y += titleBadgeH + 3;
-
-  // Header bottom divider
-  pdf.setDrawColor(15, 23, 42);
-  pdf.setLineWidth(0.55);
-  pdf.line(margin, y, pageWidth - margin, y);
-  y += 3.5;
+  y += titleBadgeH + 3.5;
 
   // 4-Column Metadata Summary Box
   const metaH = 13;
@@ -313,9 +243,8 @@ export function buildSupplierReconciliationPdfDocument(
       const rowHeight = Math.max(6.8, supplierLines.length * 4 + 2.8);
 
       if (y + rowHeight > bottomSafeY) {
-        pdf.addPage();
-        drawWatermarkOnCurrentPage();
-        y = 14;
+        pdf.addPage('a4', 'portrait');
+        y = contentTopY;
         y = drawTableHeader(pdf, margin, y, colWidths);
       }
 
@@ -373,9 +302,8 @@ export function buildSupplierReconciliationPdfDocument(
     // Totals Row
     const totalsH = 8;
     if (y + totalsH + 22 > bottomSafeY) {
-      pdf.addPage();
-      drawWatermarkOnCurrentPage();
-      y = 14;
+      pdf.addPage('a4', 'portrait');
+      y = contentTopY;
       y = drawTableHeader(pdf, margin, y, colWidths);
     }
 
@@ -421,9 +349,8 @@ export function buildSupplierReconciliationPdfDocument(
 
   // Signature Footer
   if (y + 22 > bottomSafeY) {
-    pdf.addPage();
-    drawWatermarkOnCurrentPage();
-    y = 20;
+    pdf.addPage('a4', 'portrait');
+    y = contentTopY + 4;
   }
   const sigY = y + 14;
   const sigColW = (contentWidth - 20) / 3;
@@ -440,15 +367,18 @@ export function buildSupplierReconciliationPdfDocument(
     pdf.text(label.toUpperCase(), startX + sigColW / 2, sigY + 4, { align: 'center' });
   });
 
-  // Page X of Y Footer
+  // Stamp Official A4 Company Pad letterhead, frame, watermark & Page X of Y footer on EVERY page
   const totalPages = pdf.getNumberOfPages();
   for (let p = 1; p <= totalPages; p++) {
     pdf.setPage(p);
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(8);
-    pdf.setTextColor(71, 85, 105);
-    pdf.text(`Page ${p} of ${totalPages}`, pageWidth - margin, pageHeight - 6, {
-      align: 'right',
+    drawPdfCompanyPadFrame(pdf, {
+      pageNumber: p,
+      totalPages,
+      profile: input.companyProfile,
+      logoDataUrl,
+      documentLabel: 'Supplier Reconciliation Ledger',
+      exportDateIso: input.todayIso,
+      drawWatermark: true,
     });
   }
 
@@ -463,6 +393,11 @@ export function exportSupplierReconciliationLedgerPdf(
     (window as unknown as Record<string, unknown>).__LAST_EXPORTED_PDF__ = {
       filename: payload.filename,
       elementId: 'supplier-reconciliation-ledger-pdf-canvas',
+      paperSize: 'A4',
+      widthMm: A4_PAGE_WIDTH_MM,
+      heightMm: A4_PAGE_HEIGHT_MM,
+      companyPadOnEveryPage: true,
+      pageCount: pdf.getNumberOfPages(),
       timestamp: new Date().toISOString(),
     };
   }

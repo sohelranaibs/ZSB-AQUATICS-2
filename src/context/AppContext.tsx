@@ -130,6 +130,7 @@ import {
   extractLiveDomTablesFromContainer,
 } from '../utils/globalViewPdfExport.ts';
 import { exportElementToPdf } from '../utils/pdfGenerator.ts';
+import { setActiveCompanyPadProfile } from '../utils/companyPadLayout.ts';
 import {
   authenticateUser,
   AuthVerificationResult,
@@ -777,6 +778,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return initialCompanyProfile;
     }
   });
+
+  useEffect(() => {
+    setActiveCompanyPadProfile(companyProfile);
+  }, [companyProfile]);
 
   const [dropdownOptions, setDropdownOptions] = useState<DropdownOptions>(() => {
     try {

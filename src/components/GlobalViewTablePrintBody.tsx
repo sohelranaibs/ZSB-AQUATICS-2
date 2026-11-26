@@ -18,7 +18,9 @@ export const GlobalViewTablePrintBody: React.FC<GlobalViewTablePrintBodyProps> =
       {report.metadataGrid && report.metadataGrid.length > 0 && (
         <div
           style={{ backgroundColor: '#f8fafc', borderColor: '#cbd5e1' }}
-          className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs p-3 rounded border"
+          className={`grid grid-cols-2 ${
+            report.metadataGrid.length > 4 ? 'sm:grid-cols-3' : 'sm:grid-cols-4'
+          } gap-2.5 text-xs p-3 rounded border`}
         >
           {report.metadataGrid.map((meta, idx) => (
             <div key={idx}>
@@ -34,32 +36,43 @@ export const GlobalViewTablePrintBody: React.FC<GlobalViewTablePrintBodyProps> =
       )}
 
       {/* Table Sections */}
-      {report.sections.map((section) => (
+      {report.sections.map((section) => {
+        const isDenseTable = section.columns.length >= 10;
+        const cellPadding = isDenseTable
+          ? 'px-1 py-1.5 whitespace-normal break-words align-middle'
+          : 'p-1.5';
+        return (
         <div key={section.id} className="space-y-2">
           <div
             style={{ backgroundColor: '#f1f5f9', borderColor: '#cbd5e1' }}
-            className="px-3 py-1.5 rounded border flex items-center justify-between"
+            className="px-3 py-1.5 rounded border flex items-center justify-between gap-2"
           >
             <span className="font-black text-xs uppercase tracking-wide text-slate-900">
               {section.title}
             </span>
             {section.subtitle && (
-              <span className="font-mono text-[10px] font-semibold text-slate-600">
+              <span className="font-mono text-[10px] font-semibold text-slate-600 text-right">
                 {section.subtitle}
               </span>
             )}
           </div>
 
-          <table className="w-full text-[11px] border border-slate-300 border-collapse">
+          <table
+            className={`w-full border border-slate-300 border-collapse ${
+              isDenseTable ? 'text-[7.5px] leading-snug table-auto' : 'text-[11px]'
+            }`}
+          >
             <thead>
               <tr
                 style={{ backgroundColor: '#f1f5f9', color: '#1e293b' }}
-                className="uppercase font-bold text-[10px] border-b border-slate-300"
+                className={`uppercase font-bold border-b border-slate-300 ${
+                  isDenseTable ? 'text-[7.5px]' : 'text-[10px]'
+                }`}
               >
                 {section.columns.map((col, cIdx) => (
                   <th
                     key={col.key}
-                    className={`p-1.5 ${
+                    className={`${cellPadding} ${
                       cIdx < section.columns.length - 1 ? 'border-r border-slate-300' : ''
                     } ${
                       col.align === 'right'
@@ -83,11 +96,11 @@ export const GlobalViewTablePrintBody: React.FC<GlobalViewTablePrintBodyProps> =
                       return (
                         <td
                           key={col.key}
-                          className={`p-1.5 ${
+                          className={`${cellPadding} ${
                             cIdx < section.columns.length - 1 ? 'border-r border-slate-200' : ''
                           } ${
                             col.align === 'right'
-                              ? 'text-right font-mono tabular-nums'
+                              ? 'text-right font-mono tabular-nums whitespace-nowrap'
                               : col.align === 'center'
                               ? 'text-center font-mono'
                               : 'text-left font-semibold'
@@ -120,13 +133,15 @@ export const GlobalViewTablePrintBody: React.FC<GlobalViewTablePrintBodyProps> =
                   <tr
                     key={fIdx}
                     style={{ backgroundColor: '#f1f5f9' }}
-                    className="font-bold border-t-2 border-slate-400 text-[11px]"
+                    className={`font-bold border-t-2 border-slate-400 ${
+                      isDenseTable ? 'text-[7.5px]' : 'text-[11px]'
+                    }`}
                   >
                     {fRow.cells.map((cell, cIdx) => (
                       <td
                         key={cIdx}
                         colSpan={cell.colSpan || 1}
-                        className={`p-1.5 ${
+                        className={`${cellPadding} ${
                           cIdx < fRow.cells.length - 1 ? 'border-r border-slate-300' : ''
                         } ${
                           cell.align === 'right'
@@ -157,7 +172,8 @@ export const GlobalViewTablePrintBody: React.FC<GlobalViewTablePrintBodyProps> =
             )}
           </table>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 };

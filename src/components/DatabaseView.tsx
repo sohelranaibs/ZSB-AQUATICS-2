@@ -90,6 +90,7 @@ import {
   formatBatchPaymentSlipsPdfFilename,
   preparePaymentRecordsForBatchExport,
 } from '../utils/batchPaymentSlipPdf.ts';
+import { buildPackingDbPdfReport } from '../utils/packingDbPdfExport.ts';
 import { PaymentSlipPrintCard } from './PaymentSlipPrintCard.tsx';
 import { BatchUpdateSidebar } from './BatchUpdateSidebar.tsx';
 import {
@@ -1512,6 +1513,31 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
     }
   };
 
+  // Export currently filtered Packing DB view as an official A4 Company-Pad PDF (with column toggle preview)
+  const handleExportPackingPdf = () => {
+    if (sortedPackings.length === 0) {
+      showToast('No packing records in current filtered view to export as PDF.');
+      return;
+    }
+    const report = buildPackingDbPdfReport({
+      records: sortedPackings,
+      totalRecordCount: packings.length,
+      companyProfile,
+      serialNumberMap: packingSerialNumberMap,
+      columnOrder: packingDbColOrder.columnOrder,
+      startDate,
+      endDate,
+      partyQuery: packingPartySearch,
+      searchTerm,
+      validationFilter,
+    });
+    openPrintModal({
+      type: 'global_view_table',
+      title: report.documentTitle,
+      data: report,
+    });
+  };
+
   const isDateFilterActive = Boolean(startDate || endDate);
 
   /**
@@ -2539,6 +2565,21 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
             <span>EXPORT CSV ({currentFilteredCount})</span>
           </button>
 
+          {/* Export Packing DB as A4 Company-Pad PDF Button */}
+          {activeDbType === 'packing' && (
+            <button
+              type="button"
+              data-testid="database-export-pdf-btn"
+              onClick={handleExportPackingPdf}
+              disabled={sortedPackings.length === 0}
+              className="flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-sm transition bg-rose-700 hover:bg-rose-600 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white cursor-pointer"
+              title="Export current filtered Packing DB ledger as official A4 Company-Pad PDF"
+            >
+              <FileDown className="w-4 h-4 text-rose-100" />
+              <span>EXPORT PDF ({sortedPackings.length})</span>
+            </button>
+          )}
+
           {/* Batch Update Sidebar Toggle Button */}
           <button
             type="button"
@@ -3377,6 +3418,22 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({ initialType = 'purch
                 >
                   <Download className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                   <span>Export CSV ({sortedPackings.length})</span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="packing-ledger-export-pdf-btn"
+                  aria-label={`Export currently filtered Packing List view as A4 PDF (${sortedPackings.length} rows)`}
+                  onClick={handleExportPackingPdf}
+                  disabled={sortedPackings.length === 0}
+                  title={
+                    sortedPackings.length === 0
+                      ? 'No filtered Packing List rows available to export as PDF'
+                      : `Preview & download ${sortedPackings.length} filtered Packing List row${sortedPackings.length === 1 ? '' : 's'} as an A4 Company-Pad PDF`
+                  }
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-600 disabled:bg-slate-200 disabled:text-slate-500 disabled:border-slate-300 disabled:cursor-not-allowed text-white border border-rose-800 text-xs font-bold shadow-xs transition whitespace-nowrap cursor-pointer"
+                >
+                  <FileDown className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                  <span>Export PDF ({sortedPackings.length})</span>
                 </button>
                 <div className="font-mono text-[11px] font-semibold text-black bg-white px-2.5 py-1 rounded border border-slate-300 whitespace-nowrap">
                   Formula: <strong>Total Value (RMB) × RMB Rate = Total Amount (BDT)</strong>

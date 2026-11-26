@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import {
   formatCurrency,
@@ -31,6 +31,7 @@ import {
   ChevronRight,
   Layers,
   SlidersHorizontal,
+  Columns3,
 } from 'lucide-react';
 import { getPrintAllSequenceProgress } from '../utils/printAllSheets.ts';
 import {
@@ -48,6 +49,7 @@ import {
   WeChatIcon,
 } from './PngShareModal.tsx';
 import { PrintHeaderFooterConfigPanel } from './PrintHeaderFooterConfigPanel.tsx';
+import { PrintColumnSelectorPanel } from './PrintColumnSelectorPanel.tsx';
 import {
   PrintHeaderFooterConfig,
   formatPrintHeaderDate,
@@ -55,6 +57,20 @@ import {
   loadPrintHeaderFooterConfig,
   savePrintHeaderFooterConfig,
 } from '../utils/printHeaderFooterConfig.ts';
+import {
+  PrintColumnDescriptor,
+  buildDefaultHiddenColumnIds,
+  buildPrintDocumentColumnSignature,
+  computeCleanA4HiddenColumnIds,
+  enforceMinimumVisibleColumns,
+  loadSavedPrintHiddenColumns,
+  savePrintHiddenColumns,
+  togglePrintColumnVisibility,
+} from '../utils/printColumnConfig.ts';
+import {
+  applyPrintColumnVisibilityToDom,
+  scanPrintDocumentTables,
+} from '../utils/printTableDom.ts';
 
 export const PrintPreviewModal: React.FC = () => {
   const {
@@ -74,7 +90,12 @@ export const PrintPreviewModal: React.FC = () => {
   const [isSavingPdf, setIsSavingPdf] = useState(false);
   const [isSavingPng, setIsSavingPng] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const printableDocRef = useRef<HTMLDivElement | null>(null);
   const [showHeaderFooterConfig, setShowHeaderFooterConfig] = useState(false);
+  const [showColumnConfig, setShowColumnConfig] = useState(false);
+  const [discoveredColumns, setDiscoveredColumns] = useState<PrintColumnDescriptor[]>([]);
+  const [hiddenColumnIds, setHiddenColumnIds] = useState<string[]>([]);
+  const [activeColumnSignature, setActiveColumnSignature] = useState<string>('');
   const [headerFooterConfig, setHeaderFooterConfig] = useState<PrintHeaderFooterConfig>(() =>
     loadPrintHeaderFooterConfig(typeof window !== 'undefined' ? window.localStorage : null)
   );
@@ -82,9 +103,15 @@ export const PrintPreviewModal: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
 
+  const deduplicateBatchSlipTables = printModalData.type === 'batch_payment_slips';
+
   useEffect(() => {
     if (!printModalData.isOpen) {
       setShowHeaderFooterConfig(false);
+      setShowColumnConfig(false);
+      setDiscoveredColumns([]);
+      setHiddenColumnIds([]);
+      setActiveColumnSignature('');
       setIsShareModalOpen(false);
       setPrintCurrentPageOnly(false);
       setCurrentPage(1);
@@ -95,6 +122,93 @@ export const PrintPreviewModal: React.FC = () => {
     }
   }, [printModalData.isOpen, printModalData.type, printModalData.data, printModalData.title]);
 
+  // Discover all tables & columns inside #printable-document whenever the preview document mounts or changes
+  useLayoutEffect(() => {
+    if (!printModalData.isOpen || !printableDocRef.current) {
+      return;
+    }
+    const cols = scanPrintDocumentTables(
+      printableDocRef.current,
+      deduplicateBatchSlipTables
+    );
+    const sig = buildPrintDocumentColumnSignature(printModalData.type, cols);
+    const saved = loadSavedPrintHiddenColumns(sig);
+    const resolvedHidden = enforceMinimumVisibleColumns(
+      saved !== null ? saved : buildDefaultHiddenColumnIds(cols),
+      cols
+    );
+
+    setDiscoveredColumns(cols);
+    setActiveColumnSignature(sig);
+    setHiddenColumnIds(resolvedHidden);
+
+    applyPrintColumnVisibilityToDom(
+      printableDocRef.current,
+      cols,
+      new Set(resolvedHidden),
+      deduplicateBatchSlipTables
+    );
+  }, [
+    printModalData.isOpen,
+    printModalData.type,
+    printModalData.data,
+    printModalData.items,
+    printModalData.title,
+    deduplicateBatchSlipTables,
+  ]);
+
+  const hiddenColumnIdSet = useMemo(
+    () => new Set(hiddenColumnIds),
+    [hiddenColumnIds]
+  );
+
+  // Re-apply column visibility whenever user toggles columns or pagination re-renders table rows
+  useLayoutEffect(() => {
+    if (!printModalData.isOpen || !printableDocRef.current || discoveredColumns.length === 0) {
+      return;
+    }
+    applyPrintColumnVisibilityToDom(
+      printableDocRef.current,
+      discoveredColumns,
+      hiddenColumnIdSet,
+      deduplicateBatchSlipTables
+    );
+  }, [
+    printModalData.isOpen,
+    discoveredColumns,
+    hiddenColumnIdSet,
+    deduplicateBatchSlipTables,
+    printCurrentPageOnly,
+    currentPage,
+  ]);
+
+  const handleToggleColumn = (columnId: string) => {
+    const next = togglePrintColumnVisibility(
+      hiddenColumnIds,
+      columnId,
+      discoveredColumns
+    );
+    setHiddenColumnIds(next);
+    if (activeColumnSignature) {
+      savePrintHiddenColumns(activeColumnSignature, next);
+    }
+  };
+
+  const handleApplyCleanA4Preset = () => {
+    const next = computeCleanA4HiddenColumnIds(discoveredColumns);
+    setHiddenColumnIds(next);
+    if (activeColumnSignature) {
+      savePrintHiddenColumns(activeColumnSignature, next);
+    }
+  };
+
+  const handleShowAllColumns = () => {
+    setHiddenColumnIds([]);
+    if (activeColumnSignature) {
+      savePrintHiddenColumns(activeColumnSignature, []);
+    }
+  };
+
   const handleHeaderFooterConfigChange = (next: PrintHeaderFooterConfig) => {
     setHeaderFooterConfig(next);
     savePrintHeaderFooterConfig(next, typeof window !== 'undefined' ? window.localStorage : null);
@@ -102,6 +216,11 @@ export const PrintPreviewModal: React.FC = () => {
 
   const isHeaderFooterCustomized = isPrintHeaderFooterCustomized(headerFooterConfig);
   const formattedPrintDate = formatPrintHeaderDate();
+  const visibleColumnCount = discoveredColumns.filter(
+    (c) => !hiddenColumnIdSet.has(c.id)
+  ).length;
+  const hasHiddenColumns =
+    discoveredColumns.length > 0 && visibleColumnCount < discoveredColumns.length;
 
   const sequenceProgress = getPrintAllSequenceProgress(printAllSequence);
 
@@ -190,10 +309,22 @@ export const PrintPreviewModal: React.FC = () => {
 
   const resolvedLogoSrc = resolveCompanyLogoSrc(companyProfile.logoUrl);
 
+  const syncColumnVisibilityBeforeExport = () => {
+    if (printableDocRef.current && discoveredColumns.length > 0) {
+      applyPrintColumnVisibilityToDom(
+        printableDocRef.current,
+        discoveredColumns,
+        hiddenColumnIdSet,
+        deduplicateBatchSlipTables
+      );
+    }
+  };
+
   const handleDirectSavePdf = async (allowFallback = true) => {
     if (printAllSequence.isAutoPlaying) {
       togglePrintAllAutoPlay(false);
     }
+    syncColumnVisibilityBeforeExport();
     setIsSavingPdf(true);
     const filename = getCleanFilename('pdf');
     try {
@@ -226,6 +357,7 @@ export const PrintPreviewModal: React.FC = () => {
     if (printAllSequence.isAutoPlaying) {
       togglePrintAllAutoPlay(false);
     }
+    syncColumnVisibilityBeforeExport();
     setIsSavingPng(true);
     const filename = getCleanFilename('png');
     try {
@@ -247,6 +379,7 @@ export const PrintPreviewModal: React.FC = () => {
     if (printAllSequence.isAutoPlaying) {
       togglePrintAllAutoPlay(false);
     }
+    syncColumnVisibilityBeforeExport();
     try {
       const opened = openPrintableDocumentWindow('printable-document', title);
       if (opened) {
@@ -448,24 +581,70 @@ export const PrintPreviewModal: React.FC = () => {
               </button>
             </div>
 
-            {/* Configure Header & Footer Button */}
-            <button
-              type="button"
-              data-testid="print-header-footer-toggle-btn"
-              aria-expanded={showHeaderFooterConfig}
-              onClick={() => setShowHeaderFooterConfig((prev) => !prev)}
-              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-xs font-bold shadow transition cursor-pointer border ${
-                showHeaderFooterConfig || isHeaderFooterCustomized
-                  ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 border-amber-300'
-                  : 'bg-[#1c2a33] hover:bg-[#152028] text-white border-[#334b59]'
-              }`}
-              title="Customize printed document header, date, signatures, and footer"
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              <span>Header &amp; Footer</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Toggle Columns Before Export Button */}
+              {discoveredColumns.length > 0 && (
+                <button
+                  type="button"
+                  data-testid="print-columns-toggle-btn"
+                  aria-expanded={showColumnConfig}
+                  onClick={() => {
+                    setShowColumnConfig((prev) => {
+                      const next = !prev;
+                      if (next) setShowHeaderFooterConfig(false);
+                      return next;
+                    });
+                  }}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-xs font-bold shadow transition cursor-pointer border ${
+                    showColumnConfig || hasHiddenColumns
+                      ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 border-amber-300'
+                      : 'bg-[#1c2a33] hover:bg-[#152028] text-white border-[#334b59]'
+                  }`}
+                  title="Select which columns to include in the A4 PDF & printout"
+                >
+                  <Columns3 className="w-3.5 h-3.5" />
+                  <span>
+                    Columns ({visibleColumnCount}/{discoveredColumns.length})
+                  </span>
+                </button>
+              )}
+
+              {/* Configure Header & Footer Button */}
+              <button
+                type="button"
+                data-testid="print-header-footer-toggle-btn"
+                aria-expanded={showHeaderFooterConfig}
+                onClick={() => {
+                  setShowHeaderFooterConfig((prev) => {
+                    const next = !prev;
+                    if (next) setShowColumnConfig(false);
+                    return next;
+                  });
+                }}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-xs font-bold shadow transition cursor-pointer border ${
+                  showHeaderFooterConfig || isHeaderFooterCustomized
+                    ? 'bg-amber-500 hover:bg-amber-600 text-slate-950 border-amber-300'
+                    : 'bg-[#1c2a33] hover:bg-[#152028] text-white border-[#334b59]'
+                }`}
+                title="Customize printed document header, date, signatures, and footer"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span>Header &amp; Footer</span>
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* Collapsible Column Visibility Drawer (Hidden in Print) */}
+        {showColumnConfig && discoveredColumns.length > 0 && (
+          <PrintColumnSelectorPanel
+            columns={discoveredColumns}
+            hiddenColumnIds={hiddenColumnIds}
+            onToggleColumn={handleToggleColumn}
+            onApplyCleanA4Preset={handleApplyCleanA4Preset}
+            onShowAllColumns={handleShowAllColumns}
+          />
+        )}
 
         {/* Collapsible Header & Footer Customization Drawer (Hidden in Print) */}
         {showHeaderFooterConfig && (
@@ -621,6 +800,7 @@ export const PrintPreviewModal: React.FC = () => {
           {/* Printable Voucher Paper Content (A4 Portrait Printable Width: 760px / 190mm) */}
           <div
             id="printable-document"
+            ref={printableDocRef}
             className="zsb-print-paper relative w-full max-w-[760px] bg-white shadow-2xl rounded-sm border border-slate-300 p-5 sm:p-7 space-y-5 text-slate-900 print:shadow-none overflow-hidden"
             style={{ backgroundColor: '#ffffff', color: '#000000', position: 'relative' }}
           >

@@ -29,6 +29,7 @@ import { PrintPreviewModal } from './components/PrintPreviewModal.tsx';
 import { QuickEntryModal } from './components/QuickEntryModal.tsx';
 import { SuperAdminClearModal } from './components/SuperAdminClearModal.tsx';
 import { DatabaseSnapshotModal } from './components/DatabaseSnapshotModal.tsx';
+import { SnapshotReminderPrompt } from './components/SnapshotReminderPrompt.tsx';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal.tsx';
 import {
   ShortcutActionId,
@@ -1147,6 +1148,9 @@ const MainContent: React.FC = () => {
 
       {/* Local JSON Database Snapshot & State Recovery Modal */}
       <DatabaseSnapshotModal />
+
+      {/* Recurring 24-Hour Active Usage Database Snapshot Reminder */}
+      <SnapshotReminderPrompt />
 
       {/* Global 10-Row Scroll Viewport Controller for All Interactive Tables */}
       <GlobalTableScrollController />

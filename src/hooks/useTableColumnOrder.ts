@@ -139,9 +139,14 @@ export function useTableColumnOrder<T extends string>(
           ? `${label} — Drag header to reorder column (or press Alt+Left / Alt+Right)`
           : 'Drag header to reorder column (or press Alt+Left / Alt+Right)',
         onDragStart: (e) => {
-          // Do not hijack drag if user is interacting with a nested input/select
+          // Do not hijack drag if user is interacting with a nested input/select or column resize handle
           const targetEl = e.target as HTMLElement | null;
-          if (targetEl && targetEl.closest('input, select, textarea')) {
+          if (
+            targetEl &&
+            targetEl.closest(
+              'input, select, textarea, [data-col-resize-handle="true"]'
+            )
+          ) {
             e.preventDefault();
             return;
           }

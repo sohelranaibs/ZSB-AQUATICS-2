@@ -146,7 +146,17 @@ import {
   loadInitialTeamMembers,
   TEAM_MEMBERS_STORAGE_KEY,
 } from '../utils/administration.ts';
-import { indexedStorageDriver, DB_STORE_NAMES } from '../utils/indexedStorage.ts';
+import { indexedStorageDriver, DB_STORE_NAMES, DbStoreName } from '../utils/indexedStorage.ts';
+import {
+  WIPE_MIGRATION_FLAG_KEY,
+  getOverflowMarkerKey,
+  ensureWipeMigrationFlag,
+  hasCollectionOverflowMarker,
+  persistCollectionDual,
+  persistCollectionLocalSync,
+  clearCollectionDual,
+  resolveHydratedCollection,
+} from '../utils/persistentCollectionStorage.ts';
 import {
   publishToastMessage,
   getToastSnapshot,
@@ -1213,15 +1223,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const slowSyncWatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialMountRef = useRef<boolean>(true);
+  const idbHydrationCompleteRef = useRef<boolean>(false);
+  const isHydratingFromIdbRef = useRef<boolean>(false);
+  const quotaToastShownRef = useRef<boolean>(false);
+  const mutatedCollectionsRef = useRef<{
+    purchases: boolean;
+    packings: boolean;
+    payments: boolean;
+    otherCosts: boolean;
+  }>({
+    purchases: false,
+    packings: false,
+    payments: false,
+    otherCosts: false,
+  });
   const debouncedSaveTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const lastWrittenRefMap = useRef<Map<string, unknown>>(new Map());
 
-  const writeJsonIfChanged = (key: string, value: unknown) => {
+  const writeJsonIfChanged = (key: string, value: unknown): boolean => {
     if (lastWrittenRefMap.current.get(key) === value) {
-      return;
+      return true;
     }
-    localStorage.setItem(key, JSON.stringify(value));
-    lastWrittenRefMap.current.set(key, value);
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+      lastWrittenRefMap.current.set(key, value);
+      return true;
+    } catch (err) {
+      console.error(`Failed to persist ${key} to localStorage:`, err);
+      return false;
+    }
   };
 
   const evaluateNavigatorSlowConnection = () => {
@@ -1319,56 +1349,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         // Atomically push synced collections into localStorage + IndexedDB + React state
+        const storage = typeof window !== 'undefined' ? window.localStorage : null;
         if (result.countsByEntity.purchase > 0) {
-          localStorage.setItem(
-            STORAGE_KEYS.PURCHASES,
-            JSON.stringify(result.collections.purchases)
-          );
-          void indexedStorageDriver.saveCollection(
-            DB_STORE_NAMES.PURCHASES,
-            result.collections.purchases
-          );
+          mutatedCollectionsRef.current.purchases = true;
           purchasesRef.current = result.collections.purchases;
+          lastWrittenRefMap.current.set(STORAGE_KEYS.PURCHASES, result.collections.purchases);
+          void persistCollectionDual({
+            storageKey: STORAGE_KEYS.PURCHASES,
+            storeName: DB_STORE_NAMES.PURCHASES,
+            records: result.collections.purchases,
+            storage,
+            saveToIndexedDb: (store, recs) => indexedStorageDriver.saveCollection(store, recs),
+          });
           setPurchases(result.collections.purchases);
         }
 
         if (result.countsByEntity.packing > 0) {
+          mutatedCollectionsRef.current.packings = true;
           const normalizedPackings = ensurePackingSerialNumbers(result.collections.packings);
-          localStorage.setItem(
-            STORAGE_KEYS.PACKINGS,
-            JSON.stringify(normalizedPackings)
-          );
-          void indexedStorageDriver.saveCollection(
-            DB_STORE_NAMES.PACKINGS,
-            normalizedPackings
-          );
           packingsRef.current = normalizedPackings;
+          lastWrittenRefMap.current.set(STORAGE_KEYS.PACKINGS, normalizedPackings);
+          void persistCollectionDual({
+            storageKey: STORAGE_KEYS.PACKINGS,
+            storeName: DB_STORE_NAMES.PACKINGS,
+            records: normalizedPackings,
+            storage,
+            saveToIndexedDb: (store, recs) => indexedStorageDriver.saveCollection(store, recs),
+          });
           setPackings(normalizedPackings);
         }
 
         if (result.countsByEntity.payment > 0) {
-          localStorage.setItem(
-            STORAGE_KEYS.PAYMENTS,
-            JSON.stringify(result.collections.payments)
-          );
-          void indexedStorageDriver.saveCollection(
-            DB_STORE_NAMES.PAYMENTS,
-            result.collections.payments
-          );
+          mutatedCollectionsRef.current.payments = true;
           paymentsRef.current = result.collections.payments;
+          lastWrittenRefMap.current.set(STORAGE_KEYS.PAYMENTS, result.collections.payments);
+          void persistCollectionDual({
+            storageKey: STORAGE_KEYS.PAYMENTS,
+            storeName: DB_STORE_NAMES.PAYMENTS,
+            records: result.collections.payments,
+            storage,
+            saveToIndexedDb: (store, recs) => indexedStorageDriver.saveCollection(store, recs),
+          });
           setPayments(result.collections.payments);
         }
 
         if (result.countsByEntity.other_cost > 0) {
-          localStorage.setItem(
-            STORAGE_KEYS.OTHER_COSTS,
-            JSON.stringify(result.collections.otherCosts)
-          );
-          void indexedStorageDriver.saveCollection(
-            DB_STORE_NAMES.OTHER_COSTS,
-            result.collections.otherCosts
-          );
+          mutatedCollectionsRef.current.otherCosts = true;
           otherCostsRef.current = result.collections.otherCosts;
+          lastWrittenRefMap.current.set(STORAGE_KEYS.OTHER_COSTS, result.collections.otherCosts);
+          void persistCollectionDual({
+            storageKey: STORAGE_KEYS.OTHER_COSTS,
+            storeName: DB_STORE_NAMES.OTHER_COSTS,
+            records: result.collections.otherCosts,
+            storage,
+            saveToIndexedDb: (store, recs) => indexedStorageDriver.saveCollection(store, recs),
+          });
           setOtherCosts(result.collections.otherCosts);
         }
 
@@ -1539,6 +1574,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, 3500);
   }, []);
 
+  const persistCoreCollection = useCallback(
+    async <T extends { id: string }>(
+      collectionKey: 'purchases' | 'packings' | 'payments' | 'otherCosts',
+      storageKey: string,
+      storeName: DbStoreName,
+      records: T[],
+      options?: { markMutated?: boolean; notifyOnQuotaFallback?: boolean }
+    ) => {
+      if (options?.markMutated) {
+        mutatedCollectionsRef.current[collectionKey] = true;
+      }
+      const storage = typeof window !== 'undefined' ? window.localStorage : null;
+      const res = await persistCollectionDual({
+        storageKey,
+        storeName,
+        records,
+        storage,
+        saveToIndexedDb: (targetStore, recs) =>
+          indexedStorageDriver.saveCollection(targetStore, recs),
+      });
+      if (res.savedToLocalStorage || res.savedToIndexedDb) {
+        lastWrittenRefMap.current.set(storageKey, records);
+      }
+      if (
+        res.quotaExceeded &&
+        res.savedToIndexedDb &&
+        options?.notifyOnQuotaFallback !== false &&
+        !quotaToastShownRef.current
+      ) {
+        quotaToastShownRef.current = true;
+        showToast(
+          'Large dataset saved safely to browser IndexedDB storage (exceeded 5MB localStorage limit).'
+        );
+      }
+      return res;
+    },
+    [showToast]
+  );
+
   const flushAllStoresNow = async (
     entityLabel: string = 'All Ledgers (Force Sync)',
     options?: { targetStatus?: SyncStatusState; silent?: boolean }
@@ -1567,27 +1641,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await yieldForDomFrame();
 
     try {
-      const idbPromises: Promise<unknown>[] = [];
-      if (lastWrittenRefMap.current.get(STORAGE_KEYS.PURCHASES) !== purchases) {
-        idbPromises.push(indexedStorageDriver.saveCollection(DB_STORE_NAMES.PURCHASES, purchases));
-      }
-      if (lastWrittenRefMap.current.get(STORAGE_KEYS.PACKINGS) !== packings) {
-        idbPromises.push(indexedStorageDriver.saveCollection(DB_STORE_NAMES.PACKINGS, packings));
-      }
-      if (lastWrittenRefMap.current.get(STORAGE_KEYS.PAYMENTS) !== payments) {
-        idbPromises.push(indexedStorageDriver.saveCollection(DB_STORE_NAMES.PAYMENTS, payments));
-      }
-      if (lastWrittenRefMap.current.get(STORAGE_KEYS.OTHER_COSTS) !== otherCosts) {
-        idbPromises.push(indexedStorageDriver.saveCollection(DB_STORE_NAMES.OTHER_COSTS, otherCosts));
-      }
+      const latestPurchases = purchasesRef.current;
+      const latestPackings = packingsRef.current;
+      const latestPayments = paymentsRef.current;
+      const latestOtherCosts = otherCostsRef.current;
+
+      const coreSavePromises: Promise<unknown>[] = [
+        persistCoreCollection(
+          'purchases',
+          STORAGE_KEYS.PURCHASES,
+          DB_STORE_NAMES.PURCHASES,
+          latestPurchases,
+          { notifyOnQuotaFallback: false }
+        ),
+        persistCoreCollection(
+          'packings',
+          STORAGE_KEYS.PACKINGS,
+          DB_STORE_NAMES.PACKINGS,
+          latestPackings,
+          { notifyOnQuotaFallback: false }
+        ),
+        persistCoreCollection(
+          'payments',
+          STORAGE_KEYS.PAYMENTS,
+          DB_STORE_NAMES.PAYMENTS,
+          latestPayments,
+          { notifyOnQuotaFallback: false }
+        ),
+        persistCoreCollection(
+          'otherCosts',
+          STORAGE_KEYS.OTHER_COSTS,
+          DB_STORE_NAMES.OTHER_COSTS,
+          latestOtherCosts,
+          { notifyOnQuotaFallback: false }
+        ),
+      ];
 
       writeJsonIfChanged(STORAGE_KEYS.PROFILE, companyProfile);
       writeJsonIfChanged(STORAGE_KEYS.DROPDOWNS, dropdownOptions);
-      writeJsonIfChanged(STORAGE_KEYS.PURCHASES, purchases);
-      writeJsonIfChanged(STORAGE_KEYS.PACKINGS, packings);
       writeJsonIfChanged(STORAGE_KEYS.PACKING_DRAFT, packingDraft);
-      writeJsonIfChanged(STORAGE_KEYS.PAYMENTS, payments);
-      writeJsonIfChanged(STORAGE_KEYS.OTHER_COSTS, otherCosts);
       writeJsonIfChanged(STORAGE_KEYS.PARTNER_DEPOSITS, partnerDeposits);
       writeJsonIfChanged(STORAGE_KEYS.PARTNER_WITHDRAWALS, partnerWithdrawals);
       writeJsonIfChanged(STORAGE_KEYS.PROFIT_DISTRIBUTIONS, profitDistributions);
@@ -1599,14 +1691,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       writeJsonIfChanged(STORAGE_KEYS.BUSINESS_DOCUMENTS, businessDocuments);
       writeJsonIfChanged(STORAGE_KEYS.SNAPSHOTS, snapshots);
 
-      if (idbPromises.length > 0) {
-        await Promise.race([
-          Promise.all(idbPromises),
-          new Promise<void>((resolve) => {
-            setTimeout(resolve, 3500);
-          }),
-        ]);
-      }
+      await Promise.race([
+        Promise.all(coreSavePromises),
+        new Promise<void>((resolve) => {
+          setTimeout(resolve, 3500);
+        }),
+      ]);
 
       const completedAt = new Date().toISOString();
       const finalStatus =
@@ -1809,16 +1899,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [dropdownOptions]);
 
   useEffect(() => {
+    if (isInitialMountRef.current || isHydratingFromIdbRef.current) return;
+    if (lastWrittenRefMap.current.get(STORAGE_KEYS.PURCHASES) === purchases) return;
+    mutatedCollectionsRef.current.purchases = true;
     persistWithSyncIndicator('Purchase DB', async () => {
-      localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify(purchases));
-      await indexedStorageDriver.saveCollection(DB_STORE_NAMES.PURCHASES, purchases);
+      await persistCoreCollection(
+        'purchases',
+        STORAGE_KEYS.PURCHASES,
+        DB_STORE_NAMES.PURCHASES,
+        purchases,
+        { markMutated: true }
+      );
     });
   }, [purchases]);
 
   useEffect(() => {
+    if (isInitialMountRef.current || isHydratingFromIdbRef.current) return;
+    if (lastWrittenRefMap.current.get(STORAGE_KEYS.PACKINGS) === packings) return;
+    mutatedCollectionsRef.current.packings = true;
     persistWithSyncIndicator('Packing DB', async () => {
-      localStorage.setItem(STORAGE_KEYS.PACKINGS, JSON.stringify(packings));
-      await indexedStorageDriver.saveCollection(DB_STORE_NAMES.PACKINGS, packings);
+      await persistCoreCollection(
+        'packings',
+        STORAGE_KEYS.PACKINGS,
+        DB_STORE_NAMES.PACKINGS,
+        packings,
+        { markMutated: true }
+      );
     });
   }, [packings]);
 
@@ -1829,16 +1935,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [packingDraft]);
 
   useEffect(() => {
+    if (isInitialMountRef.current || isHydratingFromIdbRef.current) return;
+    if (lastWrittenRefMap.current.get(STORAGE_KEYS.PAYMENTS) === payments) return;
+    mutatedCollectionsRef.current.payments = true;
     persistWithSyncIndicator('Payment DB', async () => {
-      localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
-      await indexedStorageDriver.saveCollection(DB_STORE_NAMES.PAYMENTS, payments);
+      await persistCoreCollection(
+        'payments',
+        STORAGE_KEYS.PAYMENTS,
+        DB_STORE_NAMES.PAYMENTS,
+        payments,
+        { markMutated: true }
+      );
     });
   }, [payments]);
 
   useEffect(() => {
+    if (isInitialMountRef.current || isHydratingFromIdbRef.current) return;
+    if (lastWrittenRefMap.current.get(STORAGE_KEYS.OTHER_COSTS) === otherCosts) return;
+    mutatedCollectionsRef.current.otherCosts = true;
     persistWithSyncIndicator('Costing DB', async () => {
-      localStorage.setItem(STORAGE_KEYS.OTHER_COSTS, JSON.stringify(otherCosts));
-      await indexedStorageDriver.saveCollection(DB_STORE_NAMES.OTHER_COSTS, otherCosts);
+      await persistCoreCollection(
+        'otherCosts',
+        STORAGE_KEYS.OTHER_COSTS,
+        DB_STORE_NAMES.OTHER_COSTS,
+        otherCosts,
+        { markMutated: true }
+      );
     });
   }, [otherCosts]);
 
@@ -2002,7 +2124,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {
       // ignore storage error
     }
+
+    const handleBeforeUnloadFlush = () => {
+      if (debouncedSaveTimersRef.current.size === 0) return;
+      const storage = typeof window !== 'undefined' ? window.localStorage : null;
+      if (mutatedCollectionsRef.current.purchases) {
+        persistCollectionLocalSync(STORAGE_KEYS.PURCHASES, purchasesRef.current, storage);
+      }
+      if (mutatedCollectionsRef.current.packings) {
+        persistCollectionLocalSync(STORAGE_KEYS.PACKINGS, packingsRef.current, storage);
+      }
+      if (mutatedCollectionsRef.current.payments) {
+        persistCollectionLocalSync(STORAGE_KEYS.PAYMENTS, paymentsRef.current, storage);
+      }
+      if (mutatedCollectionsRef.current.otherCosts) {
+        persistCollectionLocalSync(STORAGE_KEYS.OTHER_COSTS, otherCostsRef.current, storage);
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnloadFlush);
+    window.addEventListener('pagehide', handleBeforeUnloadFlush);
+
     return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnloadFlush);
+      window.removeEventListener('pagehide', handleBeforeUnloadFlush);
       if (syncTimerRef.current) {
         clearTimeout(syncTimerRef.current);
       }
@@ -2013,64 +2158,188 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
-  // One-time cleanup of obsolete storage versions on startup
+  // One-time cleanup of obsolete storage versions & IndexedDB hydration fallback on startup
   useEffect(() => {
-    try {
-      const legacyKeys = [
-        'zsb_purchases_v1',
-        'zsb_purchases_v2',
-        'zsb_purchases_v3',
-        'zsb_purchases_v4',
-        'zsb_purchases_v5',
-        'zsb_purchases_v6',
-        'zsb_packings_v1',
-        'zsb_packings_v2',
-        'zsb_packings_v3',
-        'zsb_packings_v4',
-        'zsb_packings_v5',
-        'zsb_packings_v6',
-        'zsb_packing_draft_v1',
-        'zsb_packing_draft_v2',
-        'zsb_packing_draft_v3',
-        'zsb_packing_draft_v4',
-        'zsb_packing_draft_v5',
-        'zsb_packing_draft_v6',
-        'zsb_payments_v1',
-        'zsb_payments_v2',
-        'zsb_payments_v3',
-        'zsb_payments_v4',
-        'zsb_payments_v5',
-        'zsb_payments_v6',
-        'zsb_other_costs_v1',
-        'zsb_other_costs_v2',
-        'zsb_other_costs_v3',
-        'zsb_other_costs_v4',
-        'zsb_other_costs_v5',
-        'zsb_other_costs_v6',
-        'zsb_supplier_credits_v1',
-        'zsb_supplier_credits_v2',
-        'zsb_supplier_credits_v3',
-        'zsb_supplier_credits_v4',
-        'zsb_mortalities_v1',
-        'zsb_mortalities_v2',
-        'zsb_mortalities_v3',
-        'zsb_mortalities_v4',
-        'zsb_database_snapshots_v1',
-        'zsb_audit_logs_v1',
-        'zsb_awb_row_overrides_v1',
-        'zsb_exporter_slip_custom_rows_v1',
-        'zsb_exporter_slip_custom_rows_v2',
-        'zsb_exporter_slip_custom_rows_v3',
-      ];
-      legacyKeys.forEach((k) => localStorage.removeItem(k));
-      sessionStorage.removeItem('zsb_auth_user_v1');
-      if (!localStorage.getItem('zsb_db_wipe_all_v12')) {
-        indexedStorageDriver.clearAllStores();
-        localStorage.setItem('zsb_db_wipe_all_v12', '1');
+    let cancelled = false;
+
+    const runStartupCleanupAndHydration = async () => {
+      const storage = typeof window !== 'undefined' ? window.localStorage : null;
+      try {
+        const legacyKeys = [
+          'zsb_purchases_v1',
+          'zsb_purchases_v2',
+          'zsb_purchases_v3',
+          'zsb_purchases_v4',
+          'zsb_purchases_v5',
+          'zsb_purchases_v6',
+          'zsb_packings_v1',
+          'zsb_packings_v2',
+          'zsb_packings_v3',
+          'zsb_packings_v4',
+          'zsb_packings_v5',
+          'zsb_packings_v6',
+          'zsb_packing_draft_v1',
+          'zsb_packing_draft_v2',
+          'zsb_packing_draft_v3',
+          'zsb_packing_draft_v4',
+          'zsb_packing_draft_v5',
+          'zsb_packing_draft_v6',
+          'zsb_payments_v1',
+          'zsb_payments_v2',
+          'zsb_payments_v3',
+          'zsb_payments_v4',
+          'zsb_payments_v5',
+          'zsb_payments_v6',
+          'zsb_other_costs_v1',
+          'zsb_other_costs_v2',
+          'zsb_other_costs_v3',
+          'zsb_other_costs_v4',
+          'zsb_other_costs_v5',
+          'zsb_other_costs_v6',
+          'zsb_supplier_credits_v1',
+          'zsb_supplier_credits_v2',
+          'zsb_supplier_credits_v3',
+          'zsb_supplier_credits_v4',
+          'zsb_mortalities_v1',
+          'zsb_mortalities_v2',
+          'zsb_mortalities_v3',
+          'zsb_mortalities_v4',
+          'zsb_database_snapshots_v1',
+          'zsb_audit_logs_v1',
+          'zsb_awb_row_overrides_v1',
+          'zsb_exporter_slip_custom_rows_v1',
+          'zsb_exporter_slip_custom_rows_v2',
+          'zsb_exporter_slip_custom_rows_v3',
+        ];
+        let hadLegacyKeys = false;
+        legacyKeys.forEach((k) => {
+          if (storage?.getItem(k) !== null && storage?.getItem(k) !== undefined) {
+            hadLegacyKeys = true;
+          }
+          storage?.removeItem(k);
+        });
+        sessionStorage.removeItem('zsb_auth_user_v1');
+
+        const hadWipeFlag = Boolean(storage?.getItem(WIPE_MIGRATION_FLAG_KEY));
+        if (!hadWipeFlag) {
+          ensureWipeMigrationFlag(storage);
+          if (hadLegacyKeys) {
+            await indexedStorageDriver.clearAllStores();
+            idbHydrationCompleteRef.current = true;
+            return;
+          }
+        }
+
+        const [idbPurchases, idbPackings, idbPayments, idbOtherCosts] = await Promise.all([
+          indexedStorageDriver.loadCollection<PurchaseRecord>(DB_STORE_NAMES.PURCHASES),
+          indexedStorageDriver.loadCollection<PackingRecord>(DB_STORE_NAMES.PACKINGS),
+          indexedStorageDriver.loadCollection<PaymentRecord>(DB_STORE_NAMES.PAYMENTS),
+          indexedStorageDriver.loadCollection<OtherCostRecord>(DB_STORE_NAMES.OTHER_COSTS),
+        ]);
+
+        if (cancelled) return;
+
+        isHydratingFromIdbRef.current = true;
+        try {
+          const resolvedPurchases = resolveHydratedCollection({
+            localRecords: purchasesRef.current,
+            idbRecords: idbPurchases,
+            hasOverflowMarker: hasCollectionOverflowMarker(storage, STORAGE_KEYS.PURCHASES),
+            hasUserMutated: mutatedCollectionsRef.current.purchases,
+            deduplicate: (recs) => deduplicateRecords(recs, 'pur'),
+          });
+          if (resolvedPurchases.shouldHydrate) {
+            purchasesRef.current = resolvedPurchases.records;
+            lastWrittenRefMap.current.set(STORAGE_KEYS.PURCHASES, resolvedPurchases.records);
+            setPurchases(resolvedPurchases.records);
+          } else if (
+            purchasesRef.current.length > 0 &&
+            (!idbPurchases || idbPurchases.length === 0)
+          ) {
+            void indexedStorageDriver.saveCollection(
+              DB_STORE_NAMES.PURCHASES,
+              purchasesRef.current
+            );
+          }
+
+          const resolvedPackings = resolveHydratedCollection({
+            localRecords: packingsRef.current,
+            idbRecords: idbPackings,
+            hasOverflowMarker: hasCollectionOverflowMarker(storage, STORAGE_KEYS.PACKINGS),
+            hasUserMutated: mutatedCollectionsRef.current.packings,
+            deduplicate: (recs) => ensurePackingSerialNumbers(deduplicateRecords(recs, 'pkg')),
+          });
+          if (resolvedPackings.shouldHydrate) {
+            packingsRef.current = resolvedPackings.records;
+            lastWrittenRefMap.current.set(STORAGE_KEYS.PACKINGS, resolvedPackings.records);
+            setPackings(resolvedPackings.records);
+          } else if (
+            packingsRef.current.length > 0 &&
+            (!idbPackings || idbPackings.length === 0)
+          ) {
+            void indexedStorageDriver.saveCollection(
+              DB_STORE_NAMES.PACKINGS,
+              packingsRef.current
+            );
+          }
+
+          const resolvedPayments = resolveHydratedCollection({
+            localRecords: paymentsRef.current,
+            idbRecords: idbPayments,
+            hasOverflowMarker: hasCollectionOverflowMarker(storage, STORAGE_KEYS.PAYMENTS),
+            hasUserMutated: mutatedCollectionsRef.current.payments,
+            deduplicate: (recs) => deduplicateRecords(recs, 'pay'),
+          });
+          if (resolvedPayments.shouldHydrate) {
+            paymentsRef.current = resolvedPayments.records;
+            lastWrittenRefMap.current.set(STORAGE_KEYS.PAYMENTS, resolvedPayments.records);
+            setPayments(resolvedPayments.records);
+          } else if (
+            paymentsRef.current.length > 0 &&
+            (!idbPayments || idbPayments.length === 0)
+          ) {
+            void indexedStorageDriver.saveCollection(
+              DB_STORE_NAMES.PAYMENTS,
+              paymentsRef.current
+            );
+          }
+
+          const resolvedOtherCosts = resolveHydratedCollection({
+            localRecords: otherCostsRef.current,
+            idbRecords: idbOtherCosts,
+            hasOverflowMarker: hasCollectionOverflowMarker(storage, STORAGE_KEYS.OTHER_COSTS),
+            hasUserMutated: mutatedCollectionsRef.current.otherCosts,
+            deduplicate: (recs) => deduplicateRecords(recs, 'cost'),
+          });
+          if (resolvedOtherCosts.shouldHydrate) {
+            otherCostsRef.current = resolvedOtherCosts.records;
+            lastWrittenRefMap.current.set(STORAGE_KEYS.OTHER_COSTS, resolvedOtherCosts.records);
+            setOtherCosts(resolvedOtherCosts.records);
+          } else if (
+            otherCostsRef.current.length > 0 &&
+            (!idbOtherCosts || idbOtherCosts.length === 0)
+          ) {
+            void indexedStorageDriver.saveCollection(
+              DB_STORE_NAMES.OTHER_COSTS,
+              otherCostsRef.current
+            );
+          }
+        } finally {
+          setTimeout(() => {
+            isHydratingFromIdbRef.current = false;
+          }, 0);
+        }
+      } catch {
+        // ignore startup hydration error
+      } finally {
+        idbHydrationCompleteRef.current = true;
       }
-    } catch {
-      // ignore
-    }
+    };
+
+    void runStartupCleanupAndHydration();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const addAuditLog = (input: CreateAuditLogInput): AuditLogRecord => {
@@ -2534,10 +2803,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ): number => {
     if (!records || records.length === 0) return 0;
     const now = new Date().toISOString();
+    const currentPurchases = purchasesRef.current;
     const mergedIncoming = mergePurchaseRecordsBySupplierAndDate(
       records,
-      mode === 'replace' ? 0 : purchases.length
+      mode === 'replace' ? 0 : currentPurchases.length
     );
+
+    const persistImportedPurchases = (nextPurchases: PurchaseRecord[]) => {
+      mutatedCollectionsRef.current.purchases = true;
+      purchasesRef.current = nextPurchases;
+      lastWrittenRefMap.current.set(STORAGE_KEYS.PURCHASES, nextPurchases);
+      setPurchases(nextPurchases);
+      // Persist immediately (localStorage synchronously + IndexedDB asynchronously),
+      // bypassing debounce delays and saving even if Live Sync is paused.
+      void persistCoreCollection(
+        'purchases',
+        STORAGE_KEYS.PURCHASES,
+        DB_STORE_NAMES.PURCHASES,
+        nextPurchases,
+        { markMutated: true, notifyOnQuotaFallback: true }
+      ).then((res) => {
+        if (res.savedToLocalStorage || res.savedToIndexedDb) {
+          const completedAt = new Date().toISOString();
+          updateSyncTelemetry({
+            hasUnsyncedChanges: false,
+            lastSyncedEntity: 'Purchase DB (Excel Import)',
+            syncStatus: isLiveSyncEnabledRef.current ? 'synced' : 'paused',
+          });
+          recordCompletedBackupTimestamp(completedAt);
+        }
+      });
+    };
 
     if (mode === 'replace') {
       const hydrated: PurchaseRecord[] = mergedIncoming.map((rec, idx) => ({
@@ -2546,7 +2842,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         id: generateRecordId('pur'),
         createdAt: now,
       }));
-      setPurchases(hydrated);
+      persistImportedPurchases(hydrated);
       addAuditLog({
         action: 'IMPORT',
         module: 'Purchase',
@@ -2557,12 +2853,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const upsertResult = upsertPurchasesInPlace(
-      purchases,
+      currentPurchases,
       mergedIncoming,
       generateRecordId,
       now
     );
-    setPurchases(upsertResult.records);
+    persistImportedPurchases(upsertResult.records);
 
     addAuditLog({
       action: 'IMPORT',
@@ -2751,10 +3047,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ): number => {
     if (!records || records.length === 0) return 0;
     const now = new Date().toISOString();
+    const currentPackings = packingsRef.current;
     const mergedIncoming = mergePackingRecordsByShipmentGroup(
       records,
-      mode === 'replace' ? 0 : packings.length
+      mode === 'replace' ? 0 : currentPackings.length
     );
+
+    const persistImportedPackings = (nextPackings: PackingRecord[]) => {
+      mutatedCollectionsRef.current.packings = true;
+      packingsRef.current = nextPackings;
+      lastWrittenRefMap.current.set(STORAGE_KEYS.PACKINGS, nextPackings);
+      setPackings(nextPackings);
+      void persistCoreCollection(
+        'packings',
+        STORAGE_KEYS.PACKINGS,
+        DB_STORE_NAMES.PACKINGS,
+        nextPackings,
+        { markMutated: true, notifyOnQuotaFallback: true }
+      ).then((res) => {
+        if (res.savedToLocalStorage || res.savedToIndexedDb) {
+          const completedAt = new Date().toISOString();
+          updateSyncTelemetry({
+            hasUnsyncedChanges: false,
+            lastSyncedEntity: 'Packing DB (Excel Import)',
+            syncStatus: isLiveSyncEnabledRef.current ? 'synced' : 'paused',
+          });
+          recordCompletedBackupTimestamp(completedAt);
+        }
+      });
+    };
 
     if (mode === 'replace') {
       const hydrated: PackingRecord[] = ensurePackingSerialNumbers(
@@ -2764,7 +3085,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           createdAt: now,
         }))
       );
-      setPackings(hydrated);
+      persistImportedPackings(hydrated);
       addAuditLog({
         action: 'IMPORT',
         module: 'Packing',
@@ -2775,12 +3096,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const upsertResult = upsertPackingsInPlace(
-      packings,
+      currentPackings,
       mergedIncoming,
       generateRecordId,
       now
     );
-    setPackings(ensurePackingSerialNumbers(upsertResult.records));
+    persistImportedPackings(ensurePackingSerialNumbers(upsertResult.records));
 
     addAuditLog({
       action: 'IMPORT',
@@ -3003,13 +3324,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ): number => {
     if (!records || records.length === 0) return 0;
     const now = new Date().toISOString();
+    const currentPayments = paymentsRef.current;
+
+    const persistImportedPayments = (nextPayments: PaymentRecord[]) => {
+      mutatedCollectionsRef.current.payments = true;
+      paymentsRef.current = nextPayments;
+      lastWrittenRefMap.current.set(STORAGE_KEYS.PAYMENTS, nextPayments);
+      setPayments(nextPayments);
+      void persistCoreCollection(
+        'payments',
+        STORAGE_KEYS.PAYMENTS,
+        DB_STORE_NAMES.PAYMENTS,
+        nextPayments,
+        { markMutated: true, notifyOnQuotaFallback: true }
+      ).then((res) => {
+        if (res.savedToLocalStorage || res.savedToIndexedDb) {
+          const completedAt = new Date().toISOString();
+          updateSyncTelemetry({
+            hasUnsyncedChanges: false,
+            lastSyncedEntity: 'Payment DB (Excel Import)',
+            syncStatus: isLiveSyncEnabledRef.current ? 'synced' : 'paused',
+          });
+          recordCompletedBackupTimestamp(completedAt);
+        }
+      });
+    };
+
     if (mode === 'replace') {
       const hydrated: PaymentRecord[] = records.map((rec) => ({
         ...rec,
         id: generateRecordId('pay'),
         createdAt: now,
       }));
-      setPayments(hydrated);
+      persistImportedPayments(hydrated);
       addAuditLog({
         action: 'IMPORT',
         module: 'Payment',
@@ -3020,12 +3367,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const upsertResult = upsertPaymentsInPlace(
-      payments,
+      currentPayments,
       records,
       generateRecordId,
       now
     );
-    setPayments(upsertResult.records);
+    persistImportedPayments(upsertResult.records);
     addAuditLog({
       action: 'IMPORT',
       module: 'Payment',
@@ -3145,13 +3492,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ): number => {
     if (!records || records.length === 0) return 0;
     const now = new Date().toISOString();
+    const currentOtherCosts = otherCostsRef.current;
+
+    const persistImportedOtherCosts = (nextOtherCosts: OtherCostRecord[]) => {
+      mutatedCollectionsRef.current.otherCosts = true;
+      otherCostsRef.current = nextOtherCosts;
+      lastWrittenRefMap.current.set(STORAGE_KEYS.OTHER_COSTS, nextOtherCosts);
+      setOtherCosts(nextOtherCosts);
+      void persistCoreCollection(
+        'otherCosts',
+        STORAGE_KEYS.OTHER_COSTS,
+        DB_STORE_NAMES.OTHER_COSTS,
+        nextOtherCosts,
+        { markMutated: true, notifyOnQuotaFallback: true }
+      ).then((res) => {
+        if (res.savedToLocalStorage || res.savedToIndexedDb) {
+          const completedAt = new Date().toISOString();
+          updateSyncTelemetry({
+            hasUnsyncedChanges: false,
+            lastSyncedEntity: 'Costing DB (Excel Import)',
+            syncStatus: isLiveSyncEnabledRef.current ? 'synced' : 'paused',
+          });
+          recordCompletedBackupTimestamp(completedAt);
+        }
+      });
+    };
+
     if (mode === 'replace') {
       const hydrated: OtherCostRecord[] = records.map((rec) => ({
         ...rec,
         id: generateRecordId('cost'),
         createdAt: now,
       }));
-      setOtherCosts(hydrated);
+      persistImportedOtherCosts(hydrated);
       addAuditLog({
         action: 'IMPORT',
         module: 'OtherCost',
@@ -3162,12 +3535,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const upsertResult = upsertOtherCostsInPlace(
-      otherCosts,
+      currentOtherCosts,
       records,
       generateRecordId,
       now
     );
-    setOtherCosts(upsertResult.records);
+    persistImportedOtherCosts(upsertResult.records);
     addAuditLog({
       action: 'IMPORT',
       module: 'OtherCost',
@@ -4726,6 +5099,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const executeUnconditionalClearAll = () => {
+    mutatedCollectionsRef.current = {
+      purchases: true,
+      packings: true,
+      payments: true,
+      otherCosts: true,
+    };
+    purchasesRef.current = [];
+    packingsRef.current = [];
+    paymentsRef.current = [];
+    otherCostsRef.current = [];
     setPurchases([]);
     setPackings([]);
     setPayments([]);
@@ -4743,6 +5126,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const freshDraft = createInitialPackingDraft(0);
     setPackingDraft(freshDraft);
     try {
+      ensureWipeMigrationFlag(localStorage);
+      localStorage.removeItem(getOverflowMarkerKey(STORAGE_KEYS.PURCHASES));
+      localStorage.removeItem(getOverflowMarkerKey(STORAGE_KEYS.PACKINGS));
+      localStorage.removeItem(getOverflowMarkerKey(STORAGE_KEYS.PAYMENTS));
+      localStorage.removeItem(getOverflowMarkerKey(STORAGE_KEYS.OTHER_COSTS));
       localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify([]));
       localStorage.setItem(STORAGE_KEYS.PACKINGS, JSON.stringify([]));
       localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify([]));
@@ -4914,11 +5302,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setEditingPurchaseId(null);
     setEditingPackingId(null);
 
+    mutatedCollectionsRef.current = {
+      purchases: true,
+      packings: true,
+      payments: true,
+      otherCosts: true,
+    };
+    purchasesRef.current = nextPurchases;
+    packingsRef.current = nextPackings;
+    paymentsRef.current = nextPayments;
+    otherCostsRef.current = nextOtherCosts;
+    lastWrittenRefMap.current.set(STORAGE_KEYS.PURCHASES, nextPurchases);
+    lastWrittenRefMap.current.set(STORAGE_KEYS.PACKINGS, nextPackings);
+    lastWrittenRefMap.current.set(STORAGE_KEYS.PAYMENTS, nextPayments);
+    lastWrittenRefMap.current.set(STORAGE_KEYS.OTHER_COSTS, nextOtherCosts);
+
+    void persistCoreCollection(
+      'purchases',
+      STORAGE_KEYS.PURCHASES,
+      DB_STORE_NAMES.PURCHASES,
+      nextPurchases,
+      { markMutated: true }
+    );
+    void persistCoreCollection(
+      'packings',
+      STORAGE_KEYS.PACKINGS,
+      DB_STORE_NAMES.PACKINGS,
+      nextPackings,
+      { markMutated: true }
+    );
+    void persistCoreCollection(
+      'payments',
+      STORAGE_KEYS.PAYMENTS,
+      DB_STORE_NAMES.PAYMENTS,
+      nextPayments,
+      { markMutated: true }
+    );
+    void persistCoreCollection(
+      'otherCosts',
+      STORAGE_KEYS.OTHER_COSTS,
+      DB_STORE_NAMES.OTHER_COSTS,
+      nextOtherCosts,
+      { markMutated: true }
+    );
     try {
-      localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify(nextPurchases));
-      localStorage.setItem(STORAGE_KEYS.PACKINGS, JSON.stringify(nextPackings));
-      localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(nextPayments));
-      localStorage.setItem(STORAGE_KEYS.OTHER_COSTS, JSON.stringify(nextOtherCosts));
       localStorage.setItem(STORAGE_KEYS.PACKING_DRAFT, JSON.stringify(nextDraft));
     } catch (e) {
       console.error(e);
@@ -5127,42 +5554,63 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     }
 
+    const storage = typeof window !== 'undefined' ? window.localStorage : null;
     if (scope === 'purchase') {
+      mutatedCollectionsRef.current.purchases = true;
+      purchasesRef.current = [];
+      lastWrittenRefMap.current.set(STORAGE_KEYS.PURCHASES, []);
       setPurchases([]);
       setEditingPurchaseId(null);
-      try {
-        localStorage.setItem(STORAGE_KEYS.PURCHASES, JSON.stringify([]));
-      } catch (e) {
-        console.error(e);
-      }
+      void clearCollectionDual({
+        storageKey: STORAGE_KEYS.PURCHASES,
+        storeName: DB_STORE_NAMES.PURCHASES,
+        storage,
+        saveToIndexedDb: (store, recs) => indexedStorageDriver.saveCollection(store, recs),
+      });
       showToast('Super Admin verified: Purchase DB cleared (Safety Snapshot saved).');
     } else if (scope === 'packing') {
+      mutatedCollectionsRef.current.packings = true;
+      packingsRef.current = [];
+      lastWrittenRefMap.current.set(STORAGE_KEYS.PACKINGS, []);
       setPackings([]);
       setEditingPackingId(null);
       const freshDraft = createInitialPackingDraft(0);
       setPackingDraft(freshDraft);
+      void clearCollectionDual({
+        storageKey: STORAGE_KEYS.PACKINGS,
+        storeName: DB_STORE_NAMES.PACKINGS,
+        storage,
+        saveToIndexedDb: (store, recs) => indexedStorageDriver.saveCollection(store, recs),
+      });
       try {
-        localStorage.setItem(STORAGE_KEYS.PACKINGS, JSON.stringify([]));
         localStorage.setItem(STORAGE_KEYS.PACKING_DRAFT, JSON.stringify(freshDraft));
       } catch (e) {
         console.error(e);
       }
       showToast('Super Admin verified: Packing DB cleared (Safety Snapshot saved).');
     } else if (scope === 'payment') {
+      mutatedCollectionsRef.current.payments = true;
+      paymentsRef.current = [];
+      lastWrittenRefMap.current.set(STORAGE_KEYS.PAYMENTS, []);
       setPayments([]);
-      try {
-        localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify([]));
-      } catch (e) {
-        console.error(e);
-      }
+      void clearCollectionDual({
+        storageKey: STORAGE_KEYS.PAYMENTS,
+        storeName: DB_STORE_NAMES.PAYMENTS,
+        storage,
+        saveToIndexedDb: (store, recs) => indexedStorageDriver.saveCollection(store, recs),
+      });
       showToast('Super Admin verified: Payment DB cleared (Safety Snapshot saved).');
     } else if (scope === 'other_cost') {
+      mutatedCollectionsRef.current.otherCosts = true;
+      otherCostsRef.current = [];
+      lastWrittenRefMap.current.set(STORAGE_KEYS.OTHER_COSTS, []);
       setOtherCosts([]);
-      try {
-        localStorage.setItem(STORAGE_KEYS.OTHER_COSTS, JSON.stringify([]));
-      } catch (e) {
-        console.error(e);
-      }
+      void clearCollectionDual({
+        storageKey: STORAGE_KEYS.OTHER_COSTS,
+        storeName: DB_STORE_NAMES.OTHER_COSTS,
+        storage,
+        saveToIndexedDb: (store, recs) => indexedStorageDriver.saveCollection(store, recs),
+      });
       showToast('Super Admin verified: Costing DB cleared (Safety Snapshot saved).');
     } else {
       executeUnconditionalClearAll();

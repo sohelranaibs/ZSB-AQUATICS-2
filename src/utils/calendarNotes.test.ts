@@ -96,3 +96,46 @@ test('formatNotePreview and formatShortCalendarNoteChip produce clean UI strings
   assert.equal(formatShortCalendarNoteChip('2026-11-05'), '5 Nov');
   assert.equal(formatShortCalendarNoteChip('2026-12-25'), '25 Dec');
 });
+
+test('persistCalendarNotesToStorage and loadCalendarNotesFromStorage round-trip via localStorage', async () => {
+  const {
+    CALENDAR_NOTES_STORAGE_KEY,
+    loadCalendarNotesFromStorage,
+    persistCalendarNotesToStorage,
+  } = await import('./calendarNotes.ts');
+
+  const backing = new Map<string, string>();
+  const originalWindow = (globalThis as { window?: unknown }).window;
+  (globalThis as { window?: unknown }).window = {
+    localStorage: {
+      getItem: (key: string) => backing.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        backing.set(key, value);
+      },
+      removeItem: (key: string) => {
+        backing.delete(key);
+      },
+    },
+  };
+
+  try {
+    const notes = upsertCalendarNote(
+      {},
+      '2026-11-28',
+      'Confirm Kunming flight space',
+      '2026-11-28T09:00:00.000Z'
+    );
+    assert.equal(persistCalendarNotesToStorage(notes), true);
+    assert.ok(backing.has(CALENDAR_NOTES_STORAGE_KEY));
+
+    const reloaded = loadCalendarNotesFromStorage();
+    assert.equal(reloaded['2026-11-28']?.content, 'Confirm Kunming flight space');
+    assert.equal(reloaded['2026-11-28']?.updatedAt, '2026-11-28T09:00:00.000Z');
+  } finally {
+    if (originalWindow === undefined) {
+      delete (globalThis as { window?: unknown }).window;
+    } else {
+      (globalThis as { window?: unknown }).window = originalWindow;
+    }
+  }
+});

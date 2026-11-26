@@ -5,7 +5,6 @@ import {
   calculatePurchaseTotals,
   formatCurrency,
   formatDate,
-  formatPurchaseExportFilename,
   generateInvoiceNumber,
   getSupplierLedgerStats,
 } from '../utils/calculations.ts';
@@ -29,8 +28,6 @@ import {
   sanitizePurchaseFormDraft,
   saveFormDraftJson,
 } from '../utils/formDraftStorage.ts';
-import { exportElementToPng } from '../utils/pdfGenerator.ts';
-import { yieldForDomFrame } from '../utils/pdfExportStyles.ts';
 import {
   ZSB_VIEW_SHORTCUT_EVENT,
   ViewShortcutEventDetail,
@@ -60,15 +57,9 @@ import {
   AlertCircle,
   X,
   Edit2,
-  ImageDown,
-  Loader2,
   Lock,
   Unlock,
 } from 'lucide-react';
-import {
-  PngShareModal,
-  WeChatIcon,
-} from './PngShareModal.tsx';
 import { useTableColumnOrder } from '../hooks/useTableColumnOrder.ts';
 import {
   ColumnReorderToolbar,
@@ -480,7 +471,6 @@ export const PurchaseFormView: React.FC = () => {
     () => initialPurchaseDraft?.remarks || ''
   );
   const [lastSavedRecord, setLastSavedRecord] = useState<{ id: string; invoiceNumber: string } | null>(null);
-  const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [rateResetToken, setRateResetToken] = useState<number>(0);
 
   const [rows, setRows] = useState<PurchaseItemRow[]>(() => {
@@ -552,7 +542,6 @@ export const PurchaseFormView: React.FC = () => {
   const [isAddingNewSupplier, setIsAddingNewSupplier] = useState<boolean>(false);
   const [newSupplierValue, setNewSupplierValue] = useState<string>('');
   const [validationAttempted, setValidationAttempted] = useState<boolean>(false);
-  const [isExportingPng, setIsExportingPng] = useState<boolean>(false);
 
   const validation = useMemo(
     () =>
@@ -1038,27 +1027,6 @@ export const PurchaseFormView: React.FC = () => {
     window.addEventListener(ZSB_VIEW_SHORTCUT_EVENT, onShortcut);
     return () => window.removeEventListener(ZSB_VIEW_SHORTCUT_EVENT, onShortcut);
   }, []);
-
-  const handleDirectSavePng = async () => {
-    setIsExportingPng(true);
-    const filename = formatPurchaseExportFilename(invoiceNumber, description, date, 'png');
-    try {
-      await yieldForDomFrame();
-      const success = await exportElementToPng('purchase-voucher-export-canvas', filename, 760);
-      if (success) {
-        markPopulatedRowsAsExported();
-        showToast(`PNG image downloaded: ${filename} (exported rows locked)`);
-      } else {
-        showToast('Opening Print / Save PNG preview...');
-        handlePrintSelected();
-      }
-    } catch (err) {
-      console.error('Purchase PNG export error:', err);
-      showToast('Error generating PNG image.');
-    } finally {
-      setIsExportingPng(false);
-    }
-  };
 
   const handleMonthlyStatement = () => {
     const matched = purchases.filter((p) =>
@@ -1887,43 +1855,6 @@ export const PurchaseFormView: React.FC = () => {
               </span>
             </button>
 
-            {/* Direct SAVE .PNG Button */}
-            <button
-              type="button"
-              data-testid="purchase-direct-save-png-btn"
-              onClick={handleDirectSavePng}
-              disabled={isExportingPng}
-              className="w-full bg-[#1877d2] hover:bg-[#1465b5] text-white py-2.5 px-3 rounded-lg font-bold text-xs uppercase shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer disabled:opacity-50 whitespace-nowrap"
-              title="Download Purchase Challan / Data Entry Form directly as .PNG image (locks exported rows)"
-            >
-              {isExportingPng ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                  <span>SAVING .PNG...</span>
-                </>
-              ) : (
-                <>
-                  <ImageDown className="w-4 h-4 shrink-0" />
-                  <span>SAVE .PNG</span>
-                </>
-              )}
-            </button>
-
-            {/* Share via WeChat (.PNG) */}
-            <button
-              type="button"
-              data-testid="purchase-share-wechat-btn"
-              onClick={() => {
-                markPopulatedRowsAsExported();
-                setIsShareModalOpen(true);
-              }}
-              className="w-full bg-[#07C160] hover:bg-[#06a853] text-white py-2.5 px-3 rounded-lg font-bold text-xs shadow-xs flex items-center justify-center space-x-2 transition cursor-pointer"
-              title="Share Purchase Challan .PNG to WeChat (微信)"
-            >
-              <WeChatIcon className="w-4 h-4 shrink-0" />
-              <span>SHARE VIA WECHAT (微信)</span>
-            </button>
-
             {/* MONTHLY STATEMENT (PDF) Button */}
             <button
               type="button"
@@ -2183,280 +2114,6 @@ export const PurchaseFormView: React.FC = () => {
           </ol>
         </div>
       </div>
-
-      {/* Offscreen Printable / Exportable Purchase Challan Canvas for Direct PDF & .PNG Export (Mounted Only On Demand) */}
-      {(isExportingPng || isShareModalOpen) && (
-      <div className="fixed -left-[9999px] top-0 pointer-events-none" aria-hidden="true">
-        <div
-          id="purchase-voucher-export-canvas"
-          className="zsb-print-paper relative w-[760px] max-w-[760px] bg-white rounded-sm border border-slate-300 p-7 space-y-5 text-slate-900 overflow-hidden"
-          style={{ width: '760px', backgroundColor: '#ffffff', color: '#000000', position: 'relative' }}
-        >
-          {/* Centered Watermark Logo */}
-          <div
-            aria-hidden="true"
-            className="absolute inset-0 flex items-center justify-center pointer-events-none select-none z-0 overflow-hidden"
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              pointerEvents: 'none',
-              userSelect: 'none',
-              zIndex: 0,
-              opacity: 0.07,
-            }}
-          >
-            <img
-              src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
-              alt=""
-              style={{
-                width: '340px',
-                height: '340px',
-                objectFit: 'contain',
-                borderRadius: '9999px',
-              }}
-            />
-          </div>
-
-          {/* Official Document Header (Logo on Left Side of ZSB AQUATICS) */}
-          <div
-            style={{ borderBottom: '2px solid #0f172a', position: 'relative', zIndex: 10 }}
-            className="pb-3.5 text-center space-y-1 relative z-10"
-          >
-            <div className="flex items-center justify-center gap-3.5 mb-1">
-              <div
-                style={{
-                  width: '64px',
-                  height: '64px',
-                  borderRadius: '9999px',
-                  overflow: 'hidden',
-                  border: '2px solid #fbbf24',
-                  backgroundColor: '#ffffff',
-                  padding: '2px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-                className="w-16 h-16 rounded-full overflow-hidden border-2 border-amber-400 bg-white p-0.5 shadow-xs flex items-center justify-center shrink-0"
-              >
-                <img
-                  src={companyProfile.logoUrl || '/assets/aistudio/Image_20260915140835_5_211_5a70ba77.jpg'}
-                  alt={companyProfile.companyName}
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'contain',
-                    borderRadius: '9999px',
-                    display: 'block',
-                  }}
-                  className="w-full h-full object-contain rounded-full"
-                />
-              </div>
-
-              <div
-                className="zsb-3d-text-print text-3xl sm:text-4xl font-black tracking-widest uppercase"
-                style={{
-                  color: '#f59e0b',
-                  fontFamily: "'Cinzel', Georgia, Cambria, 'Times New Roman', Times, serif",
-                  fontWeight: 900,
-                  letterSpacing: '0.09em',
-                  textShadow:
-                    '1px 1px 0px #b45309, 2px 2px 0px #92400e, 3px 3px 0px #78350f, 4px 4px 0px #451a03, 5px 5px 7px rgba(15, 23, 42, 0.35)',
-                }}
-              >
-                {companyProfile.companyName}
-              </div>
-            </div>
-
-            <div
-              style={{ color: '#000000' }}
-              className="text-xs sm:text-sm font-bold tracking-wide"
-            >
-              Address: {companyProfile.address}
-            </div>
-
-            <div
-              style={{ color: '#000000' }}
-              className="text-xs sm:text-sm font-bold font-mono"
-            >
-              Mobile: {companyProfile.mobiles.join(' , ')} | EMAIL: {companyProfile.email && companyProfile.email !== 'www.zsbaquatics.com' ? companyProfile.email : 'zsbaquatics@gmail.com'}, Website : {companyProfile.website || 'www.zsbaquatics.com'}
-            </div>
-
-            <div
-              style={{ backgroundColor: '#0f172a', color: '#ffffff' }}
-              className="inline-block mt-2 px-5 py-1.5 rounded text-xs font-bold tracking-widest uppercase shadow-sm"
-            >
-              PURCHASE DATA ENTRY FORM (LIVE CRABS, EEL FISH &amp; CHILLED FISH GRADES) — CHALLAN / BILL
-            </div>
-          </div>
-
-          {/* Purchase Challan Content matching PrintPreviewModal */}
-          <div className="space-y-4">
-            <div
-              style={{ backgroundColor: '#f8fafc', borderColor: '#cbd5e1', display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}
-              className="grid grid-cols-4 gap-2 text-xs p-3 rounded border"
-            >
-              <div>
-                <span className="text-slate-500 block">INVOICE NO:</span>
-                <span className="font-mono font-black text-slate-900 text-sm">{invoiceNumber || '-'}</span>
-              </div>
-              <div>
-                <span className="text-slate-500 block">DATE:</span>
-                <span className="font-semibold text-slate-800">{formatDate(date)}</span>
-              </div>
-              <div>
-                <span className="text-slate-500 block">SUPPLIER:</span>
-                <span className="font-black text-slate-900">{description || '-'}</span>
-              </div>
-              <div>
-                <span className="text-slate-500 block">CONTACT:</span>
-                <span className="font-mono text-slate-800">{contactNumber || '-'}</span>
-              </div>
-            </div>
-
-            <table className="w-full text-xs border border-slate-300 border-collapse">
-              <thead>
-                <tr className="bg-slate-100 text-slate-800 uppercase font-bold text-[11px] border-b border-slate-300">
-                  <th className="p-2 border-r border-slate-300 text-center w-12">SL</th>
-                  <th className="p-2 border-r border-slate-300 text-left">ITEM / GRADE</th>
-                  <th className="p-2 border-r border-slate-300 text-right w-28">QUANTITY</th>
-                  <th className="p-2 border-r border-slate-300 text-right w-32">RATE ({companyProfile.currency})</th>
-                  <th className="p-2 text-right w-40">TOTAL AMOUNT ({companyProfile.currency})</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {exportableRows.map((row, i) => (
-                  <tr key={row.id || i} className="font-medium">
-                    <td className="p-2 border-r border-slate-200 text-center whitespace-nowrap">
-                      <span className="zsb-sl-badge">{String(i + 1).padStart(2, '0')}</span>
-                    </td>
-                    <td className="p-2 border-r border-slate-200 font-bold">{row.item || '-'}</td>
-                    <td className="p-2 border-r border-slate-200 text-right font-mono tabular-nums whitespace-nowrap">{row.quantity || 0}</td>
-                    <td className={`p-2 border-r border-slate-200 text-right font-mono tabular-nums whitespace-nowrap ${(row.rate || 0) < 0 ? 'text-rose-700' : ''}`}>
-                      {formatCurrency(row.rate || 0, '')}
-                    </td>
-                    <td className={`p-2 text-right font-mono font-bold tabular-nums whitespace-nowrap ${(row.totalAmount || 0) < 0 ? 'text-rose-700' : ''}`}>
-                      {formatCurrency(row.totalAmount || 0, '')}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="bg-slate-100 font-bold border-t-2 border-slate-400">
-                  <td colSpan={2} className="p-2 text-right uppercase whitespace-nowrap">TOTAL QUANTITY:</td>
-                  <td className="p-2 text-right font-mono tabular-nums text-blue-900 border-r border-slate-300 whitespace-nowrap">{totalQty}</td>
-                  <td className="p-2 text-right uppercase border-r border-slate-300 whitespace-nowrap">BILL TOTAL:</td>
-                  <td className={`p-2 text-right font-mono tabular-nums font-black whitespace-nowrap ${totalAmount < 0 ? 'text-rose-700' : 'text-slate-900'}`}>
-                    {formatCurrency(totalAmount, companyProfile.currency)}
-                  </td>
-                </tr>
-                <tr className="bg-slate-50 font-semibold text-[11px]">
-                  <td colSpan={4} className="p-2 text-right text-slate-600 border-r border-slate-200">PREVIOUS BALANCE (BROUGHT FORWARD):</td>
-                  <td className="p-2 text-right font-mono tabular-nums text-slate-800 whitespace-nowrap">
-                    {formatCurrency(overallPreviousAmount, companyProfile.currency)}
-                  </td>
-                </tr>
-                <tr className="bg-slate-50 font-semibold text-[11px]">
-                  <td colSpan={4} className="p-2 text-right text-slate-600 border-r border-slate-200">LESS: PAID AMOUNT (TODAY):</td>
-                  <td className="p-2 text-right font-mono tabular-nums text-emerald-700 whitespace-nowrap">
-                    - {formatCurrency(overallPaidAmount, companyProfile.currency)}
-                  </td>
-                </tr>
-                <tr className="bg-slate-200 font-black text-xs border-t border-slate-400">
-                  <td colSpan={4} className="p-2 text-right uppercase text-slate-900 border-r border-slate-300">NET CLOSING BALANCE:</td>
-                  <td className="p-2 text-right font-mono tabular-nums text-rose-700 text-sm whitespace-nowrap">
-                    {formatCurrency(balance, companyProfile.currency)}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-
-            {remarks && (
-              <div className="text-xs p-2.5 bg-slate-50 rounded border border-slate-200">
-                <strong className="text-slate-700">Remarks:</strong> {remarks}
-              </div>
-            )}
-          </div>
-
-          {/* Dual Official Signatures */}
-          <div className="pt-12 grid grid-cols-2 gap-8 text-center text-xs">
-            <div className="flex flex-col items-center">
-              <div style={{ borderBottom: '2px solid #0f172a' }} className="w-52 pb-1.5">
-                <div
-                  style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', color: '#0f172a' }}
-                  className="text-base font-bold tracking-wider"
-                >
-                  {companyProfile.managingPartner}
-                </div>
-              </div>
-              <div style={{ color: '#0f172a' }} className="mt-1.5 font-bold uppercase tracking-wider text-xs">
-                Managing Partner
-              </div>
-              <div style={{ color: '#d97706', fontWeight: 800 }} className="text-[10px] uppercase font-extrabold text-amber-500 zsb-golden-brand-light">
-                {companyProfile.companyName}
-              </div>
-            </div>
-
-            <div className="flex flex-col items-center">
-              <div style={{ borderBottom: '2px solid #0f172a' }} className="w-52 pb-1.5">
-                <div
-                  style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', color: '#0f172a' }}
-                  className="text-base font-bold tracking-wider"
-                >
-                  {companyProfile.partner}
-                </div>
-              </div>
-              <div style={{ color: '#0f172a' }} className="mt-1.5 font-bold uppercase tracking-wider text-xs">
-                Partner
-              </div>
-              <div style={{ color: '#d97706', fontWeight: 800 }} className="text-[10px] uppercase font-extrabold text-amber-500 zsb-golden-brand-light">
-                {companyProfile.companyName}
-              </div>
-            </div>
-          </div>
-
-          {/* Footer certification & dynamic A4 page counter */}
-          <div
-            style={{ borderTop: '1px solid #e2e8f0', color: '#94a3b8' }}
-            className="flex justify-between items-center text-[10px] pt-4 mt-6"
-          >
-            <span>
-              This is an official computer-generated document from <strong style={{ color: '#d97706', fontWeight: 800 }} className="font-extrabold text-amber-500 zsb-golden-brand-light">{companyProfile.companyName}</strong> System • Validated and archived.
-            </span>
-            <span className="print-page-number-counter font-mono font-bold text-slate-600">
-              <span className="print:hidden">Page 1 of 1</span>
-            </span>
-          </div>
-        </div>
-      </div>
-      )}
-
-      {/* Interactive PNG WeChat Share Modal */}
-      {isShareModalOpen && (
-        <PngShareModal
-          isOpen={isShareModalOpen}
-          onClose={() => setIsShareModalOpen(false)}
-          title={`Procurement Challan / Purchase Voucher — #${invoiceNumber} (${description || 'Supplier'})`}
-          documentType="purchase"
-          documentData={{
-            invoiceNumber,
-            description,
-            contactNumber,
-            date,
-            totalQty,
-            billAmount: totalAmount,
-            remarks,
-          }}
-          targetElementId="purchase-voucher-export-canvas"
-          defaultFilename={formatPurchaseExportFilename(invoiceNumber, description, date, 'png')}
-        />
-      )}
     </div>
   );
 };

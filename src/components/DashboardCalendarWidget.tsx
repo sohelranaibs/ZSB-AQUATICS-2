@@ -4,6 +4,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Maximize2,
   Package,
   Plus,
   ReceiptText,
@@ -23,18 +24,14 @@ import {
 import { UpcomingRecurringPaymentItem } from '../utils/recurringPayments.ts';
 import { formatCurrency } from '../utils/calculations.ts';
 import { getTodayLocalIsoDate } from '../utils/dailyExpense.ts';
+import { useCalendarNotes } from '../hooks/useCalendarNotes.ts';
+import { CalendarNoteModal } from './CalendarNoteModal.tsx';
 import {
-  CalendarNotesMap,
-  deleteCalendarNote,
   formatNotePreview,
   formatNoteUpdatedTime,
   formatShortCalendarNoteChip,
-  getNotedDatesInMonth,
   hasNoteContent,
-  loadCalendarNotesFromStorage,
   normalizeNoteText,
-  persistCalendarNotesToStorage,
-  upsertCalendarNote,
 } from '../utils/calendarNotes.ts';
 import {
   buildCalendarActivityMap,
@@ -111,38 +108,49 @@ export const DashboardCalendarWidget: React.FC<DashboardCalendarWidgetProps> = (
   const todayIso = getTodayLocalIsoDate();
   const [displayedMonth, setDisplayedMonth] = useState<string>(() => todayIso.slice(0, 7));
   const [selectedDate, setSelectedDate] = useState<string>(todayIso);
-  const [notesMap, setNotesMap] = useState<CalendarNotesMap>(() => loadCalendarNotesFromStorage());
-  const [draftNote, setDraftNote] = useState<string>(() => notesMap[todayIso]?.content ?? '');
+  const [modalDateIso, setModalDateIso] = useState<string | null>(null);
+  const {
+    notes: notesMap,
+    getNote,
+    getNoteContent,
+    saveNote,
+    deleteNote,
+    getNotedDatesForMonth,
+  } = useCalendarNotes();
+
+  const [draftNote, setDraftNote] = useState<string>(() => getNoteContent(todayIso));
   const [justSavedFlag, setJustSavedFlag] = useState<boolean>(false);
 
   const selectedDateRef = useRef<string>(selectedDate);
   const draftNoteRef = useRef<string>(draftNote);
-  const notesMapRef = useRef<CalendarNotesMap>(notesMap);
+  const notesMapRef = useRef(notesMap);
 
   selectedDateRef.current = selectedDate;
   draftNoteRef.current = draftNote;
   notesMapRef.current = notesMap;
 
-  const commitNoteForDate = useCallback((dateIso: string, rawText: string, showSavedBadge = false) => {
-    const normalizedDraft = normalizeNoteText(rawText);
-    const existingSaved = notesMapRef.current[dateIso]?.content ?? '';
-    if (normalizedDraft === existingSaved && (hasNoteContent(normalizedDraft) || !notesMapRef.current[dateIso])) {
-      if (showSavedBadge && hasNoteContent(normalizedDraft)) {
+  const commitNoteForDate = useCallback(
+    (dateIso: string, rawText: string, showSavedBadge = false) => {
+      const normalizedDraft = normalizeNoteText(rawText);
+      const existingSaved = notesMapRef.current[dateIso]?.content ?? '';
+      if (
+        normalizedDraft === existingSaved &&
+        (hasNoteContent(normalizedDraft) || !notesMapRef.current[dateIso])
+      ) {
+        if (showSavedBadge && hasNoteContent(normalizedDraft)) {
+          setJustSavedFlag(true);
+        }
+        return;
+      }
+      saveNote(dateIso, normalizedDraft);
+      if (showSavedBadge) {
         setJustSavedFlag(true);
       }
-      return;
-    }
-    setNotesMap((prev) => {
-      const next = upsertCalendarNote(prev, dateIso, normalizedDraft);
-      persistCalendarNotesToStorage(next);
-      return next;
-    });
-    if (showSavedBadge) {
-      setJustSavedFlag(true);
-    }
-  }, []);
+    },
+    [saveNote]
+  );
 
-  // Auto-save draft changes gently after short pause so thoughts are never lost
+  // Auto-save inline draft changes gently after short pause so thoughts are never lost
   useEffect(() => {
     const existingSaved = notesMapRef.current[selectedDate]?.content ?? '';
     if (normalizeNoteText(draftNote) === existingSaved) return undefined;
@@ -159,52 +167,60 @@ export const DashboardCalendarWidget: React.FC<DashboardCalendarWidgetProps> = (
     return () => window.clearTimeout(timer);
   }, [justSavedFlag]);
 
-  // Flush any unsaved note if component unmounts
+  // Flush any unsaved inline note if component unmounts
   useEffect(() => {
     return () => {
       const dateIso = selectedDateRef.current;
       const latestText = draftNoteRef.current;
       const existingSaved = notesMapRef.current[dateIso]?.content ?? '';
       if (normalizeNoteText(latestText) !== existingSaved) {
-        const next = upsertCalendarNote(notesMapRef.current, dateIso, latestText);
-        persistCalendarNotesToStorage(next);
+        saveNote(dateIso, latestText);
       }
     };
-  }, []);
+  }, [saveNote]);
 
   const switchSelectedDate = useCallback(
     (nextDateIso: string, syncMonth: boolean) => {
       const currentDateIso = selectedDateRef.current;
       const latestDraft = draftNoteRef.current;
-      let latestMap = notesMapRef.current;
+      const currentSaved = notesMapRef.current[currentDateIso]?.content ?? '';
 
-      if (currentDateIso !== nextDateIso) {
-        const existingSaved = latestMap[currentDateIso]?.content ?? '';
-        if (normalizeNoteText(latestDraft) !== existingSaved) {
-          latestMap = upsertCalendarNote(latestMap, currentDateIso, latestDraft);
-          persistCalendarNotesToStorage(latestMap);
-          setNotesMap(latestMap);
-        }
+      if (currentDateIso !== nextDateIso && normalizeNoteText(latestDraft) !== currentSaved) {
+        saveNote(currentDateIso, latestDraft);
       }
 
       setSelectedDate(nextDateIso);
-      setDraftNote(latestMap[nextDateIso]?.content ?? '');
+      setDraftNote(notesMapRef.current[nextDateIso]?.content ?? '');
       setJustSavedFlag(false);
       if (syncMonth) {
         setDisplayedMonth(nextDateIso.slice(0, 7));
       }
     },
-    []
+    [saveNote]
   );
 
   const handleClearSelectedNote = () => {
     setDraftNote('');
     setJustSavedFlag(false);
-    setNotesMap((prev) => {
-      const next = deleteCalendarNote(prev, selectedDate);
-      persistCalendarNotesToStorage(next);
-      return next;
-    });
+    deleteNote(selectedDate);
+  };
+
+  const handleModalSaveNote = (dateIso: string, content: string) => {
+    const saved = saveNote(dateIso, content);
+    if (dateIso === selectedDateRef.current) {
+      setDraftNote(saved?.content ?? '');
+      if (saved) {
+        setJustSavedFlag(true);
+      }
+    }
+  };
+
+  const handleModalDeleteNote = (dateIso: string) => {
+    deleteNote(dateIso);
+    if (dateIso === selectedDateRef.current) {
+      setDraftNote('');
+      setJustSavedFlag(false);
+    }
   };
 
   const activityMap = useMemo(
@@ -231,8 +247,8 @@ export const DashboardCalendarWidget: React.FC<DashboardCalendarWidgetProps> = (
   );
 
   const notedDatesInMonth = useMemo(
-    () => getNotedDatesInMonth(notesMap, displayedMonth),
-    [notesMap, displayedMonth]
+    () => getNotedDatesForMonth(displayedMonth),
+    [getNotedDatesForMonth, displayedMonth]
   );
 
   const selectedDay = useMemo(
@@ -240,12 +256,13 @@ export const DashboardCalendarWidget: React.FC<DashboardCalendarWidgetProps> = (
     [activityMap, selectedDate]
   );
 
-  const savedSelectedNote = notesMap[selectedDate];
+  const savedSelectedNote = getNote(selectedDate);
   const isDraftDirty =
     normalizeNoteText(draftNote) !== (savedSelectedNote?.content ?? '');
 
   const handleSelectCell = (dateIso: string, inCurrentMonth: boolean) => {
     switchSelectedDate(dateIso, !inCurrentMonth);
+    setModalDateIso(dateIso);
   };
 
   const handleJumpToday = () => {
@@ -681,6 +698,21 @@ export const DashboardCalendarWidget: React.FC<DashboardCalendarWidgetProps> = (
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     type="button"
+                    data-testid="calendar-notepad-open-modal-btn"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      commitNoteForDate(selectedDate, draftNote, false);
+                      setModalDateIso(selectedDate);
+                    }}
+                    aria-label={`Open note modal for ${formatCalendarSelectedDateHeading(selectedDate)}`}
+                    title="Open full note editor"
+                    className="!px-2 !py-1 text-[10px] font-bold flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                  >
+                    <Maximize2 className="w-3 h-3" aria-hidden="true" />
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    type="button"
                     data-testid="calendar-notepad-save-btn"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => commitNoteForDate(selectedDate, draftNote, true)}
@@ -805,6 +837,19 @@ export const DashboardCalendarWidget: React.FC<DashboardCalendarWidgetProps> = (
           </div>
         </div>
       </div>
+
+      {/* Add / Edit Date Note Modal */}
+      <CalendarNoteModal
+        isOpen={Boolean(modalDateIso)}
+        dateIso={modalDateIso}
+        existingNote={modalDateIso ? getNote(modalDateIso) : undefined}
+        dayEventsCount={
+          modalDateIso ? activityMap.get(modalDateIso)?.totalActivityCount ?? 0 : 0
+        }
+        onSave={handleModalSaveNote}
+        onDelete={handleModalDeleteNote}
+        onClose={() => setModalDateIso(null)}
+      />
     </section>
   );
 };

@@ -371,13 +371,19 @@ export const PaymentFormView: React.FC = () => {
     showToast('Payment form cleared.');
   };
 
-  // Keyboard shortcut support (Ctrl+S, Print)
+  // Keyboard shortcut support (Ctrl+S, Print, Alt+N, Alt+R)
   const shortcutHandlerRef = useRef<(action: ViewShortcutEventDetail['action']) => void>(() => {});
   shortcutHandlerRef.current = (action) => {
     if (action === 'SAVE_ACTIVE_VIEW') {
       handleSaveVoucher({ openPreview: false });
     } else if (action === 'PRINT_ACTIVE_VIEW') {
       handleSaveVoucher({ openPreview: true });
+    } else if (action === 'ADD_FORM_ROW') {
+      handleClearForm();
+      setTimeout(() => {
+        creditInputRef.current?.focus();
+      }, 40);
+      showToast('Prepared new Supplier Payment voucher entry (Alt+N).');
     } else if (action === 'RESET_FORM') {
       handleClearForm();
     }
@@ -390,6 +396,7 @@ export const PaymentFormView: React.FC = () => {
       if (
         action === 'SAVE_ACTIVE_VIEW' ||
         action === 'PRINT_ACTIVE_VIEW' ||
+        action === 'ADD_FORM_ROW' ||
         action === 'RESET_FORM'
       ) {
         customEvent.detail.handled = true;

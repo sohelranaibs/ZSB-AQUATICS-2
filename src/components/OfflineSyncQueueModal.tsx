@@ -39,6 +39,11 @@ export const OfflineSyncQueueModal: React.FC<OfflineSyncQueueModalProps> = ({
       aria-modal="true"
       aria-label="Service Worker Offline Background Sync Queue"
       data-testid="offline-sync-queue-modal"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
       className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-950/70 p-4 print:hidden"
     >
       <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[85vh]">

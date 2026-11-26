@@ -28,6 +28,8 @@ export const CalendarNoteModal: React.FC<CalendarNoteModalProps> = ({
 }) => {
   const [draft, setDraft] = useState<string>('');
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const draftRef = useRef<string>(draft);
+  draftRef.current = draft;
 
   // Sync draft text whenever modal opens for a date
   useEffect(() => {
@@ -44,18 +46,26 @@ export const CalendarNoteModal: React.FC<CalendarNoteModalProps> = ({
     return () => cancelAnimationFrame(rafId);
   }, [isOpen, dateIso, existingNote]);
 
-  // Close modal on Escape key
+  // Close modal on Escape key & save on Ctrl/Cmd+S without leaking to App.tsx global handlers
   useEffect(() => {
-    if (!isOpen) return undefined;
+    if (!isOpen || !dateIso) return undefined;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        e.stopPropagation();
+        onSave(dateIso, draftRef.current);
         onClose();
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [isOpen, dateIso, onSave, onClose]);
 
   if (!isOpen || !dateIso) return null;
 
@@ -156,12 +166,6 @@ export const CalendarNoteModal: React.FC<CalendarNoteModalProps> = ({
               rows={6}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
-                  e.preventDefault();
-                  handleSubmit();
-                }
-              }}
               placeholder="Write whatever is on your mind for this date — supplier calls, flight bookings, payment reminders, or daily tasks..."
               className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#1D6CE0]/40 focus:border-[#1D6CE0] resize-y min-h-[140px]"
             />

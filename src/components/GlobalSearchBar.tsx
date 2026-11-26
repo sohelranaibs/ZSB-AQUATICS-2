@@ -33,6 +33,7 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
     payments,
     otherCosts,
     supplierCredits,
+    activeTab,
     setActiveTab,
     openPrintModal,
     showToast,
@@ -81,7 +82,7 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
     });
   }, [isOpen, query, dataset, selectedModule]);
 
-  // Handle outside click to close dropdown
+  // Handle outside click and global Escape to close dropdown reliably
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
@@ -91,6 +92,23 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleGlobalKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false);
+        inputRef.current?.blur();
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [isOpen]);
+
+  // Close search dropdown whenever the active sheet tab changes
+  useEffect(() => {
+    setIsOpen(false);
+  }, [activeTab]);
 
   // Keyboard navigation inside search dropdown
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -199,7 +217,16 @@ export const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className = ''
   ];
 
   return (
-    <div ref={containerRef} className={`relative flex-1 w-full min-w-0 max-w-lg ${className}`}>
+    <div
+      ref={containerRef}
+      onBlur={(e) => {
+        const nextFocusTarget = e.relatedTarget as Node | null;
+        if (!nextFocusTarget || !containerRef.current?.contains(nextFocusTarget)) {
+          setIsOpen(false);
+        }
+      }}
+      className={`relative flex-1 w-full min-w-0 max-w-lg ${className}`}
+    >
       {/* Search Input Box */}
       <div className="relative flex items-center">
         <div className="absolute left-3 pointer-events-none text-slate-400 flex items-center">

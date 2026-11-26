@@ -117,6 +117,7 @@ const MainContent: React.FC = () => {
     createSnapshot,
     exportCurrentViewToPdf,
     startPrintAllActiveSheets,
+    printAllSequence,
     purchases,
     packings,
     payments,
@@ -317,7 +318,11 @@ const MainContent: React.FC = () => {
             setShortcutsModalOpen(false);
             return;
           }
-          if (printModalData.isOpen) {
+          if (syncQueueModalOpen) {
+            setSyncQueueModalOpen(false);
+            return;
+          }
+          if (printModalData.isOpen || printAllSequence.isActive) {
             closePrintModal();
             return;
           }
@@ -335,6 +340,10 @@ const MainContent: React.FC = () => {
           }
           if (superAdminClearModal.isOpen) {
             closeSuperAdminClearModal();
+            return;
+          }
+          if (isFullScreen) {
+            void handleToggleFullScreen();
             return;
           }
           return;
@@ -461,9 +470,13 @@ const MainContent: React.FC = () => {
       getDatasetForTab,
       openDataCenterModal,
       openSnapshotModal,
+      printAllSequence.isActive,
       printModalData.isOpen,
       setActiveTab,
       shortcutsModalOpen,
+      syncQueueModalOpen,
+      isFullScreen,
+      handleToggleFullScreen,
       showToast,
       snapshotModalOpen,
       superAdminClearModal.isOpen,

@@ -904,14 +904,27 @@ export const ExporterPaymentFormView: React.FC = () => {
   );
 
   const handleAddRow = useCallback(() => {
-    setCustomRows((prev) => [
-      ...prev,
-      createEmptyRow(
-        generateRecordId('exprow'),
-        shippingMark !== 'ALL' ? shippingMark : ''
-      ),
-    ]);
-  }, [shippingMark]);
+    const defaultMark = shippingMark !== 'ALL' ? shippingMark : '';
+    setCustomRows((prev) => {
+      const baseList =
+        prev.length > 0
+          ? prev
+          : dbHistoryRows.length === 0
+          ? [
+              { ...createEmptyRow('exp-default-1', defaultMark), date },
+              { ...createEmptyRow('exp-default-2', defaultMark), date },
+              { ...createEmptyRow('exp-default-3', defaultMark), date },
+            ].filter((r) => !deletedRowIds.includes(r.id))
+          : [];
+      return [
+        ...baseList,
+        {
+          ...createEmptyRow(generateRecordId('exprow'), defaultMark),
+          date,
+        },
+      ];
+    });
+  }, [date, dbHistoryRows.length, deletedRowIds, shippingMark]);
 
   const handleEditRow = useCallback(
     (row: PaymentItemRow, idx: number) => {

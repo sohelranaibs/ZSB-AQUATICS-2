@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext.tsx';
 import { PurchaseRecord, PaymentRecord } from '../types/index.ts';
 import {
@@ -96,6 +96,20 @@ export const SupplierPortalView: React.FC<SupplierPortalViewProps> = ({
     if (!selectedPaymentId) return null;
     return getSupplierPaymentVoucherById(session.supplierName, selectedPaymentId, payments);
   }, [session.supplierName, selectedPaymentId, payments]);
+
+  // Close open invoice or payment receipt modal on Escape
+  useEffect(() => {
+    if (!selectedInvoiceId && !selectedPaymentId) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (selectedInvoiceId) setSelectedInvoiceId(null);
+        if (selectedPaymentId) setSelectedPaymentId(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedInvoiceId, selectedPaymentId]);
 
   const hasActiveFilters = Boolean(
     searchQuery.trim() || fromDate || toDate || recordTypeFilter !== 'ALL'

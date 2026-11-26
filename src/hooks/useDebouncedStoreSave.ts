@@ -53,7 +53,11 @@ export function useDebouncedStoreSave(
 
     const timer = setTimeout(() => {
       lastSavedPayloadRef.current = serializedPayload;
-      onSaveRef.current?.();
+      try {
+        onSaveRef.current?.();
+      } catch (err) {
+        console.error('[useDebouncedStoreSave] Failed to persist debounced draft:', err);
+      }
       triggerDebouncedAutoSaveIndicator(sourceLabelRef.current);
     }, debounceMs);
 
@@ -66,7 +70,11 @@ export function useDebouncedStoreSave(
     const flushPendingSave = () => {
       if (latestPayloadRef.current !== lastSavedPayloadRef.current) {
         lastSavedPayloadRef.current = latestPayloadRef.current;
-        onSaveRef.current?.();
+        try {
+          onSaveRef.current?.();
+        } catch (err) {
+          console.error('[useDebouncedStoreSave] Failed to flush draft on unload:', err);
+        }
       }
     };
 

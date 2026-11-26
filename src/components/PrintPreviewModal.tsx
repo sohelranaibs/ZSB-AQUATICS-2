@@ -85,8 +85,15 @@ export const PrintPreviewModal: React.FC = () => {
   useEffect(() => {
     if (!printModalData.isOpen) {
       setShowHeaderFooterConfig(false);
+      setIsShareModalOpen(false);
+      setPrintCurrentPageOnly(false);
+      setCurrentPage(1);
+    } else {
+      setCurrentPage(1);
+      setPrintCurrentPageOnly(false);
+      setIsShareModalOpen(false);
     }
-  }, [printModalData.isOpen]);
+  }, [printModalData.isOpen, printModalData.type, printModalData.data, printModalData.title]);
 
   const handleHeaderFooterConfigChange = (next: PrintHeaderFooterConfig) => {
     setHeaderFooterConfig(next);

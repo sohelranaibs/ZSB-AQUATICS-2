@@ -4692,8 +4692,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       reason?: 'stopped' | 'completed';
     }) => {
       const prevSeq = printAllSequenceRef.current;
+      const idleState = stopPrintAllSequence(prevSeq);
+      printAllSequenceRef.current = idleState;
       setPendingPrintAllTarget(null);
-      setPrintAllSequence(stopPrintAllSequence(prevSeq));
+      setPrintAllSequence(idleState);
 
       if (options?.closeModal !== false) {
         setPrintModalData((prev) => ({ ...prev, isOpen: false }));
@@ -4780,6 +4782,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const startPrintAllActiveSheets = useCallback(
     (options?: { autoPlay?: boolean; autoDelayMs?: number }) => {
+      if (printAllSequenceRef.current.isActive) {
+        return;
+      }
       const allSheets = buildWorkbookSheets({
         purchasesCount: purchasesRef.current.length,
         packingsCount: packingsRef.current.length,
@@ -4796,6 +4801,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       const nextSequence = startPrintAllSequence(visibleSheets, activeTab, options);
+      printAllSequenceRef.current = nextSequence;
       setPrintAllSequence(nextSequence);
       const firstSheet = nextSequence.queue[0];
       setPendingPrintAllTarget({ stepIndex: 0, tabId: firstSheet.id });

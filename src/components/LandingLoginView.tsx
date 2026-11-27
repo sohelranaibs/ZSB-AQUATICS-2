@@ -109,7 +109,7 @@ export const LandingLoginView: React.FC = () => {
   return (
     <main
       data-testid="landing-login-screen"
-      className="min-h-screen w-full flex items-center justify-center bg-[#EDF2F7] px-4 py-8"
+      className="min-h-screen w-full flex items-center justify-center sm:justify-end bg-[#EDF2F7] px-4 sm:px-8 md:px-12 lg:px-16 xl:px-24 py-8"
     >
       <section
         aria-labelledby="authorized-access-heading"
